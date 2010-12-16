@@ -1,0 +1,42 @@
+{
+  Iterator<AbstractJobVertex> it=temporaryGroupVertexMap.keySet().iterator();
+  while (it.hasNext()) {
+    final AbstractJobVertex jobVertex=it.next();
+    if (jobVertex.getVertexToShareInstancesWith() != null) {
+      final AbstractJobVertex vertexToShareInstancesWith=jobVertex.getVertexToShareInstancesWith();
+      final ExecutionGroupVertex groupVertex=temporaryGroupVertexMap.get(jobVertex);
+      final ExecutionGroupVertex groupVertexToShareInstancesWith=temporaryGroupVertexMap.get(vertexToShareInstancesWith);
+      groupVertex.shareInstancesWith(groupVertexToShareInstancesWith);
+    }
+  }
+  Iterator<ExecutionGroupVertex> it2=new ExecutionGroupVertexIterator(this,true,-1);
+  while (it2.hasNext()) {
+    final ExecutionGroupVertex groupVertex=it2.next();
+    if (groupVertex.isNumberOfMembersUserDefined()) {
+      groupVertex.changeNumberOfGroupMembers(groupVertex.getUserDefinedNumberOfMembers());
+    }
+  }
+  repairInstanceAssignment();
+  it2=new ExecutionGroupVertexIterator(this,true,-1);
+  while (it2.hasNext()) {
+    final ExecutionGroupVertex groupVertex=it2.next();
+    for (int i=0; i < groupVertex.getNumberOfForwardLinks(); i++) {
+      final ExecutionGroupEdge edge=groupVertex.getForwardEdge(i);
+      if (edge.isChannelTypeUserDefined()) {
+        edge.changeChannelType(edge.getChannelType());
+      }
+      if (edge.isCompressionLevelUserDefined()) {
+        edge.changeCompressionLevel(edge.getCompressionLevel());
+      }
+    }
+  }
+  it2=new ExecutionGroupVertexIterator(this,true,-1);
+  while (it2.hasNext()) {
+    final ExecutionGroupVertex groupVertex=it2.next();
+    if (groupVertex.getVertexToShareInstancesWith() == null) {
+      System.out.println("Finally calling reassign instances for " + groupVertex.getName());
+      groupVertex.reassignInstances();
+      this.repairInstanceAssignment();
+    }
+  }
+}

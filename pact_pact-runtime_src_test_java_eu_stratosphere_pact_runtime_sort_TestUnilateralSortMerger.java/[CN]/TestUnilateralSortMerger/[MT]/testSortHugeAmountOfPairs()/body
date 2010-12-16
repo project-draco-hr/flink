@@ -1,0 +1,44 @@
+{
+  final int PAIRS=(int)(2 * Math.pow(10,7));
+  final SerializationFactory<TestData.Key> keySerialization=new WritableSerializationFactory<TestData.Key>(TestData.Key.class);
+  final SerializationFactory<TestData.Value> valSerialization=new WritableSerializationFactory<TestData.Value>(TestData.Value.class);
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>> reader=new MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>>();
+  LOG.info("initializing sortmerger");
+  SortMerger<TestData.Key,TestData.Value> merger=new UnilateralSortMerger<TestData.Key,TestData.Value>(memoryManager,ioManager,3,1024 * 1024 * 64,1024 * 1024 * 64,16,keySerialization,valSerialization,keyComparator,reader,0.2f,null);
+  Iterator<KeyValuePair<TestData.Key,TestData.Value>> iterator=merger.getIterator();
+  long start=System.currentTimeMillis();
+  LOG.info("emitting data");
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH,CreationMode.MUTABLE);
+  long bytesWritten=0;
+  for (int i=1; i <= PAIRS; i++) {
+    if (i % (PAIRS / 20) == 0 || i == PAIRS) {
+      long mb=bytesWritten / 1024 / 1024;
+      LOG.info("emitted " + (int)(100.0 * i / PAIRS) + "% ("+ i+ " pairs, "+ mb+ " mb)");
+    }
+    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
+    bytesWritten+=generator.sizeOf(pair);
+    reader.emit(pair);
+  }
+  reader.close();
+  LOG.info("checking results");
+  int pairsEmitted=0;
+  KeyValuePair<TestData.Key,TestData.Value> pair1=null;
+  while (iterator.hasNext()) {
+    pairsEmitted++;
+    KeyValuePair<TestData.Key,TestData.Value> pair2=iterator.next();
+    if (pair1 != null && pair2 != null) {
+      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
+    }
+    pair2=pair1;
+    if (pairsEmitted % (PAIRS / 20) == 0 || pairsEmitted == PAIRS - 1) {
+      LOG.info("checked " + (int)(100.0 * pairsEmitted / PAIRS) + "% ("+ pairsEmitted+ " pairs)");
+    }
+  }
+  Assert.assertTrue(PAIRS == pairsEmitted);
+  long end=System.currentTimeMillis();
+  long diff=end - start;
+  long secs=diff / 1000;
+  long mb=bytesWritten / 1024 / 1024;
+  LOG.info("sorting a workload of " + PAIRS + " pairs ("+ mb+ "mb)  took "+ secs+ " seconds -> "+ (1.0 * mb) / secs + "mb/s");
+}

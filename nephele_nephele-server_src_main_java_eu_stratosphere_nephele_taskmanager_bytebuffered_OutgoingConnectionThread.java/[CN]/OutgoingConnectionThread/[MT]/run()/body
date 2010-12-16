@@ -1,0 +1,53 @@
+{
+  while (!isInterrupted()) {
+synchronized (this.pendingOutgoingConnections) {
+      if (!pendingOutgoingConnections.isEmpty()) {
+        final OutgoingConnection outgoingConnection=pendingOutgoingConnections.poll();
+        try {
+          final SocketChannel socketChannel=SocketChannel.open();
+          socketChannel.configureBlocking(false);
+          final SelectionKey key=socketChannel.register(this.selector,SelectionKey.OP_CONNECT);
+          socketChannel.connect(outgoingConnection.getConnectionAddress());
+          key.attach(outgoingConnection);
+        }
+ catch (        IOException ioe) {
+          outgoingConnection.reportConnectionProblem(null,null,ioe);
+        }
+      }
+    }
+    try {
+      selector.select(500);
+    }
+ catch (    IOException e) {
+      e.printStackTrace();
+    }
+    Iterator<SelectionKey> iter=selector.selectedKeys().iterator();
+    while (iter.hasNext()) {
+      SelectionKey key=iter.next();
+      iter.remove();
+      if (key.isValid()) {
+        if (key.isConnectable()) {
+          doConnect(key);
+        }
+ else {
+          if (key.isReadable()) {
+            doRead(key);
+            continue;
+          }
+          if (key.isWritable()) {
+            doWrite(key);
+          }
+        }
+      }
+ else {
+        LOG.error("Received invalid key: " + key);
+      }
+    }
+  }
+  try {
+    this.selector.close();
+  }
+ catch (  IOException ioe) {
+    LOG.debug(StringUtils.stringifyException(ioe));
+  }
+}

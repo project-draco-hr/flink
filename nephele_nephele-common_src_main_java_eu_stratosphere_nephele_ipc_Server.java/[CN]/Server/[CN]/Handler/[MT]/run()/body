@@ -1,0 +1,28 @@
+{
+  LOG.info(getName() + ": starting");
+  SERVER.set(Server.this);
+  ByteArrayOutputStream buf=new ByteArrayOutputStream(10240);
+  while (running) {
+    try {
+      final Call call=callQueue.take();
+      if (LOG.isDebugEnabled())       LOG.debug(getName() + ": has #" + call.id+ " from "+ call.connection);
+      String errorClass=null;
+      String error=null;
+      IOReadableWritable value=null;
+      CurCall.set(call);
+      value=call(call.connection.protocol,call.param,call.timestamp);
+      CurCall.set(null);
+      setupResponse(buf,call,(error == null) ? Status.SUCCESS : Status.ERROR,value,errorClass,error);
+      responder.doRespond(call);
+    }
+ catch (    InterruptedException e) {
+      if (running) {
+        LOG.info(getName() + " caught: ",e);
+      }
+    }
+catch (    Exception e) {
+      LOG.info(getName() + " caught: ",e);
+    }
+  }
+  LOG.info(getName() + ": exiting");
+}

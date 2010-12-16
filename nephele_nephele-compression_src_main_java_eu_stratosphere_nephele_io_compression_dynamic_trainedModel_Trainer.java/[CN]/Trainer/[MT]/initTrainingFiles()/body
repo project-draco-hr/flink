@@ -1,0 +1,57 @@
+{
+  try {
+    FileSystem fs=pathToTrainingFiles.getFileSystem();
+    final FileStatus file=fs.getFileStatus(pathToTrainingFiles);
+    if (!file.isDir()) {
+      print("ERROR: Can not compute Training - Path to test files is not valid!",true);
+    }
+ else {
+      final FileStatus[] dir=fs.listStatus(pathToTrainingFiles);
+      int numberOfFiles=0;
+      for (int i=0; i < dir.length; i++) {
+        if (!dir[i].isDir())         numberOfFiles++;
+      }
+      if (numberOfFiles == 0) {
+        print("ERROR: Can not compute Training - No files found in given Directory!",true);
+        return false;
+      }
+      this.results=new TrainingResults(0,numberOfRounds,dataBlockSize,numberOfFiles);
+      byte[] tmpBuffer=new byte[this.dataBlockSize];
+      int fileCounter=0;
+      int blockCounter=0;
+      long fileSize=0;
+      for (int i=0; i < dir.length; i++) {
+        if (!dir[i].isDir()) {
+          FSDataInputStream fdis=fs.open(dir[i].getPath());
+          int readBytes=0;
+          while ((readBytes=fdis.read(tmpBuffer,0,dataBlockSize)) != -1) {
+            blockCounter++;
+            numberOfDataBlocks++;
+            fileSize+=readBytes;
+          }
+          fdis.close();
+          results.addFileInfo(fileCounter,dir[i].getPath().getName(),blockCounter,fileSize);
+          fileCounter++;
+          blockCounter=0;
+          fileSize=0;
+        }
+      }
+      this.results.setNumberOfDataBlocks(numberOfDataBlocks);
+      if (progress != null) {
+        SwingUtilities.invokeLater(new Runnable(){
+          @Override public void run(){
+            progress.setMaximum(numberOfDataBlocks * compressors.size());
+            progress.setValue(0);
+          }
+        }
+);
+      }
+    }
+  }
+ catch (  IOException e) {
+    print("ERROR: An Error occured during initialization of TrainingFiles!",true);
+    e.printStackTrace();
+    return false;
+  }
+  return true;
+}

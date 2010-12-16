@@ -1,0 +1,65 @@
+{
+  OptimizerNode pred1=input1 == null ? null : input1.getSourcePact();
+  OptimizerNode pred2=input2 == null ? null : input2.getSourcePact();
+  CompilerHints hints=getPactContract().getCompilerHints();
+  if (pred1 != null && pred2 != null) {
+    if (hints.getKeyCardinality() > 0) {
+      this.estimatedKeyCardinality=hints.getKeyCardinality();
+    }
+ else {
+      this.estimatedKeyCardinality=-1;
+      if (getOutputContract() == OutputContract.SameKey && pred1.estimatedKeyCardinality >= 1 && pred2.estimatedKeyCardinality >= 1) {
+        this.estimatedKeyCardinality=Math.min(pred1.estimatedKeyCardinality,pred2.estimatedKeyCardinality);
+      }
+    }
+    this.estimatedNumRecords=-1;
+    if (this.estimatedKeyCardinality != -1 && hints.getAvgNumValuesPerKey() >= 1.0f) {
+      this.estimatedNumRecords=(long)(this.estimatedKeyCardinality * hints.getAvgNumValuesPerKey()) + 1;
+    }
+ else {
+      float vpk1=-1.0f, vpk2=-1.0f;
+      if (pred1.estimatedNumRecords != -1 && pred1.estimatedKeyCardinality != -1) {
+        vpk1=pred1.estimatedNumRecords / ((float)pred1.estimatedKeyCardinality);
+      }
+      if (pred2.estimatedNumRecords != -1 && pred2.estimatedKeyCardinality != -1) {
+        vpk2=pred2.estimatedNumRecords / ((float)pred2.estimatedKeyCardinality);
+      }
+      if (vpk1 >= 1.0f && vpk2 >= 1.0f) {
+        long numInKeys=Math.max(pred1.estimatedKeyCardinality,pred2.estimatedKeyCardinality);
+        this.estimatedNumRecords=(long)(numInKeys * vpk1 * vpk2) + 1;
+        if (hints.getSelectivity() >= 0.0f) {
+          this.estimatedNumRecords=(long)(this.estimatedNumRecords * hints.getSelectivity()) + 1;
+        }
+        if (this.estimatedKeyCardinality == -1 && hints.getAvgNumValuesPerKey() >= 1.0f) {
+          this.estimatedKeyCardinality=(long)(this.estimatedNumRecords / hints.getAvgNumValuesPerKey()) + 1;
+        }
+      }
+    }
+    this.estimatedOutputSize=-1;
+    if (this.estimatedNumRecords != -1) {
+      if (hints.getAvgBytesPerRecord() >= 1.0f) {
+        this.estimatedOutputSize=(long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) + 1;
+      }
+ else {
+        float width1=0.0f, width2=0.0f;
+        if (pred1.estimatedOutputSize != -1 && pred1.estimatedNumRecords != -1) {
+          width1=pred1.estimatedOutputSize / ((float)pred1.estimatedNumRecords);
+        }
+        if (pred2.estimatedOutputSize != -1 && pred2.estimatedNumRecords != -1) {
+          width2=pred2.estimatedOutputSize / ((float)pred2.estimatedNumRecords);
+        }
+        if (width1 > 0.0f && width2 > 0.0f) {
+          this.estimatedOutputSize=(long)(this.estimatedNumRecords * (width1 + width2)) + 1;
+        }
+      }
+    }
+    if (this.estimatedKeyCardinality > this.estimatedNumRecords) {
+      this.estimatedKeyCardinality=this.estimatedNumRecords;
+    }
+  }
+ else {
+    this.estimatedKeyCardinality=-1;
+    this.estimatedNumRecords=-1;
+    this.estimatedOutputSize=-1;
+  }
+}

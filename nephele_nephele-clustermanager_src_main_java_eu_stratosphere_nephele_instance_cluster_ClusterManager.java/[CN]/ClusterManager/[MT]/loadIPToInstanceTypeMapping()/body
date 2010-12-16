@@ -1,0 +1,54 @@
+{
+  final String configDir=GlobalConfiguration.getString(CONFIG_DIR_KEY,null);
+  if (configDir == null) {
+    LOG.error("Cannot find configuration directory to read IP to instance type mapping");
+    return;
+  }
+  final File slaveFile=new File(configDir + File.separator + SLAVE_FILE_NAME);
+  if (!slaveFile.exists()) {
+    LOG.error("Cannot access slave file to read IP to instance type mapping");
+    return;
+  }
+  final Pattern pattern=Pattern.compile("^(\\S+)\\s*(\\S*)\\s*$");
+  try {
+    final BufferedReader input=new BufferedReader(new FileReader(slaveFile));
+    String line=null;
+    while ((line=input.readLine()) != null) {
+      final Matcher m=pattern.matcher(line);
+      if (!m.matches()) {
+        LOG.error("Entry does not match format: " + line);
+        continue;
+      }
+      InetAddress address=null;
+      String host=m.group(1);
+      try {
+        final int pos=host.lastIndexOf('/');
+        if (pos != -1) {
+          host=host.substring(pos + 1);
+        }
+        address=InetAddress.getByName(host);
+      }
+ catch (      UnknownHostException e) {
+        LOG.error("Cannot resolve " + host + " to a hostname/IP address",e);
+        continue;
+      }
+      InstanceType instanceType=null;
+      String instanceTypeName=m.group(2);
+      if (instanceTypeName == null || instanceTypeName.length() == 0) {
+        instanceType=getDefaultInstanceType();
+      }
+ else {
+        instanceType=getInstanceTypeByName(instanceTypeName);
+        if (instanceType == null) {
+          instanceType=getDefaultInstanceType();
+          LOG.warn(m.group(2) + " does not refer to a valid instance type, switching to default");
+        }
+      }
+      this.ipToInstanceTypeMapping.put(address,instanceType);
+    }
+    input.close();
+  }
+ catch (  IOException e) {
+    LOG.error("Cannot load IP to instance type mapping from file: " + e);
+  }
+}

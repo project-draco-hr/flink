@@ -1,0 +1,22 @@
+{
+  DataSourceContract<PactString,PactString> input_left=new DataSourceContract<PactString,PactString>(CoGroupTestInFormat.class,getHDFSProvider().getHdfsHome() + "/cogroup_left");
+  input_left.setFormatParameter("delimiter","\n");
+  input_left.setDegreeOfParallelism(config.getInteger("CoGroupTest#NoSubtasks",1));
+  DataSourceContract<PactString,PactString> input_right=new DataSourceContract<PactString,PactString>(CoGroupTestInFormat.class,getHDFSProvider().getHdfsHome() + "/cogroup_right");
+  input_right.setFormatParameter("delimiter","\n");
+  input_right.setDegreeOfParallelism(config.getInteger("CoGroupTest#NoSubtasks",1));
+  CoGroupContract<PactString,PactString,PactString,PactString,PactInteger> testCoGrouper=new CoGroupContract<PactString,PactString,PactString,PactString,PactInteger>(TestCoGrouper.class);
+  testCoGrouper.setDegreeOfParallelism(config.getInteger("CoGroupTest#NoSubtasks",1));
+  testCoGrouper.getStubParameters().setString(PactCompiler.HINT_LOCAL_STRATEGY,config.getString("CoGroupTest#LocalStrategy",""));
+  testCoGrouper.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY,config.getString("CoGroupTest#ShipStrategy",""));
+  DataSinkContract<PactString,PactInteger> output=new DataSinkContract<PactString,PactInteger>(CoGroupOutFormat.class,getHDFSProvider().getHdfsHome() + "/result.txt");
+  output.setDegreeOfParallelism(1);
+  output.setInput(testCoGrouper);
+  testCoGrouper.setFirstInput(input_left);
+  testCoGrouper.setSecondInput(input_right);
+  Plan plan=new Plan(output);
+  PactCompiler pc=new PactCompiler();
+  OptimizedPlan op=pc.compile(plan);
+  JobGraphGenerator jgg=new JobGraphGenerator();
+  return jgg.compileJobGraph(op);
+}

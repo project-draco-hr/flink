@@ -1,0 +1,41 @@
+{
+  String[] resultFiles=new String[1];
+  if (getHDFSProvider().getFileSystem().getFileStatus(new Path(hdfsPath)).isDir()) {
+    LinkedList<String> files=new LinkedList<String>();
+    for (    FileStatus fs : getHDFSProvider().getFileSystem().listStatus(new Path(hdfsPath))) {
+      if (!fs.isDir()) {
+        files.add(fs.getPath().toString());
+      }
+    }
+    resultFiles=files.toArray(resultFiles);
+  }
+ else {
+    resultFiles[0]=hdfsPath;
+  }
+  PriorityQueue<String> computedResult=new PriorityQueue<String>();
+  for (  String resultFile : resultFiles) {
+    InputStream is=getHDFSProvider().getHdfsInputStream(resultFile);
+    BufferedReader reader=new BufferedReader(new InputStreamReader(is));
+    String line=reader.readLine();
+    while (line != null) {
+      computedResult.add(line);
+      line=reader.readLine();
+    }
+    reader.close();
+  }
+  assertEquals("Computed Result is empty",0,computedResult.size());
+  PriorityQueue<String> expectedResult=new PriorityQueue<String>();
+  StringTokenizer st=new StringTokenizer(expectedResultStr,"\n");
+  while (st.hasMoreElements()) {
+    expectedResult.add(st.nextToken());
+  }
+  System.out.println("Expected: " + expectedResult);
+  System.out.println("Computed: " + computedResult);
+  Assert.assertEquals("Computed and expected results have different size",expectedResult.size(),computedResult.size());
+  while (!expectedResult.isEmpty()) {
+    String expectedLine=expectedResult.poll();
+    String computedLine=computedResult.poll();
+    System.out.println("expLine: <" + expectedLine + ">\t\t: compLine: <"+ computedLine+ ">");
+    Assert.assertEquals("Computed and expected lines differ",expectedLine,computedLine);
+  }
+}

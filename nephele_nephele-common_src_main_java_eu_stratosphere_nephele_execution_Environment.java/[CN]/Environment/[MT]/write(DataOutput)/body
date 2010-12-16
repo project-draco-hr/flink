@@ -1,0 +1,41 @@
+{
+  if (this.jobID == null) {
+    throw new IOException("this.jobID is null");
+  }
+  this.jobID.write(out);
+  StringRecord.writeString(out,this.taskName);
+  final String[] requiredJarFiles=LibraryCacheManager.getRequiredJarFiles(this.jobID);
+  out.writeInt(requiredJarFiles.length);
+  for (int i=0; i < requiredJarFiles.length; i++) {
+    StringRecord.writeString(out,requiredJarFiles[i]);
+  }
+  if (this.invokableClass == null) {
+    throw new IOException("this.invokableClass is null");
+  }
+  StringRecord.writeString(out,this.invokableClass.getName());
+  out.writeInt(getNumberOfOutputGates());
+  for (int i=0; i < getNumberOfOutputGates(); i++) {
+    StringRecord.writeString(out,getOutputGate(i).getType().getName());
+    getOutputGate(i).write(out);
+  }
+  out.writeInt(getNumberOfInputGates());
+  for (int i=0; i < getNumberOfInputGates(); i++) {
+    getInputGate(i).write(out);
+  }
+  out.writeInt(this.inputSplits.size());
+  for (int i=0; i < this.inputSplits.size(); i++) {
+    final InputSplit inputSplit=this.inputSplits.get(i);
+    if (inputSplit == null) {
+      out.writeBoolean(false);
+    }
+ else {
+      out.writeBoolean(true);
+      StringRecord.writeString(out,inputSplit.getClass().getName());
+      inputSplit.write(out);
+    }
+  }
+  this.runtimeConfiguration.write(out);
+  out.writeInt(this.currentNumberOfSubtasks);
+  out.writeInt(this.indexInSubtaskGroup);
+  EnumUtils.writeEnum(out,this.executionState);
+}

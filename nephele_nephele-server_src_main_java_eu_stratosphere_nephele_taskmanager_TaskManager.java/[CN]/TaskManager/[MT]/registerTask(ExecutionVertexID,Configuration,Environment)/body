@@ -1,0 +1,59 @@
+{
+  if (id == null) {
+    LOG.debug("Incoming task has no ID");
+    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+    result.setDescription("Incoming task has no ID");
+    return result;
+  }
+  if (ee == null) {
+    LOG.debug("Incoming environment is null");
+    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+    result.setDescription("Incoming task with ID " + id + " has no environment");
+    return result;
+  }
+synchronized (this.runningTasks) {
+    if (this.runningTasks.containsKey(id)) {
+      LOG.debug("Task with ID " + id + " is already running");
+      TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+      result.setDescription("Task with ID " + id + " is already running");
+      return result;
+    }
+  }
+  if (ee.hasUnboundInputGates() || ee.hasUnboundOutputGates()) {
+    LOG.debug("Task with ID " + id + " has unbound gates");
+    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+    result.setDescription("Task with ID " + id + " has unbound gates");
+    return result;
+  }
+  final EnvironmentWrapper wrapper=new EnvironmentWrapper(this,id,ee);
+  ee.registerExecutionNotifiable(wrapper);
+  boolean enableProfiling=false;
+  if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+    enableProfiling=true;
+  }
+  if (enableProfiling) {
+    this.profiler.registerExecutionNotifiable(id,jobConfiguration,ee);
+  }
+  try {
+    for (int i=0; i < ee.getNumberOfInputGates(); i++) {
+      registerInputChannels(ee.getInputGate(i));
+      if (enableProfiling) {
+        this.profiler.registerInputGateListener(id,jobConfiguration,ee.getInputGate(i));
+      }
+    }
+    final ChannelType commonChannelType=hasCommonOutputChannelType(ee);
+    final ByteBufferedOutputChannelGroup channelGroup=new ByteBufferedOutputChannelGroup(this.byteBufferedChannelManager,this.checkpointManager,commonChannelType,id);
+    for (int i=0; i < ee.getNumberOfOutputGates(); i++) {
+      registerOutputChannels(ee.getOutputGate(i),channelGroup);
+      if (enableProfiling) {
+        this.profiler.registerOutputGateListener(id,jobConfiguration,ee.getOutputGate(i));
+      }
+    }
+  }
+ catch (  ChannelSetupException e) {
+    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+    result.setDescription(e.getMessage());
+    return result;
+  }
+  return null;
+}

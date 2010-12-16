@@ -1,0 +1,43 @@
+{
+  if (shouldCloseConnection.get()) {
+    return;
+  }
+  touch();
+  try {
+    int id=in.readInt();
+    if (LOG.isDebugEnabled())     LOG.debug(getName() + " got value #" + id);
+    Call call=calls.remove(id);
+    int state=in.readInt();
+    if (state == Status.SUCCESS.state) {
+      IOReadableWritable value=null;
+      boolean isNotNull=in.readBoolean();
+      if (isNotNull) {
+        String returnClassName=StringRecord.readString(in);
+        Class<? extends IOReadableWritable> c=null;
+        try {
+          c=ClassUtils.getRecordByName(returnClassName);
+        }
+ catch (        ClassNotFoundException e) {
+          e.printStackTrace();
+        }
+        try {
+          value=c.newInstance();
+        }
+ catch (        Exception e) {
+          e.printStackTrace();
+        }
+        value.read(in);
+      }
+      call.setValue(value);
+    }
+ else     if (state == Status.ERROR.state) {
+      call.setException(new RemoteException(StringRecord.readString(in),StringRecord.readString(in)));
+    }
+ else     if (state == Status.FATAL.state) {
+      markClosed(new RemoteException(StringRecord.readString(in),StringRecord.readString(in)));
+    }
+  }
+ catch (  IOException e) {
+    markClosed(e);
+  }
+}

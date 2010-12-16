@@ -1,0 +1,19 @@
+{
+  if (!isClosing) {
+    isClosing=true;
+    requestQueue.add(new IORequest<Buffer.Output>(this,currentBuffer));
+    lock.lock();
+    while (emptyBufferQueue.size() < emptyBufferQueueSize) {
+      allRequestsHandled.awaitUninterruptibly();
+    }
+    lock.unlock();
+    try {
+      fileChannel.force(true);
+      file.close();
+    }
+ catch (    IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+  return IOManager.unbindBuffers(emptyBufferQueue);
+}

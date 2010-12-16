@@ -1,0 +1,66 @@
+{
+  if (job == null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Submitted job is null!");
+    return result;
+  }
+  LOG.debug("Submitted job " + job.getName() + " is not null");
+  AbstractJobVertex jv=job.findVertexWithNullEdges();
+  if (jv != null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Vertex " + jv.getName() + " has at least one null edge");
+    return result;
+  }
+  LOG.debug("Submitted job " + job.getName() + " has no null edges");
+  if (!job.isWeaklyConnected()) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not weakly connected");
+    return result;
+  }
+  LOG.debug("The graph of job " + job.getName() + " is weakly connected");
+  if (!job.isAcyclic()) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not a DAG");
+    return result;
+  }
+  LOG.info("The graph of job " + job.getName() + " is acyclic");
+  jv=job.areVertexDegreesCorrect();
+  if (jv != null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Degree of vertex " + jv.getName() + " is incorrect");
+    return result;
+  }
+  LOG.info("All vertices of job " + job.getName() + " have the correct degree");
+  LOG.info("Creating initial execution graph from job graph " + job.getName());
+  ExecutionGraph eg=null;
+  try {
+    eg=new ExecutionGraph(job,this.instanceManager);
+  }
+ catch (  GraphConversionException gce) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,gce.getMessage());
+    return result;
+  }
+  boolean profilingEnabled=false;
+  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+    profilingEnabled=true;
+  }
+  if (this.eventCollector != null) {
+    this.eventCollector.registerJob(eg,profilingEnabled);
+  }
+  if (profilingEnabled) {
+    this.profiler.registerProfilingJob(eg);
+    if (this.eventCollector != null) {
+      this.profiler.registerForProfilingData(eg.getJobID(),this.eventCollector);
+    }
+  }
+  if (this.optimizer != null) {
+    this.optimizer.optimize(eg);
+  }
+  LOG.info("Scheduling job " + job.getName());
+  try {
+    this.scheduler.schedulJob(eg);
+  }
+ catch (  SchedulingException e) {
+    unregisterJob(eg);
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,e.getMessage());
+    return result;
+  }
+  jobStartTime=System.currentTimeMillis();
+  System.out.println("Job started " + jobStartTime);
+  return new JobSubmissionResult(AbstractJobResult.ReturnCode.SUCCESS,null);
+}

@@ -1,0 +1,57 @@
+{
+  if (vertices.containsKey(node)) {
+    return false;
+  }
+  AbstractJobVertex vertex=null;
+  try {
+switch (node.getPactType()) {
+case Map:
+      vertex=generateMapVertex(node);
+    break;
+case Reduce:
+  if (node instanceof ReduceNode) {
+    vertex=generateReduceVertex((ReduceNode)node);
+  }
+ else   if (node instanceof CombinerNode) {
+    vertex=generateCombineVertex((CombinerNode)node);
+  }
+ else {
+    throw new CompilerException("Wrong node type for PACT type 'Reduce': " + node.getClass().getName());
+  }
+break;
+case Match:
+vertex=generateMatchVertex(node);
+break;
+case Cross:
+vertex=generateCrossVertex(node);
+break;
+case Cogroup:
+vertex=generateCoGroupVertex(node);
+break;
+case DataSource:
+vertex=generateDataSourceVertex(node);
+break;
+case DataSink:
+vertex=generateDataSinkVertex(node);
+break;
+default :
+throw new Exception("Unknown PACT type: " + node.getPactType());
+}
+}
+ catch (NotEnoughMemoryException nemex) {
+throw new CompilerException("The available memory portion of " + node.getMemoryPerTask() + " megabytes is not sufficient for the task '"+ node.toString()+ "' Decrease the intra-node parallelism or use instances with more memory.");
+}
+catch (Exception e) {
+throw new CompilerException("An error occurred while translating the optimized plan to a nephele JobGraph: " + e.getMessage(),e);
+}
+int pd=node.getDegreeOfParallelism();
+vertex.setNumberOfSubtasks(pd);
+if (maxDegreeVertex == null || maxDegreeVertex.getNumberOfSubtasks() < pd) {
+maxDegreeVertex=vertex;
+}
+if (node.getInstancesPerMachine() >= 1) {
+vertex.setNumberOfSubtasksPerInstance(node.getInstancesPerMachine());
+}
+this.vertices.put(node,vertex);
+return true;
+}

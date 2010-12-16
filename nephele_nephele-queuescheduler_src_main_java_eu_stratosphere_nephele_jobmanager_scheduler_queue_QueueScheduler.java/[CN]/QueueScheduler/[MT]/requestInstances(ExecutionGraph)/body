@@ -1,0 +1,19 @@
+{
+  final Map<InstanceType,Integer> requiredInstanceTypes=executionGraph.getInstanceTypesRequiredForCurrentStage();
+  if (requiredInstanceTypes == null)   throw new InstanceException("Cannot acquire required instance types to run next stage");
+  final Iterator<InstanceType> it=requiredInstanceTypes.keySet().iterator();
+  while (it.hasNext()) {
+    final InstanceType type=it.next();
+    for (int i=0; i < requiredInstanceTypes.get(type).intValue(); i++) {
+      LOG.info("Trying to allocate instance of type " + type.getIdentifier());
+      this.instanceManager.requestInstance(executionGraph.getJobID(),executionGraph.getJobConfiguration(),type);
+    }
+  }
+  final ExecutionGraphIterator it2=new ExecutionGraphIterator(executionGraph,executionGraph.getIndexOfCurrentExecutionStage(),true,true);
+  while (it2.hasNext()) {
+    final ExecutionVertex vertex=it2.next();
+    if (vertex.getExecutionState() == ExecutionState.SCHEDULED) {
+      vertex.setExecutionState(ExecutionState.ASSIGNING);
+    }
+  }
+}

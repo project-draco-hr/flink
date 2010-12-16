@@ -1,0 +1,28 @@
+{
+synchronized (this.registeredJobs) {
+    Iterator<JobID> it=this.registeredJobs.keySet().iterator();
+    while (it.hasNext()) {
+      final JobID jobID=it.next();
+      final JobProfilingData jobProfilingData=this.registeredJobs.get(jobID);
+      if (!jobProfilingData.instanceAllocatedByJob(profilingData)) {
+        continue;
+      }
+      final SingleInstanceProfilingEvent singleInstanceProfilingEvent=new SingleInstanceProfilingEvent(profilingData.getProfilingInterval(),profilingData.getIOWaitCPU(),profilingData.getIdleCPU(),profilingData.getUserCPU(),profilingData.getSystemCPU(),profilingData.getHardIrqCPU(),profilingData.getSoftIrqCPU(),profilingData.getTotalMemory(),profilingData.getFreeMemory(),profilingData.getBufferedMemory(),profilingData.getCachedMemory(),profilingData.getCachedSwapMemory(),profilingData.getReceivedBytes(),profilingData.getTransmittedBytes(),jobID,timestamp,timestamp - jobProfilingData.getProfilingStart(),profilingData.getInstanceConnectionInfo().toString());
+synchronized (this.registeredNotifiables) {
+        List<ProfilingNotifiable> jobNotifiables=this.registeredNotifiables.get(jobID);
+        if (jobNotifiables == null) {
+          continue;
+        }
+        final InstanceSummaryProfilingEvent instanceSummary=jobProfilingData.getInstanceSummaryProfilingData(timestamp);
+        final Iterator<ProfilingNotifiable> notifiableIterator=jobNotifiables.iterator();
+        while (notifiableIterator.hasNext()) {
+          final ProfilingNotifiable profilingNotifiable=notifiableIterator.next();
+          profilingNotifiable.processProfilingEvents(singleInstanceProfilingEvent);
+          if (instanceSummary != null) {
+            profilingNotifiable.processProfilingEvents(instanceSummary);
+          }
+        }
+      }
+    }
+  }
+}

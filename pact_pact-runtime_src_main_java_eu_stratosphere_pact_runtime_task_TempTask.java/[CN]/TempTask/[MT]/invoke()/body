@@ -1,0 +1,34 @@
+{
+  LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  SpillingResettableIterator<KeyValuePair<Key,Value>> tempIterator=null;
+  try {
+    tempIterator=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,reader,MEMORY_IO,new KeyValuePairDeserializer<Key,Value>(stub.getOutKeyType(),stub.getOutValueType()));
+    LOG.debug("Start temping records: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    tempIterator.open();
+    LOG.debug("Finished temping records: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    LOG.debug("Start serving records: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    while (tempIterator.hasNext()) {
+      KeyValuePair<Key,Value> pair=tempIterator.next();
+      writer.emit(pair);
+    }
+    LOG.debug("Finished serving records: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+ catch (  MemoryAllocationException mae) {
+    throw new RuntimeException("Unable to obtain SpillingResettableIterator for TempTask",mae);
+  }
+catch (  ServiceException se) {
+    throw new RuntimeException(se);
+  }
+catch (  IOException ioe) {
+    throw new RuntimeException(ioe);
+  }
+catch (  InterruptedException ie) {
+    throw new RuntimeException(ie);
+  }
+ finally {
+    tempIterator.close();
+  }
+  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+}

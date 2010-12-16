@@ -1,0 +1,97 @@
+{
+  List<String> pars=Arrays.asList(args);
+  int lengthPars=pars.size();
+  int posJar=pars.indexOf("-jar");
+  int posConf=pars.indexOf("-conf");
+  String jobName="";
+  List<String> jars=new ArrayList<String>();
+  List<String> confs=new ArrayList<String>();
+  if (posJar == -1 && posConf == -1) {
+    if (lengthPars != 1) {
+      System.err.println("Usage: JobLauncher JobName -jar <list of jars> -conf <list of confs>");
+      System.exit(1);
+    }
+ else {
+      jobName=pars.get(0);
+    }
+  }
+ else   if (posJar != -1 && posConf == -1) {
+    if (posJar != 1 || lengthPars < 3) {
+      System.err.println("Usage: JobLauncher JobName -jar <list of jars> -conf <list of confs>");
+      System.exit(1);
+    }
+ else {
+      jobName=pars.get(0);
+      jars=pars.subList(2,pars.size());
+    }
+  }
+ else   if (posJar == -1 && posConf != -1) {
+    if (posConf != 1 || lengthPars < 3) {
+      System.err.println("Usage: JobLauncher JobName -jar <list of jars> -conf <list of confs>");
+      System.exit(1);
+    }
+ else {
+      jobName=pars.get(0);
+      confs=pars.subList(posConf + 1,pars.size());
+    }
+  }
+ else {
+    if (pars.size() < 5 || posJar != 1 || posConf < 3 || posConf == pars.size() - 1) {
+      System.err.println("Usage: JobLauncher JobName -jar <list of jars> -conf <list of confs>");
+      System.exit(1);
+    }
+ else {
+      jobName=pars.get(0);
+      jars=pars.subList(2,posConf);
+      confs=pars.subList(posConf + 1,pars.size());
+    }
+  }
+  try {
+    Job job=(Job)Class.forName(jobName).newInstance();
+    JobGraph jobGraph=job.getJobGraph();
+    for (int i=0; i < jars.size(); i++) {
+      jobGraph.addJar(new Path(jars.get(i)));
+    }
+    Configuration jobConfiguration=jobGraph.getJobConfiguration();
+    Configuration clientConfiguration=new Configuration();
+    DocumentBuilderFactory dbf=DocumentBuilderFactory.newInstance();
+    DocumentBuilder db=dbf.newDocumentBuilder();
+    for (int i=0; i < confs.size(); i++) {
+      Document doc=db.parse(confs.get(i));
+      NodeList nl=doc.getElementsByTagName("property");
+      for (int j=0; j < nl.getLength(); j++) {
+        Element property=(Element)nl.item(j);
+        Node nodeKey=property.getElementsByTagName("key").item(0);
+        Node nodeValue=property.getElementsByTagName("value").item(0);
+        String key=nodeKey.getFirstChild().getNodeValue();
+        String value=nodeValue.getFirstChild().getNodeValue();
+        if (key.startsWith("job.")) {
+          jobConfiguration.setString(key,value);
+        }
+ else {
+          clientConfiguration.setString(key,value);
+        }
+      }
+    }
+    JobClient jobClient=new JobClient(jobGraph,clientConfiguration);
+    jobClient.submitJobAndWait();
+  }
+ catch (  InstantiationException e) {
+    e.printStackTrace();
+  }
+catch (  IllegalAccessException e) {
+    e.printStackTrace();
+  }
+catch (  ClassNotFoundException e) {
+    e.printStackTrace();
+  }
+catch (  ParserConfigurationException e) {
+    e.printStackTrace();
+  }
+catch (  SAXException e) {
+    e.printStackTrace();
+  }
+catch (  IOException e) {
+    e.printStackTrace();
+  }
+}

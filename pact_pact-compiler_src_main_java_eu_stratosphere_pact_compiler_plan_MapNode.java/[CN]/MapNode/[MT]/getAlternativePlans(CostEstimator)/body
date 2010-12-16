@@ -1,0 +1,23 @@
+{
+  if (cachedPlans != null) {
+    return cachedPlans;
+  }
+  List<? extends OptimizerNode> inPlans=input.getSourcePact().getAlternativePlans(estimator);
+  List<MapNode> outputPlans=new ArrayList<MapNode>();
+  for (  OptimizerNode pred : inPlans) {
+    ShipStrategy ss=input.getShipStrategy() == ShipStrategy.NONE ? ShipStrategy.FORWARD : input.getShipStrategy();
+    GlobalProperties gp=PactConnection.getGlobalPropertiesAfterConnection(pred,ss);
+    LocalProperties lp=PactConnection.getLocalPropertiesAfterConnection(pred,ss);
+    MapNode nMap=new MapNode(this,pred,input,gp,lp);
+    nMap.input.setShipStrategy(ss);
+    nMap.getGlobalProperties().getPreservedAfterContract(getOutputContract());
+    nMap.getLocalProperties().getPreservedAfterContract(getOutputContract());
+    estimator.costOperator(nMap);
+    outputPlans.add(nMap);
+  }
+  prunePlanAlternatives(outputPlans);
+  if (this.getOutgoingConnections() != null && this.getOutgoingConnections().size() > 1) {
+    this.cachedPlans=outputPlans;
+  }
+  return outputPlans;
+}

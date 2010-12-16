@@ -1,0 +1,70 @@
+{
+  CircularElement element=null;
+  while (element == null) {
+    try {
+      element=queues.empty.take();
+    }
+ catch (    InterruptedException iex) {
+      if (!isRunning())       return;
+    }
+  }
+  if (LOG.isDebugEnabled()) {
+    while (isRunning() && reader.hasNext()) {
+      KeyValuePair<K,V> pair=reader.next();
+      if (!element.buffer.write(pair)) {
+        LOG.debug("Emitting full read buffer " + element.id + ".");
+        queues.sort.put(element);
+        element=null;
+        do {
+          try {
+            element=queues.empty.take();
+          }
+ catch (          InterruptedException iex) {
+            if (!isRunning()) {
+              return;
+            }
+          }
+        }
+ while (element == null);
+        if (!element.buffer.isEmpty()) {
+          LOG.error("New buffer is not empty.");
+        }
+        element.buffer.write(pair);
+        LOG.debug("Retrieved empty read buffer " + element.id + ".");
+      }
+    }
+  }
+ else {
+    while (isRunning() && reader.hasNext()) {
+      KeyValuePair<K,V> pair=reader.next();
+      if (!element.buffer.write(pair)) {
+        queues.sort.put(element);
+        element=null;
+        do {
+          try {
+            element=queues.empty.take();
+          }
+ catch (          InterruptedException iex) {
+            if (!isRunning()) {
+              return;
+            }
+          }
+        }
+ while (element == null);
+        if (!element.buffer.isEmpty()) {
+          LOG.error("New buffer is not empty.");
+        }
+        element.buffer.write(pair);
+      }
+    }
+  }
+  if (!isRunning()) {
+    return;
+  }
+  if (!element.buffer.isEmpty()) {
+    LOG.debug("Emitting last read buffer " + element.id + ".");
+    queues.sort.put(element);
+  }
+  queues.sort.put(SENTINEL);
+  LOG.debug("Reading thread done.");
+}

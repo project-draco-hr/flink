@@ -1,0 +1,32 @@
+{
+  KeyValuePair<Key,Value> pair=null;
+  LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  FileInputSplit[] splits=getFileInputSplits();
+  boolean immutable=config.getMutability() == Config.Mutability.IMMUTABLE;
+  for (int i=0; i < splits.length; i++) {
+    FileInputSplit split=splits[i];
+    long start=split.getStart();
+    long length=split.getLength();
+    LOG.debug("Opening input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    FileSystem fs=FileSystem.get(split.getPath().toUri(),new org.apache.hadoop.conf.Configuration());
+    FSDataInputStream fdis=fs.open(new Path(split.getPath().toUri().toString()));
+    format.setInput(new DistributedDataInputStream(fdis),start,length,(1024 * 1024));
+    format.open();
+    LOG.debug("Starting reader on file " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    if (!immutable) {
+      pair=format.createPair();
+    }
+    while (!format.reachedEnd()) {
+      if (immutable) {
+        pair=format.createPair();
+      }
+      boolean valid=format.nextPair(pair);
+      if (valid) {
+        output.collect(pair.getKey(),pair.getValue());
+      }
+    }
+    format.close();
+    LOG.debug("Closing input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+}

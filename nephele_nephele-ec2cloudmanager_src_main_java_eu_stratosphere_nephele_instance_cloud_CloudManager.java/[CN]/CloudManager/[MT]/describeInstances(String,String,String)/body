@@ -1,0 +1,46 @@
+{
+  final Boolean isSecure=GlobalConfiguration.getBoolean(EC2WSSECUREKEY,false);
+  final String server=GlobalConfiguration.getString(EC2WSSERVERKEY,null);
+  if (server == null) {
+    LOG.error("Unable to contact cloud: web service server unknown");
+    return null;
+  }
+  final int port=GlobalConfiguration.getInteger(EC2WSPORTKEY,-1);
+  if (port < 0) {
+    LOG.error("cloud.ec2ws.port not defined in config file");
+    return null;
+  }
+  final com.xerox.amazonws.ec2.Jec2 ec2Client=new com.xerox.amazonws.ec2.Jec2(awsAccessId,awsSecretKey,isSecure,server,port);
+  ec2Client.setResourcePrefix("/services/Eucalyptus");
+  ec2Client.setSignatureVersion(1);
+  List<com.xerox.amazonws.ec2.ReservationDescription> reservation=null;
+  try {
+    reservation=ec2Client.describeInstances(new String[0]);
+  }
+ catch (  Exception e) {
+    LOG.error("Error while communicating with cloud: " + StringUtils.stringifyException(e));
+    return null;
+  }
+  if (reservation == null) {
+    LOG.debug("EC2 describeInstances returned null");
+    return null;
+  }
+  final List<com.xerox.amazonws.ec2.ReservationDescription.Instance> returnInstances=new ArrayList<com.xerox.amazonws.ec2.ReservationDescription.Instance>();
+  final Iterator<com.xerox.amazonws.ec2.ReservationDescription> it=reservation.iterator();
+  while (it.hasNext()) {
+    final com.xerox.amazonws.ec2.ReservationDescription r=it.next();
+    if (!owner.equals(r.getOwner())) {
+      continue;
+    }
+    final List<com.xerox.amazonws.ec2.ReservationDescription.Instance> instances=r.getInstances();
+    if (instances == null) {
+      LOG.debug("EC2 describesInstances includes no instances for owner " + owner);
+      continue;
+    }
+    final Iterator<com.xerox.amazonws.ec2.ReservationDescription.Instance> it2=instances.iterator();
+    while (it2.hasNext()) {
+      returnInstances.add(it2.next());
+    }
+  }
+  return returnInstances;
+}

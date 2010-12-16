@@ -1,0 +1,32 @@
+{
+  DataSourceContract<PactString,PactString> input_left=new DataSourceContract<PactString,PactString>(MatchTestInFormat.class,getHDFSProvider().getHdfsHome() + "/match_left");
+  input_left.setFormatParameter("delimiter","\n");
+  input_left.setDegreeOfParallelism(config.getInteger("MatchTest#NoSubtasks",1));
+  DataSourceContract<PactString,PactString> input_right=new DataSourceContract<PactString,PactString>(MatchTestInFormat.class,getHDFSProvider().getHdfsHome() + "/match_right");
+  input_right.setFormatParameter("delimiter","\n");
+  input_right.setDegreeOfParallelism(config.getInteger("MatchTest#NoSubtasks",1));
+  MatchContract<PactString,PactString,PactString,PactString,PactInteger> testMatcher=new MatchContract<PactString,PactString,PactString,PactString,PactInteger>(TestMatcher.class);
+  testMatcher.setDegreeOfParallelism(config.getInteger("MatchTest#NoSubtasks",1));
+  testMatcher.getStubParameters().setString(PactCompiler.HINT_LOCAL_STRATEGY,config.getString("MatchTest#LocalStrategy",""));
+  if (config.getString("MatchTest#ShipStrategy","").equals("BROADCAST_FIRST")) {
+    testMatcher.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY_FIRST_INPUT,PactCompiler.HINT_SHIP_STRATEGY_BROADCAST);
+    testMatcher.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY_SECOND_INPUT,PactCompiler.HINT_SHIP_STRATEGY_FORWARD);
+  }
+ else   if (config.getString("MatchTest#ShipStrategy","").equals("BROADCAST_SECOND")) {
+    testMatcher.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY_FIRST_INPUT,PactCompiler.HINT_SHIP_STRATEGY_FORWARD);
+    testMatcher.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY_SECOND_INPUT,PactCompiler.HINT_SHIP_STRATEGY_BROADCAST);
+  }
+ else {
+    testMatcher.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY,config.getString("MatchTest#ShipStrategy",""));
+  }
+  DataSinkContract<PactString,PactInteger> output=new DataSinkContract<PactString,PactInteger>(MatchTestOutFormat.class,getHDFSProvider().getHdfsHome() + "/result.txt");
+  output.setDegreeOfParallelism(1);
+  output.setInput(testMatcher);
+  testMatcher.setFirstInput(input_left);
+  testMatcher.setSecondInput(input_right);
+  Plan plan=new Plan(output);
+  PactCompiler pc=new PactCompiler();
+  OptimizedPlan op=pc.compile(plan);
+  JobGraphGenerator jgg=new JobGraphGenerator();
+  return jgg.compileJobGraph(op);
+}

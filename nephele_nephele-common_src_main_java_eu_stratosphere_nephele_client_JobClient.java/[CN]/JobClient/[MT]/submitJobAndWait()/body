@@ -1,0 +1,72 @@
+{
+synchronized (this.jobSubmitClient) {
+    final JobSubmissionResult submissionResult=this.jobSubmitClient.submitJob(this.jobGraph);
+    if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
+      LOG.error("ERROR: " + submissionResult.getDescription());
+      return false;
+    }
+ else {
+      Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
+    }
+  }
+  long sleep=0;
+  try {
+    final IntegerRecord interval=this.jobSubmitClient.getRecommendedPollingInterval();
+    sleep=interval.getValue() * 1000;
+  }
+ catch (  IOException ioe) {
+    LOG.error("ERROR" + StringUtils.stringifyException(ioe));
+    return false;
+  }
+  try {
+    Thread.sleep(sleep / 2);
+  }
+ catch (  InterruptedException e) {
+    LOG.debug(StringUtils.stringifyException(e));
+    return false;
+  }
+  while (true) {
+    if (Thread.interrupted()) {
+      LOG.debug("Job client has been interrupted");
+      return false;
+    }
+    final JobProgressResult jobProgressResult=getJobProgress();
+    if (jobProgressResult == null) {
+      LOG.error("Returned job progress is unexpectedly null!");
+      return false;
+    }
+    if (jobProgressResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
+      LOG.error("Could not retrieve job progress: " + jobProgressResult.getDescription());
+      return false;
+    }
+    final Iterator<AbstractEvent> it=jobProgressResult.getEvents();
+    while (it.hasNext()) {
+      final AbstractEvent event=it.next();
+      if (this.processedEvents.contains(event)) {
+        continue;
+      }
+      System.out.println(event.toString());
+      this.processedEvents.add(event);
+      if (event instanceof JobEvent) {
+        final JobEvent jobEvent=(JobEvent)event;
+        final JobStatus jobStatus=jobEvent.getCurrentJobStatus();
+        if (jobStatus == JobStatus.FINISHED) {
+          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+          return true;
+        }
+ else         if (jobStatus == JobStatus.CANCELLED || jobStatus == JobStatus.FAILED) {
+          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+          return false;
+        }
+      }
+    }
+    cleanUpOldEvents(sleep);
+    try {
+      Thread.sleep(sleep);
+    }
+ catch (    InterruptedException e) {
+      LOG.debug(StringUtils.stringifyException(e));
+      return false;
+    }
+  }
+}

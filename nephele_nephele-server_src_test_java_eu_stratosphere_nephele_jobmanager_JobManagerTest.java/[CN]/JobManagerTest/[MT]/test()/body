@@ -1,0 +1,97 @@
+{
+  JobManager jobManager=null;
+  try {
+    Constructor<JobManager> c=JobManager.class.getDeclaredConstructor(new Class[]{String.class,String.class});
+    c.setAccessible(true);
+    jobManager=c.newInstance(new Object[]{new String(System.getProperty("user.dir") + "/correct-conf"),new String("local")});
+  }
+ catch (  SecurityException e) {
+    e.printStackTrace();
+  }
+catch (  NoSuchMethodException e) {
+    e.printStackTrace();
+  }
+catch (  IllegalArgumentException e) {
+    e.printStackTrace();
+  }
+catch (  InstantiationException e) {
+    e.printStackTrace();
+  }
+catch (  IllegalAccessException e) {
+    e.printStackTrace();
+  }
+catch (  InvocationTargetException e) {
+    e.printStackTrace();
+  }
+  try {
+    Thread.sleep(SLEEPINTERVAL);
+  }
+ catch (  InterruptedException e) {
+    e.printStackTrace();
+  }
+  final String inputFilename=getRandomFilename();
+  createInputFile(inputFilename);
+  createJarFile("GrepTask");
+  JobGraph jg=new JobGraph("Job Graph 1");
+  JobID jobID=jg.getJobID();
+  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+  i1.setFileInputClass(FileLineReader.class);
+  i1.setFilePath(new Path("file://" + PATHNAME + inputFilename));
+  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+  t1.setTaskClass(GrepTask.class);
+  final String outputFilename=getRandomFilename();
+  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+  o1.setFileOutputClass(FileLineWriter.class);
+  o1.setFilePath(new Path("file://" + PATHNAME + outputFilename));
+  try {
+    i1.connectTo(t1,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+    t1.connectTo(o1,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+  }
+  jg.addJar(new Path("file://" + PATHNAME + "GrepTask.jar"));
+  Path[] paths={new Path("file://" + PATHNAME + "GrepTask.jar")};
+  try {
+    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask.jar"),new File(PATHNAME + "GrepTask.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask.jar"))));
+    LibraryCacheManager.register(jobID,paths);
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
+  try {
+    jobManager.submitJob(jg);
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
+  jobManager.runVerticesReadyForExecution();
+  try {
+    Thread.sleep(SLEEPINTERVAL);
+  }
+ catch (  InterruptedException e) {
+    e.printStackTrace();
+  }
+  char[] buffer=new char[INPUTCONTENT.toCharArray().length];
+  try {
+    FileReader fr=new FileReader(new File(PATHNAME + outputFilename));
+    fr.read(buffer);
+    fr.close();
+  }
+ catch (  FileNotFoundException e) {
+    e.printStackTrace();
+  }
+catch (  IOException e) {
+    e.printStackTrace();
+  }
+  assertEquals(INPUTCONTENT,new String(buffer));
+  new File(PATHNAME + inputFilename).delete();
+  new File(PATHNAME + outputFilename).delete();
+  jobManager.cleanUp();
+  try {
+    Thread.sleep(SLEEPINTERVAL);
+  }
+ catch (  InterruptedException e) {
+    e.printStackTrace();
+  }
+}
