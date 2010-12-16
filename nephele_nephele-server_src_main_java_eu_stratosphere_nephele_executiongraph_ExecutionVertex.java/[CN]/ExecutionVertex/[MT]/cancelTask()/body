@@ -1,0 +1,31 @@
+{
+  AllocatedResource allocatedRes=null;
+synchronized (this) {
+    if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
+      setExecutionState(ExecutionState.CANCELLED);
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    final ExecutionState es=this.environment.getExecutionState();
+    if (es == ExecutionState.FINISHED) {
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    if (es != ExecutionState.RUNNING && es != ExecutionState.FINISHING) {
+      setExecutionState(ExecutionState.CANCELLED);
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    if (this.allocatedResource == null) {
+      final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ERROR);
+      result.setDescription("Assigned instance of vertex " + this.toString() + " is null!");
+      return result;
+    }
+    allocatedRes=this.allocatedResource;
+  }
+  try {
+    return allocatedRes.getInstance().cancelTask(this.vertexID);
+  }
+ catch (  IOException e) {
+    final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ERROR);
+    result.setDescription(StringUtils.stringifyException(e));
+    return result;
+  }
+}

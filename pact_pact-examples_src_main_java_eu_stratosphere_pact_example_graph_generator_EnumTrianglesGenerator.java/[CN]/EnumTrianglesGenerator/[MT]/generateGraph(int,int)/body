@@ -1,0 +1,58 @@
+{
+  TriangGraph graph=new TriangGraph();
+  TriangNode lastNode=null;
+  for (int i=0; i < nodeCount; i++) {
+    TriangNode node=new TriangNode(NameGenerator.getNewName(),graph);
+    graph.addNode(node);
+    if (lastNode != null) {
+      lastNode.addEdge(node);
+      this.writeEdge(TriangNode.getEdgeString(node,lastNode));
+    }
+    lastNode=node;
+  }
+  LOG.info("Generated " + nodeCount + " nodes.");
+  Random rnd=new Random(EnumTrianglesGenerator.seed);
+  for (int i=0; i < edgeCount; i++) {
+    if (i % 1000000 == 0 && i != 0)     LOG.info("Generated " + (i / 1000000) + ".000.000 edges.");
+    int index1=rnd.nextInt(graph.getNodeCount());
+    int index2=rnd.nextInt(graph.getNodeCount());
+    if (index2 == index1) {
+      if (index2 < graph.getNodeCount() - 1)       index2++;
+ else       index2--;
+    }
+    TriangNode node1=graph.getNode(index1);
+    TriangNode node2=graph.getNode(index2);
+    int triesFirstNode=0;
+    boolean abort=false;
+    while (!abort && triesFirstNode < EnumTrianglesGenerator.MAX_TRIES) {
+      int triesSecondNode=0;
+      while (node1.hasEdgeTo(node2) && triesSecondNode < EnumTrianglesGenerator.MAX_TRIES) {
+        index2=rnd.nextInt(graph.getNodeCount());
+        if (index2 == index1) {
+          if (index2 < graph.getNodeCount() - 1)           index2++;
+ else           index2--;
+        }
+        node2=graph.getNode(index2);
+        triesSecondNode++;
+      }
+      if (node1.hasEdgeTo(node2)) {
+        triesFirstNode++;
+        index1=rnd.nextInt(graph.getNodeCount());
+        node1=graph.getNode(index1);
+      }
+ else {
+        abort=true;
+      }
+    }
+    if (triesFirstNode < EnumTrianglesGenerator.MAX_TRIES) {
+      node1.addEdge(node2);
+      this.writeEdge(TriangNode.getEdgeString(node1,node2));
+      Collection<String> triangStrings=graph.calculateTriangles(node1,node2);
+      this.writeTriangles(triangStrings);
+    }
+ else {
+      LOG.debug("Exceeded number of retries to connect two randomly chosen nodes in the graph. No edge was added");
+    }
+  }
+  return graph;
+}

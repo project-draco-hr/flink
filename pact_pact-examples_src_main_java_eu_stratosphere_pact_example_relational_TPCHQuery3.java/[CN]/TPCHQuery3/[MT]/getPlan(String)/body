@@ -1,0 +1,47 @@
+{
+  if (args.length != 4) {
+    throw new IllegalArgumentException("Must provide four arguments: <parallelism> <orders_input> <lineitem_input> <result_directory>");
+  }
+  int degreeOfParallelism=Integer.parseInt(args[0]);
+  String ordersPath=args[1];
+  String lineitemsPath=args[2];
+  String resultPath=args[3];
+  DataSourceContract<PactInteger,Tuple> orders=new DataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,ordersPath,"Orders");
+  orders.setFormatParameter("delimiter","\n");
+  orders.setDegreeOfParallelism(degreeOfParallelism);
+  orders.setOutputContract(UniqueKey.class);
+  orders.getCompilerHints().setAvgNumValuesPerKey(1);
+  DataSourceContract<PactInteger,Tuple> lineitems=new DataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,lineitemsPath,"LineItems");
+  lineitems.setFormatParameter("delimiter","\n");
+  lineitems.setDegreeOfParallelism(degreeOfParallelism);
+  lineitems.getCompilerHints().setAvgNumValuesPerKey(4);
+  MapContract<PactInteger,Tuple,PactInteger,Tuple> filterO=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(FilterO.class,"FilterO");
+  filterO.setDegreeOfParallelism(degreeOfParallelism);
+  filterO.getCompilerHints().setAvgBytesPerRecord(32);
+  filterO.getCompilerHints().setSelectivity(0.05f);
+  filterO.getCompilerHints().setAvgNumValuesPerKey(1);
+  MapContract<PactInteger,Tuple,PactInteger,Tuple> projectLi=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(ProjectLi.class,"ProjectLi");
+  projectLi.setDegreeOfParallelism(degreeOfParallelism);
+  projectLi.getCompilerHints().setAvgBytesPerRecord(48);
+  projectLi.getCompilerHints().setSelectivity(1.0f);
+  projectLi.getCompilerHints().setAvgNumValuesPerKey(4);
+  MatchContract<PactInteger,Tuple,Tuple,N_IntStringPair,Tuple> joinLiO=new MatchContract<PactInteger,Tuple,Tuple,N_IntStringPair,Tuple>(JoinLiO.class,"JoinLiO");
+  joinLiO.setDegreeOfParallelism(degreeOfParallelism);
+  joinLiO.getCompilerHints().setSelectivity(0.05f);
+  joinLiO.getCompilerHints().setAvgBytesPerRecord(64);
+  joinLiO.getCompilerHints().setAvgNumValuesPerKey(4);
+  ReduceContract<N_IntStringPair,Tuple,PactInteger,Tuple> aggLiO=new ReduceContract<N_IntStringPair,Tuple,PactInteger,Tuple>(AggLiO.class,"AggLio");
+  aggLiO.setDegreeOfParallelism(degreeOfParallelism);
+  aggLiO.getCompilerHints().setAvgBytesPerRecord(64);
+  aggLiO.getCompilerHints().setSelectivity(0.25f);
+  aggLiO.getCompilerHints().setAvgNumValuesPerKey(1);
+  DataSinkContract<PactString,Tuple> result=new DataSinkContract<PactString,Tuple>(StringTupleDataOutFormat.class,resultPath,"Output");
+  result.setDegreeOfParallelism(degreeOfParallelism);
+  result.setInput(aggLiO);
+  aggLiO.setInput(joinLiO);
+  joinLiO.setFirstInput(filterO);
+  filterO.setInput(orders);
+  joinLiO.setSecondInput(projectLi);
+  projectLi.setInput(lineitems);
+  return new Plan(result,"TPCH Q3");
+}

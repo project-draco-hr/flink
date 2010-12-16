@@ -1,0 +1,35 @@
+{
+  if (conf == null) {
+    throw new InstanceException("No job configuration provided, unable to acquire credentials");
+  }
+  final String owner=conf.getString("job.cloud.username",null);
+  if (owner == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find username");
+  }
+  final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
+  if (awsAccessId == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS access ID");
+  }
+  final String awsSecretKey=conf.getString("job.cloud.awssecretkey",null);
+  if (awsSecretKey == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS secret key");
+  }
+  JobToInstancesMapping jobToInstanceMapping=null;
+synchronized (this.jobToInstancesMap) {
+    jobToInstanceMapping=this.jobToInstancesMap.get(jobID);
+    if (jobToInstanceMapping == null) {
+      LOG.debug("Creating new mapping for job " + jobID);
+      jobToInstanceMapping=new JobToInstancesMapping(owner,awsAccessId,awsSecretKey);
+      this.jobToInstancesMap.put(jobID,jobToInstanceMapping);
+    }
+  }
+  final CloudInstance instance=anyFloatingInstanceAvailable(owner,awsAccessId,awsSecretKey,instanceType);
+  if (instance != null) {
+    jobToInstanceMapping.assignInstanceToJob(instance);
+    this.instanceListener.resourceAllocated(jobID,instance.asAllocatedResource());
+  }
+ else {
+    final String instanceID=allocateCloudInstance(awsAccessId,awsSecretKey,instanceType);
+    this.reservedInstances.put(instanceID,jobID);
+  }
+}

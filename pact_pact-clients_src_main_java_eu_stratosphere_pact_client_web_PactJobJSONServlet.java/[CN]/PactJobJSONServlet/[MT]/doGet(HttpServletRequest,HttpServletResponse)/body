@@ -1,0 +1,36 @@
+{
+  resp.setContentType("application/json");
+  String jobName=req.getParameter(JOB_PARAM_NAME);
+  if (jobName == null) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    return;
+  }
+  File jarFile=new File(jobStoreDirectory,jobName);
+  if (!jarFile.exists()) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    return;
+  }
+  try {
+    PactProgram pactProgram=new PactProgram(jarFile,(String[])null);
+    OptimizedPlan optPlan=pactProgram.getPreOptimizedPlan();
+    String programDescription=pactProgram.getDescription();
+    String json=new JSONGenerator().compilePlanToJSON(optPlan);
+    resp.setStatus(HttpServletResponse.SC_OK);
+    PrintWriter wrt=resp.getWriter();
+    wrt.print("{ \"jobname\": \"");
+    wrt.print(jobName);
+    wrt.print("\", \"plan\": ");
+    wrt.println(json);
+    if (programDescription != null) {
+      wrt.print(", \"description\": \"");
+      wrt.print(escapeString(programDescription));
+      wrt.print("\"");
+    }
+    wrt.println("}");
+  }
+ catch (  Throwable t) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    resp.getWriter().print(t.getMessage());
+    return;
+  }
+}

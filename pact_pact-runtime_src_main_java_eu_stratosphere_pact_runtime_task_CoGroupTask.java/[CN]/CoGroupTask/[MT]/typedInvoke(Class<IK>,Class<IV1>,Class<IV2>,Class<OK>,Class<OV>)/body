@@ -1,0 +1,35 @@
+{
+  LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  final CoGroupStub<IK,IV1,IV2,OK,OV> coGroup=getCoGroupStub();
+  final OutputCollector<OK,OV> collector=getOutputCollector();
+  final CoGroupTaskIterator<IK,IV1,IV2> coGroupIterator=getIterator(ikClass,iv1Class,iv2Class);
+  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  coGroup.open();
+  try {
+    coGroupIterator.open();
+    LOG.debug("Start processing: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    while (coGroupIterator.next()) {
+      coGroup.coGroup(coGroupIterator.getKey(),coGroupIterator.getValues1(),coGroupIterator.getValues2(),collector);
+    }
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Error occured during processing CoGroupTask",ioe);
+  }
+catch (  InterruptedException ie) {
+    throw new RuntimeException("Error occured during processing CoGroupTask",ie);
+  }
+ finally {
+    try {
+      coGroup.close();
+    }
+ catch (    Throwable t) {
+    }
+    try {
+      coGroupIterator.close();
+    }
+ catch (    Throwable t) {
+    }
+    collector.close();
+  }
+  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+}

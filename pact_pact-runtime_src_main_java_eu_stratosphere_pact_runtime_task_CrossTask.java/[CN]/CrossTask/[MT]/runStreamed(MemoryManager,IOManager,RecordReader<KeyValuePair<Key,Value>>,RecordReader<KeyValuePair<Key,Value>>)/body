@@ -1,0 +1,63 @@
+{
+  Iterator<KeyValuePair<Key,Value>> outerInput=new Iterator<KeyValuePair<Key,Value>>(){
+    @Override public boolean hasNext(){
+      return outerReader.hasNext();
+    }
+    @Override public KeyValuePair<Key,Value> next(){
+      try {
+        return outerReader.next();
+      }
+ catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+catch (      InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    @Override public void remove(){
+      throw new UnsupportedOperationException();
+    }
+  }
+;
+  SpillingResettableIterator<KeyValuePair<Key,Value>> innerInput=null;
+  try {
+    innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,MEMORY_IO / 2,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()));
+  }
+ catch (  MemoryAllocationException mae) {
+    throw new RuntimeException("Unable to obtain SpillingResettable iterator for inner side.",mae);
+  }
+  try {
+    innerInput.open();
+  }
+ catch (  ServiceException se) {
+    throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",se);
+  }
+catch (  IOException ioe) {
+    throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",ioe);
+  }
+catch (  InterruptedException ie) {
+    throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",ie);
+  }
+  LOG.debug("Resetable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  stub.open();
+  while (outerInput.hasNext()) {
+    Pair outerPair=outerInput.next();
+    while (innerInput.hasNext()) {
+      Pair innerPair=innerInput.next();
+      if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+        stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),output);
+      }
+ else {
+        stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
+      }
+    }
+    innerInput.reset();
+  }
+  stub.close();
+  try {
+    innerInput.close();
+  }
+ catch (  ServiceException se) {
+    throw new RuntimeException("Unable to close SpillingResettable iterator for inner side.",se);
+  }
+}

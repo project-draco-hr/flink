@@ -1,0 +1,49 @@
+{
+  InetSocketAddress connectionAddress=null;
+synchronized (this.connectionAddresses) {
+    connectionAddress=this.connectionAddresses.get(sourceChannelID);
+  }
+  if (connectionAddress == null) {
+    ByteBufferedChannelWrapper channelWrapper=null;
+synchronized (this.registeredChannels) {
+      channelWrapper=this.registeredChannels.get(sourceChannelID);
+      if (channelWrapper == null) {
+        LOG.error("Cannot find channel object for ID " + sourceChannelID + " to do lookup");
+        return null;
+      }
+    }
+    InstanceConnectionInfo ici=null;
+    try {
+      while (true) {
+        final ConnectionInfoLookupResponse lookupResponse=this.channelLookupService.lookupConnectionInfo(channelWrapper.getJobID(),channelWrapper.getConnectedChannelID());
+        if (lookupResponse.receiverNotFound()) {
+          throw new IOException("Task with channel ID " + channelWrapper.getConnectedChannelID() + " does not appear to be running");
+        }
+        if (lookupResponse.receiverNotReady()) {
+          try {
+            Thread.sleep(500);
+          }
+ catch (          InterruptedException e) {
+            return null;
+          }
+          continue;
+        }
+        if (lookupResponse.receiverReady()) {
+          ici=lookupResponse.getInstanceConnectionInfo();
+          break;
+        }
+      }
+    }
+ catch (    IOException e) {
+      LOG.error(StringUtils.stringifyException(e));
+      return null;
+    }
+    if (ici != null) {
+      connectionAddress=new InetSocketAddress(ici.getAddress(),ici.getDataPort());
+synchronized (this.connectionAddresses) {
+        this.connectionAddresses.put(sourceChannelID,connectionAddress);
+      }
+    }
+  }
+  return connectionAddress;
+}

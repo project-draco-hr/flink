@@ -1,0 +1,44 @@
+{
+  super.read(in);
+  try {
+    String classNameSelector=StringRecord.readString(in);
+    final ClassLoader cl=LibraryCacheManager.getClassLoader(getJobID());
+    channelSelector=(ChannelSelector<T>)Class.forName(classNameSelector,true,cl).newInstance();
+    channelSelector.read(in);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+  final int numOutputChannels=in.readInt();
+  final Class<?>[] parameters={this.getClass(),int.class,ChannelID.class,CompressionLevel.class};
+  for (int i=0; i < numOutputChannels; i++) {
+    final ChannelID channelID=new ChannelID();
+    channelID.read(in);
+    final CompressionLevel compressionLevel=EnumUtils.readEnum(in,CompressionLevel.class);
+    final String className=StringRecord.readString(in);
+    Class<? extends IOReadableWritable> c=null;
+    try {
+      c=ClassUtils.getRecordByName(className);
+    }
+ catch (    ClassNotFoundException e) {
+      e.printStackTrace();
+    }
+    AbstractOutputChannel<T> eoc=null;
+    try {
+      final Constructor<AbstractOutputChannel<T>> constructor=(Constructor<AbstractOutputChannel<T>>)c.getDeclaredConstructor(parameters);
+      if (constructor == null) {
+        throw new IOException("Constructor is null!");
+      }
+      constructor.setAccessible(true);
+      eoc=constructor.newInstance(this,i,channelID,compressionLevel);
+    }
+ catch (    Exception e) {
+      e.printStackTrace();
+    }
+    if (eoc == null) {
+      throw new IOException("Created output channel is null!");
+    }
+    eoc.read(in);
+    addOutputChannel(eoc);
+  }
+}

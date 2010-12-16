@@ -1,0 +1,185 @@
+{
+  jsonString.append("\t{\n");
+  jsonString.append("\t\t\"id\": " + nodeIds.get(visitable));
+  String type;
+switch (visitable.getPactType()) {
+case DataSink:
+    type="sink";
+  break;
+case DataSource:
+type="source";
+break;
+default :
+type="pact";
+break;
+}
+jsonString.append(",\n\t\t\"type\": \"" + type + "\"");
+if (type.equals("pact")) {
+jsonString.append(",\n\t\t\"pact\": \"" + visitable.getName() + "\"");
+}
+String contents;
+switch (visitable.getPactType()) {
+case DataSink:
+contents=((DataSinkContract<?,?>)visitable.getPactContract()).getFilePath();
+break;
+case DataSource:
+contents=((DataSourceContract<?,?>)visitable.getPactContract()).getFilePath();
+break;
+default :
+contents=visitable.getPactContract().getName();
+break;
+}
+jsonString.append(",\n\t\t\"contents\": \"" + contents + "\"");
+OutputContract outContr=visitable.getOutputContract();
+if (outContr != null && outContr != OutputContract.None) {
+jsonString.append(",\n\t\t\"outputcontract\": \"" + outContr.name() + "\"");
+}
+jsonString.append(",\n\t\t\"parallelism\": \"" + (visitable.getDegreeOfParallelism() >= 1 ? visitable.getDegreeOfParallelism() : "default") + "\"");
+List<PactConnection> connList=visitable.getIncomingConnections();
+String child1name=null, child2name=null;
+if (connList != null && connList.size() > 0) {
+jsonString.append(",\n\t\t\"predecessors\": [");
+int connCnt=0;
+for (PactConnection conn : connList) {
+jsonString.append(connCnt == 0 ? "\n" : ",\n");
+if (connCnt == 0) {
+child1name=conn.getSourcePact().getPactContract().getName();
+}
+ else if (connCnt == 1) {
+child2name=conn.getSourcePact().getPactContract().getName();
+}
+jsonString.append("\t\t\t{\"id\": " + nodeIds.get(conn.getSourcePact()));
+if (connList.size() == 2) {
+jsonString.append(", \"side\": \"" + (connCnt == 0 ? "first" : "second") + "\"");
+}
+String shipStrategy=null;
+String channelType=null;
+switch (conn.getShipStrategy()) {
+case NONE:
+break;
+case FORWARD:
+shipStrategy="Local Forward";
+channelType="memory";
+break;
+case BROADCAST:
+shipStrategy="Broadcast";
+channelType="network";
+break;
+case PARTITION_HASH:
+shipStrategy="Partition";
+channelType="network";
+break;
+case PARTITION_RANGE:
+shipStrategy="Partition (range)";
+channelType="network";
+break;
+case SFR:
+shipStrategy="SFR";
+channelType="network";
+break;
+default :
+throw new CompilerException("Unknown ship strategy '" + conn.getShipStrategy().name() + "' in JSON generator.");
+}
+if (shipStrategy != null) {
+jsonString.append(", \"shippingStrategy\": \"" + shipStrategy + "\"");
+}
+if (channelType != null) {
+jsonString.append(", \"channelType\": \"" + channelType + "\"");
+}
+if (conn.getTempMode() != TempMode.NONE) {
+String tempMode=conn.getTempMode().toString();
+jsonString.append(", \"tempMode\": \"" + tempMode + "\"");
+}
+jsonString.append('}');
+connCnt++;
+}
+jsonString.append("\t\t]");
+}
+String locString=null;
+if (visitable.getLocalStrategy() != null) {
+switch (visitable.getLocalStrategy()) {
+case NONE:
+break;
+case HYBRIDHASH_FIRST:
+locString="Hybrid Hash (build: " + child1name + ")";
+break;
+case HYBRIDHASH_SECOND:
+locString="Hybrid Hash (build: " + child2name + ")";
+break;
+case MMHASH_FIRST:
+locString="Main-Memory Hash (build: " + child1name + ")";
+break;
+case MMHASH_SECOND:
+locString="Main-Memory Hash (build: " + child2name + ")";
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+locString="Nested Loops (Blocked Outer: " + child1name + ")";
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+locString="Nested Loops (Blocked Outer: " + child2name + ")";
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+locString="Nested Loops (Streamed Outer: " + child1name + ")";
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+locString="Nested Loops (Streamed Outer: " + child2name + ")";
+break;
+case SORTMERGE:
+locString="Sort-Merge";
+break;
+case SORT:
+locString="Sort";
+break;
+case COMBININGSORT:
+locString="Sort with Combiner";
+break;
+default :
+throw new CompilerException("Unknown local strategy '" + visitable.getLocalStrategy().name() + "' in JSON generator.");
+}
+if (locString != null) {
+jsonString.append(",\n\t\t\"local_strategy\": \"");
+jsonString.append(locString);
+jsonString.append("\"");
+}
+}
+{
+GlobalProperties gp=visitable.getGlobalProperties();
+jsonString.append(",\n\t\t\"global_properties\": [\n");
+addProperty(jsonString,"Key-Partitioning",gp.getPartitioning().name(),true);
+addProperty(jsonString,"Key-Order",gp.getKeyOrder().name(),false);
+addProperty(jsonString,"Key-Uniqueness",gp.isKeyUnique() ? "unique" : "not unique",false);
+jsonString.append("\n\t\t]");
+}
+{
+LocalProperties lp=visitable.getLocalProperties();
+jsonString.append(",\n\t\t\"local_properties\": [\n");
+addProperty(jsonString,"Key-Order",lp.getKeyOrder().name(),true);
+addProperty(jsonString,"Key-Uniqueness",lp.isKeyUnique() ? "unique" : "not unique",false);
+addProperty(jsonString,"Key-Grouping",lp.areKeysGrouped() ? "grouped" : "not grouped",false);
+jsonString.append("\n\t\t]");
+}
+jsonString.append(",\n\t\t\"properties\": [\n");
+addProperty(jsonString,"Est. Cardinality",visitable.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedNumRecords()),true);
+addProperty(jsonString,"Est. Key-Cardinality",visitable.getEstimatedKeyCardinality() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedKeyCardinality()),false);
+addProperty(jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
+jsonString.append("\t\t]");
+if (visitable.getNodeCosts() != null) {
+jsonString.append(",\n\t\t\"costs\": [\n");
+addProperty(jsonString,"Network",visitable.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getNetworkCost(),"B"),true);
+addProperty(jsonString,"Disk I/O",visitable.getNodeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getSecondaryStorageCost(),"B"),false);
+addProperty(jsonString,"Cumulative Network",visitable.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getNetworkCost(),"B"),false);
+addProperty(jsonString,"Cumulative Disk I/O",visitable.getCumulativeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getSecondaryStorageCost(),"B"),false);
+jsonString.append("\n\t\t]");
+}
+if (visitable.getPactContract().getCompilerHints() != null) {
+CompilerHints hints=visitable.getPactContract().getCompilerHints();
+CompilerHints defaults=new CompilerHints();
+jsonString.append(",\n\t\t\"compiler_hints\": [\n");
+addProperty(jsonString,"Key-Cardinality",hints.getKeyCardinality() == defaults.getKeyCardinality() ? "(none)" : formatNumber(hints.getKeyCardinality()),true);
+addProperty(jsonString,"Selectivity",hints.getSelectivity() == defaults.getSelectivity() ? "(none)" : String.valueOf(hints.getSelectivity()),false);
+addProperty(jsonString,"Avg. Values/Key",hints.getAvgNumValuesPerKey() == defaults.getAvgNumValuesPerKey() ? "(none)" : String.valueOf(hints.getAvgNumValuesPerKey()),false);
+addProperty(jsonString,"Avg. width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
+jsonString.append("\t\t]");
+}
+jsonString.append("\n\t},\n");
+}

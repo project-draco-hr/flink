@@ -1,0 +1,116 @@
+{
+  if (n.getIncomingConnections() == null) {
+    throw new CompilerException("Cannot compute costs on operator before incoming connections are set.");
+  }
+  ShipStrategy primStrat=null;
+  ShipStrategy secStrat=null;
+  OptimizerNode primIn=null;
+  OptimizerNode secIn=null;
+{
+    List<PactConnection> conns=n.getIncomingConnections();
+    if (conns.size() > 0) {
+      primStrat=conns.get(0).getShipStrategy();
+      primIn=conns.get(0).getSourcePact();
+    }
+    if (conns.size() > 1) {
+      secStrat=conns.get(1).getShipStrategy();
+      secIn=conns.get(1).getSourcePact();
+    }
+  }
+  Costs globCost=new Costs();
+  Costs locCost=new Costs();
+  if (primStrat != null) {
+switch (primStrat) {
+case NONE:
+      throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for the first input.");
+case FORWARD:
+    globCost.setNetworkCost(0);
+  globCost.setSecondaryStorageCost(0);
+break;
+case PARTITION_HASH:
+getHashPartitioningCost(n,primIn,globCost);
+break;
+case PARTITION_RANGE:
+getRangePartitionCost(n,primIn,globCost);
+break;
+case BROADCAST:
+getBroadcastCost(n,primIn,globCost);
+break;
+case SFR:
+throw new CompilerException("Symmetric-Fragment-And-Replicate Strategy currently not supported.");
+default :
+throw new CompilerException("Unknown shipping strategy for first input: " + primStrat.name());
+}
+}
+ else {
+globCost.setNetworkCost(0);
+globCost.setSecondaryStorageCost(0);
+}
+if (secStrat != null) {
+Costs secCost=new Costs();
+switch (secStrat) {
+case NONE:
+throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for the second input.");
+case FORWARD:
+secCost.setNetworkCost(0);
+secCost.setSecondaryStorageCost(0);
+break;
+case PARTITION_HASH:
+getHashPartitioningCost(n,secIn,secCost);
+break;
+case PARTITION_RANGE:
+getRangePartitionCost(n,secIn,secCost);
+break;
+case BROADCAST:
+getBroadcastCost(n,secIn,secCost);
+break;
+case SFR:
+throw new CompilerException("Symmetric-Fragment-And-Replicate Strategy currently not supported.");
+default :
+throw new CompilerException("Unknown shipping strategy for second input: " + secStrat.name());
+}
+globCost.addCosts(secCost);
+}
+locCost.setNetworkCost(0);
+switch (n.getLocalStrategy()) {
+case NONE:
+locCost.setNetworkCost(0);
+locCost.setSecondaryStorageCost(0);
+break;
+case COMBININGSORT:
+case SORT:
+getLocalSortCost(n,primIn,locCost);
+break;
+case SORTMERGE:
+getLocalSortMergeCost(n,primIn,secIn,locCost);
+break;
+case HYBRIDHASH_FIRST:
+getHybridHashCosts(n,primIn,secIn,locCost);
+break;
+case HYBRIDHASH_SECOND:
+getHybridHashCosts(n,secIn,primIn,locCost);
+break;
+case MMHASH_FIRST:
+getMainMemHashCosts(n,primIn,secIn,locCost);
+break;
+case MMHASH_SECOND:
+getMainMemHashCosts(n,secIn,primIn,locCost);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+getBlockNestedLoopsCosts(n,primIn,secIn,locCost,2);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+getBlockNestedLoopsCosts(n,secIn,primIn,locCost,2);
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+getStreamedNestedLoopsCosts(n,primIn,secIn,locCost);
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+getStreamedNestedLoopsCosts(n,secIn,primIn,locCost);
+break;
+default :
+throw new CompilerException("Unknown local strategy: " + n.getLocalStrategy().name());
+}
+globCost.addCosts(locCost);
+n.setCosts(globCost);
+}

@@ -1,0 +1,35 @@
+{
+  Map<Key,Collection<Value>> expectedValuesMap1=collectData(generator1,input1Size);
+  Map<Key,Collection<Value>> expectedValuesMap2=collectData(generator2,input2Size);
+  Map<Key,Collection<Match>> expectedMatchesMap=matchValues(expectedValuesMap1,expectedValuesMap2);
+  generator1.reset();
+  generator2.reset();
+  InMemoryHashMatchIterator iterator=new InMemoryHashMatchIterator(reader1,reader2);
+  iterator.open();
+  while (iterator.next()) {
+    Key key=(Key)iterator.getKey();
+    assertTrue("No matches for key " + key + " are expected",expectedMatchesMap.containsKey(key));
+    Iterator<Value> iter1=iterator.getValues1();
+    Iterator<Value> iter2=iterator.getValues2();
+    List<Value> values1=new ArrayList<Value>();
+    while (iter1.hasNext()) {
+      values1.add(iter1.next());
+    }
+    List<Value> values2=new ArrayList<Value>();
+    while (iter2.hasNext()) {
+      values2.add(iter2.next());
+    }
+    for (    Value value1 : values1) {
+      for (      Value value2 : values2) {
+        Collection<Match> expectedValues=expectedMatchesMap.get(key);
+        Match match=new Match((Value)value1,(Value)value2);
+        assertTrue("Unexpected match " + match + " for key "+ key,expectedValues.contains(match));
+        expectedValues.remove(match);
+      }
+    }
+  }
+  iterator.close();
+  for (  Entry<Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
+    assertTrue("Collection for key " + entry.getKey() + " is not empty",entry.getValue().isEmpty());
+  }
+}

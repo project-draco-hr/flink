@@ -1,0 +1,27 @@
+{
+synchronized (this.jobQueue) {
+    List<ExecutionVertex> assignedVertices=executionGraph.getVerticesAssignedToResource(allocatedResource);
+    if (assignedVertices.isEmpty()) {
+      return;
+    }
+    boolean instanceCanBeReleased=true;
+    final Iterator<ExecutionVertex> it=assignedVertices.iterator();
+    while (it.hasNext()) {
+      final ExecutionVertex vertex=it.next();
+      final ExecutionState state=vertex.getExecutionState();
+      if (state == ExecutionState.ASSIGNED || state == ExecutionState.READY || state == ExecutionState.RUNNING || state == ExecutionState.FINISHING || state == ExecutionState.CANCELLING) {
+        instanceCanBeReleased=false;
+        break;
+      }
+    }
+    if (instanceCanBeReleased) {
+      LOG.info("Releasing instance " + allocatedResource.getInstance());
+      try {
+        this.instanceManager.releaseAllocatedResource(executionGraph.getJobID(),executionGraph.getJobConfiguration(),allocatedResource);
+      }
+ catch (      InstanceException e) {
+        LOG.error(StringUtils.stringifyException(e));
+      }
+    }
+  }
+}

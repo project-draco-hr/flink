@@ -1,0 +1,53 @@
+{
+  int occupiedMemory=0;
+  int numberOfKeys=0;
+  int numberOfValues=0;
+  boolean insertValues=true;
+  while (insertValues) {
+    numberOfValues++;
+    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
+    if (javaHashMap.containsKey(pair.getKey())) {
+      occupiedMemory+=2 * VALUE_LENGTH + 4;
+    }
+ else {
+      occupiedMemory+=2 * VALUE_LENGTH + 16;
+    }
+    try {
+      pactHashMap.put(pair.getKey(),pair.getValue());
+      if (!javaHashMap.containsKey(pair.getKey())) {
+        javaHashMap.put(pair.getKey(),new LinkedList<Value>());
+        numberOfKeys++;
+      }
+      LinkedList<Value> values=javaHashMap.get(pair.getKey());
+      values.addFirst(pair.getValue());
+      Assert.assertEquals("number of values don't match",numberOfValues,pactHashMap.numberOfValues());
+      Assert.assertEquals("number of keys don't match",numberOfKeys,pactHashMap.numberOfKeys());
+    }
+ catch (    OutOfMemoryException e) {
+      Assert.assertTrue("Unexpected OutOfMemoryException",occupiedMemory > SEGMENT_SIZE);
+      insertValues=false;
+    }
+  }
+  Assert.assertTrue("Number of values in map is below lower bound",pactHashMap.numberOfValues() >= SEGMENT_SIZE / (2 * VALUE_LENGTH + 16));
+  System.out.println("Inserted " + pactHashMap.numberOfKeys() + " keys");
+  System.out.println("Inserted " + pactHashMap.numberOfValues() + " values");
+  for (  Key key : javaHashMap.keySet()) {
+    Iterator<Value> expIt=javaHashMap.get(key).iterator();
+    Iterator<Value> actIt=pactHashMap.get(key).iterator();
+    while (expIt.hasNext()) {
+      Assert.assertEquals("iterator count does not match",expIt.hasNext(),actIt.hasNext());
+      Value expValue=expIt.next();
+      Value actValue=actIt.next();
+      Assert.assertEquals("values don't match",expValue,actValue);
+    }
+  }
+  Set<Key> keySet=javaHashMap.keySet();
+  for (  Key key : keySet) {
+    Assert.assertTrue("",pactHashMap.contains(key));
+  }
+  for (  Key key : pactHashMap.keys()) {
+    Assert.assertTrue("Unexpected key " + key,keySet.contains(key));
+    keySet.remove(key);
+  }
+  Assert.assertTrue("Key set is not empty (size is " + keySet.size() + ")",keySet.isEmpty());
+}

@@ -1,0 +1,24 @@
+{
+  final AbstractInstance instance=allocatedResource.getInstance();
+  JobToInstancesMapping jobToInstanceMapping=null;
+synchronized (this.jobToInstancesMap) {
+    jobToInstanceMapping=this.jobToInstancesMap.get(jobID);
+    if (jobToInstanceMapping == null) {
+      LOG.error("No mapping for job " + jobID);
+      return;
+    }
+  }
+  if (jobToInstanceMapping.getAssignedInstances().contains(instance)) {
+    jobToInstanceMapping.unassignedInstanceFromJob((CloudInstance)instance);
+    this.cloudInstances.remove(instance);
+    final long currentTime=System.currentTimeMillis();
+    final long remainingTime=((CloudInstance)instance).getAllocationTime() + ((currentTime - ((CloudInstance)instance).getAllocationTime()) / TIMEUNIT + 1) * TIMEUNIT - currentTime;
+    this.floatingInstances.put(instance.getInstanceConnectionInfo(),new FloatingInstance(((CloudInstance)instance).getInstanceID(),instance.getInstanceConnectionInfo(),currentTime,remainingTime));
+    this.floatingInstanceIDs.put(((CloudInstance)instance).getInstanceID(),conf);
+    LOG.info("Convert " + ((CloudInstance)instance).getInstanceID() + " from allocated instance to floating instance");
+  }
+ else {
+    LOG.error("Job " + jobID + " contains no such instance");
+    return;
+  }
+}

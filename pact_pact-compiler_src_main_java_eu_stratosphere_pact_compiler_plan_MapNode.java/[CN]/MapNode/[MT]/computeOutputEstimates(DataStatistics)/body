@@ -1,0 +1,61 @@
+{
+  OptimizerNode pred=input == null ? null : input.getSourcePact();
+  CompilerHints hints=getPactContract().getCompilerHints();
+  if (pred != null) {
+    if (hints.getKeyCardinality() > 0) {
+      this.estimatedKeyCardinality=hints.getKeyCardinality();
+    }
+ else {
+      if (getOutputContract() == OutputContract.SameKey) {
+        this.estimatedKeyCardinality=pred.estimatedKeyCardinality;
+      }
+ else {
+        this.estimatedKeyCardinality=-1;
+      }
+    }
+    this.estimatedNumRecords=-1;
+    if (hints.getSelectivity() > 0.0f && pred.estimatedNumRecords != -1) {
+      this.estimatedNumRecords=(long)(pred.estimatedNumRecords * hints.getSelectivity()) + 1;
+      if (hints.getAvgNumValuesPerKey() >= 1.0f) {
+        long v=(long)(this.estimatedNumRecords / hints.getAvgNumValuesPerKey()) + 1;
+        if (this.estimatedKeyCardinality == -1) {
+          this.estimatedKeyCardinality=v;
+        }
+ else         if (hints.getKeyCardinality() < 1) {
+          this.estimatedKeyCardinality=Math.min(this.estimatedKeyCardinality,v);
+        }
+      }
+    }
+ else     if (this.estimatedKeyCardinality != -1 && hints.getAvgNumValuesPerKey() >= 1.0f) {
+      this.estimatedNumRecords=(long)(this.estimatedKeyCardinality * hints.getAvgNumValuesPerKey()) + 1;
+    }
+ else {
+      this.estimatedNumRecords=pred.estimatedNumRecords;
+    }
+    this.estimatedOutputSize=-1;
+    if (this.estimatedNumRecords != -1) {
+      if (hints.getAvgBytesPerRecord() > 0.0f) {
+        this.estimatedOutputSize=(long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) + 1;
+      }
+ else {
+        long inSize=pred.estimatedOutputSize;
+        long inVals=pred.estimatedNumRecords;
+        float prevBytesPerRecord=(inSize > 0 && inVals > 0) ? inSize / ((float)inVals) : -1.0f;
+        if (prevBytesPerRecord > 0.0f) {
+          this.estimatedOutputSize=(long)(this.estimatedNumRecords * prevBytesPerRecord) + 1;
+        }
+      }
+    }
+ else {
+      this.estimatedOutputSize=pred.estimatedOutputSize;
+    }
+    if (this.estimatedKeyCardinality > this.estimatedNumRecords) {
+      this.estimatedKeyCardinality=this.estimatedNumRecords;
+    }
+  }
+ else {
+    this.estimatedKeyCardinality=hints.getKeyCardinality();
+    this.estimatedNumRecords=-1;
+    this.estimatedOutputSize=-1;
+  }
+}

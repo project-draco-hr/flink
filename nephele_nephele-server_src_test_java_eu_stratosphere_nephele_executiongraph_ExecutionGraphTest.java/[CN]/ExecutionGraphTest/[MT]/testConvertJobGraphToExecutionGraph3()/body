@@ -1,0 +1,218 @@
+{
+  createInputFile();
+  createOutputDir();
+  createJarFile("GrepTask1Input1Output");
+  createJarFile("GrepTask2Inputs1Output");
+  JobGraph jg=new JobGraph("Job Graph 1");
+  JobID jobID=jg.getJobID();
+  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+  i1.setFileInputClass(FileLineReader.class);
+  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
+  i1.setNumberOfSubtasks(2);
+  JobFileInputVertex i2=new JobFileInputVertex("Input 2",jg);
+  i2.setFileInputClass(FileLineReader.class);
+  i2.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
+  i2.setNumberOfSubtasks(2);
+  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+  t1.setTaskClass(GrepTask1Input1Output.class);
+  t1.setNumberOfSubtasks(2);
+  JobTaskVertex t2=new JobTaskVertex("Task 2",jg);
+  t2.setTaskClass(GrepTask1Input1Output.class);
+  t2.setNumberOfSubtasks(2);
+  JobTaskVertex t3=new JobTaskVertex("Task 3",jg);
+  t3.setTaskClass(GrepTask2Inputs1Output.class);
+  t3.setNumberOfSubtasks(2);
+  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+  o1.setFileOutputClass(FileLineWriter.class);
+  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTDIRNAME));
+  o1.setNumberOfSubtasks(2);
+  i1.setVertexToShareInstancesWith(t1);
+  t1.setVertexToShareInstancesWith(t3);
+  i2.setVertexToShareInstancesWith(t2);
+  t2.setVertexToShareInstancesWith(t3);
+  t3.setVertexToShareInstancesWith(o1);
+  try {
+    i1.connectTo(t1);
+    i2.connectTo(t2);
+    t1.connectTo(t3);
+    t2.connectTo(t3);
+    t3.connectTo(o1);
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+  }
+  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
+  jg.addJar(new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"));
+  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar")};
+  try {
+    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
+    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"),new File(PATHNAME + "GrepTask2Inputs1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask2Inputs1Output.jar"))));
+    LibraryCacheManager.register(jobID,paths);
+  }
+ catch (  IOException e1) {
+    e1.printStackTrace();
+  }
+  final String confDir=System.getProperty("user.dir") + "/correct-conf";
+  GlobalConfiguration.loadConfiguration(confDir);
+  final MyInstanceNotifiable myInstanceNotifiable=new MyInstanceNotifiable();
+  final LocalInstanceManager lim=new LocalInstanceManager(confDir);
+  lim.setInstanceListener(myInstanceNotifiable);
+  try {
+    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
+    while (it.hasNext()) {
+      it.next().setExecutionState(ExecutionState.SCHEDULED);
+    }
+    assertEquals(1,eg.getInstanceTypesRequiredForCurrentStage().size());
+    assertEquals(2,(int)eg.getInstanceTypesRequiredForCurrentStage().get(lim.getDefaultInstanceType()));
+    ExecutionStage es=eg.getStage(0);
+    ExecutionGroupVertex egv0=null;
+    ExecutionGroupVertex egv1=null;
+    ExecutionGroupVertex egv2=null;
+    ExecutionGroupVertex egv3=null;
+    ExecutionGroupVertex egv4=null;
+    ExecutionGroupVertex egv5=null;
+    if (es.getStageMember(0).getName().equals("Input 1")) {
+      egv0=es.getStageMember(0);
+    }
+ else     if (es.getStageMember(0).getName().equals("Input 2")) {
+      egv1=es.getStageMember(0);
+    }
+ else     if (es.getStageMember(0).getName().equals("Task 1")) {
+      egv2=es.getStageMember(0);
+    }
+ else     if (es.getStageMember(0).getName().equals("Task 2")) {
+      egv3=es.getStageMember(0);
+    }
+ else     if (es.getStageMember(0).getName().equals("Task 3")) {
+      egv4=es.getStageMember(0);
+    }
+ else {
+      egv5=es.getStageMember(0);
+    }
+    if (es.getStageMember(1).getName().equals("Input 1")) {
+      egv0=es.getStageMember(1);
+    }
+ else     if (es.getStageMember(1).getName().equals("Input 2")) {
+      egv1=es.getStageMember(1);
+    }
+ else     if (es.getStageMember(1).getName().equals("Task 1")) {
+      egv2=es.getStageMember(1);
+    }
+ else     if (es.getStageMember(1).getName().equals("Task 2")) {
+      egv3=es.getStageMember(1);
+    }
+ else     if (es.getStageMember(1).getName().equals("Task 3")) {
+      egv4=es.getStageMember(1);
+    }
+ else {
+      egv5=es.getStageMember(1);
+    }
+    if (es.getStageMember(2).getName().equals("Input 1")) {
+      egv0=es.getStageMember(2);
+    }
+ else     if (es.getStageMember(2).getName().equals("Input 2")) {
+      egv1=es.getStageMember(2);
+    }
+ else     if (es.getStageMember(2).getName().equals("Task 1")) {
+      egv2=es.getStageMember(2);
+    }
+ else     if (es.getStageMember(2).getName().equals("Task 2")) {
+      egv3=es.getStageMember(2);
+    }
+ else     if (es.getStageMember(2).getName().equals("Task 3")) {
+      egv4=es.getStageMember(2);
+    }
+ else {
+      egv5=es.getStageMember(2);
+    }
+    if (es.getStageMember(3).getName().equals("Input 1")) {
+      egv0=es.getStageMember(3);
+    }
+ else     if (es.getStageMember(3).getName().equals("Input 2")) {
+      egv1=es.getStageMember(3);
+    }
+ else     if (es.getStageMember(3).getName().equals("Task 1")) {
+      egv2=es.getStageMember(3);
+    }
+ else     if (es.getStageMember(3).getName().equals("Task 2")) {
+      egv3=es.getStageMember(3);
+    }
+ else     if (es.getStageMember(3).getName().equals("Task 3")) {
+      egv4=es.getStageMember(3);
+    }
+ else {
+      egv5=es.getStageMember(3);
+    }
+    if (es.getStageMember(4).getName().equals("Input 1")) {
+      egv0=es.getStageMember(4);
+    }
+ else     if (es.getStageMember(4).getName().equals("Input 2")) {
+      egv1=es.getStageMember(4);
+    }
+ else     if (es.getStageMember(4).getName().equals("Task 1")) {
+      egv2=es.getStageMember(4);
+    }
+ else     if (es.getStageMember(4).getName().equals("Task 2")) {
+      egv3=es.getStageMember(4);
+    }
+ else     if (es.getStageMember(4).getName().equals("Task 3")) {
+      egv4=es.getStageMember(4);
+    }
+ else {
+      egv5=es.getStageMember(4);
+    }
+    if (es.getStageMember(5).getName().equals("Input 1")) {
+      egv0=es.getStageMember(5);
+    }
+ else     if (es.getStageMember(5).getName().equals("Input 2")) {
+      egv1=es.getStageMember(5);
+    }
+ else     if (es.getStageMember(5).getName().equals("Task 1")) {
+      egv2=es.getStageMember(5);
+    }
+ else     if (es.getStageMember(5).getName().equals("Task 2")) {
+      egv3=es.getStageMember(5);
+    }
+ else     if (es.getStageMember(5).getName().equals("Task 3")) {
+      egv4=es.getStageMember(5);
+    }
+ else {
+      egv5=es.getStageMember(5);
+    }
+    ExecutionVertex i1_0=egv0.getGroupMember(0);
+    ExecutionVertex i1_1=egv0.getGroupMember(1);
+    ExecutionVertex i2_0=egv1.getGroupMember(0);
+    ExecutionVertex i2_1=egv1.getGroupMember(1);
+    ExecutionVertex t1_0=egv2.getGroupMember(0);
+    ExecutionVertex t1_1=egv2.getGroupMember(1);
+    ExecutionVertex t2_0=egv3.getGroupMember(0);
+    ExecutionVertex t2_1=egv3.getGroupMember(1);
+    ExecutionVertex t3_0=egv4.getGroupMember(0);
+    ExecutionVertex t3_1=egv4.getGroupMember(1);
+    ExecutionVertex o1_0=egv5.getGroupMember(0);
+    ExecutionVertex o1_1=egv5.getGroupMember(1);
+    assertTrue((t1_0.getAllocatedResource().equals(i1_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(i1_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(i1_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(i1_1.getAllocatedResource())));
+    assertTrue((t1_0.getAllocatedResource().equals(i2_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(i2_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(i2_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(i2_1.getAllocatedResource())));
+    assertTrue((t1_0.getAllocatedResource().equals(t2_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(t2_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(t2_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(t2_1.getAllocatedResource())));
+    assertTrue((t1_0.getAllocatedResource().equals(t3_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(t3_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(t3_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(t3_1.getAllocatedResource())));
+    assertTrue((t1_0.getAllocatedResource().equals(o1_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(o1_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(o1_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(o1_1.getAllocatedResource())));
+    assertTrue((t1_1.getAllocatedResource().equals(i1_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(i1_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(i1_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(i1_1.getAllocatedResource())));
+    assertTrue((t1_1.getAllocatedResource().equals(i2_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(i2_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(i2_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(i2_1.getAllocatedResource())));
+    assertTrue((t1_1.getAllocatedResource().equals(t2_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(t2_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(t2_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(t2_1.getAllocatedResource())));
+    assertTrue((t1_1.getAllocatedResource().equals(t3_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(t3_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(t3_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(t3_1.getAllocatedResource())));
+    assertTrue((t1_1.getAllocatedResource().equals(o1_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(o1_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(o1_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(o1_1.getAllocatedResource())));
+  }
+ catch (  GraphConversionException e) {
+    e.printStackTrace();
+  }
+ finally {
+    lim.shutdown();
+    try {
+      Thread.sleep(SLEEPINTERVAL);
+    }
+ catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
+  }
+}

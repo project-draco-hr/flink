@@ -1,0 +1,37 @@
+{
+  ExecutionGraphIterator iterator=new ExecutionGraphIterator(executionGraph,true);
+  final Map<ExecutionVertex,ManagementVertex> vertexMap=new HashMap<ExecutionVertex,ManagementVertex>();
+  final Map<Gate<? extends Record>,ManagementGate> gateMap=new HashMap<Gate<? extends Record>,ManagementGate>();
+  while (iterator.hasNext()) {
+    final ExecutionVertex ev=iterator.next();
+    final ManagementGroupVertex parent=groupMap.get(ev.getGroupVertex());
+    final ManagementVertex managementVertex=new ManagementVertex(parent,ev.getID().toManagementVertexID(),(ev.getAllocatedResource().getInstance().getInstanceConnectionInfo() != null) ? ev.getAllocatedResource().getInstance().getInstanceConnectionInfo().toString() : ev.getAllocatedResource().getInstance().toString(),ev.getAllocatedResource().getInstance().getType().toString(),ev.getEnvironment().getIndexInSubtaskGroup());
+    managementVertex.setExecutionState(ev.getExecutionState());
+    vertexMap.put(ev,managementVertex);
+    for (int i=0; i < ev.getEnvironment().getNumberOfOutputGates(); i++) {
+      final OutputGate<? extends Record> outputGate=ev.getEnvironment().getOutputGate(i);
+      final ManagementGate managementGate=new ManagementGate(managementVertex,i,false,outputGate.getType().toString());
+      gateMap.put(outputGate,managementGate);
+    }
+    for (int i=0; i < ev.getEnvironment().getNumberOfInputGates(); i++) {
+      final InputGate<? extends Record> inputGate=ev.getEnvironment().getInputGate(i);
+      final ManagementGate managementGate=new ManagementGate(managementVertex,i,true,inputGate.getType().toString());
+      gateMap.put(inputGate,managementGate);
+    }
+  }
+  iterator=new ExecutionGraphIterator(executionGraph,true);
+  while (iterator.hasNext()) {
+    final ExecutionVertex source=iterator.next();
+    for (int i=0; i < source.getEnvironment().getNumberOfOutputGates(); i++) {
+      final OutputGate<? extends Record> outputGate=(OutputGate<? extends Record>)source.getEnvironment().getOutputGate(i);
+      final ManagementGate manangementOutputGate=gateMap.get(outputGate);
+      for (int j=0; j < outputGate.getNumberOfOutputChannels(); j++) {
+        final AbstractOutputChannel<? extends Record> outputChannel=outputGate.getOutputChannel(j);
+        final ChannelID inputChannelID=outputChannel.getConnectedChannelID();
+        final AbstractInputChannel<? extends Record> inputChannel=executionGraph.getInputChannelByID(inputChannelID);
+        final ManagementGate managementInputGate=gateMap.get(inputChannel.getInputGate());
+        new ManagementEdge(manangementOutputGate,j,managementInputGate,inputChannel.getChannelIndex(),inputChannel.getType(),inputChannel.getCompressionLevel());
+      }
+    }
+  }
+}

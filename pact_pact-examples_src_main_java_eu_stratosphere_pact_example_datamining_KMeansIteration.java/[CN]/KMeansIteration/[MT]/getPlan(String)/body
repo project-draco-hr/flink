@@ -1,0 +1,34 @@
+{
+  if (args.length != 4) {
+    return null;
+  }
+  int noSubTasks=Integer.parseInt(args[0]);
+  String dataPointInput=args[1];
+  String clusterInput=args[2];
+  String output=args[3];
+  DataSourceContract<PactInteger,CoordVector> dataPoints=new DataSourceContract<PactInteger,CoordVector>(PointInFormat.class,dataPointInput,"Read Data Points");
+  dataPoints.setFormatParameter("delimiter","\n");
+  dataPoints.setDegreeOfParallelism(noSubTasks);
+  dataPoints.setOutputContract(UniqueKey.class);
+  DataSourceContract<PactInteger,CoordVector> clusterPoints=new DataSourceContract<PactInteger,CoordVector>(PointInFormat.class,clusterInput,"Read Centers");
+  clusterPoints.setFormatParameter("delimiter","\n");
+  clusterPoints.setDegreeOfParallelism(1);
+  clusterPoints.setOutputContract(UniqueKey.class);
+  CrossContract<PactInteger,CoordVector,PactInteger,CoordVector,PactInteger,Distance> computeDistance=new CrossContract<PactInteger,CoordVector,PactInteger,CoordVector,PactInteger,Distance>(ComputeDistance.class,"Compute Distances");
+  computeDistance.setDegreeOfParallelism(noSubTasks);
+  computeDistance.getCompilerHints().setAvgBytesPerRecord(48);
+  ReduceContract<PactInteger,Distance,PactInteger,CoordVectorCountSum> findNearestClusterCenters=new ReduceContract<PactInteger,Distance,PactInteger,CoordVectorCountSum>(FindNearestCenter.class,"Find Nearest Centers");
+  findNearestClusterCenters.setDegreeOfParallelism(noSubTasks);
+  findNearestClusterCenters.getCompilerHints().setAvgBytesPerRecord(48);
+  ReduceContract<PactInteger,CoordVectorCountSum,PactInteger,CoordVector> recomputeClusterCenter=new ReduceContract<PactInteger,CoordVectorCountSum,PactInteger,CoordVector>(RecomputeClusterCenter.class,"Recompute Center Positions");
+  recomputeClusterCenter.setDegreeOfParallelism(noSubTasks);
+  recomputeClusterCenter.getCompilerHints().setAvgBytesPerRecord(36);
+  DataSinkContract<PactInteger,CoordVector> newClusterPoints=new DataSinkContract<PactInteger,CoordVector>(PointOutFormat.class,output,"Write new Center Positions");
+  newClusterPoints.setDegreeOfParallelism(noSubTasks);
+  newClusterPoints.setInput(recomputeClusterCenter);
+  recomputeClusterCenter.setInput(findNearestClusterCenters);
+  findNearestClusterCenters.setInput(computeDistance);
+  computeDistance.setFirstInput(dataPoints);
+  computeDistance.setSecondInput(clusterPoints);
+  return new Plan(newClusterPoints,"KMeans Iteration");
+}

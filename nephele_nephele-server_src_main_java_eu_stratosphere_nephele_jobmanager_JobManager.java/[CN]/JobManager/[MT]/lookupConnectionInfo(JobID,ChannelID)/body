@@ -1,0 +1,22 @@
+{
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  if (eg == null) {
+    LOG.error("Cannot find execution graph to job ID " + jobID);
+    return ConnectionInfoLookupResponse.createReceiverNotFound();
+  }
+  final ExecutionVertex vertex=eg.getVertexByChannelID(targetChannelID);
+  if (vertex == null) {
+    LOG.debug("Cannot resolve ID " + targetChannelID + " to a vertex for job "+ jobID);
+    return ConnectionInfoLookupResponse.createReceiverNotFound();
+  }
+  final ExecutionState executionState=vertex.getExecutionState();
+  if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
+    return ConnectionInfoLookupResponse.createReceiverNotReady();
+  }
+  final AbstractInstance assignedInstance=vertex.getAllocatedResource().getInstance();
+  if (assignedInstance == null) {
+    LOG.debug("Cannot resolve lookup: vertex found for channel ID " + targetChannelID + " but no instance assigned");
+    return ConnectionInfoLookupResponse.createReceiverNotReady();
+  }
+  return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+}

@@ -1,0 +1,18 @@
+{
+  DataSourceContract<PactString,PactString> input=new DataSourceContract<PactString,PactString>(ReduceTestInFormat.class,getHDFSProvider().getHdfsHome() + "/reduceInput");
+  input.setFormatParameter("delimiter","\n");
+  input.setDegreeOfParallelism(config.getInteger("ReduceTest#NoSubtasks",1));
+  ReduceContract<PactString,PactString,PactString,PactInteger> testReducer=new ReduceContract<PactString,PactString,PactString,PactInteger>(TestReducer.class);
+  testReducer.setDegreeOfParallelism(config.getInteger("ReduceTest#NoSubtasks",1));
+  testReducer.getStubParameters().setString(PactCompiler.HINT_LOCAL_STRATEGY,config.getString("ReduceTest#LocalStrategy",""));
+  testReducer.getStubParameters().setString(PactCompiler.HINT_SHIP_STRATEGY,config.getString("ReduceTest#ShipStrategy",""));
+  DataSinkContract<PactString,PactInteger> output=new DataSinkContract<PactString,PactInteger>(ReduceTestOutFormat.class,getHDFSProvider().getHdfsHome() + "/result.txt");
+  output.setDegreeOfParallelism(1);
+  output.setInput(testReducer);
+  testReducer.setInput(input);
+  Plan plan=new Plan(output);
+  PactCompiler pc=new PactCompiler();
+  OptimizedPlan op=pc.compile(plan);
+  JobGraphGenerator jgg=new JobGraphGenerator();
+  return jgg.compileJobGraph(op);
+}

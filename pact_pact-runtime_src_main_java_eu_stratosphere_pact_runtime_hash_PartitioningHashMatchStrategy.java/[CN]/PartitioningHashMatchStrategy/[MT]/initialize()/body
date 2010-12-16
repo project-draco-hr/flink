@@ -1,0 +1,27 @@
+{
+  LOG.debug("initialization #1: setting up initial internal state");
+  numberOfPartitions=freeSegments.size() / 2;
+  partitioner=new Partitioner(numberOfPartitions);
+  partitionWriters=new ArrayList<ChannelWriter>(numberOfPartitions);
+  buildPartitionIDs=new ArrayList<Channel.ID>(numberOfPartitions);
+  probePartitionIDs=new ArrayList<Channel.ID>(numberOfPartitions);
+  LOG.debug("initialization #1: using " + numberOfPartitions + " partitions");
+  LOG.debug("initialization #2: repartitioning build side");
+  Channel.Enumerator buildEnumerator=ioManager.createChannelEnumerator();
+  allocatePartitionWriters(buildEnumerator,buildPartitionIDs);
+  repartitionBuildSide();
+  closePartitionWriters();
+  LOG.debug("initialization #3: repartitioning probe side");
+  Channel.Enumerator probeEnumerator=ioManager.createChannelEnumerator();
+  allocatePartitionWriters(probeEnumerator,probePartitionIDs);
+  repartitionProbeSide();
+  closePartitionWriters();
+  currentPartition=0;
+  currentBuildPartitionReader=ioManager.createChannelReader(buildPartitionIDs.get(currentPartition),freeSegments);
+  KeyValuePair<K,VB> pair=buildPairSerialization.newInstance();
+  while (currentBuildPartitionReader.read(pair)) {
+    hashMap.put(pair.getKey(),pair.getValue());
+  }
+  currentBuildPartitionReader.close();
+  currentProbePartitionReader=ioManager.createChannelReader(probePartitionIDs.get(currentPartition),freeSegments);
+}

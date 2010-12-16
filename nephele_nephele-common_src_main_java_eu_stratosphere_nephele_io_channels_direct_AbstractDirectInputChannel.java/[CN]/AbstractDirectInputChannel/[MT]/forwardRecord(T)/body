@@ -1,0 +1,22 @@
+{
+  if (this.currentWriteBuffer == null) {
+synchronized (this.synchronizationMontior) {
+      while (this.emptyBuffers.isEmpty()) {
+        if (this.connectedInMemoryOutputChannel == null) {
+          this.connectedInMemoryOutputChannel=getConnectedOutputChannel();
+        }
+        this.connectedInMemoryOutputChannel.channelCapacityExhausted();
+        this.synchronizationMontior.wait();
+      }
+      this.currentWriteBuffer=this.emptyBuffers.poll();
+    }
+  }
+  this.currentWriteBuffer.put(record);
+  if (this.currentWriteBuffer.getSize() >= this.currentWriteBuffer.capacity()) {
+synchronized (this.synchronizationMontior) {
+      this.fullBuffers.add(this.currentWriteBuffer);
+      this.getInputGate().notifyRecordIsAvailable(getChannelIndex());
+      this.currentWriteBuffer=null;
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
+  List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
+  Collection<MemorySegment> outputSegments=memoryManager.allocate(2,ioMemorySize / 2);
+  CircularElement element=null;
+  while (isRunning() && (element=queues.spill.take()) != SENTINEL) {
+    Channel.ID channel=enumerator.next();
+    channelIDs.add(channel);
+    LOG.debug("Creating temp file " + channel.toString() + '.');
+    ChannelWriter writer=ioManager.createChannelWriter(channel,outputSegments);
+    LOG.debug("Combining buffer " + element.id + '.');
+    final BufferSortable<K,V> buffer=element.buffer;
+    final CombineValueIterator<V> iter=new CombineValueIterator<V>(buffer);
+    final Collector<K,V> collector=new WriterCollector<K,V>(writer);
+    int i=0;
+    int stop=buffer.size() - 1;
+    while (i < stop) {
+      int seqStart=i;
+      while (i < stop && 0 == buffer.compare(i,i + 1)) {
+        i++;
+      }
+      if (i == seqStart) {
+        buffer.writeToChannel(writer,seqStart,1);
+      }
+ else {
+        K key=buffer.getKey(seqStart);
+        iter.set(seqStart,i);
+        combineStub.combine(key,iter,collector);
+      }
+      i++;
+    }
+    if (i == stop) {
+      buffer.writeToChannel(writer,stop,1);
+    }
+    LOG.debug("Combined and spilled buffer " + element.id + ".");
+    outputSegments=writer.close();
+    element.buffer.reset();
+    queues.empty.put(element);
+  }
+  LOG.debug("Spilling done.");
+  LOG.debug("Releasing output-buffer memory.");
+  memoryManager.release(outputSegments);
+  LOG.debug("Releasing sort-buffer memory.");
+  while (!queues.empty.isEmpty()) {
+    memoryManager.release(queues.empty.take().buffer.unbind());
+  }
+  while (channelIDs.size() > maxNumFileHandles) {
+    channelIDs=mergeChannelList(channelIDs,ioMemorySize);
+  }
+  if (CombiningUnilateralSortMerger.this.combineLastMerge) {
+    KeyGroupedIterator<K,V> iter=new KeyGroupedIterator<K,V>(getMergingIterator(channelIDs,ioMemorySize));
+    lazyIterator.setTarget(new CombiningIterator<K,V>(combineStub,iter));
+  }
+ else {
+    lazyIterator.setTarget(getMergingIterator(channelIDs,ioMemorySize));
+  }
+  LOG.debug("Spilling thread done.");
+}

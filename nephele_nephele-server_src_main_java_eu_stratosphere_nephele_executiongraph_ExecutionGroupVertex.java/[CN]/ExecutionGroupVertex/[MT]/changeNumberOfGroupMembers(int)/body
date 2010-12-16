@@ -1,0 +1,48 @@
+{
+  if (newNumberOfMembers == this.getCurrentNumberOfGroupMembers()) {
+    return;
+  }
+  if (this.userDefinedNumberOfMembers != -1) {
+    if (this.userDefinedNumberOfMembers == getCurrentNumberOfGroupMembers()) {
+      throw new GraphConversionException("Cannot overwrite user defined number of group members");
+    }
+  }
+  if (this.getMinimumNumberOfGroupMember() < 1) {
+    throw new GraphConversionException("The minimum number of members is below 1 for group vertex " + this.getName());
+  }
+  if ((this.getMaximumNumberOfGroupMembers() != -1) && (this.getMaximumNumberOfGroupMembers() < this.getMinimumNumberOfGroupMember())) {
+    throw new GraphConversionException("The maximum number of members is smaller than the minimum for group vertex " + this.getName());
+  }
+  if (newNumberOfMembers < this.getMinimumNumberOfGroupMember()) {
+    throw new GraphConversionException("Number of members must be at least " + this.getMinimumNumberOfGroupMember());
+  }
+  if ((this.getMaximumNumberOfGroupMembers() != -1) && (newNumberOfMembers > this.getMaximumNumberOfGroupMembers())) {
+    throw new GraphConversionException("Number of members cannot exceed " + this.getMaximumNumberOfGroupMembers());
+  }
+  unwire();
+  if (newNumberOfMembers < this.getCurrentNumberOfGroupMembers()) {
+    while (this.getCurrentNumberOfGroupMembers() > newNumberOfMembers) {
+synchronized (this.groupMembers) {
+        this.groupMembers.remove(this.groupMembers.size() - 1);
+      }
+    }
+  }
+ else {
+    while (this.getCurrentNumberOfGroupMembers() < newNumberOfMembers) {
+synchronized (this.groupMembers) {
+        final ExecutionVertex vertex=this.groupMembers.get(0).splitVertex();
+        this.groupMembers.add(vertex);
+      }
+    }
+    System.out.println("Number of members is now " + this.groupMembers.size());
+  }
+  wire();
+synchronized (this.groupMembers) {
+    for (int i=0; i < this.groupMembers.size(); i++) {
+      final ExecutionVertex vertex=this.groupMembers.get(i);
+      vertex.getEnvironment().setIndexInSubtaskGroup(i);
+      vertex.getEnvironment().setCurrentNumberOfSubtasks(this.groupMembers.size());
+    }
+  }
+  reassignInstances();
+}

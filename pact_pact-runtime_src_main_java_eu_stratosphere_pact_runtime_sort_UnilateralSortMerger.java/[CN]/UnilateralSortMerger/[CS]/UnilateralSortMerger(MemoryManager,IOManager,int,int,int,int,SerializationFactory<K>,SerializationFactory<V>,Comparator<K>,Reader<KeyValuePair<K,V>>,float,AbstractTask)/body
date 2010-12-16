@@ -1,0 +1,38 @@
+{
+  this.maxNumFileHandles=maxNumFileHandles;
+  this.memoryManager=memoryManager;
+  this.ioManager=ioManager;
+  this.keyComparator=keyComparator;
+  this.keySerialization=keySerialization;
+  this.valueSerialization=valueSerialization;
+  this.allocatedMemory=new ArrayList<MemorySegment>();
+  this.lazyIterator=new LazyDelegatingIterator<KeyValuePair<K,V>>();
+  CircularQueues circularQueues=new CircularQueues();
+  for (int i=0; i < numSortBuffers; i++) {
+    Deserializer<K> keyDeserializer=keySerialization.getDeserializer();
+    RawComparator comparator=new DeserializerComparator<K>(keyDeserializer,keyComparator);
+    MemorySegment seg=memoryManager.allocate(sizeSortBuffer);
+    freeSegmentAtShutdown(seg);
+    BufferSortable<K,V> buffer=new BufferSortable<K,V>(seg,comparator,keySerialization,valueSerialization,offsetArrayPerc);
+    CircularElement element=new CircularElement(i,buffer);
+    circularQueues.empty.add(element);
+  }
+  ExceptionHandler<IOException> exceptionHandler=new ExceptionHandler<IOException>(){
+    public void handleException(    IOException exception){
+      LOG.error("Thread threw an IOException (delegating to lazy iterator)",exception);
+      lazyIterator.setException(exception);
+      try {
+        shutdown();
+      }
+ catch (      InterruptedException iex) {
+      }
+    }
+  }
+;
+  readThread=getReadingThread(exceptionHandler,reader,circularQueues,parentTask);
+  sortThread=getSortingThread(exceptionHandler,circularQueues,parentTask);
+  spillThread=getSpillingThread(exceptionHandler,circularQueues,memoryManager,ioManager,ioMemorySize,parentTask);
+  readThread.start();
+  sortThread.start();
+  spillThread.start();
+}

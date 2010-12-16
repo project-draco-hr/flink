@@ -1,0 +1,95 @@
+{
+  BasicFileStatistics stats=fileStatisticsCache.get(filePath);
+  if (stats == null) {
+    stats=new BasicFileStatistics(-1,UNKNOWN,UNKNOWN);
+  }
+  try {
+    URI uri=new Path(filePath).toUri();
+    if (uri.getHost() == null || uri.getPort() == -1) {
+      return stats;
+    }
+    Path file=new Path(uri.getPath());
+    FileSystem fs=FileSystem.get(uri);
+    List<FileStatus> files=null;
+{
+      FileStatus status=fs.getFileStatus(file);
+      if (status.isDir()) {
+        FileStatus[] fss=fs.listStatus(file);
+        files=new ArrayList<FileStatus>(fss.length);
+        boolean unmodified=true;
+        for (        FileStatus s : fss) {
+          if (!s.isDir()) {
+            files.add(s);
+            if (s.getModificationTime() > stats.fileModTime) {
+              stats.fileModTime=s.getModificationTime();
+              unmodified=false;
+            }
+          }
+        }
+        if (unmodified) {
+          return stats;
+        }
+      }
+ else {
+        if (stats.getLastModificationTime() == status.getModificationTime()) {
+          return stats;
+        }
+        files=new ArrayList<FileStatus>(1);
+        files.add(status);
+      }
+    }
+    stats.fileSize=0;
+    for (    FileStatus s : files) {
+      stats.fileSize+=s.getLen();
+    }
+    if (stats.fileSize <= 0) {
+      return stats;
+    }
+    int numSamples=Math.min(numLineSamples,(int)(stats.fileSize / 1024));
+    if (numSamples < 2) {
+      numSamples=2;
+    }
+    long offset=0;
+    long bytes=0;
+    long stepSize=stats.fileSize / numSamples;
+    int fileNum=0;
+    int samplesTaken=0;
+    for (int sampleNum=0; sampleNum < numSamples && fileNum < files.size(); sampleNum++) {
+      FileStatus currentFile=files.get(fileNum);
+      FSDataInputStream inStream=null;
+      try {
+        inStream=fs.open(currentFile.getPath());
+        LineReader lineReader=new LineReader(inStream,offset,currentFile.getLen() - offset,1024);
+        byte[] line=lineReader.readLine();
+        lineReader.close();
+        if (line != null && line.length > 0) {
+          samplesTaken++;
+          bytes+=line.length + 1;
+        }
+      }
+  finally {
+        if (inStream != null) {
+          try {
+            inStream.close();
+          }
+ catch (          Throwable t) {
+          }
+        }
+      }
+      offset+=stepSize;
+      while (fileNum < files.size() && offset >= (currentFile=files.get(fileNum)).getLen()) {
+        offset-=currentFile.getLen();
+        fileNum++;
+      }
+    }
+    stats.avgBytesPerRecord=bytes / (float)samplesTaken;
+  }
+ catch (  IOException ioex) {
+    LOG.warn("Could not determine complete statistics for file '" + filePath + "' due to an io error: "+ ioex.getMessage());
+  }
+catch (  Throwable t) {
+    LOG.error("Unexpected problen while getting the file statistics for file '" + filePath + "': "+ t.getMessage(),t);
+  }
+  fileStatisticsCache.put(filePath,stats);
+  return stats;
+}

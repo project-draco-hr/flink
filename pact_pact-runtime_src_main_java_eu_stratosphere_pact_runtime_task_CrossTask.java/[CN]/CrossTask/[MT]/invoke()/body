@@ -1,0 +1,25 @@
+{
+  LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  final RecordReader<KeyValuePair<Key,Value>> innerReader;
+  final RecordReader<KeyValuePair<Key,Value>> outerReader;
+  if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND || config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+    innerReader=reader1;
+    outerReader=reader2;
+  }
+ else   if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_FIRST || config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
+    innerReader=reader2;
+    outerReader=reader1;
+  }
+ else {
+    throw new RuntimeException("Invalid local strategy for CROSS: " + config.getLocalStrategy());
+  }
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_FIRST || config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND) {
+    runBlocked(memoryManager,ioManager,innerReader,outerReader);
+  }
+ else {
+    runStreamed(memoryManager,ioManager,innerReader,outerReader);
+  }
+  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+}

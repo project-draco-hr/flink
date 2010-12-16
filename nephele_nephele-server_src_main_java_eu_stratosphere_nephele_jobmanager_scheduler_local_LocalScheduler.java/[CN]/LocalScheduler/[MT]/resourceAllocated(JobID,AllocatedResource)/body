@@ -1,0 +1,56 @@
+{
+  if (allocatedResource == null) {
+    LOG.error("Resource to lock is null!");
+    return;
+  }
+  if (allocatedResource.getInstance() instanceof DummyInstance) {
+    LOG.debug("Available instance is of type DummyInstance!");
+    return;
+  }
+  try {
+    allocatedResource.getInstance().checkLibraryAvailability(jobID);
+  }
+ catch (  IOException ioe) {
+    LOG.error("Cannot check library availability: " + StringUtils.stringifyException(ioe));
+  }
+synchronized (this.jobQueue) {
+    final ExecutionGraph eg=getExecutionGraphByID(jobID);
+    if (eg == null) {
+      try {
+        this.instanceManager.releaseAllocatedResource(jobID,null,allocatedResource);
+      }
+ catch (      InstanceException e) {
+        LOG.error(e);
+      }
+    }
+    AllocatedResource resourceToBeReplaced=null;
+    ExecutionGraphIterator it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
+    while (it.hasNext()) {
+      final ExecutionVertex vertex=it.next();
+      if (vertex.getExecutionState() == ExecutionState.ASSIGNING && vertex.getAllocatedResource() != null) {
+        if (vertex.getAllocatedResource().getInstance().getType().equals(allocatedResource.getInstance().getType())) {
+          resourceToBeReplaced=vertex.getAllocatedResource();
+          break;
+        }
+      }
+    }
+    if (resourceToBeReplaced == null) {
+      LOG.error("Instance " + allocatedResource.getInstance() + " is not required for job"+ eg.getJobID());
+      try {
+        this.instanceManager.releaseAllocatedResource(jobID,eg.getJobConfiguration(),allocatedResource);
+      }
+ catch (      InstanceException e) {
+        LOG.error(e);
+      }
+      return;
+    }
+    it=new ExecutionGraphIterator(eg,true);
+    while (it.hasNext()) {
+      final ExecutionVertex vertex=it.next();
+      if (vertex.getAllocatedResource().equals(resourceToBeReplaced)) {
+        vertex.setAllocatedResource(allocatedResource);
+        vertex.setExecutionState(ExecutionState.ASSIGNED);
+      }
+    }
+  }
+}

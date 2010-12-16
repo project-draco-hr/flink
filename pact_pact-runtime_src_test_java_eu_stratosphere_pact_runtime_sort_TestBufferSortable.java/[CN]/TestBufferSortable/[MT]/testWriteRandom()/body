@@ -1,0 +1,33 @@
+{
+  MemorySegment memory=memoryManager.allocate(1024);
+  int writtenPairs=0, readPairs=0, limit;
+{
+    TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    BufferSortable<TestData.Key,TestData.Value> buffer=newSortBuffer(memory,OFFSETS_PERCENTAGE);
+    int writtenBytes=0;
+    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
+    while (buffer.write(pair)) {
+      LOG.debug("<- " + pair);
+      writtenBytes+=generator.sizeOf(pair) + Integer.SIZE / 8;
+      writtenPairs++;
+      pair=generator.next();
+    }
+    LOG.info("Written " + writtenPairs + " pairs to buffer which occupied "+ writtenBytes+ " of "+ 1024+ " bytes.");
+    limit=buffer.getPosition();
+    memory=buffer.unbind();
+  }
+{
+    Buffer.Input buffer=new Buffer.Input();
+    buffer.bind(memory);
+    buffer.reset(limit);
+    KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
+    while (buffer.read(pair)) {
+      LOG.debug("-> " + pair);
+      readPairs++;
+    }
+    LOG.info("Read " + readPairs + " pairs from buffer.");
+    memory=buffer.unbind();
+  }
+  Assert.assertEquals(writtenPairs,readPairs);
+  memoryManager.release(memory);
+}

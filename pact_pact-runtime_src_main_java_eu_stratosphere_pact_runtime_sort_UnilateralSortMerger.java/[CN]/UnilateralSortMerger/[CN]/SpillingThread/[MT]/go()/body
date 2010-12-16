@@ -1,0 +1,30 @@
+{
+  final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
+  List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
+  Collection<MemorySegment> outputSegments=memoryManager.allocate(2,ioMemorySize / 2);
+  freeSegmentsAtShutdown(outputSegments);
+  CircularElement element=null;
+  while (isRunning() && (element=queues.spill.take()) != SENTINEL) {
+    Channel.ID channel=enumerator.next();
+    channelIDs.add(channel);
+    ChannelWriter writer=ioManager.createChannelWriter(channel,outputSegments);
+    LOG.debug("Spilling buffer " + element.id + ".");
+    element.buffer.writeToChannel(writer);
+    LOG.debug("Spilled buffer " + element.id + ".");
+    outputSegments=writer.close();
+    element.buffer.reset();
+    queues.empty.put(element);
+  }
+  LOG.debug("Spilling done.");
+  LOG.debug("Releasing output-buffer memory.");
+  memoryManager.release(outputSegments);
+  LOG.debug("Releasing sort-buffer memory.");
+  while (!queues.empty.isEmpty()) {
+    memoryManager.release(queues.empty.take().buffer.unbind());
+  }
+  while (channelIDs.size() > maxNumFileHandles) {
+    channelIDs=mergeChannelList(channelIDs,ioMemorySize);
+  }
+  lazyIterator.setTarget(getMergingIterator(channelIDs,ioMemorySize));
+  LOG.debug("Spilling thread done.");
+}

@@ -1,0 +1,35 @@
+{
+  if (candidateAddress == null) {
+    LOG.debug("candidateAddress is null");
+    return null;
+  }
+  if (candidateAddress.isLoopbackAddress()) {
+    return candidateAddress;
+  }
+  try {
+    Enumeration<NetworkInterface> ie=NetworkInterface.getNetworkInterfaces();
+    while (ie.hasMoreElements()) {
+      NetworkInterface i=ie.nextElement();
+      if (!i.isUp()) {
+        continue;
+      }
+      for (      InterfaceAddress adr : i.getInterfaceAddresses()) {
+        InetAddress address=adr.getAddress();
+        if ((address instanceof Inet4Address) && USEIPV6) {
+          continue;
+        }
+        if ((address instanceof Inet6Address) && !USEIPV6) {
+          continue;
+        }
+        final int networkPrefixLength=adr.getNetworkPrefixLength();
+        if (i.isPointToPoint() == false && onSameNetwork(address,candidateAddress,networkPrefixLength)) {
+          return address;
+        }
+      }
+    }
+  }
+ catch (  SocketException e) {
+    LOG.error(e);
+  }
+  return null;
+}

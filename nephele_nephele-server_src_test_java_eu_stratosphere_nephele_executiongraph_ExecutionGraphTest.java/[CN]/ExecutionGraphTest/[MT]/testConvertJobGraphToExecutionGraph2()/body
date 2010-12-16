@@ -1,0 +1,95 @@
+{
+  createInputFile();
+  createJarFile("GrepTask1Input1Output");
+  JobGraph jg=new JobGraph("Job Graph 1");
+  JobID jobID=jg.getJobID();
+  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+  i1.setFileInputClass(FileLineReader.class);
+  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
+  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+  t1.setTaskClass(GrepTask1Input1Output.class);
+  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+  o1.setFileOutputClass(FileLineWriter.class);
+  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTFILENAME));
+  try {
+    i1.connectTo(t1,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+    t1.connectTo(o1,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+  }
+  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
+  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar")};
+  try {
+    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
+    LibraryCacheManager.register(jobID,paths);
+  }
+ catch (  IOException e1) {
+    e1.printStackTrace();
+  }
+  final String confDir=System.getProperty("user.dir") + "/correct-conf";
+  GlobalConfiguration.loadConfiguration(confDir);
+  MyInstanceNotifiable myInstanceNotifiable=new MyInstanceNotifiable();
+  final LocalInstanceManager lim=new LocalInstanceManager(confDir);
+  lim.setInstanceListener(myInstanceNotifiable);
+  try {
+    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
+    while (it.hasNext()) {
+      it.next().setExecutionState(ExecutionState.SCHEDULED);
+    }
+    assertEquals(1,eg.getInstanceTypesRequiredForCurrentStage().size());
+    assertEquals(1,(int)eg.getInstanceTypesRequiredForCurrentStage().get(lim.getDefaultInstanceType()));
+    ExecutionStage es=eg.getStage(0);
+    ExecutionGroupVertex egv0=null;
+    ExecutionGroupVertex egv1=null;
+    ExecutionGroupVertex egv2=null;
+    if (es.getStageMember(0).getName().equals("Input 1")) {
+      egv0=es.getStageMember(0);
+    }
+ else     if (es.getStageMember(0).getName().equals("Output 1")) {
+      egv1=es.getStageMember(0);
+    }
+ else {
+      egv2=es.getStageMember(0);
+    }
+    if (es.getStageMember(1).getName().equals("Input 1")) {
+      egv0=es.getStageMember(1);
+    }
+ else     if (es.getStageMember(1).getName().equals("Output 1")) {
+      egv1=es.getStageMember(1);
+    }
+ else {
+      egv2=es.getStageMember(1);
+    }
+    if (es.getStageMember(2).getName().equals("Input 1")) {
+      egv0=es.getStageMember(2);
+    }
+ else     if (es.getStageMember(2).getName().equals("Output 1")) {
+      egv1=es.getStageMember(2);
+    }
+ else {
+      egv2=es.getStageMember(2);
+    }
+    ExecutionVertex ev0=egv0.getGroupMember(0);
+    ExecutionVertex ev1=egv1.getGroupMember(0);
+    ExecutionVertex ev2=egv2.getGroupMember(0);
+    assertEquals(lim.getDefaultInstanceType(),ev0.getAllocatedResource().getInstance().getType());
+    assertEquals(lim.getDefaultInstanceType(),ev1.getAllocatedResource().getInstance().getType());
+    assertEquals(lim.getDefaultInstanceType(),ev2.getAllocatedResource().getInstance().getType());
+    assertEquals(ev0.getAllocatedResource(),ev1.getAllocatedResource());
+    assertEquals(ev0.getAllocatedResource(),ev2.getAllocatedResource());
+  }
+ catch (  GraphConversionException e) {
+    e.printStackTrace();
+  }
+ finally {
+    lim.shutdown();
+    try {
+      Thread.sleep(SLEEPINTERVAL);
+    }
+ catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  FileSystem fs=null;
+synchronized (synchronizationObject) {
+    if (uri.getScheme() == null) {
+      throw new IOException("FileSystem: Scheme is null");
+    }
+    final FSKey key=new FSKey(uri.getScheme(),uri.getAuthority());
+    if (CACHE.containsKey(key)) {
+      return CACHE.get(key);
+    }
+    if (!FSDIRECTORY.containsKey(uri.getScheme())) {
+      throw new IOException("No file system found with scheme " + uri.getScheme());
+    }
+    Class<? extends FileSystem> fsClass=null;
+    try {
+      fsClass=ClassUtils.getFileSystemByName(FSDIRECTORY.get(uri.getScheme()));
+    }
+ catch (    ClassNotFoundException e1) {
+      throw new IOException(StringUtils.stringifyException(e1));
+    }
+    try {
+      fs=fsClass.newInstance();
+    }
+ catch (    InstantiationException e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+catch (    IllegalAccessException e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+    fs.initialize(uri);
+    CACHE.put(key,fs);
+  }
+  return fs;
+}

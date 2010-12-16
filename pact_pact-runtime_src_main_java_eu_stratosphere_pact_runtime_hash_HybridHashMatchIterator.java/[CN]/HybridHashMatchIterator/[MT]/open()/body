@@ -1,0 +1,45 @@
+{
+  try {
+    hashMapSegment=memoryManager.allocate(hashMapMemorySize);
+    bufferSegments=memoryManager.allocate(numberOfIOBuffers,ioBufferSize);
+    if (inputRoles == InputRoles.BUILD_PROBE) {
+      SerializingHashMap<K,V1> hashMap=new SerializingHashMap<K,V1>(keyClass,value1Class,hashMapSegment);
+      HashMatchStrategy<K,V1,V2> strategy;
+      LOG.debug("Initializing HybridHashMergeIterator (build := reader1, probe := reader2)");
+      try {
+        strategy=new InMemoryHashMatchStrategy<K,V1,V2>(reader1,reader2,ioManager,keySerialization,value1Serialization,value2Serialization,hashMap);
+        strategy.initialize();
+        LOG.debug("Using InMemoryHashMergeStrategy");
+      }
+ catch (      SerializingHashMap.OverflowException e) {
+        LOG.warn("Overflow cause is " + e.cause + ". Falling back to PartitioningHashMergeStrategy");
+        strategy=new PartitioningHashMatchStrategy<K,V1,V2>(reader1,reader2,ioManager,keySerialization,value1Serialization,value2Serialization,hashMap,(KeyValuePair<K,V1>)e.cause,bufferSegments);
+        strategy.initialize();
+        LOG.debug("Using PartitioningHashMergeStrategy");
+      }
+      this.strategyBuildProbe=strategy;
+      this.activeStrategy=strategy;
+    }
+ else {
+      SerializingHashMap<K,V2> hashMap=new SerializingHashMap<K,V2>(keyClass,value2Class,hashMapSegment);
+      HashMatchStrategy<K,V2,V1> strategy;
+      LOG.debug("Initializing HashMergeStrategy (build := reader2, probe := reader1)");
+      try {
+        strategy=new InMemoryHashMatchStrategy<K,V2,V1>(reader2,reader1,ioManager,keySerialization,value2Serialization,value1Serialization,hashMap);
+        strategy.initialize();
+        LOG.debug("Using InMemoryHashMergeStrategy");
+      }
+ catch (      SerializingHashMap.OverflowException e) {
+        LOG.warn("Overflow cause is " + e.cause + ". Falling back to PartitioningHashMergeStrategy");
+        strategy=new PartitioningHashMatchStrategy<K,V2,V1>(reader2,reader1,ioManager,keySerialization,value2Serialization,value1Serialization,hashMap,(KeyValuePair<K,V2>)e.cause,bufferSegments);
+        strategy.initialize();
+        LOG.debug("Using PartitioningHashMergeStrategy");
+      }
+      this.strategyProbeBuild=strategy;
+      this.activeStrategy=strategy;
+    }
+  }
+ catch (  ServiceException e) {
+    throw new IOException(e);
+  }
+}

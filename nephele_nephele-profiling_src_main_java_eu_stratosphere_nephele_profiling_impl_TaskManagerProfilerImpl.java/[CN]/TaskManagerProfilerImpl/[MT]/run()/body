@@ -1,0 +1,53 @@
+{
+  final long timestamp=System.currentTimeMillis();
+  InternalInstanceProfilingData instanceProfilingData=null;
+synchronized (this.monitoredThreads) {
+    final Iterator<Environment> iterator=this.monitoredThreads.keySet().iterator();
+    while (iterator.hasNext()) {
+      final Environment environment=iterator.next();
+      final EnvironmentThreadSet environmentThreadSet=this.monitoredThreads.get(environment);
+      final InternalExecutionVertexThreadProfilingData threadProfilingData=environmentThreadSet.captureCPUUtilization(environment.getJobID(),this.tmx,timestamp);
+      if (threadProfilingData != null) {
+        this.profilingDataContainer.addProfilingData(threadProfilingData);
+      }
+    }
+    if (!this.monitoredThreads.isEmpty()) {
+      try {
+        instanceProfilingData=this.instanceProfiler.generateProfilingData(timestamp);
+      }
+ catch (      ProfilingException e) {
+        LOG.error("Error while retrieving instance profiling data: ",e);
+      }
+    }
+  }
+synchronized (this.monitoredInputGates) {
+    final Iterator<InputGate<? extends Record>> iterator=this.monitoredInputGates.keySet().iterator();
+    while (iterator.hasNext()) {
+      final InputGate<? extends Record> inputGate=iterator.next();
+      final InputGateListenerImpl listener=this.monitoredInputGates.get(inputGate);
+      this.profilingDataContainer.addProfilingData(new InternalInputGateProfilingData(listener.getJobID(),listener.getExecutionVertexID(),listener.getGateIndex(),(int)timerInterval,listener.getAndResetCounter()));
+    }
+  }
+synchronized (this.monitoredOutputGates) {
+    final Iterator<OutputGate<? extends Record>> iterator=this.monitoredOutputGates.keySet().iterator();
+    while (iterator.hasNext()) {
+      final OutputGate<? extends Record> outputGate=iterator.next();
+      final OutputGateListenerImpl listener=this.monitoredOutputGates.get(outputGate);
+      this.profilingDataContainer.addProfilingData(new InternalOutputGateProfilingData(listener.getJobID(),listener.getExecutionVertexID(),listener.getGateIndex(),(int)timerInterval,listener.getAndResetCounter()));
+    }
+  }
+synchronized (this.profilingDataContainer) {
+    if (instanceProfilingData != null) {
+      this.profilingDataContainer.addProfilingData(instanceProfilingData);
+    }
+    if (!this.profilingDataContainer.isEmpty()) {
+      try {
+        this.jobManagerProfiler.reportProfilingData(this.profilingDataContainer);
+        this.profilingDataContainer.clear();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+}

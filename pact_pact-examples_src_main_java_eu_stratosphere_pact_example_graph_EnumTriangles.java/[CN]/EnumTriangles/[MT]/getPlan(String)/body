@@ -1,0 +1,26 @@
+{
+  if (args.length != 3) {
+    return null;
+  }
+  int noSubTasks=Integer.parseInt(args[0]);
+  String edgeInput=args[1];
+  String output=args[2];
+  DataSourceContract<N_StringPair,N_List_StringPair> edges=new DataSourceContract<N_StringPair,N_List_StringPair>(EdgeListInFormat.class,edgeInput);
+  edges.setFormatParameter("delimiter","\n");
+  edges.setDegreeOfParallelism(noSubTasks);
+  edges.setOutputContract(UniqueKey.class);
+  MapContract<N_StringPair,N_List_StringPair,PactString,N_List_StringPair> assignKeys=new MapContract<N_StringPair,N_List_StringPair,PactString,N_List_StringPair>(AssignKeys.class,"Assign Keys");
+  assignKeys.setDegreeOfParallelism(noSubTasks);
+  ReduceContract<PactString,N_List_StringPair,N_StringPair,N_List_StringPair> buildTriads=new ReduceContract<PactString,N_List_StringPair,N_StringPair,N_List_StringPair>(BuildTriads.class,"Build Triads");
+  buildTriads.setDegreeOfParallelism(noSubTasks);
+  MatchContract<N_StringPair,N_List_StringPair,N_List_StringPair,N_StringPair,N_List_StringPair> closeTriads=new MatchContract<N_StringPair,N_List_StringPair,N_List_StringPair,N_StringPair,N_List_StringPair>(CloseTriads.class,"Close Triads");
+  closeTriads.setDegreeOfParallelism(noSubTasks);
+  DataSinkContract<N_StringPair,N_List_StringPair> triangles=new DataSinkContract<N_StringPair,N_List_StringPair>(EdgeListOutFormat.class,output);
+  triangles.setDegreeOfParallelism(noSubTasks);
+  triangles.setInput(closeTriads);
+  closeTriads.setSecondInput(edges);
+  closeTriads.setFirstInput(buildTriads);
+  buildTriads.setInput(assignKeys);
+  assignKeys.setInput(edges);
+  return new Plan(triangles,"Enumerate Triangles");
+}

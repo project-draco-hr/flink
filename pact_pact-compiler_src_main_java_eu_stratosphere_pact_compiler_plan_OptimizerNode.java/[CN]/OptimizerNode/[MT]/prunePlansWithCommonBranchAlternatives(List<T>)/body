@@ -1,0 +1,63 @@
+{
+  List<List<T>> toKeep=new ArrayList<List<T>>(intProps.size());
+  for (int i=0; i < intProps.size(); i++) {
+    toKeep.add(null);
+  }
+  T cheapest=null;
+  for (  T candidate : plans) {
+    if (cheapest == null || (cheapest.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0)) {
+      cheapest=candidate;
+    }
+    for (int i=0; i < intProps.size(); i++) {
+      if (intProps.get(i).isMetBy(candidate)) {
+        if (toKeep.get(i) == null) {
+          List<T> l=new ArrayList<T>(2);
+          l.add(candidate);
+          toKeep.set(i,l);
+        }
+ else {
+          List<T> l=toKeep.get(i);
+          boolean met=false;
+          boolean replaced=false;
+          for (int k=0; k < l.size(); k++) {
+            T other=l.get(k);
+            if (other.getGlobalProperties().isMetBy(candidate.getGlobalProperties()) && other.getLocalProperties().isMetBy(candidate.getLocalProperties()) && other.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0) {
+              l.set(k,replaced ? null : candidate);
+              replaced=true;
+              met=true;
+            }
+ else {
+              met|=(candidate.getGlobalProperties().isMetBy(other.getGlobalProperties()) && candidate.getLocalProperties().isMetBy(other.getLocalProperties()) && candidate.getCumulativeCosts().compareTo(other.getCumulativeCosts()) >= 0);
+            }
+          }
+          if (!met) {
+            l.add(candidate);
+          }
+        }
+      }
+    }
+  }
+  plans.clear();
+  if (cheapest != null) {
+    plans.add(cheapest);
+    cheapest.pFlag=true;
+  }
+  Costs cheapestCosts=cheapest.cumulativeCosts;
+  for (int i=0; i < toKeep.size(); i++) {
+    List<T> l=toKeep.get(i);
+    if (l != null) {
+      Costs maxDelta=intProps.get(i).getMaximalCosts();
+      for (      T plan : l) {
+        if (plan != null && !plan.pFlag) {
+          plan.pFlag=true;
+          if (!cheapestCosts.isOtherMoreThanDeltaAbove(plan.getCumulativeCosts(),maxDelta)) {
+            plans.add(plan);
+          }
+        }
+      }
+    }
+  }
+  for (  T p : plans) {
+    p.pFlag=false;
+  }
+}

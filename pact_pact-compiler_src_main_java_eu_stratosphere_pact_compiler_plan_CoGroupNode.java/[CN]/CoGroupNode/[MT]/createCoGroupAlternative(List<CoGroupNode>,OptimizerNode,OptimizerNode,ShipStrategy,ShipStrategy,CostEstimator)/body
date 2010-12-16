@@ -1,0 +1,25 @@
+{
+  GlobalProperties gp1=PactConnection.getGlobalPropertiesAfterConnection(pred1,ss1);
+  LocalProperties lp1=PactConnection.getLocalPropertiesAfterConnection(pred1,ss1);
+  LocalProperties lp2=PactConnection.getLocalPropertiesAfterConnection(pred2,ss2);
+  GlobalProperties outGp=new GlobalProperties();
+  outGp.setPartitioning(gp1.getPartitioning());
+  LocalProperties outLp=new LocalProperties();
+  outLp.setKeyOrder(lp1.getKeyOrder().isOrdered() && lp1.getKeyOrder() == lp2.getKeyOrder() ? lp1.getKeyOrder() : Order.NONE);
+  outLp.setKeysGrouped(outLp.getKeyOrder().isOrdered());
+  CoGroupNode n=new CoGroupNode(this,pred1,pred2,input1,input2,outGp,outLp);
+  n.input1.setShipStrategy(ss1);
+  n.input2.setShipStrategy(ss2);
+  if (outLp.getKeyOrder().isOrdered()) {
+    n.setLocalStrategy(LocalStrategy.NONE);
+  }
+ else {
+    n.setLocalStrategy(LocalStrategy.SORTMERGE);
+    n.getLocalProperties().setKeyOrder(Order.ASCENDING);
+    n.getLocalProperties().setKeysGrouped(true);
+  }
+  n.getGlobalProperties().getPreservedAfterContract(getOutputContract());
+  n.getLocalProperties().getPreservedAfterContract(getOutputContract());
+  estimator.costOperator(n);
+  target.add(n);
+}

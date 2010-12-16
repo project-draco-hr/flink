@@ -1,0 +1,32 @@
+{
+  if (invokable == null) {
+    LOG.fatal("ExecutionEnvironment has no Invokable set");
+  }
+  changeExecutionState(ExecutionState.RUNNING,null);
+  try {
+    this.invokable.invoke();
+    if (this.executingThread.isInterrupted()) {
+      throw new InterruptedException();
+    }
+  }
+ catch (  InterruptedException e) {
+    changeExecutionState(ExecutionState.CANCELLED,null);
+    return;
+  }
+catch (  Exception e) {
+    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    return;
+  }
+  changeExecutionState(ExecutionState.FINISHING,null);
+  try {
+    closeInputGates();
+    requestAllOutputGatesToClose();
+    waitForInputChannelsToBeClosed();
+    waitForOutputChannelsToBeClosed();
+  }
+ catch (  Exception e) {
+    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    return;
+  }
+  changeExecutionState(ExecutionState.FINISHED,null);
+}

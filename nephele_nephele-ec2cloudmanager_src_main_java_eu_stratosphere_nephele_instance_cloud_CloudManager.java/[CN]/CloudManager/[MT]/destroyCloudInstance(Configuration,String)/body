@@ -1,0 +1,53 @@
+{
+  if (conf == null) {
+    throw new InstanceException("No job configuration provided, unable to acquire credentials");
+  }
+  final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
+  if (awsAccessId == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS access ID");
+  }
+  final String awsSecretKey=conf.getString("job.cloud.awssecretkey",null);
+  if (awsSecretKey == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS secret key");
+  }
+  final Boolean isSecure=GlobalConfiguration.getBoolean(EC2WSSECUREKEY,false);
+  final String server=GlobalConfiguration.getString(EC2WSSERVERKEY,null);
+  if (server == null) {
+    LOG.error("Unable to contact cloud: web service server unknown");
+    return null;
+  }
+  final int port=GlobalConfiguration.getInteger(EC2WSPORTKEY,-1);
+  if (port < 0) {
+    LOG.error("cloud.ec2ws.port not defined in config file");
+    return null;
+  }
+  com.xerox.amazonws.ec2.Jec2 ec2Client=null;
+  try {
+    ec2Client=new com.xerox.amazonws.ec2.Jec2(awsAccessId,awsSecretKey,isSecure,server,port);
+    ec2Client.setResourcePrefix("/services/Eucalyptus");
+    ec2Client.setSignatureVersion(1);
+  }
+ catch (  Exception e) {
+    LOG.error("Unable to contact cloud: " + StringUtils.stringifyException(e));
+    return null;
+  }
+  List<com.xerox.amazonws.ec2.TerminatingInstanceDescription> terminatedInstances=null;
+  final String[] instanceIDs={instanceID};
+  try {
+    LOG.info("Trying to terminate instance " + instanceID);
+    terminatedInstances=ec2Client.terminateInstances(instanceIDs);
+  }
+ catch (  Exception e) {
+    LOG.error("Unable to destroy instance: " + StringUtils.stringifyException(e));
+    return null;
+  }
+  if (terminatedInstances == null) {
+    LOG.error("Unable to destroy instance: terminated instance is null");
+    return null;
+  }
+  if (terminatedInstances.size() != 1) {
+    LOG.error("More or less than one instance terminated at a time, this is unexpected");
+    return null;
+  }
+  return terminatedInstances.get(0).getInstanceId();
+}
