@@ -3,7 +3,7 @@
     throw new IllegalConfigurationException("Cannot generate input splits, path is not set");
   }
   final int numSubtasks=getNumberOfSubtasks();
-  final List<FileInputSplit> inputSplits=new ArrayList<FileInputSplit>(numSubtasks);
+  final List<FileInputSplit> inputSplits=new ArrayList<FileInputSplit>();
   List<FileStatus> files=new ArrayList<FileStatus>();
   long totalLength=0;
   try {
@@ -23,28 +23,35 @@
       totalLength+=pathFile.getLen();
     }
     final long minSplitSize=1;
-    final long maxSplitSize=totalLength / numSubtasks + (totalLength % numSubtasks == 0 ? 0 : 1);
+    final long maxSplitSize=(numSubtasks < 1) ? Long.MAX_VALUE : (totalLength / numSubtasks + (totalLength % numSubtasks == 0 ? 0 : 1));
     for (    FileStatus file : files) {
       final long len=file.getLen();
       final long blockSize=file.getBlockSize();
       final long splitSize=Math.max(minSplitSize,Math.min(maxSplitSize,blockSize));
       final long halfSplit=splitSize >>> 1;
       final long maxBytesForLastSplit=(long)(splitSize * MAX_SPLIT_SIZE_DISCREPANCY);
-      BlockLocation[] blocks=fs.getFileBlockLocations(file,0,len);
-      Arrays.sort(blocks);
-      long bytesUnassigned=len;
-      long position=0;
-      int blockIndex=0;
-      while (bytesUnassigned > maxBytesForLastSplit) {
-        blockIndex=getBlockIndexForPosition(blocks,position,halfSplit,blockIndex);
-        FileInputSplit fis=new FileInputSplit(file.getPath(),position,splitSize,blocks[blockIndex].getHosts());
-        inputSplits.add(fis);
-        position+=splitSize;
-        bytesUnassigned-=splitSize;
+      if (len > 0) {
+        final BlockLocation[] blocks=fs.getFileBlockLocations(file,0,len);
+        Arrays.sort(blocks);
+        long bytesUnassigned=len;
+        long position=0;
+        int blockIndex=0;
+        while (bytesUnassigned > maxBytesForLastSplit) {
+          blockIndex=getBlockIndexForPosition(blocks,position,halfSplit,blockIndex);
+          FileInputSplit fis=new FileInputSplit(file.getPath(),position,splitSize,blocks[blockIndex].getHosts());
+          inputSplits.add(fis);
+          position+=splitSize;
+          bytesUnassigned-=splitSize;
+        }
+        if (bytesUnassigned > 0) {
+          blockIndex=getBlockIndexForPosition(blocks,position,halfSplit,blockIndex);
+          final FileInputSplit fis=new FileInputSplit(file.getPath(),position,bytesUnassigned,blocks[blockIndex].getHosts());
+          inputSplits.add(fis);
+        }
       }
-      if (bytesUnassigned > 0) {
-        blockIndex=getBlockIndexForPosition(blocks,position,halfSplit,blockIndex);
-        FileInputSplit fis=new FileInputSplit(file.getPath(),position,bytesUnassigned,blocks[blockIndex].getHosts());
+ else {
+        final BlockLocation[] blocks=fs.getFileBlockLocations(file,0,0);
+        final FileInputSplit fis=new FileInputSplit(file.getPath(),0,0,blocks[0].getHosts());
         inputSplits.add(fis);
       }
     }

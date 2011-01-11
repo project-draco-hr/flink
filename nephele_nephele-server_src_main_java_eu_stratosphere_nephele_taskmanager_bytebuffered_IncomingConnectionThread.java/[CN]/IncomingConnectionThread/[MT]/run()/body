@@ -3,14 +3,20 @@
 synchronized (this.pendingIncomingConnections) {
       if (!pendingIncomingConnections.isEmpty()) {
         final IncomingConnection incomingConnection=pendingIncomingConnections.poll();
-        final SocketChannel socketChannel=incomingConnection.getSockeChannel();
-        try {
-          socketChannel.configureBlocking(false);
-          final SelectionKey key=socketChannel.register(this.selector,SelectionKey.OP_READ);
-          key.attach(incomingConnection);
+        final ReadableByteChannel readableByteChannel=incomingConnection.getReadableByteChannel();
+        if (readableByteChannel instanceof SocketChannel) {
+          final SocketChannel socketChannel=(SocketChannel)readableByteChannel;
+          try {
+            socketChannel.configureBlocking(false);
+            final SelectionKey key=socketChannel.register(this.selector,SelectionKey.OP_READ);
+            key.attach(incomingConnection);
+          }
+ catch (          IOException ioe) {
+            incomingConnection.reportTransmissionProblem(null,ioe);
+          }
         }
- catch (        IOException ioe) {
-          incomingConnection.reportTransmissionProblem(null,ioe);
+ else {
+          LOG.error("Found pending incoming connection which is not of type SocketChannel buf of type " + readableByteChannel.getClass());
         }
       }
     }
