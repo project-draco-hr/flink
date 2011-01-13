@@ -4,31 +4,13 @@
   if (num <= 0) {
     throw new RuntimeException("Illegal configuration, cloudmgr.nrtypes is not configured");
   }
-  final Pattern pattern=Pattern.compile("^([^,]+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)$");
   for (int i=0; i < num; ++i) {
     final String key="cloudmgr.instancetype." + (i + 1);
     final String type=GlobalConfiguration.getString(key,null);
     if (type == null) {
       throw new RuntimeException("Illegal configuration for " + key);
     }
-    try {
-      final Matcher m=pattern.matcher(type);
-      if (!m.matches()) {
-        throw new Exception(key + " does not match pattern " + pattern.toString());
-      }
-      final String identifier=m.group(1);
-      final int numComputeUnits=Integer.parseInt(m.group(2));
-      final int numCores=Integer.parseInt(m.group(3));
-      final int memorySize=Integer.parseInt(m.group(4));
-      final int diskCapacity=Integer.parseInt(m.group(5));
-      final int pricePerHour=Integer.parseInt(m.group(6));
-      final InstanceType instanceType=new InstanceType(identifier,numComputeUnits,numCores,memorySize,diskCapacity,pricePerHour);
-      instanceTypes.add(instanceType);
-    }
- catch (    Exception e) {
-      LOG.error("Error parsing " + key + ":"+ type,e);
-      throw new RuntimeException("Error parsing " + key + ":"+ type,e);
-    }
+    instanceTypes.add(InstanceTypeFactory.constructFromDescription(type));
   }
   Collections.sort(instanceTypes,new Comparator<InstanceType>(){
     @Override public int compare(    InstanceType o1,    InstanceType o2){
