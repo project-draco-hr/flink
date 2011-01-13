@@ -3,21 +3,27 @@
   MyInstanceListener dummyInstanceListener=new MyInstanceListener();
   ClusterManager cm=new ClusterManager();
   cm.setInstanceListener(dummyInstanceListener);
+  InetAddress inetAddress=null;
   try {
-    InetAddress inetAddress=null;
     try {
       inetAddress=InetAddress.getByName("192.168.198.1");
     }
  catch (    UnknownHostException e) {
-      e.printStackTrace();
+      fail(e.getMessage());
     }
-    InstanceConnectionInfo instanceConnectionInfo=new InstanceConnectionInfo(inetAddress,1234,1235);
-    cm.reportHeartBeat(instanceConnectionInfo);
-    JobID jobID=new JobID();
+    final InstanceConnectionInfo instanceConnectionInfo=new InstanceConnectionInfo(inetAddress,1234,1235);
+    final HardwareDescription hardwareDescription=HardwareDescriptionFactory.construct(8,32L * 1024L * 1024L* 1024L,32L * 1024L * 1024L* 1024L);
+    cm.reportHeartBeat(instanceConnectionInfo,hardwareDescription);
+    final JobID jobID=new JobID();
     for (int i=0; i < 4; ++i) {
-      cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
+      try {
+        cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
+      }
+ catch (      InstanceException e) {
+        fail(e.getMessage());
+      }
     }
-    Thread.sleep(500);
+    waitForInstanceArrival(dummyInstanceListener,4,1000);
     assertEquals(4,dummyInstanceListener.resourcesOfJobs.get(jobID).size());
     try {
       cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
@@ -26,21 +32,33 @@
  catch (    InstanceException e) {
       assertTrue(true);
     }
-    List<AllocatedResource> resources=new ArrayList<AllocatedResource>(dummyInstanceListener.resourcesOfJobs.get(jobID));
+    final List<AllocatedResource> resources=new ArrayList<AllocatedResource>(dummyInstanceListener.resourcesOfJobs.get(jobID));
     for (    AllocatedResource i : resources) {
-      cm.releaseAllocatedResource(jobID,new Configuration(),i);
+      try {
+        cm.releaseAllocatedResource(jobID,new Configuration(),i);
+      }
+ catch (      InstanceException e) {
+        fail(e.getMessage());
+      }
     }
     assertEquals(4,dummyInstanceListener.resourcesOfJobs.get(jobID).size());
     for (int i=0; i < 4; ++i) {
-      cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
+      try {
+        cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
+      }
+ catch (      InstanceException e) {
+        fail(e.getMessage());
+      }
     }
-    Thread.sleep(500);
+    try {
+      Thread.sleep(500);
+    }
+ catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
     assertEquals(8,dummyInstanceListener.resourcesOfJobs.get(jobID).size());
   }
- catch (  InterruptedException e) {
-    e.printStackTrace();
-  }
- finally {
+  finally {
     if (cm != null) {
       cm.shutdown();
     }
