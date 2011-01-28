@@ -1,18 +1,19 @@
 {
-  final Map<InstanceType,Integer> instanceTypeMap=new HashMap<InstanceType,Integer>();
-  if (this.indexToCurrentExecutionStage >= this.stages.size()) {
-    return instanceTypeMap;
+  if (stage >= this.stages.size()) {
+    LOG.error("Illegal stage  " + stage + " requested");
+    return;
   }
   final ExecutionStage nextStage=this.stages.get(this.indexToCurrentExecutionStage);
   if (nextStage == null) {
-    LOG.warn("Stage " + this.indexToCurrentExecutionStage + " is not a valid execution stage");
+    LOG.error("Stage " + stage + " is not a valid execution stage");
+    return;
   }
   final Set<AbstractInstance> collectedInstances=new HashSet<AbstractInstance>();
   for (int i=0; i < nextStage.getNumberOfStageMembers(); i++) {
     final ExecutionGroupVertex groupVertex=nextStage.getStageMember(i);
     for (int j=0; j < groupVertex.getCurrentNumberOfGroupMembers(); j++) {
       final ExecutionVertex vertex=groupVertex.getGroupMember(j);
-      if (vertex.getExecutionState() == ExecutionState.SCHEDULED) {
+      if (vertex.getExecutionState() == executionState) {
         final AbstractInstance instance=vertex.getAllocatedResource().getInstance();
         if (collectedInstances.contains(instance)) {
           continue;
@@ -22,7 +23,7 @@
         }
         if (instance instanceof DummyInstance) {
           Integer num=instanceTypeMap.get(instance.getType());
-          num=(num == null) ? new Integer(1) : new Integer(num.intValue() + 1);
+          num=(num == null) ? Integer.valueOf(1) : Integer.valueOf(num.intValue() + 1);
           instanceTypeMap.put(instance.getType(),num);
         }
  else {
@@ -31,5 +32,4 @@
       }
     }
   }
-  return instanceTypeMap;
 }
