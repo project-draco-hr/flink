@@ -1,17 +1,18 @@
 {
-  Configuration config=GlobalConfiguration.getConfiguration();
+  final Configuration config=GlobalConfiguration.getConfiguration();
   InstanceType type=null;
-  String descr=config.getString(ConfigConstants.JOBMANAGER_LOCALINSTANCE_TYPE_KEY,null);
-  try {
-    if (descr != null) {
-      type=InstanceType.getTypeFromString(descr);
+  final String descr=config.getString(LOCALINSTANCE_TYPE_KEY,null);
+  if (descr != null) {
+    LOG.info("Attempting to parse default instance type from string " + descr);
+    type=InstanceTypeFactory.constructFromDescription(descr);
+    if (type == null) {
+      LOG.warn("Unable to parse default instance type from configuration, using hardware profile instead");
     }
   }
- catch (  IllegalArgumentException iaex) {
-    LogFactory.getLog(LocalInstanceManager.class).error("Invalid description of default instance: " + descr + ". Using default instance type.",iaex);
-  }
-  this.defaultInstanceType=type != null ? type : createDefaultInstanceType();
+  this.defaultInstanceType=(type != null) ? type : createDefaultInstanceType();
+  LOG.info("Default instance type is " + this.defaultInstanceType.getIdentifier());
   this.networkTopology=NetworkTopology.createEmptyTopology();
+  this.instanceTypeDescriptionList=new SerializableArrayList<InstanceTypeDescription>();
   this.localTaskManagerThread=new LocalTaskManagerThread(configDir);
   this.localTaskManagerThread.start();
 }

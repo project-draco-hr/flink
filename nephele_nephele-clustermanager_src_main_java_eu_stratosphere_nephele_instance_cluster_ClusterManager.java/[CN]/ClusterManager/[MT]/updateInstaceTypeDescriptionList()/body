@@ -1,0 +1,54 @@
+{
+  this.instanceTypeDescriptionList.clear();
+  final int[] numberOfInstances=new int[this.availableInstanceTypes.length];
+  for (int i=0; i < numberOfInstances.length; i++) {
+    numberOfInstances[i]=0;
+  }
+  for (int i=0; i < this.availableInstanceTypes.length; i++) {
+    final InstanceType currentInstanceType=this.availableInstanceTypes[i];
+    int numberOfMatchingInstances=0;
+    int minNumberOfCPUCores=Integer.MAX_VALUE;
+    long minSizeOfPhysicalMemory=Long.MAX_VALUE;
+    long minSizeOfFreeMemory=Long.MAX_VALUE;
+    final Iterator<ClusterInstance> it=this.registeredHosts.values().iterator();
+    while (it.hasNext()) {
+      final ClusterInstance clusterInstance=it.next();
+      if (clusterInstance.getType().equals(currentInstanceType)) {
+        ++numberOfMatchingInstances;
+        final HardwareDescription hardwareDescription=clusterInstance.getHardwareDescription();
+        minNumberOfCPUCores=Math.min(minNumberOfCPUCores,hardwareDescription.getNumberOfCPUCores());
+        minSizeOfPhysicalMemory=Math.min(minSizeOfPhysicalMemory,hardwareDescription.getSizeOfPhysicalMemory());
+        minSizeOfFreeMemory=Math.min(minSizeOfFreeMemory,hardwareDescription.getSizeOfFreeMemory());
+      }
+    }
+    int highestAccommodationNumber=-1;
+    int highestAccommodationIndex=-1;
+    for (int j=0; j < this.availableInstanceTypes.length; j++) {
+      final int accommodationNumber=canBeAccommodated(j,i);
+      if (accommodationNumber > 0) {
+        numberOfInstances[j]+=numberOfMatchingInstances * accommodationNumber;
+        if (accommodationNumber > highestAccommodationNumber) {
+          highestAccommodationNumber=accommodationNumber;
+          highestAccommodationIndex=j;
+        }
+      }
+    }
+    HardwareDescription pessimisticHardwareDescription=null;
+    if (minNumberOfCPUCores < Integer.MAX_VALUE && minSizeOfPhysicalMemory < Long.MAX_VALUE && minSizeOfFreeMemory < Long.MAX_VALUE) {
+      pessimisticHardwareDescription=HardwareDescriptionFactory.construct(minNumberOfCPUCores,minSizeOfPhysicalMemory,minSizeOfFreeMemory);
+    }
+ else {
+      if (highestAccommodationIndex < i) {
+        final InstanceTypeDescription descriptionOfLargerInstanceType=this.instanceTypeDescriptionList.get(highestAccommodationIndex);
+        if (descriptionOfLargerInstanceType.getHardwareDescription() != null) {
+          final HardwareDescription hardwareDescriptionOfLargerInstanceType=descriptionOfLargerInstanceType.getHardwareDescription();
+          final int numCores=hardwareDescriptionOfLargerInstanceType.getNumberOfCPUCores() / highestAccommodationNumber;
+          final long physMem=hardwareDescriptionOfLargerInstanceType.getSizeOfPhysicalMemory() / highestAccommodationNumber;
+          final long freeMem=hardwareDescriptionOfLargerInstanceType.getSizeOfFreeMemory() / highestAccommodationNumber;
+          pessimisticHardwareDescription=HardwareDescriptionFactory.construct(numCores,physMem,freeMem);
+        }
+      }
+    }
+    this.instanceTypeDescriptionList.add(InstanceTypeDescriptionFactory.construct(currentInstanceType,pessimisticHardwareDescription,numberOfInstances[i]));
+  }
+}
