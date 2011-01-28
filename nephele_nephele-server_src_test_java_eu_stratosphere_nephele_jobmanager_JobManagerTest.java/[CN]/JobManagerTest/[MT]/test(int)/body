@@ -1,9 +1,9 @@
 {
   try {
     final String forwardClassName=ForwardTask.class.getSimpleName();
-    final File inputFile=TestUtils.createInputFile(limit);
-    final File outputFile=new File(TestUtils.getTempDir() + File.separator + TestUtils.getRandomFilename());
-    final File jarFile=TestUtils.createJarFile(forwardClassName);
+    final File inputFile=ServerTestUtils.createInputFile(limit);
+    final File outputFile=new File(ServerTestUtils.getTempDir() + File.separator + ServerTestUtils.getRandomFilename());
+    final File jarFile=ServerTestUtils.createJarFile(forwardClassName);
     final JobGraph jg=new JobGraph("Job Graph 1");
     final JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
     i1.setFileInputClass(FileLineReader.class);
@@ -15,6 +15,9 @@
     JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
     o1.setFileOutputClass(FileLineWriter.class);
     o1.setFilePath(new Path("file://" + outputFile.getAbsolutePath().toString()));
+    t1.setVertexToShareInstancesWith(i1);
+    t2.setVertexToShareInstancesWith(i1);
+    o1.setVertexToShareInstancesWith(i1);
     try {
       i1.connectTo(t1,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
       t1.connectTo(t2,ChannelType.FILE,CompressionLevel.NO_COMPRESSION);
@@ -23,10 +26,13 @@
  catch (    JobGraphDefinitionException e) {
       e.printStackTrace();
     }
-    jg.addJar(new Path("file://" + TestUtils.getTempDir() + File.separator+ forwardClassName+ ".jar"));
+    jg.addJar(new Path("file://" + ServerTestUtils.getTempDir() + File.separator+ forwardClassName+ ".jar"));
     JobClient jobClient=new JobClient(jg);
-    if (!jobClient.submitJobAndWait()) {
-      fail("Job execution failed");
+    try {
+      jobClient.submitJobAndWait();
+    }
+ catch (    JobExecutionException e) {
+      fail(e.getMessage());
     }
     final BufferedReader bufferedReader=new BufferedReader(new FileReader(outputFile));
     for (int i=0; i < limit; i++) {
