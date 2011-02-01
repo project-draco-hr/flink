@@ -1,39 +1,22 @@
 {
-  createInputFile();
-  createJarFile("GrepTask1Input1Output");
-  JobGraph jg=new JobGraph("Job Graph 1");
-  JobID jobID=jg.getJobID();
-  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
-  i1.setFileInputClass(FileLineReader.class);
-  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
-  t1.setTaskClass(GrepTask1Input1Output.class);
-  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
-  o1.setFileOutputClass(FileLineWriter.class);
-  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTFILENAME));
+  File inputFile=null;
+  JobID jobID=null;
   try {
+    inputFile=ServerTestUtils.createInputFile(0);
+    final JobGraph jg=new JobGraph("Job Graph 1");
+    jobID=jg.getJobID();
+    final JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+    i1.setFileInputClass(FileLineReader.class);
+    i1.setFilePath(new Path("file://" + inputFile.getAbsolutePath()));
+    final JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+    t1.setTaskClass(ForwardTask1Input1Output.class);
+    final JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+    o1.setFileOutputClass(FileLineWriter.class);
+    o1.setFilePath(new Path("file://" + ServerTestUtils.getRandomFilename()));
     i1.connectTo(t1,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
     t1.connectTo(o1,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
-  }
- catch (  JobGraphDefinitionException e) {
-    e.printStackTrace();
-  }
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
-  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar")};
-  try {
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
-    LibraryCacheManager.register(jobID,paths);
-  }
- catch (  IOException e1) {
-    e1.printStackTrace();
-  }
-  final String confDir=System.getProperty("user.dir") + "/correct-conf";
-  GlobalConfiguration.loadConfiguration(confDir);
-  MyInstanceListener myInstanceListener=new MyInstanceListener();
-  final LocalInstanceManager lim=new LocalInstanceManager(confDir);
-  lim.setInstanceListener(myInstanceListener);
-  try {
-    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    LibraryCacheManager.register(jobID,new String[0]);
+    final ExecutionGraph eg=new ExecutionGraph(jg,INSTANCE_MANAGER);
     final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
     while (it.hasNext()) {
       it.next().setExecutionState(ExecutionState.SCHEDULED);
@@ -41,7 +24,7 @@
     final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
     eg.collectInstanceTypesRequiredForCurrentStage(requiredInstances,ExecutionState.SCHEDULED);
     assertEquals(1,requiredInstances.size());
-    assertEquals(1,(int)requiredInstances.get(lim.getDefaultInstanceType()));
+    assertEquals(1,(int)requiredInstances.get(INSTANCE_MANAGER.getDefaultInstanceType()));
     ExecutionStage es=eg.getStage(0);
     ExecutionGroupVertex egv0=null;
     ExecutionGroupVertex egv1=null;
@@ -76,16 +59,31 @@
     ExecutionVertex ev0=egv0.getGroupMember(0);
     ExecutionVertex ev1=egv1.getGroupMember(0);
     ExecutionVertex ev2=egv2.getGroupMember(0);
-    assertEquals(lim.getDefaultInstanceType(),ev0.getAllocatedResource().getInstance().getType());
-    assertEquals(lim.getDefaultInstanceType(),ev1.getAllocatedResource().getInstance().getType());
-    assertEquals(lim.getDefaultInstanceType(),ev2.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getDefaultInstanceType(),ev0.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getDefaultInstanceType(),ev1.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getDefaultInstanceType(),ev2.getAllocatedResource().getInstance().getType());
     assertEquals(ev0.getAllocatedResource(),ev1.getAllocatedResource());
     assertEquals(ev0.getAllocatedResource(),ev2.getAllocatedResource());
   }
  catch (  GraphConversionException e) {
-    e.printStackTrace();
+    fail(e.getMessage());
+  }
+catch (  IOException e) {
+    fail(e.getMessage());
+  }
+catch (  JobGraphDefinitionException e) {
+    fail(e.getMessage());
   }
  finally {
-    lim.shutdown();
+    if (inputFile != null) {
+      inputFile.delete();
+    }
+    if (jobID != null) {
+      try {
+        LibraryCacheManager.unregister(jobID);
+      }
+ catch (      IOException e) {
+      }
+    }
   }
 }

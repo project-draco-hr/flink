@@ -1,49 +1,49 @@
 {
-  createInputFile();
-  createOutputDir();
-  createJarFile("GrepTask1Input1Output");
-  createJarFile("GrepTask2Inputs1Output");
-  createJarFile("GrepTask1Input2Outputs");
-  JobGraph jg=new JobGraph("Job Graph 1");
-  JobID jobID=jg.getJobID();
-  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
-  i1.setFileInputClass(FileLineReader.class);
-  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  i1.setNumberOfSubtasks(4);
-  i1.setNumberOfSubtasksPerInstance(2);
-  JobFileInputVertex i2=new JobFileInputVertex("Input 2",jg);
-  i2.setFileInputClass(FileLineReader.class);
-  i2.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  i2.setNumberOfSubtasks(4);
-  i2.setNumberOfSubtasksPerInstance(2);
-  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
-  t1.setTaskClass(GrepTask1Input1Output.class);
-  t1.setNumberOfSubtasks(4);
-  t1.setNumberOfSubtasksPerInstance(2);
-  JobTaskVertex t2=new JobTaskVertex("Task 2",jg);
-  t2.setTaskClass(GrepTask1Input1Output.class);
-  t2.setNumberOfSubtasks(4);
-  t2.setNumberOfSubtasksPerInstance(2);
-  JobTaskVertex t3=new JobTaskVertex("Task 3",jg);
-  t3.setTaskClass(GrepTask2Inputs1Output.class);
-  t3.setNumberOfSubtasks(8);
-  t3.setNumberOfSubtasksPerInstance(4);
-  JobTaskVertex t4=new JobTaskVertex("Task 4",jg);
-  t4.setTaskClass(GrepTask1Input2Outputs.class);
-  t4.setNumberOfSubtasks(8);
-  t4.setNumberOfSubtasksPerInstance(4);
-  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
-  o1.setFileOutputClass(FileLineWriter.class);
-  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTDIRNAME));
-  o1.setNumberOfSubtasks(4);
-  o1.setNumberOfSubtasksPerInstance(2);
-  JobFileOutputVertex o2=new JobFileOutputVertex("Output 2",jg);
-  o2.setFileOutputClass(FileLineWriter.class);
-  o2.setFilePath(new Path("file://" + PATHNAME + OUTPUTDIRNAME));
-  o2.setNumberOfSubtasks(4);
-  o2.setNumberOfSubtasksPerInstance(2);
-  o1.setVertexToShareInstancesWith(o2);
+  File inputFile1=null;
+  File inputFile2=null;
+  JobID jobID=null;
   try {
+    inputFile1=ServerTestUtils.createInputFile(0);
+    inputFile2=ServerTestUtils.createInputFile(0);
+    final JobGraph jg=new JobGraph("Job Graph 1");
+    jobID=jg.getJobID();
+    final JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+    i1.setFileInputClass(FileLineReader.class);
+    i1.setFilePath(new Path("file://" + inputFile1.getAbsolutePath()));
+    i1.setNumberOfSubtasks(4);
+    i1.setNumberOfSubtasksPerInstance(2);
+    final JobFileInputVertex i2=new JobFileInputVertex("Input 2",jg);
+    i2.setFileInputClass(FileLineReader.class);
+    i2.setFilePath(new Path("file://" + inputFile2.getAbsolutePath()));
+    i2.setNumberOfSubtasks(4);
+    i2.setNumberOfSubtasksPerInstance(2);
+    final JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+    t1.setTaskClass(ForwardTask1Input1Output.class);
+    t1.setNumberOfSubtasks(4);
+    t1.setNumberOfSubtasksPerInstance(2);
+    final JobTaskVertex t2=new JobTaskVertex("Task 2",jg);
+    t2.setTaskClass(ForwardTask1Input1Output.class);
+    t2.setNumberOfSubtasks(4);
+    t2.setNumberOfSubtasksPerInstance(2);
+    final JobTaskVertex t3=new JobTaskVertex("Task 3",jg);
+    t3.setTaskClass(ForwardTask2Inputs1Output.class);
+    t3.setNumberOfSubtasks(8);
+    t3.setNumberOfSubtasksPerInstance(4);
+    final JobTaskVertex t4=new JobTaskVertex("Task 4",jg);
+    t4.setTaskClass(ForwardTask1Input2Outputs.class);
+    t4.setNumberOfSubtasks(8);
+    t4.setNumberOfSubtasksPerInstance(4);
+    final JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+    o1.setFileOutputClass(FileLineWriter.class);
+    o1.setFilePath(new Path("file://" + ServerTestUtils.getRandomFilename()));
+    o1.setNumberOfSubtasks(4);
+    o1.setNumberOfSubtasksPerInstance(2);
+    final JobFileOutputVertex o2=new JobFileOutputVertex("Output 2",jg);
+    o2.setFileOutputClass(FileLineWriter.class);
+    o2.setFilePath(new Path("file://" + ServerTestUtils.getRandomFilename()));
+    o2.setNumberOfSubtasks(4);
+    o2.setNumberOfSubtasksPerInstance(2);
+    o1.setVertexToShareInstancesWith(o2);
     i1.connectTo(t1,ChannelType.FILE,CompressionLevel.NO_COMPRESSION);
     i2.connectTo(t2,ChannelType.FILE,CompressionLevel.NO_COMPRESSION);
     t1.connectTo(t3,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
@@ -51,30 +51,8 @@
     t3.connectTo(t4,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
     t4.connectTo(o1,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
     t4.connectTo(o2,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
-  }
- catch (  JobGraphDefinitionException e) {
-    e.printStackTrace();
-  }
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"));
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input2Outputs.jar"));
-  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"),new Path("file://" + PATHNAME + "GrepTask1Input2Outputs.jar")};
-  try {
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"),new File(PATHNAME + "GrepTask2Inputs1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask2Inputs1Output.jar"))));
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input2Outputs.jar"),new File(PATHNAME + "GrepTask1Input2Outputs.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input2Outputs.jar"))));
-    LibraryCacheManager.register(jobID,paths);
-  }
- catch (  IOException e1) {
-    e1.printStackTrace();
-  }
-  final String confDir=System.getProperty("user.dir") + "/correct-conf";
-  GlobalConfiguration.loadConfiguration(confDir);
-  final MyInstanceListener myInstanceListener=new MyInstanceListener();
-  final LocalInstanceManager lim=new LocalInstanceManager(confDir);
-  lim.setInstanceListener(myInstanceListener);
-  try {
-    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    LibraryCacheManager.register(jobID,new String[0]);
+    final ExecutionGraph eg=new ExecutionGraph(jg,INSTANCE_MANAGER);
     Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
     while (it.hasNext()) {
       it.next().setExecutionState(ExecutionState.SCHEDULED);
@@ -82,7 +60,7 @@
     final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
     eg.collectInstanceTypesRequiredForCurrentStage(requiredInstances,ExecutionState.SCHEDULED);
     assertEquals(1,requiredInstances.size());
-    assertEquals(4,(int)requiredInstances.get(lim.getInstanceTypeByName("test")));
+    assertEquals(4,(int)requiredInstances.get(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
     it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
     while (it.hasNext()) {
       final ExecutionVertex ev=it.next();
@@ -97,12 +75,30 @@
     requiredInstances.clear();
     eg.collectInstanceTypesRequiredForCurrentStage(requiredInstances,ExecutionState.SCHEDULED);
     assertEquals(1,requiredInstances.size());
-    assertEquals(8,(int)requiredInstances.get(lim.getInstanceTypeByName("test")));
+    assertEquals(8,(int)requiredInstances.get(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
   }
  catch (  GraphConversionException e) {
-    e.printStackTrace();
+    fail(e.getMessage());
+  }
+catch (  JobGraphDefinitionException e) {
+    fail(e.getMessage());
+  }
+catch (  IOException e) {
+    fail(e.getMessage());
   }
  finally {
-    lim.shutdown();
+    if (inputFile1 != null) {
+      inputFile1.delete();
+    }
+    if (inputFile2 != null) {
+      inputFile2.delete();
+    }
+    if (jobID != null) {
+      try {
+        LibraryCacheManager.unregister(jobID);
+      }
+ catch (      IOException e) {
+      }
+    }
   }
 }
