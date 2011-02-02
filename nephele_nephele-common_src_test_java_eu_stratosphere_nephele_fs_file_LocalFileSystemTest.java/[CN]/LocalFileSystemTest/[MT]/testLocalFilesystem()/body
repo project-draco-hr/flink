@@ -1,0 +1,63 @@
+{
+  File tempdir=new File(CommonTestUtils.getTempDir() + File.separator + CommonTestUtils.getRandomDirectoryName()+ File.separator);
+  while (tempdir.exists()) {
+    tempdir=new File(CommonTestUtils.getTempDir() + File.separator + CommonTestUtils.getRandomDirectoryName()+ File.separator);
+  }
+  final File testfile1=new File(tempdir.getAbsolutePath() + File.separator + CommonTestUtils.getRandomFilename());
+  final File testfile2=new File(tempdir.getAbsolutePath() + File.separator + CommonTestUtils.getRandomFilename());
+  final Path pathtotestfile1=new Path(testfile1.toURI().getPath());
+  final Path pathtotestfile2=new Path(testfile2.toURI().getPath());
+  try {
+    LocalFileSystem lfs=new LocalFileSystem();
+    Path pathtotmpdir=new Path(tempdir.toURI().getPath());
+    assertFalse(lfs.exists(pathtotmpdir));
+    tempdir.mkdirs();
+    assertTrue(lfs.exists(pathtotmpdir));
+    FileStatus localstatus1=lfs.getFileStatus(pathtotmpdir);
+    assertTrue(localstatus1.isDir());
+    FileStatus[] statusforfiles=lfs.listStatus(pathtotmpdir);
+    assertTrue(statusforfiles.length == 0);
+    lfs.delete(pathtotmpdir,true);
+    assertFalse(lfs.exists(pathtotmpdir));
+    assertFalse(tempdir.exists());
+    lfs.mkdirs(pathtotmpdir);
+    assertTrue(tempdir.exists());
+    FSDataOutputStream lfsoutput1=lfs.create(pathtotestfile1,false);
+    testfile2.createNewFile();
+    assertTrue(testfile1.exists());
+    assertTrue(lfs.exists(pathtotestfile2));
+    final byte[] testbytes={1,2,3,4,5};
+    lfsoutput1.write(testbytes);
+    lfsoutput1.close();
+    assertEquals(testfile1.length(),5l);
+    FileInputStream fisfile1=new FileInputStream(testfile1);
+    byte[] testbytestest=new byte[5];
+    fisfile1.read(testbytestest);
+    fisfile1.close();
+    assertTrue(Arrays.equals(testbytes,testbytestest));
+    assertEquals(lfs.getFileStatus(pathtotestfile1).getLen(),testfile1.length());
+    assertEquals(lfs.listStatus(pathtotestfile1)[0].getLen(),testfile1.length());
+    FileOutputStream fosfile2=new FileOutputStream(testfile2);
+    fosfile2.write(testbytes);
+    fosfile2.close();
+    testbytestest=new byte[5];
+    FSDataInputStream lfsinput2=lfs.open(pathtotestfile2);
+    assertEquals(lfsinput2.read(testbytestest),5);
+    lfsinput2.close();
+    assertTrue(Arrays.equals(testbytes,testbytestest));
+    assertEquals(lfs.listStatus(pathtotmpdir).length,2);
+    assertEquals(lfs.getFileBlockLocations(lfs.getFileStatus(pathtotestfile1),0,0).length,1);
+    assertTrue(lfs.delete(pathtotestfile1,false));
+    assertTrue(lfs.delete(pathtotmpdir,true));
+    assertTrue(!tempdir.exists());
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+    fail(e.toString());
+  }
+ finally {
+    testfile1.delete();
+    testfile2.delete();
+    tempdir.delete();
+  }
+}
