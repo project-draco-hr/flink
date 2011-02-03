@@ -1,10 +1,6 @@
 {
   LastRepeatableIterator<KeyValuePair<Key,Value>> outerInput=new LastRepeatableIterator<KeyValuePair<Key,Value>>(){
-    byte[] lastSerialized=new byte[1024];
-    ByteArrayOutputStream baos=new ByteArrayOutputStream();
-    DataOutputStream dos=new DataOutputStream(baos);
-    ByteArrayInputStream bais=new ByteArrayInputStream(lastSerialized);
-    DataInputStream dis=new DataInputStream(bais);
+    SerializationCopier<KeyValuePair<Key,Value>> copier=new SerializationCopier<KeyValuePair<Key,Value>>();
     KeyValuePairDeserializer<Key,Value> deserializer=new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType());
     @Override public boolean hasNext(){
       return outerReader.hasNext();
@@ -12,19 +8,7 @@
     @Override public KeyValuePair<Key,Value> next(){
       try {
         KeyValuePair<Key,Value> pair=outerReader.next();
-        pair.write(dos);
-        dos.flush();
-        baos.flush();
-        if (baos.size() <= lastSerialized.length) {
-          System.arraycopy(baos.toByteArray(),0,lastSerialized,0,baos.size());
-        }
- else {
-          lastSerialized=new byte[baos.size() * 2];
-          System.arraycopy(baos.toByteArray(),0,lastSerialized,0,baos.size());
-          bais=new ByteArrayInputStream(lastSerialized);
-          dis=new DataInputStream(bais);
-        }
-        baos.reset();
+        copier.setCopy(pair);
         return pair;
       }
  catch (      IOException e) {
@@ -39,13 +23,7 @@ catch (      InterruptedException e) {
     }
     @Override public KeyValuePair<Key,Value> repeatLast(){
       KeyValuePair<Key,Value> pair=deserializer.getInstance();
-      try {
-        pair.read(dis);
-      }
- catch (      IOException e) {
-        e.printStackTrace();
-      }
-      bais.reset();
+      copier.getCopy(pair);
       return pair;
     }
   }
