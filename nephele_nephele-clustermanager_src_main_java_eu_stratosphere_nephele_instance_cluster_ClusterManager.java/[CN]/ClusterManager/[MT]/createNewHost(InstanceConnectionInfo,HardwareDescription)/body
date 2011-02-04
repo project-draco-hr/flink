@@ -1,0 +1,44 @@
+{
+  InstanceType instanceType=this.ipToInstanceTypeMapping.get(instanceConnectionInfo.getAddress());
+  if (instanceType != null) {
+    LOG.info("Found user-defined instance type for cluster instance with IP " + instanceConnectionInfo.getAddress() + ": "+ instanceType);
+  }
+ else {
+    instanceType=mactchHardwareDescriptionWithInstanceType(hardwareDescription);
+    if (instanceType != null) {
+      LOG.info("Hardware profile of cluster instance with IP " + instanceConnectionInfo.getAddress() + " matches with instance type "+ instanceType);
+    }
+ else {
+      LOG.error("No matching instance type, cannot create cluster instance");
+      return null;
+    }
+  }
+  String instanceName=instanceConnectionInfo.getHostName();
+  NetworkNode parentNode=this.networkTopology.getRootNode();
+  NetworkNode currentStubNode=null;
+  while (true) {
+    currentStubNode=this.networkTopology.getNodeByName(instanceName);
+    if (currentStubNode != null) {
+      break;
+    }
+    final int pos=instanceName.lastIndexOf('.');
+    if (pos == -1) {
+      break;
+    }
+    instanceName=instanceName.substring(0,pos);
+  }
+  if (currentStubNode == null) {
+    instanceName=instanceConnectionInfo.getAddress().toString();
+    instanceName=instanceName.replaceAll("/","");
+    currentStubNode=this.networkTopology.getNodeByName(instanceName);
+  }
+  if (currentStubNode != null) {
+    if (currentStubNode.getParentNode() != null) {
+      parentNode=currentStubNode.getParentNode();
+    }
+    currentStubNode.remove();
+  }
+  LOG.info("Creating instance of type " + instanceType + " for "+ instanceConnectionInfo+ ", parent is "+ parentNode.getName());
+  final ClusterInstance host=new ClusterInstance(instanceConnectionInfo,instanceType,parentNode,this.networkTopology,hardwareDescription);
+  return host;
+}

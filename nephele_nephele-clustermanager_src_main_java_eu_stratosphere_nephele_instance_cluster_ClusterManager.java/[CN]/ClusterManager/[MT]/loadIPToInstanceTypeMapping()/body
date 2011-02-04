@@ -9,12 +9,11 @@
     LOG.error("Cannot access slave file to read IP to instance type mapping");
     return;
   }
-  final Pattern pattern=Pattern.compile("^(\\S+)\\s*(\\S*)\\s*$");
   try {
     final BufferedReader input=new BufferedReader(new FileReader(slaveFile));
     String line=null;
     while ((line=input.readLine()) != null) {
-      final Matcher m=pattern.matcher(line);
+      final Matcher m=IP_TO_INSTANCE_TYPE_PATTERN.matcher(line);
       if (!m.matches()) {
         LOG.error("Entry does not match format: " + line);
         continue;
@@ -34,21 +33,16 @@
       }
       InstanceType instanceType=null;
       String instanceTypeName=m.group(2);
-      if (instanceTypeName == null || instanceTypeName.length() == 0) {
-        instanceType=getDefaultInstanceType();
-      }
- else {
+      if (instanceTypeName != null && instanceTypeName.length() > 0) {
         instanceType=getInstanceTypeByName(instanceTypeName);
-        if (instanceType == null) {
-          instanceType=getDefaultInstanceType();
-          LOG.warn(m.group(2) + " does not refer to a valid instance type, switching to default");
+        if (instanceType != null) {
+          this.ipToInstanceTypeMapping.put(address,instanceType);
         }
       }
-      this.ipToInstanceTypeMapping.put(address,instanceType);
     }
     input.close();
   }
  catch (  IOException e) {
-    LOG.error("Cannot load IP to instance type mapping from file: " + e);
+    LOG.error("Cannot load IP to instance type mapping from file " + e);
   }
 }
