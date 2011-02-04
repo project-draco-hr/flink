@@ -1,0 +1,37 @@
+{
+  try {
+    whenNew(ExecutionGraphIterator.class).withArguments(Matchers.any(ExecutionGraph.class),Matchers.anyBoolean()).thenReturn(this.graphIterator);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+  when(this.graphIterator.next()).thenReturn(this.vertex1);
+  when(this.graphIterator.hasNext()).thenReturn(true,true,true,true,false);
+  when(this.vertex1.getExecutionState()).thenReturn(ExecutionState.CREATED);
+  when(this.vertex1.getEnvironment()).thenReturn(this.environment);
+  QueueScheduler toTest=new QueueScheduler(this.schedulingListener,this.instanceManager);
+  try {
+    toTest.schedulJob(this.executionGraph);
+    Deque<ExecutionGraph> jobQueue=Whitebox.getInternalState(toTest,"jobQueue");
+    assertEquals("Job should be in list",true,jobQueue.contains(this.executionGraph));
+    verify(this.vertex1,times(4)).setExecutionState(ExecutionState.SCHEDULED);
+    jobQueue.remove(this.executionGraph);
+  }
+ catch (  SchedulingException e) {
+    e.printStackTrace();
+  }
+  when(this.graphIterator.next()).thenReturn(this.vertex2);
+  when(this.graphIterator.hasNext()).thenReturn(true,true,true,true,false);
+  when(this.vertex2.getEnvironment()).thenReturn(this.environment);
+  when(this.vertex2.getExecutionState()).thenReturn(ExecutionState.CREATED).thenReturn(ExecutionState.CREATED).thenReturn(ExecutionState.CANCELLED).thenReturn(ExecutionState.CREATED);
+  try {
+    toTest.schedulJob(this.executionGraph);
+    verify(this.loggerMock).error(Matchers.anyString());
+    Deque<ExecutionGraph> jobQueue=Whitebox.getInternalState(toTest,"jobQueue");
+    assertEquals("Job should be in list",true,jobQueue.contains(this.executionGraph));
+    verify(this.vertex2,times(4)).setExecutionState(ExecutionState.SCHEDULED);
+  }
+ catch (  SchedulingException e) {
+    e.printStackTrace();
+  }
+}

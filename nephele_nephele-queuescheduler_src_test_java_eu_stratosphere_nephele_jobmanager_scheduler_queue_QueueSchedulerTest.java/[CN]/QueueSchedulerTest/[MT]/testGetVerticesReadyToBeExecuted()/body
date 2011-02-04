@@ -1,0 +1,29 @@
+{
+  QueueScheduler toTest=new QueueScheduler(this.schedulingListener,this.instanceManager);
+  HashSet<ExecutionVertex> set=mock(HashSet.class);
+  try {
+    whenNew(ExecutionGraphIterator.class).withArguments(Matchers.any(ExecutionGraph.class),Matchers.anyInt(),Matchers.anyBoolean(),Matchers.anyBoolean()).thenReturn(this.graphIterator);
+    whenNew(HashSet.class).withNoArguments().thenReturn(set);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+  when(this.graphIterator.next()).thenReturn(this.vertex1);
+  when(this.graphIterator.hasNext()).thenReturn(true,true,true,true,false);
+  when(this.vertex1.getExecutionState()).thenReturn(ExecutionState.ASSIGNED);
+  toTest.getVerticesReadyToBeExecuted();
+  verify(set,times(0)).add(Matchers.any(ExecutionVertex.class));
+  this.queue=Whitebox.getInternalState(toTest,"jobQueue");
+  this.queue.add(this.executionGraph);
+  when(this.executionGraph.getInstanceTypesRequiredForCurrentStage()).thenReturn(null);
+  toTest.getVerticesReadyToBeExecuted();
+  verify(this.loggerMock).error(Matchers.anyString());
+  InstanceType instanceType=new InstanceType();
+  HashMap<InstanceType,Integer> map=new HashMap<InstanceType,Integer>();
+  map.put(instanceType,3);
+  when(this.executionGraph.getInstanceTypesRequiredForCurrentStage()).thenReturn(map);
+  this.queue.add(this.executionGraph);
+  toTest.getVerticesReadyToBeExecuted();
+  verify(set,times(4)).add(Matchers.any(ExecutionVertex.class));
+  verify(this.vertex1,times(4)).setExecutionState(ExecutionState.READY);
+}
