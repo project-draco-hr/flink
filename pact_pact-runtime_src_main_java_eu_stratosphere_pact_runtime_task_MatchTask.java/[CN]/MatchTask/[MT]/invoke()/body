@@ -1,12 +1,19 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  final MatchTaskIterator matchIterator=getIterator(reader1,reader2);
-  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  matchStub.open();
+  MatchTaskIterator matchIterator=null;
   try {
+    matchIterator=getIterator(reader1,reader2);
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     matchIterator.open();
+    matchStub.open();
     while (matchIterator.next()) {
       crossValues(matchIterator.getKey(),matchIterator.getValues1(),matchIterator.getValues2());
+    }
+    try {
+      matchStub.close();
+    }
+ catch (    Throwable t) {
+      LOG.error("Error while closing the Match user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
     }
   }
  catch (  IOException ioe) {
@@ -16,8 +23,9 @@ catch (  InterruptedException ie) {
     throw new RuntimeException("Error occured during processing MatchTask",ie);
   }
  finally {
-    matchStub.close();
-    matchIterator.close();
+    if (matchIterator != null) {
+      matchIterator.close();
+    }
     output.close();
   }
   LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
