@@ -1,11 +1,6 @@
 {
   if (args.length != 5) {
-    args=new String[5];
-    args[0]="1";
-    args[1]="hdfs://localhost:9000/examples/webLog/docs";
-    args[2]="hdfs://localhost:9000/examples/webLog/ranks";
-    args[3]="hdfs://localhost:9000/examples/webLog/visits";
-    args[4]="hdfs://localhost:9000/examples/results/webLog";
+    throw new IllegalArgumentException("Must provide five arguments: [noSubTasks], [docs], [ranks], [visits], [output]");
   }
   int noSubTasks=Integer.parseInt(args[0]);
   String docsInput=args[1];
@@ -22,28 +17,28 @@
   DataSourceContract<PactString,Tuple> visits=new DataSourceContract<PactString,Tuple>(StringTupleDataInFormat.class,visitsInput,"Visits");
   visits.setFormatParameter(TextInputFormat.FORMAT_PAIR_DELIMITER,"\n");
   visits.setDegreeOfParallelism(noSubTasks);
-  MapContract<PactString,Tuple,PactString,Tuple> filterDocs=new MapContract<PactString,Tuple,PactString,Tuple>(FilterDocs.class,"Filter Docs");
+  MapContract<PactString,Tuple,PactString,PactNull> filterDocs=new MapContract<PactString,Tuple,PactString,PactNull>(FilterDocs.class,"Filter Docs");
   filterDocs.setDegreeOfParallelism(noSubTasks);
   filterDocs.getCompilerHints().setSelectivity(0.15f);
   filterDocs.getCompilerHints().setAvgBytesPerRecord(60);
   MapContract<PactString,Tuple,PactString,Tuple> filterRanks=new MapContract<PactString,Tuple,PactString,Tuple>(FilterRanks.class,"Filter Ranks");
   filterRanks.setDegreeOfParallelism(noSubTasks);
   filterRanks.getCompilerHints().setSelectivity(0.25f);
-  MapContract<PactString,Tuple,PactString,Tuple> filterVisits=new MapContract<PactString,Tuple,PactString,Tuple>(FilterVisits.class,"Filter Visits");
+  MapContract<PactString,Tuple,PactString,PactNull> filterVisits=new MapContract<PactString,Tuple,PactString,PactNull>(FilterVisits.class,"Filter Visits");
   filterVisits.setDegreeOfParallelism(noSubTasks);
   filterVisits.getCompilerHints().setAvgBytesPerRecord(60);
   filterVisits.getCompilerHints().setSelectivity(0.2f);
-  MatchContract<PactString,Tuple,Tuple,PactString,Tuple> joinDocsRanks=new MatchContract<PactString,Tuple,Tuple,PactString,Tuple>(JoinDocRanks.class,"Join DocRanks");
+  MatchContract<PactString,Tuple,PactNull,PactString,Tuple> joinDocsRanks=new MatchContract<PactString,Tuple,PactNull,PactString,Tuple>(JoinDocRanks.class,"Join DocRanks");
   joinDocsRanks.setDegreeOfParallelism(noSubTasks);
   joinDocsRanks.getCompilerHints().setSelectivity(0.15f);
-  CoGroupContract<PactString,Tuple,Tuple,PactString,Tuple> antiJoinVisits=new CoGroupContract<PactString,Tuple,Tuple,PactString,Tuple>(AntiJoinVisits.class,"Antijoin DocsVisits");
+  CoGroupContract<PactString,PactNull,Tuple,PactString,Tuple> antiJoinVisits=new CoGroupContract<PactString,PactNull,Tuple,PactString,Tuple>(AntiJoinVisits.class,"Antijoin DocsVisits");
   antiJoinVisits.setDegreeOfParallelism(noSubTasks);
   DataSinkContract<PactString,Tuple> result=new DataSinkContract<PactString,Tuple>(StringTupleDataOutFormat.class,output,"Result");
   result.setDegreeOfParallelism(noSubTasks);
   filterDocs.setInput(docs);
   filterRanks.setInput(ranks);
   filterVisits.setInput(visits);
-  joinDocsRanks.setFirstInput(filterDocs);
+  joinDocsRanks.setFirstInput(filterRanks);
   joinDocsRanks.setSecondInput(filterDocs);
   antiJoinVisits.setFirstInput(filterVisits);
   antiJoinVisits.setSecondInput(joinDocsRanks);

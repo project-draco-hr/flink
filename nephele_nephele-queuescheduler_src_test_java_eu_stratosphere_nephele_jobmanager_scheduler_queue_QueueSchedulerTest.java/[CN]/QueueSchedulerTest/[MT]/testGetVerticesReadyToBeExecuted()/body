@@ -1,0 +1,25 @@
+{
+  QueueScheduler toTest=new QueueScheduler(this.schedulingListener,this.instanceManager);
+  InstanceType type=new InstanceType();
+  HashMap<InstanceType,Integer> requiredInstanceTypes=new HashMap<InstanceType,Integer>();
+  requiredInstanceTypes.put(type,3);
+  HashSet<ExecutionVertex> set=new HashSet<ExecutionVertex>();
+  try {
+    whenNew(ExecutionGraphIterator.class).withArguments(Matchers.any(ExecutionGraph.class),Matchers.anyInt(),Matchers.anyBoolean(),Matchers.anyBoolean()).thenReturn(this.graphIterator);
+    whenNew(HashSet.class).withNoArguments().thenReturn(set);
+    whenNew(HashMap.class).withNoArguments().thenReturn(requiredInstanceTypes);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+  when(this.graphIterator.next()).thenReturn(this.vertex1);
+  when(this.graphIterator.hasNext()).thenReturn(false,true,true,true,true,false);
+  when(this.vertex1.getExecutionState()).thenReturn(ExecutionState.ASSIGNED);
+  Set<ExecutionVertex> output=toTest.getVerticesReadyToBeExecuted();
+  assertEquals(true,output.isEmpty());
+  this.queue=Whitebox.getInternalState(toTest,"jobQueue");
+  this.queue.add(this.executionGraph);
+  output=toTest.getVerticesReadyToBeExecuted();
+  verify(this.vertex1,times(4)).setExecutionState(ExecutionState.READY);
+  assertEquals(true,output.contains(this.vertex1));
+}

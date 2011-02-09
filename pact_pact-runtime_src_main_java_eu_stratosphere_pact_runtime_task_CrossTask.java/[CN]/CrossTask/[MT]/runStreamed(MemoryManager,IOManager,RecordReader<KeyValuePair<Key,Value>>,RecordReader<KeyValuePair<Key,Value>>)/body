@@ -1,11 +1,15 @@
 {
-  Iterator<KeyValuePair<Key,Value>> outerInput=new Iterator<KeyValuePair<Key,Value>>(){
+  LastRepeatableIterator<KeyValuePair<Key,Value>> outerInput=new LastRepeatableIterator<KeyValuePair<Key,Value>>(){
+    SerializationCopier<KeyValuePair<Key,Value>> copier=new SerializationCopier<KeyValuePair<Key,Value>>();
+    KeyValuePairDeserializer<Key,Value> deserializer=new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType());
     @Override public boolean hasNext(){
       return outerReader.hasNext();
     }
     @Override public KeyValuePair<Key,Value> next(){
       try {
-        return outerReader.next();
+        KeyValuePair<Key,Value> pair=outerReader.next();
+        copier.setCopy(pair);
+        return pair;
       }
  catch (      IOException e) {
         throw new RuntimeException(e);
@@ -16,6 +20,11 @@ catch (      InterruptedException e) {
     }
     @Override public void remove(){
       throw new UnsupportedOperationException();
+    }
+    @Override public KeyValuePair<Key,Value> repeatLast(){
+      KeyValuePair<Key,Value> pair=deserializer.getInstance();
+      copier.getCopy(pair);
+      return pair;
     }
   }
 ;
@@ -50,6 +59,7 @@ catch (  InterruptedException ie) {
  else {
         stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
       }
+      outerPair=outerInput.repeatLast();
     }
     innerInput.reset();
   }

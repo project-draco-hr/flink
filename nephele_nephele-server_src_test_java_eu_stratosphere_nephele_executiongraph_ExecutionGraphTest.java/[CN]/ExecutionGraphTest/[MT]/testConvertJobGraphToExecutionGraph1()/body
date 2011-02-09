@@ -1,111 +1,32 @@
 {
-  createInputFile();
-  createJarFile("GrepTask1Input1Output");
-  JobGraph jg=new JobGraph("Job Graph 1");
-  JobID jobID=jg.getJobID();
-  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
-  i1.setFileInputClass(FileLineReader.class);
-  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
-  t1.setTaskClass(GrepTask1Input1Output.class);
-  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
-  o1.setFileOutputClass(FileLineWriter.class);
-  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTFILENAME));
-  o1.setVertexToShareInstancesWith(i1);
-  i1.setVertexToShareInstancesWith(t1);
+  File inputFile=null;
+  JobID jobID=null;
   try {
+    inputFile=ServerTestUtils.createInputFile(0);
+    final JobGraph jg=new JobGraph("Job Graph 1");
+    jobID=jg.getJobID();
+    final JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+    i1.setFileInputClass(FileLineReader.class);
+    i1.setFilePath(new Path("file://" + inputFile.getAbsolutePath()));
+    final JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+    t1.setTaskClass(ForwardTask1Input1Output.class);
+    final JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+    o1.setFileOutputClass(FileLineWriter.class);
+    o1.setFilePath(new Path("file://" + ServerTestUtils.getRandomFilename()));
+    o1.setVertexToShareInstancesWith(i1);
+    i1.setVertexToShareInstancesWith(t1);
     i1.connectTo(t1);
     t1.connectTo(o1);
-  }
- catch (  JobGraphDefinitionException e) {
-    e.printStackTrace();
-  }
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
-  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar")};
-  try {
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
-    LibraryCacheManager.register(jobID,paths);
-  }
- catch (  IOException e1) {
-    e1.printStackTrace();
-  }
-  assertEquals(3,jg.getAllJobVertices().length);
-  assertEquals(3,jg.getAllReachableJobVertices().length);
-  assertTrue(jg.getInputVertices().hasNext());
-  assertEquals(1,jg.getJars().length);
-  assertEquals(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),jg.getJars()[0]);
-  assertNotNull(jg.getJobConfiguration());
-  assertEquals("Job Graph 1",jg.getName());
-  assertEquals(1,jg.getNumberOfInputVertices());
-  assertEquals(1,jg.getNumberOfOutputVertices());
-  assertEquals(1,jg.getNumberOfTaskVertices());
-  assertEquals(3,jg.getNumberOfVertices());
-  assertTrue(jg.getOutputVertices().hasNext());
-  assertNotNull(jg.getTaskmanagerConfiguration());
-  assertTrue(jg.getTaskVertices().hasNext());
-  assertTrue(jg.isAcyclic());
-  assertTrue(jg.isWeaklyConnected());
-  JobInputVertex jiv1=jg.getInputVertices().next();
-  assertNotNull(jiv1.getConfiguration());
-  try {
-    assertEquals(1,jiv1.getInputSplits().length);
-  }
- catch (  IllegalConfigurationException e) {
-    e.printStackTrace();
-  }
-  assertNull(jiv1.getBackwardConnection(0));
-  assertNotNull(jiv1.getForwardConnection(0));
-  assertNull(jiv1.getForwardConnection(1));
-  assertNull(jiv1.getInstanceType());
-  assertEquals(FileLineReader.class,jiv1.getInvokableClass());
-  assertEquals(jg,jiv1.getJobGraph());
-  assertEquals("Input 1",jiv1.getName());
-  assertEquals(0,jiv1.getNumberOfBackwardConnections());
-  assertEquals(1,jiv1.getNumberOfForwardConnections());
-  assertEquals(-1,jiv1.getNumberOfSubtasks());
-  assertEquals(-1,jiv1.getNumberOfSubtasksPerInstance());
-  assertEquals("Task 1",jiv1.getVertexToShareInstancesWith().getName());
-  JobOutputVertex jov1=jg.getOutputVertices().next();
-  assertNotNull(jov1.getConfiguration());
-  assertNotNull(jov1.getBackwardConnection(0));
-  assertNull(jov1.getBackwardConnection(1));
-  assertNull(jov1.getForwardConnection(0));
-  assertEquals(FileLineWriter.class,jov1.getInvokableClass());
-  assertEquals(jg,jov1.getJobGraph());
-  assertEquals("Output 1",jov1.getName());
-  assertEquals(1,jov1.getNumberOfBackwardConnections());
-  assertEquals(0,jov1.getNumberOfForwardConnections());
-  assertEquals(-1,jov1.getNumberOfSubtasks());
-  assertEquals(-1,jov1.getNumberOfSubtasksPerInstance());
-  assertEquals("Input 1",jov1.getVertexToShareInstancesWith().getName());
-  JobTaskVertex jtv1=jg.getTaskVertices().next();
-  assertNotNull(jtv1.getConfiguration());
-  assertNotNull(jtv1.getBackwardConnection(0));
-  assertNull(jtv1.getBackwardConnection(1));
-  assertNotNull(jtv1.getForwardConnection(0));
-  assertNull(jtv1.getForwardConnection(1));
-  assertEquals(GrepTask1Input1Output.class,jtv1.getInvokableClass());
-  assertEquals(jg,jtv1.getJobGraph());
-  assertEquals("Task 1",jtv1.getName());
-  assertEquals(1,jtv1.getNumberOfBackwardConnections());
-  assertEquals(1,jtv1.getNumberOfForwardConnections());
-  assertEquals(-1,jtv1.getNumberOfSubtasks());
-  assertEquals(-1,jtv1.getNumberOfSubtasksPerInstance());
-  assertEquals(GrepTask1Input1Output.class,jtv1.getTaskClass());
-  assertNull(jtv1.getVertexToShareInstancesWith());
-  final String confDir=System.getProperty("user.dir") + "/correct-conf";
-  GlobalConfiguration.loadConfiguration(confDir);
-  MyInstanceListener myInstanceListener=new MyInstanceListener();
-  LocalInstanceManager lim=new LocalInstanceManager(confDir);
-  lim.setInstanceListener(myInstanceListener);
-  try {
-    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    LibraryCacheManager.register(jobID,new String[0]);
+    final ExecutionGraph eg=new ExecutionGraph(jg,INSTANCE_MANAGER);
     final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
     while (it.hasNext()) {
       it.next().setExecutionState(ExecutionState.SCHEDULED);
     }
-    assertEquals(1,eg.getInstanceTypesRequiredForCurrentStage().size());
-    assertEquals(1,(int)eg.getInstanceTypesRequiredForCurrentStage().get(lim.getInstanceTypeByName("test")));
+    final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
+    eg.collectInstanceTypesRequiredForCurrentStage(requiredInstances,ExecutionState.SCHEDULED);
+    assertEquals(1,requiredInstances.size());
+    assertEquals(1,(int)requiredInstances.get(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
     assertEquals(jobID,eg.getJobID());
     assertEquals(0,eg.getIndexOfCurrentExecutionStage());
     assertEquals(1,eg.getNumberOfInputVertices());
@@ -173,7 +94,7 @@
     assertEquals(1,egv0.getNumberOfSubtasksPerInstance());
     assertEquals(0,egv0.getStageNumber());
     assertEquals(-1,egv0.getUserDefinedNumberOfMembers());
-    assertEquals(lim.getDefaultInstanceType(),egv0.getInstanceType());
+    assertEquals(INSTANCE_MANAGER.getDefaultInstanceType(),egv0.getInstanceType());
     assertEquals("Task 1",egv0.getVertexToShareInstancesWith().getName());
     assertNotNull(egv1.getBackwardEdge(0));
     assertNull(egv1.getBackwardEdge(1));
@@ -193,7 +114,7 @@
     assertEquals(1,egv1.getNumberOfSubtasksPerInstance());
     assertEquals(0,egv1.getStageNumber());
     assertEquals(-1,egv1.getUserDefinedNumberOfMembers());
-    assertEquals(lim.getInstanceTypeByName("test"),egv1.getInstanceType());
+    assertEquals(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME),egv1.getInstanceType());
     assertEquals("Input 1",egv1.getVertexToShareInstancesWith().getName());
     assertNotNull(egv2.getBackwardEdge(0));
     assertNull(egv2.getBackwardEdge(1));
@@ -215,7 +136,7 @@
     assertEquals(1,egv2.getNumberOfSubtasksPerInstance());
     assertEquals(0,egv2.getStageNumber());
     assertEquals(-1,egv2.getUserDefinedNumberOfMembers());
-    assertEquals(lim.getInstanceTypeByName("test"),egv2.getInstanceType());
+    assertEquals(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME),egv2.getInstanceType());
     assertNull(egv2.getVertexToShareInstancesWith());
     ExecutionVertex ev0=egv0.getGroupMember(0);
     ExecutionVertex ev1=egv1.getGroupMember(0);
@@ -224,26 +145,41 @@
     assertEquals(egv0,ev0.getGroupVertex());
     assertNotNull(ev0.getID());
     assertEquals("Input 1",ev0.getName());
-    assertEquals(lim.getInstanceTypeByName("test"),ev0.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME),ev0.getAllocatedResource().getInstance().getType());
     assertNotNull(ev1.getEnvironment());
     assertEquals(egv1,ev1.getGroupVertex());
     assertNotNull(ev1.getID());
     assertEquals("Output 1",ev1.getName());
-    assertEquals(lim.getInstanceTypeByName("test"),ev1.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME),ev1.getAllocatedResource().getInstance().getType());
     assertNotNull(ev2.getEnvironment());
     assertEquals(egv2,ev2.getGroupVertex());
     assertNotNull(ev2.getID());
     assertEquals("Task 1",ev2.getName());
-    assertEquals(lim.getInstanceTypeByName("test"),ev2.getAllocatedResource().getInstance().getType());
+    assertEquals(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME),ev2.getAllocatedResource().getInstance().getType());
     assertEquals(ev0.getAllocatedResource(),ev1.getAllocatedResource());
     assertEquals(ev0.getAllocatedResource(),ev2.getAllocatedResource());
     assertEquals(ChannelType.NETWORK,eg.getChannelType(ev0,ev2));
     assertEquals(ChannelType.NETWORK,eg.getChannelType(ev2,ev1));
   }
  catch (  GraphConversionException e) {
-    e.printStackTrace();
+    fail(e.getMessage());
+  }
+catch (  JobGraphDefinitionException e) {
+    fail(e.getMessage());
+  }
+catch (  IOException e) {
+    fail(e.getMessage());
   }
  finally {
-    lim.shutdown();
+    if (inputFile != null) {
+      inputFile.delete();
+    }
+    if (jobID != null) {
+      try {
+        LibraryCacheManager.unregister(jobID);
+      }
+ catch (      IOException e) {
+      }
+    }
   }
 }

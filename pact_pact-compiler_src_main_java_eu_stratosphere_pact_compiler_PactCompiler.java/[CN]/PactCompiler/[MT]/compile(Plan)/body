@@ -6,7 +6,7 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("Connecting compiler to JobManager.");
   }
-  List<InstanceTypeDescription> instances=null;
+  Map<InstanceType,InstanceTypeDescription> instances=null;
   ExtendedManagementProtocol jobManagerConnection=null;
   try {
     final String address=config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
@@ -19,7 +19,7 @@
     }
     final InetSocketAddress inetaddr=new InetSocketAddress(address,port);
     jobManagerConnection=(ExtendedManagementProtocol)RPC.getProxy(ExtendedManagementProtocol.class,inetaddr,NetUtils.getSocketFactory());
-    instances=jobManagerConnection.getListOfAvailableInstanceTypes();
+    instances=jobManagerConnection.getMapOfAvailableInstanceTypes();
     if (instances == null) {
       throw new IOException();
     }
@@ -81,17 +81,37 @@
   }
   GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(this.statistics,maxMachinesJob,defaultParallelism,true);
   pactPlan.accept(graphCreator);
-  OptimizedPlan plan=new OptimizedPlan(graphCreator.sources,graphCreator.sinks,graphCreator.con2node.values(),pactPlan.getJobName());
-  InterestingPropertyAndBranchesVisitor propsVisitor=new InterestingPropertyAndBranchesVisitor(this.costEstimator);
-  plan.accept(propsVisitor);
-  if (plan.getDataSinks().size() != 1) {
-    throw new CompilerException("In the current version, plans must have exactly one data sink.");
+  OptimizerNode rootNode=null;
+  if (graphCreator.sinks.size() == 1) {
+    rootNode=graphCreator.sinks.get(0);
   }
-  List<DataSinkNode> bestPlan=plan.getDataSinks().iterator().next().getAlternativePlans(this.costEstimator);
+ else   if (graphCreator.sinks.size() > 1) {
+    Iterator<DataSinkNode> iter=graphCreator.sinks.iterator();
+    rootNode=iter.next();
+    int id=graphCreator.getId();
+    while (iter.hasNext()) {
+      rootNode=new SinkJoiner(rootNode,iter.next());
+      rootNode.SetId(id++);
+    }
+  }
+ else {
+    throw new CompilerException("The plan encountered when generating alternatives has no sinks.");
+  }
+  InterestingPropertyAndBranchesVisitor propsVisitor=new InterestingPropertyAndBranchesVisitor(this.costEstimator);
+  rootNode.accept(propsVisitor);
+  List<? extends OptimizerNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
   if (bestPlan.size() != 1) {
     throw new CompilerException("Error in compiler: more than one best plan was created!");
   }
-  plan=new PlanFinalizer().createFinalPlan(bestPlan,pactPlan.getJobName(),memoryMegabytes);
+  OptimizerNode bestPlanRoot=bestPlan.get(0);
+  List<DataSinkNode> bestPlanSinks=new ArrayList<DataSinkNode>(4);
+  if (bestPlanRoot instanceof DataSinkNode) {
+    bestPlanSinks.add((DataSinkNode)bestPlanRoot);
+  }
+ else   if (bestPlanRoot instanceof SinkJoiner) {
+    ((SinkJoiner)bestPlanRoot).getDataSinks(bestPlanSinks);
+  }
+  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryMegabytes);
   plan.setInstanceTypeName(instanceName);
   insertTempConnection(plan);
   return plan;

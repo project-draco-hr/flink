@@ -1,0 +1,22 @@
+{
+  final DirectChannelManager dcm=new DirectChannelManager();
+  when(this.deserializer.getRecordType()).thenReturn(StringRecord.class);
+  final InMemoryInputChannel<StringRecord> inputChannel=new InMemoryInputChannel<StringRecord>(this.inputGate,0,this.deserializer,this.inputChannelID,CompressionLevel.NO_COMPRESSION);
+  final InMemoryOutputChannel<StringRecord> outputChannel=new InMemoryOutputChannel<StringRecord>(this.outputGate,0,this.outputChannelID,CompressionLevel.NO_COMPRESSION);
+  inputChannel.setConnectedChannelID(this.outputChannelID);
+  outputChannel.setConnectedChannelID(this.inputChannelID);
+  dcm.registerDirectInputChannel(inputChannel);
+  dcm.registerDirectOutputChannel(outputChannel);
+  try {
+    outputChannel.transferEvent(new StringTaskEvent("Test"));
+  }
+ catch (  IOException ioe) {
+    fail(ioe.getMessage());
+  }
+  assertEquals(inputChannel,dcm.getDirectInputChannelByID(this.inputChannelID));
+  assertEquals(outputChannel,dcm.getDirectOutputChannelByID(this.outputChannelID));
+  dcm.unregisterDirectInputChannel(inputChannel);
+  dcm.unregisterDirectOutputChannel(outputChannel);
+  assertEquals(null,dcm.getDirectInputChannelByID(this.inputChannelID));
+  assertEquals(null,dcm.getDirectOutputChannelByID(this.outputChannelID));
+}
