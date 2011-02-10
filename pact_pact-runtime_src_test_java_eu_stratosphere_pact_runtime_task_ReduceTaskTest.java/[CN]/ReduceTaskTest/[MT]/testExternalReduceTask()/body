@@ -1,0 +1,57 @@
+{
+  final int NUMKEYS=16384;
+  final int NUMVALS=4;
+  Iterator<KeyValuePair<PactInteger,PactInteger>> inIt=new Iterator<KeyValuePair<PactInteger,PactInteger>>(){
+    int keyCnt=0;
+    int valCnt=0;
+    @Override public boolean hasNext(){
+      if (valCnt < NUMVALS) {
+        return true;
+      }
+ else {
+        return false;
+      }
+    }
+    @Override public KeyValuePair<PactInteger,PactInteger> next(){
+      PactInteger key=new PactInteger(keyCnt++);
+      PactInteger val=new PactInteger(valCnt);
+      if (keyCnt == NUMKEYS) {
+        keyCnt=0;
+        valCnt++;
+      }
+      return new KeyValuePair<PactInteger,PactInteger>(key,val);
+    }
+    @Override public void remove(){
+      throw new UnsupportedOperationException();
+    }
+  }
+;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(inIt);
+  super.addOutput(outList);
+  ReduceTask testTask=new ReduceTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT);
+  super.getTaskConfig().setNumSortBuffer(2);
+  super.getTaskConfig().setSortBufferSize(1);
+  super.getTaskConfig().setMergeFactor(4);
+  super.getTaskConfig().setIOBufferSize(1);
+  super.registerTask(testTask,MockReduceStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+  Assert.assertTrue("Resultset size was " + outList.size() + ". Expected was "+ NUMKEYS,outList.size() == NUMKEYS);
+  final int expVal=computeSum(NUMVALS - 1);
+  for (  KeyValuePair<PactInteger,PactInteger> pair : outList) {
+    Assert.assertTrue("Incorrect result",pair.getValue().getValue() == expVal);
+  }
+  outList.clear();
+  try {
+    super.getMemoryManager().allocate(3 * 1024 * 1024);
+  }
+ catch (  MemoryAllocationException e) {
+    Assert.fail("MemoryManager not reset");
+  }
+}
