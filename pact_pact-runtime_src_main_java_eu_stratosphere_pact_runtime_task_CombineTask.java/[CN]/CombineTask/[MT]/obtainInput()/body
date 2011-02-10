@@ -1,0 +1,29 @@
+{
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  final Class<Key> keyClass=stub.getInKeyType();
+  final Class<Value> valueClass=stub.getInValueType();
+  final SerializationFactory<Key> keySerialization=new WritableSerializationFactory<Key>(keyClass);
+  final SerializationFactory<Value> valSerialization=new WritableSerializationFactory<Value>(valueClass);
+switch (config.getLocalStrategy()) {
+case COMBININGSORT:
+    final Comparator<Key> keyComparator=new Comparator<Key>(){
+      @Override public int compare(      Key k1,      Key k2){
+        return k1.compareTo(k2);
+      }
+    }
+;
+  try {
+    SortMerger<Key,Value> sortMerger=new CombiningUnilateralSortMerger<Key,Value>(stub,memoryManager,ioManager,NUM_SORT_BUFFERS,SIZE_SORT_BUFFER,MEMORY_IO,MAX_NUM_FILEHANLDES,keySerialization,valSerialization,keyComparator,reader,0.1f,this,true);
+    return sortMerger;
+  }
+ catch (  MemoryAllocationException mae) {
+    throw new RuntimeException("MemoryManager is not able to provide the required amount of memory for ReduceTask",mae);
+  }
+catch (  IOException ioe) {
+    throw new RuntimeException("IOException caught when obtaining SortMerger for ReduceTask",ioe);
+  }
+default :
+throw new RuntimeException("Invalid local strategy provided for CombineTask.");
+}
+}

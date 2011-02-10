@@ -1,0 +1,24 @@
+{
+  Environment ee=mock(Environment.class);
+  QueueScheduler localScheduler=mock(QueueScheduler.class);
+  ExecutionVertex executionVertex=mock(ExecutionVertex.class);
+  ExecutionGraph executionGraph=mock(ExecutionGraph.class);
+  AllocatedResource allocatedResource=mock(AllocatedResource.class);
+  when(executionVertex.getExecutionGraph()).thenReturn(executionGraph);
+  when(executionVertex.getAllocatedResource()).thenReturn(allocatedResource);
+  QueueExecutionListener toTest=new QueueExecutionListener(localScheduler,executionVertex);
+  when(executionGraph.getJobStatus()).thenReturn(JobStatus.RUNNING);
+  ExecutionState newExecutionState=ExecutionState.FINISHING;
+  toTest.executionStateChanged(ee,newExecutionState,"");
+  verify(localScheduler,times(0)).checkAndReleaseAllocatedResource(executionGraph,allocatedResource);
+  verify(localScheduler,times(0)).removeJobFromSchedule(executionGraph);
+  newExecutionState=ExecutionState.FINISHED;
+  when(executionGraph.getJobStatus()).thenReturn(JobStatus.FINISHED);
+  toTest.executionStateChanged(ee,newExecutionState,"");
+  verify(localScheduler).checkAndReleaseAllocatedResource(executionGraph,allocatedResource);
+  verify(localScheduler).removeJobFromSchedule(executionGraph);
+  newExecutionState=ExecutionState.FAILED;
+  when(executionVertex.hasRetriesLeft()).thenReturn(true);
+  toTest.executionStateChanged(ee,newExecutionState,"");
+  verify(executionVertex).setExecutionState(ExecutionState.SCHEDULED);
+}

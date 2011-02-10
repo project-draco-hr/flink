@@ -1,0 +1,46 @@
+{
+  InstanceType type=new InstanceType();
+  InstanceTypeDescription desc=InstanceTypeDescriptionFactory.construct(type,new HardwareDescription(),4);
+  HashMap<InstanceType,Integer> requiredInstanceTypes=new HashMap<InstanceType,Integer>();
+  requiredInstanceTypes.put(type,3);
+  HashMap<InstanceType,InstanceTypeDescription> availableInstances=new HashMap<InstanceType,InstanceTypeDescription>();
+  availableInstances.put(type,desc);
+  try {
+    whenNew(HashMap.class).withNoArguments().thenReturn(requiredInstanceTypes);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+  when(this.executionGraph.getNumberOfStages()).thenReturn(1);
+  when(this.instanceManager.getMapOfAvailableInstanceTypes()).thenReturn(availableInstances);
+  QueueScheduler toTest=new QueueScheduler(this.schedulingListener,this.instanceManager);
+  try {
+    toTest.schedulJob(this.executionGraph);
+    Deque<ExecutionGraph> jobQueue=Whitebox.getInternalState(toTest,"jobQueue");
+    assertEquals("Job should be in list",true,jobQueue.contains(this.executionGraph));
+    jobQueue.remove(this.executionGraph);
+  }
+ catch (  SchedulingException e) {
+    fail();
+    e.printStackTrace();
+  }
+  desc=InstanceTypeDescriptionFactory.construct(type,new HardwareDescription(),2);
+  availableInstances.put(type,desc);
+  try {
+    toTest.schedulJob(this.executionGraph);
+    fail();
+  }
+ catch (  SchedulingException e) {
+    Deque<ExecutionGraph> jobQueue=Whitebox.getInternalState(toTest,"jobQueue");
+    assertEquals("Job should not be in list",false,jobQueue.contains(this.executionGraph));
+  }
+  availableInstances.clear();
+  try {
+    toTest.schedulJob(this.executionGraph);
+    fail();
+  }
+ catch (  SchedulingException e) {
+    Deque<ExecutionGraph> jobQueue=Whitebox.getInternalState(toTest,"jobQueue");
+    assertEquals("Job should not be in list",false,jobQueue.contains(this.executionGraph));
+  }
+}
