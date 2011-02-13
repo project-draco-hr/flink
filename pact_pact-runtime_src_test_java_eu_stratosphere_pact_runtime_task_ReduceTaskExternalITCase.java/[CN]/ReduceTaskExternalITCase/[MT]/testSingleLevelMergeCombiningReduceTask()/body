@@ -1,0 +1,29 @@
+{
+  int keyCnt=8192;
+  int valCnt=8;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new RegularlyGeneratedInputGenerator(keyCnt,valCnt));
+  super.addOutput(outList);
+  ReduceTask testTask=new ReduceTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
+  super.getTaskConfig().setNumSortBuffer(2);
+  super.getTaskConfig().setSortBufferSize(1);
+  super.getTaskConfig().setMergeFactor(2);
+  super.getTaskConfig().setIOBufferSize(1);
+  super.registerTask(testTask,MockCombiningReduceStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  Assert.assertTrue("Resultset size was " + outList.size() + ". Expected was "+ keyCnt,outList.size() == keyCnt);
+  for (  KeyValuePair<PactInteger,PactInteger> pair : outList) {
+    Assert.assertTrue("Incorrect result",pair.getValue().getValue() == expSum - pair.getKey().getValue());
+  }
+  outList.clear();
+}
