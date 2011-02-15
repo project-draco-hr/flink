@@ -1,16 +1,20 @@
 {
   try {
-    final KeyValuePair<K,V> emitPair=new KeyValuePair<K,V>(key,value);
+    KeyValuePair<K,V> emitPair=new KeyValuePair<K,V>(key,value);
     if (fwdCopyFlags == 0) {
       for (int i=0; i < writers.size(); i++) {
         writers.get(i).emit(emitPair);
       }
     }
  else {
-      copier.setCopy(emitPair);
+      if (kvpSerialization == null) {
+        this.kvpSerialization=new KeyValuePairSerializationFactory<K,V>(new WritableSerializationFactory<K>((Class<K>)key.getClass()),new WritableSerializationFactory<V>((Class<V>)value.getClass()));
+      }
+      kvpCopier.setCopy(emitPair);
       for (int i=0; i < writers.size(); i++) {
         if (((fwdCopyFlags >> i) & 0x1) != 0) {
-          copier.getCopy(emitPair);
+          emitPair=kvpSerialization.newInstance();
+          kvpCopier.getCopy(emitPair);
         }
         writers.get(i).emit(emitPair);
       }
