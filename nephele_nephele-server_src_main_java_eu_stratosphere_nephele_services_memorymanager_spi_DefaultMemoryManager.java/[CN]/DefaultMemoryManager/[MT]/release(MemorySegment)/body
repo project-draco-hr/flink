@@ -2,53 +2,26 @@
   if (segment == null || segment.isFree()) {
     return;
   }
-  MemorySegmentDescriptor descriptor=((DefaultMemorySegment)segment).descriptor;
-  long start=descriptor.chunk * (chunkSize) + descriptor.start;
-  long end=descriptor.chunk * (chunkSize) + descriptor.end;
-  if (freeSegments.size() == 0) {
-    freeSegments.add(new FreeSegmentEntry(descriptor.chunk,start,end));
-  }
- else   if (end <= freeSegments.get(0).start) {
-    FreeSegmentEntry firstEntry=freeSegments.get(0);
-    if (end == firstEntry.start && descriptor.chunk == firstEntry.chunk) {
-      firstEntry.start=start;
+  final DefaultMemorySegment defSeg=(DefaultMemorySegment)segment;
+  final AbstractInvokable owner=defSeg.getSegmentDescriptor().owner;
+synchronized (this.lock) {
+    if (isShutDown) {
+      throw new IllegalStateException("Memory manager has been shut down.");
     }
- else {
-      freeSegments.addFirst(new FreeSegmentEntry(descriptor.chunk,start,end));
+    try {
+      ArrayList<DefaultMemorySegment> segsForOwner=this.allocatedSegments.get(owner);
+      if (segsForOwner != null) {
+        segsForOwner.remove(defSeg);
+        if (segsForOwner.isEmpty()) {
+          this.allocatedSegments.remove(owner);
+        }
+      }
     }
-  }
- else   if (start >= freeSegments.get(freeSegments.size() - 1).end) {
-    FreeSegmentEntry lastEntry=freeSegments.get(freeSegments.size() - 1);
-    if (start == lastEntry.end && descriptor.chunk == lastEntry.chunk) {
-      lastEntry.end=end;
+ catch (    Throwable t) {
+      LOG.error("Error removing book-keeping reference to allocated memory segment.",t);
     }
- else {
-      freeSegments.addLast(new FreeSegmentEntry(descriptor.chunk,start,end));
+ finally {
+      internalRelease(defSeg);
     }
   }
- else {
-    Iterator<FreeSegmentEntry> it=freeSegments.iterator();
-    FreeSegmentEntry left=it.next(), right=it.next();
-    int i=1;
-    while (!(start >= left.end && end <= right.start)) {
-      left=right;
-      right=it.next();
-      i++;
-    }
-    if (start == left.end && end == right.start && left.chunk == right.chunk) {
-      left.end=right.end;
-      freeSegments.remove(i);
-    }
- else     if (start == left.end && descriptor.chunk == left.chunk) {
-      left.end=end;
-    }
- else     if (end == right.start && descriptor.chunk == right.chunk) {
-      right.start=start;
-    }
- else {
-      freeSegments.add(i,new FreeSegmentEntry(descriptor.chunk,start,end));
-    }
-  }
-  segment.free();
-  allocatedSegments.remove(descriptor);
 }
