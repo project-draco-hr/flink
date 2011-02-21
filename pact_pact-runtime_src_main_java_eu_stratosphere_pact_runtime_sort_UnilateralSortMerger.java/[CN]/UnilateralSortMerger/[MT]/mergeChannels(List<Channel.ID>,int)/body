@@ -3,49 +3,25 @@
   final int ioMemoryPerChannel=ioMemorySize / (channelIDs.size() + 2);
   for (  Channel.ID id : channelIDs) {
     Collection<MemorySegment> inputSegments;
-    final ChannelReader reader;
-    try {
-      inputSegments=memoryManager.allocate(this.parent,1,ioMemoryPerChannel);
-      freeSegmentsAtShutdown(inputSegments);
-      reader=ioManager.createChannelReader(id,inputSegments);
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Could not allocate IO buffers for merge reader",mae);
-    }
-catch (    ServiceException se) {
-      throw new RuntimeException("Could not open channel reader for merging",se);
-    }
+    inputSegments=memoryManager.allocate(this.parent,1,ioMemoryPerChannel);
+    freeSegmentsAtShutdown(inputSegments);
+    final ChannelReader reader=ioManager.createChannelReader(id,inputSegments);
     final Iterator<KeyValuePair<K,V>> iterator=new KVReaderIterator<K,V>(reader,keySerialization,valueSerialization,memoryManager,true);
     iterators.add(iterator);
   }
   MergeIterator<K,V> mi=new MergeIterator<K,V>(iterators,keyComparator);
   final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
   final Channel.ID mergedChannelID=enumerator.next();
-  Collection<MemorySegment> outputSegments;
-  ChannelWriter writer;
-  try {
-    outputSegments=memoryManager.allocate(this.parent,2,ioMemoryPerChannel);
-    freeSegmentsAtShutdown(outputSegments);
-    writer=ioManager.createChannelWriter(mergedChannelID,outputSegments);
-  }
- catch (  MemoryAllocationException mae) {
-    throw new RuntimeException("Could not allocate IO Buffer for merge writer",mae);
-  }
-catch (  ServiceException se) {
-    throw new RuntimeException("Could not open channel writer for merging",se);
-  }
+  Collection<MemorySegment> outputSegments=memoryManager.allocate(this.parent,2,ioMemoryPerChannel);
+  freeSegmentsAtShutdown(outputSegments);
+  ChannelWriter writer=ioManager.createChannelWriter(mergedChannelID,outputSegments);
   while (mi.hasNext()) {
     KeyValuePair<K,V> pair=mi.next();
     if (!writer.write(pair)) {
       throw new RuntimeException("Writing of pair during merging failed");
     }
   }
-  try {
-    outputSegments=writer.close();
-  }
- catch (  ServiceException se) {
-    throw new RuntimeException("Could not close channel writer",se);
-  }
+  outputSegments=writer.close();
   memoryManager.release(outputSegments);
   return mergedChannelID;
 }
