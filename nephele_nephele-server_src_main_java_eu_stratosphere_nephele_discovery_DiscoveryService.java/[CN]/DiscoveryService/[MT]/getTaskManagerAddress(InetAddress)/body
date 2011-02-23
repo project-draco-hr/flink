@@ -1,0 +1,47 @@
+{
+  InetAddress taskManagerAddress=null;
+  DatagramSocket socket=null;
+  try {
+    socket=new DatagramSocket();
+    LOG.debug("Setting socket timeout to " + CLIENTSOCKETTIMEOUT);
+    socket.setSoTimeout(CLIENTSOCKETTIMEOUT);
+    final DatagramPacket responsePacket=new DatagramPacket(new byte[RESPONSE_PACKET_SIZE],RESPONSE_PACKET_SIZE);
+    for (int retries=0; retries < DISCOVERFAILURERETRIES; retries++) {
+      final DatagramPacket addressRequest=createTaskManagerAddressRequestPacket();
+      addressRequest.setAddress(jobManagerAddress);
+      addressRequest.setPort(DISCOVERYPORT);
+      LOG.debug("Sending Task Manager address request to " + addressRequest.getSocketAddress());
+      socket.send(addressRequest);
+      try {
+        socket.receive(responsePacket);
+      }
+ catch (      SocketTimeoutException ste) {
+        LOG.warn("Timeout wainting for address reply. Retrying...");
+        continue;
+      }
+      if (!isPacketForUs(responsePacket)) {
+        LOG.warn("Received packet which is not destined to this Nephele setup");
+        continue;
+      }
+      final int packetTypeID=getPacketTypeID(responsePacket);
+      if (packetTypeID != TM_ADDRESS_REPLY_ID) {
+        LOG.warn("Received response of unknown type " + packetTypeID + ", discarding...");
+        continue;
+      }
+      taskManagerAddress=extractInetAddress(responsePacket);
+      break;
+    }
+  }
+ catch (  IOException ioe) {
+    throw new DiscoveryException(StringUtils.stringifyException(ioe));
+  }
+ finally {
+    if (socket != null) {
+      socket.close();
+    }
+  }
+  if (taskManagerAddress == null) {
+    throw new DiscoveryException("Unable to obtain task manager address");
+  }
+  return taskManagerAddress;
+}
