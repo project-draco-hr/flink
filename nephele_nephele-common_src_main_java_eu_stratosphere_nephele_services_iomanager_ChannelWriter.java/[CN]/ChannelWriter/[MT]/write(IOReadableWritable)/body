@@ -1,10 +1,24 @@
 {
-  if (currentBuffer.write(writable)) {
+  if (this.currentBuffer.write(writable)) {
     return true;
   }
  else {
-    requestQueue.add(new IORequest<Buffer.Output>(this,currentBuffer));
-    currentBuffer=nextBuffer();
-    return currentBuffer.write(writable);
+    checkErroneous();
+    if (this.requestQueue.isClosed()) {
+      throw new IOException("The writer's IO path has been closed.");
+    }
+    this.requestQueue.add(new IORequest<Buffer.Output>(this,currentBuffer));
+    try {
+      this.currentBuffer=nextBuffer();
+    }
+ catch (    InterruptedException iex) {
+      throw new IOException("IO channel corrupt. Writer was interrupted getting a new buffer.");
+    }
+    if (currentBuffer.write(writable)) {
+      return true;
+    }
+ else {
+      throw new IOException("Object to be written is too large for IO-buffer.");
+    }
   }
 }

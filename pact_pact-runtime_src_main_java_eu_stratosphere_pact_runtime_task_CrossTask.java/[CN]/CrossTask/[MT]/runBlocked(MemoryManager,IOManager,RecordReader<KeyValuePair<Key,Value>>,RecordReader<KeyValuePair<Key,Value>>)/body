@@ -49,6 +49,7 @@ catch (    InterruptedException ie) {
     LOG.debug("SpillingResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     LOG.debug("BlockResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     stub.open();
+    boolean moreOuterBlocks=false;
     do {
       while (innerInput.hasNext()) {
         Pair<Key,Value> innerPair=innerInput.next();
@@ -64,22 +65,13 @@ catch (    InterruptedException ie) {
         }
         outerInput.reset();
       }
-      innerInput.reset();
+      moreOuterBlocks=outerInput.nextBlock();
+      if (moreOuterBlocks) {
+        innerInput.reset();
+      }
     }
- while (outerInput.nextBlock());
+ while (moreOuterBlocks);
     stub.close();
-    try {
-      innerInput.close();
-    }
- catch (    ServiceException se) {
-      throw new RuntimeException("Unable to close SpillingResettableIterator",se);
-    }
-    try {
-      outerInput.close();
-    }
- catch (    ServiceException se) {
-      throw new RuntimeException("Unable to close BlockResettableIterator",se);
-    }
   }
   finally {
     ServiceException se1=null, se2=null;

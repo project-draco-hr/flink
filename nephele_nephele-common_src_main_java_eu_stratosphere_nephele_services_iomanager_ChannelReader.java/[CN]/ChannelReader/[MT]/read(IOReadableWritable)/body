@@ -1,10 +1,46 @@
 {
+  if (this.currentBuffer == null) {
+    if (this.closed) {
+      throw new IllegalStateException("Reader has been closed.");
+    }
+ else     if (this.done) {
+      return false;
+    }
+ else {
+      try {
+        this.currentBuffer=this.nextBuffer();
+      }
+ catch (      InterruptedException iex) {
+        throw new IOException("IO channel corrupt. Reader was interrupted getting a new buffer.");
+      }
+    }
+  }
   if (currentBuffer.read(readable)) {
     return true;
   }
  else {
-    requestQueue.add(new IORequest<Buffer.Input>(this,currentBuffer));
-    currentBuffer=this.nextBuffer();
+    checkErroneous();
+    if (!allRead) {
+      if (this.requestQueue.isClosed()) {
+        throw new IOException("The reader's IO path has been closed.");
+      }
+      this.requestQueue.add(new IORequest<Buffer.Input>(this,currentBuffer));
+    }
+ else {
+      this.returnBuffers.add(this.currentBuffer);
+    }
+    try {
+      this.currentBuffer=nextBuffer();
+      if (this.currentBuffer.getRemainingBytes() == 0) {
+        this.done=true;
+        this.returnBuffers.add(this.currentBuffer);
+        this.currentBuffer=null;
+        return false;
+      }
+    }
+ catch (    InterruptedException iex) {
+      throw new IOException("IO channel corrupt. Reader was interrupted getting a new buffer.");
+    }
     return currentBuffer.read(readable);
   }
 }

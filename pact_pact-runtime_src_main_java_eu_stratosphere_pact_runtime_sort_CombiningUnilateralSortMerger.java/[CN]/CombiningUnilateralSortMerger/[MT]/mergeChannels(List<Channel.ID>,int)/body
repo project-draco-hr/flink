@@ -2,18 +2,9 @@
   List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>(channelIDs.size());
   final int ioMemoryPerChannel=ioMemorySize / (channelIDs.size() + 2);
   for (  Channel.ID id : channelIDs) {
-    final ChannelReader reader;
-    try {
-      inputSegments=memoryManager.allocate(this.parent,1,ioMemoryPerChannel);
-      freeSegmentsAtShutdown(inputSegments);
-      reader=ioManager.createChannelReader(id,inputSegments);
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Could not allocate IO buffers for merge reader",mae);
-    }
-catch (    ServiceException se) {
-      throw new RuntimeException("Could not open channel reader for merging",se);
-    }
+    inputSegments=memoryManager.allocate(this.parent,1,ioMemoryPerChannel);
+    freeSegmentsAtShutdown(inputSegments);
+    final ChannelReader reader=ioManager.createChannelReader(id,inputSegments,true);
     final Iterator<KeyValuePair<K,V>> iterator=new KVReaderIterator<K,V>(reader,keySerialization,valueSerialization,memoryManager,true);
     iterators.add(iterator);
   }
@@ -21,28 +12,14 @@ catch (    ServiceException se) {
   KeyGroupedIterator<K,V> groupedIter=new KeyGroupedIterator<K,V>(mi);
   final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
   final Channel.ID mergedChannelID=enumerator.next();
-  ChannelWriter writer;
-  try {
-    outputSegments=memoryManager.allocate(this.parent,2,ioMemoryPerChannel);
-    freeSegmentsAtShutdown(outputSegments);
-    writer=ioManager.createChannelWriter(mergedChannelID,outputSegments);
-  }
- catch (  MemoryAllocationException mae) {
-    throw new RuntimeException("Could not allocate IO Buffer for merge writer",mae);
-  }
-catch (  ServiceException se) {
-    throw new RuntimeException("Could not open channel writer for merging",se);
-  }
+  outputSegments=memoryManager.allocate(this.parent,2,ioMemoryPerChannel);
+  freeSegmentsAtShutdown(outputSegments);
+  ChannelWriter writer=ioManager.createChannelWriter(mergedChannelID,outputSegments);
   WriterCollector<K,V> collector=new WriterCollector<K,V>(writer);
   while (groupedIter.nextKey()) {
     this.combineStub.combine(groupedIter.getKey(),groupedIter.getValues(),collector);
   }
-  try {
-    outputSegments=writer.close();
-  }
- catch (  ServiceException se) {
-    throw new RuntimeException("Could not close channel writer",se);
-  }
+  outputSegments=writer.close();
   memoryManager.release(outputSegments);
   return mergedChannelID;
 }
