@@ -1,18 +1,17 @@
 {
-  if (!isClosing) {
-    isClosing=true;
-    fullBufferQueue.add(currentBuffer);
-    lock.lock();
-    while (fullBufferQueue.size() < fullBufferQueueSize) {
-      allRequestsHandled.awaitUninterruptibly();
+synchronized (this) {
+    if (this.closed) {
+      throw new IllegalStateException("Reader is already closing or has been closed.");
     }
-    lock.unlock();
-    try {
-      file.close();
-    }
- catch (    IOException e) {
-      throw new ServiceException(e);
-    }
+    this.closed=true;
   }
-  return IOManager.unbindBuffers(fullBufferQueue);
+  if (this.currentBuffer != null) {
+    this.returnBuffers.add(currentBuffer);
+    this.currentBuffer=null;
+  }
+  List<MemorySegment> segments=super.close();
+  if (this.fileChannel.isOpen()) {
+    this.fileChannel.close();
+  }
+  return segments;
 }
