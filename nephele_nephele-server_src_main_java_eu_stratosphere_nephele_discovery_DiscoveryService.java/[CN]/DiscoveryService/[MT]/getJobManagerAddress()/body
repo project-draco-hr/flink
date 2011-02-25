@@ -11,8 +11,8 @@
     socket.setSoTimeout(CLIENTSOCKETTIMEOUT);
     final DatagramPacket responsePacket=new DatagramPacket(new byte[RESPONSE_PACKET_SIZE],RESPONSE_PACKET_SIZE);
     for (int retries=0; retries < DISCOVERFAILURERETRIES; retries++) {
+      final DatagramPacket lookupRequest=createJobManagerLookupRequestPacket();
       for (      InetAddress broadcast : targetAddresses) {
-        final DatagramPacket lookupRequest=createJobManagerLookupRequestPacket();
         lookupRequest.setAddress(broadcast);
         lookupRequest.setPort(DISCOVERYPORT);
         LOG.debug("Sending discovery request to " + lookupRequest.getSocketAddress());
@@ -31,13 +31,10 @@
       }
       final int packetTypeID=getPacketTypeID(responsePacket);
       if (packetTypeID != JM_LOOKUP_REPLY_ID) {
-        LOG.error("Received unexpected packet type " + packetTypeID + ", discarding... ");
+        LOG.debug("Received unexpected packet type " + packetTypeID + ", discarding... ");
         continue;
       }
       final int ipcPort=extractIpcPort(responsePacket);
-      if (ipcPort < 0) {
-        continue;
-      }
       if (USE_IPV6) {
         if (responsePacket.getAddress() instanceof Inet6Address) {
           try {
