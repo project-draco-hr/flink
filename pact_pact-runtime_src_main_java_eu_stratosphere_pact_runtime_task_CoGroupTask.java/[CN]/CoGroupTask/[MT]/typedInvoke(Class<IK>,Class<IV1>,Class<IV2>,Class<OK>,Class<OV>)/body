@@ -2,14 +2,21 @@
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   final CoGroupStub<IK,IV1,IV2,OK,OV> coGroup=getCoGroupStub();
   final OutputCollector<OK,OV> collector=getOutputCollector();
-  final CoGroupTaskIterator<IK,IV1,IV2> coGroupIterator=getIterator(ikClass,iv1Class,iv2Class);
-  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  coGroup.open();
+  CoGroupTaskIterator<IK,IV1,IV2> coGroupIterator=null;
   try {
+    coGroupIterator=getIterator(ikClass,iv1Class,iv2Class);
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     coGroupIterator.open();
     LOG.debug("Start processing: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    coGroup.open();
     while (coGroupIterator.next()) {
       coGroup.coGroup(coGroupIterator.getKey(),coGroupIterator.getValues1(),coGroupIterator.getValues2(),collector);
+    }
+    try {
+      coGroup.close();
+    }
+ catch (    Throwable t) {
+      LOG.error("Error while closing the CoGroup user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
     }
   }
  catch (  IOException ioe) {
@@ -19,15 +26,8 @@ catch (  InterruptedException ie) {
     throw new RuntimeException("Error occured during processing CoGroupTask",ie);
   }
  finally {
-    try {
-      coGroup.close();
-    }
- catch (    Throwable t) {
-    }
-    try {
+    if (coGroupIterator != null) {
       coGroupIterator.close();
-    }
- catch (    Throwable t) {
     }
     collector.close();
   }
