@@ -2,15 +2,13 @@
   if (this.fileChannelForReading != null) {
     return this.fileChannelForReading;
   }
-  this.readAttemptInProgress=true;
   try {
+    if (this.status == FileEntryStatus.CLOSED) {
+      closeCurrentWriteFile();
+    }
     while (this.filesForReading.isEmpty()) {
-      if (!this.writeAttemptInProgress && this.fileChannelForWriting != null) {
-        closeCurrentWriteFile();
-      }
- else {
-        this.wait();
-      }
+      this.status=FileEntryStatus.WRITING_BUT_READ_REQUESTED;
+      this.wait();
     }
     final File file=this.filesForReading.peek();
     this.fileSizeForReading=file.length();
@@ -19,9 +17,6 @@
   }
  catch (  InterruptedException e) {
     LOG.error(e);
-  }
- finally {
-    this.readAttemptInProgress=false;
   }
   return this.fileChannelForReading;
 }
