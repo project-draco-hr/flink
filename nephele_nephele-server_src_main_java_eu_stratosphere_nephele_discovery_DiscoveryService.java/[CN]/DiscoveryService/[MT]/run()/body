@@ -1,25 +1,55 @@
 {
-  final DatagramPacket ping=new DatagramPacket(new byte[100],100);
-  final byte[] PONG=("PONG " + Integer.toString(this.ipcPort)).getBytes();
-  final DatagramPacket pong=new DatagramPacket(PONG,PONG.length);
-  while (!Thread.interrupted()) {
+  final DatagramPacket requestPacket=new DatagramPacket(new byte[64],64);
+  final Map<Integer,Long> packetIDMap=new HashMap<Integer,Long>();
+  while (this.isRunning) {
     try {
-      this.serverSocket.receive(ping);
-      if (isPingForUs(ping)) {
-        LOG.debug("Received ping from " + ping.getSocketAddress());
-        pong.setAddress(ping.getAddress());
-        pong.setPort(ping.getPort());
-        this.serverSocket.send(pong);
+      this.serverSocket.receive(requestPacket);
+      if (!isPacketForUs(requestPacket)) {
+        LOG.debug("Received request packet which is not destined to this Nephele setup");
+        continue;
+      }
+      final Integer packetID=Integer.valueOf(extractPacketID(requestPacket));
+      if (packetIDMap.containsKey(packetID)) {
+        LOG.debug("Request with ID " + packetID.intValue() + " already answered, discarding...");
+        continue;
       }
  else {
-        LOG.debug("Received ping for somebody else from " + ping.getSocketAddress());
+        final long currentTime=System.currentTimeMillis();
+        final Iterator<Map.Entry<Integer,Long>> it=packetIDMap.entrySet().iterator();
+        while (it.hasNext()) {
+          final Map.Entry<Integer,Long> entry=it.next();
+          if ((entry.getValue().longValue() + 5000L) < currentTime) {
+            it.remove();
+          }
+        }
+        packetIDMap.put(packetID,Long.valueOf(currentTime));
+      }
+      final int packetTypeID=getPacketTypeID(requestPacket);
+      if (packetTypeID == JM_LOOKUP_REQUEST_ID) {
+        LOG.debug("Received job manager lookup request from " + requestPacket.getSocketAddress());
+        final DatagramPacket responsePacket=createJobManagerLookupReplyPacket(this.ipcPort);
+        responsePacket.setAddress(requestPacket.getAddress());
+        responsePacket.setPort(requestPacket.getPort());
+        this.serverSocket.send(responsePacket);
+      }
+ else       if (packetTypeID == TM_ADDRESS_REQUEST_ID) {
+        LOG.debug("Received task manager address request from " + requestPacket.getSocketAddress());
+        final DatagramPacket responsePacket=createTaskManagerAddressReplyPacket(requestPacket.getAddress());
+        responsePacket.setAddress(requestPacket.getAddress());
+        responsePacket.setPort(requestPacket.getPort());
+        this.serverSocket.send(responsePacket);
+      }
+ else {
+        LOG.debug("Received packet of unknown type " + packetTypeID + ", discarding...");
       }
     }
  catch (    SocketTimeoutException ste) {
       LOG.debug("Discovery service: socket timeout");
     }
 catch (    IOException ioe) {
-      LOG.error("Discovery service stopped working with IOException:\n" + ioe.toString());
+      if (this.isRunning) {
+        LOG.error("Discovery service stopped working with IOException:\n" + ioe.toString());
+      }
       break;
     }
   }
