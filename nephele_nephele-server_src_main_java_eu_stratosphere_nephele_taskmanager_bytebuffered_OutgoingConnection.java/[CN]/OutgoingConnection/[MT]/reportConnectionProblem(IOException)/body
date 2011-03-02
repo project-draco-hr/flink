@@ -4,23 +4,27 @@
     LOG.error("Cannot connect to " + this.connectionAddress + ", "+ this.retriesLeft+ " retries left");
   }
 synchronized (this.queuedEnvelopes) {
-    if (socketChannel != null) {
-      try {
-        socketChannel.close();
+    if (this.selectionKey != null) {
+      final SocketChannel socketChannel=(SocketChannel)this.selectionKey.channel();
+      if (socketChannel != null) {
+        try {
+          socketChannel.close();
+        }
+ catch (        IOException e) {
+          LOG.debug("Error while trying to close the socket channel to " + this.connectionAddress);
+        }
       }
- catch (      IOException e) {
-        LOG.debug("Error while trying to close the socket channel to " + this.connectionAddress);
-      }
-    }
-    if (key != null) {
-      key.cancel();
+      this.selectionKey.cancel();
+      this.selectionKey=null;
+      this.isConnected=false;
+      this.isSubscribedToWriteEvent=false;
     }
     if (hasRetriesLeft(currentTime)) {
       this.connectionThread.triggerConnect(this);
       this.isConnected=true;
+      this.isSubscribedToWriteEvent=true;
       return;
     }
-    this.isConnected=false;
     LOG.error(ioe);
     if (this.currentEnvelope != null) {
       this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(this.currentEnvelope.getSource(),ioe);

@@ -1,4 +1,5 @@
 {
+  final SocketChannel socketChannel=(SocketChannel)this.selectionKey.channel();
   if (this.currentEnvelope != null) {
     LOG.error("The connection between " + socketChannel.socket().getLocalAddress() + " and "+ socketChannel.socket().getRemoteSocketAddress()+ " experienced an IOException for transfer envelope "+ this.currentEnvelope.getSequenceNumber());
   }
@@ -14,14 +15,16 @@ synchronized (this.queuedEnvelopes) {
       LOG.debug("An error occurred while responding to an IOException");
       LOG.debug(e);
     }
-    key.cancel();
+    this.selectionKey.cancel();
     LOG.error(ioe);
     if (this.queuedEnvelopes.isEmpty()) {
       this.isConnected=false;
+      this.isSubscribedToWriteEvent=false;
     }
  else {
       this.connectionThread.triggerConnect(this);
       this.isConnected=true;
+      this.isSubscribedToWriteEvent=true;
     }
     if (this.currentEnvelope != null) {
       this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(this.currentEnvelope.getSource(),ioe);
