@@ -5,19 +5,26 @@
   changeExecutionState(ExecutionState.RUNNING,null);
   try {
     this.invokable.invoke();
-    if (this.executingThread.isInterrupted()) {
+    if (this.isCanceled) {
       throw new InterruptedException();
     }
   }
  catch (  InterruptedException e) {
     changeExecutionState(ExecutionState.CANCELLED,null);
-    return;
   }
 catch (  Exception e) {
+    try {
+      this.invokable.cancel();
+    }
+ catch (    Exception e2) {
+      LOG.error(StringUtils.stringifyException(e2));
+    }
     changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
     return;
   }
-  changeExecutionState(ExecutionState.FINISHING,null);
+  if (!this.isCanceled) {
+    changeExecutionState(ExecutionState.FINISHING,null);
+  }
   try {
     closeInputGates();
     requestAllOutputGatesToClose();
@@ -25,8 +32,12 @@ catch (  Exception e) {
     waitForOutputChannelsToBeClosed();
   }
  catch (  Exception e) {
-    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
-    return;
+    if (!this.isCanceled) {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+      return;
+    }
   }
-  changeExecutionState(ExecutionState.FINISHED,null);
+  if (!this.isCanceled) {
+    changeExecutionState(ExecutionState.FINISHED,null);
+  }
 }
