@@ -3,28 +3,58 @@
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
   outputSegments=memoryManager.allocate(UnilateralSortMerger.this.parent,2,ioMemorySize / 2);
   freeSegmentsAtShutdown(outputSegments);
+  List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
   CircularElement element=null;
-  while (isRunning() && (element=queues.spill.take()) != SENTINEL) {
-    Channel.ID channel=enumerator.next();
-    channelIDs.add(channel);
-    ChannelWriter writer=ioManager.createChannelWriter(channel,outputSegments);
-    LOG.debug("Spilling buffer " + element.id + ".");
-    element.buffer.writeToChannel(writer);
-    LOG.debug("Spilled buffer " + element.id + ".");
-    outputSegments=writer.close();
-    element.buffer.reset();
-    queues.empty.put(element);
+  if (buffersToKeepBeforeSpilling > 0) {
+    while (isRunning()) {
+      if (cache.size() >= buffersToKeepBeforeSpilling) {
+        queues.spill.put(cache);
+        cache.clear();
+        break;
+      }
+      element=queues.spill.take();
+      if (element == SENTINEL) {
+        break;
+      }
+ else {
+        cache.add(element);
+      }
+    }
   }
-  LOG.debug("Spilling done.");
-  LOG.debug("Releasing output-buffer memory.");
-  memoryManager.release(outputSegments);
-  LOG.debug("Releasing sort-buffer memory.");
-  while (!queues.empty.isEmpty()) {
-    memoryManager.release(queues.empty.take().buffer.unbind());
+  if (!cache.isEmpty()) {
+    List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
+    for (    CircularElement element : cache) {
+      iterators.add(element.buffer.getIterator());
+    }
+    LOG.debug("Releasing sort-buffer memory.");
+    while (!queues.empty.isEmpty()) {
+      memoryManager.release(queues.empty.take().buffer.unbind());
+    }
+    setResultIterator(new MergeIterator<K,V>(iterators,keyComparator));
   }
-  while (channelIDs.size() > maxNumFileHandles) {
-    channelIDs=mergeChannelList(channelIDs,ioMemorySize);
+ else {
+    while (isRunning() && (element=queues.spill.take()) != SENTINEL) {
+      Channel.ID channel=enumerator.next();
+      channelIDs.add(channel);
+      ChannelWriter writer=ioManager.createChannelWriter(channel,outputSegments);
+      LOG.debug("Spilling buffer " + element.id + ".");
+      element.buffer.writeToChannel(writer);
+      LOG.debug("Spilled buffer " + element.id + ".");
+      outputSegments=writer.close();
+      element.buffer.reset();
+      queues.empty.put(element);
+    }
+    LOG.debug("Spilling done.");
+    LOG.debug("Releasing output-buffer memory.");
+    memoryManager.release(outputSegments);
+    LOG.debug("Releasing sort-buffer memory.");
+    while (!queues.empty.isEmpty()) {
+      memoryManager.release(queues.empty.take().buffer.unbind());
+    }
+    while (channelIDs.size() > maxNumFileHandles) {
+      channelIDs=mergeChannelList(channelIDs,ioMemorySize);
+    }
+    setResultIterator(getMergingIterator(channelIDs,ioMemorySize));
   }
-  setResultIterator(getMergingIterator(channelIDs,ioMemorySize));
   LOG.debug("Spilling thread done.");
 }
