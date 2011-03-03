@@ -20,22 +20,39 @@
   }
   final int numOuputGates=in.readInt();
   for (int i=0; i < numOuputGates; i++) {
-    final String gateClassName=StringRecord.readString(in);
-    Class<? extends Record> c=null;
+    final String typeClassName=StringRecord.readString(in);
+    Class<? extends Record> type=null;
     try {
-      c=(Class<? extends Record>)Class.forName(gateClassName,true,cl);
+      type=(Class<? extends Record>)Class.forName(typeClassName,true,cl);
     }
  catch (    ClassNotFoundException cnfe) {
-      throw new IOException("Class " + gateClassName + " not found in one of the supplied jar files: "+ StringUtils.stringifyException(cnfe));
+      throw new IOException("Class " + typeClassName + " not found in one of the supplied jar files: "+ StringUtils.stringifyException(cnfe));
     }
-    final OutputGate<? extends Record> eog=new OutputGate(c,i);
+    final boolean isBroadcast=in.readBoolean();
+    ChannelSelector<? extends Record> channelSelector=null;
+    if (!isBroadcast) {
+      final String channelSelectorClassName=StringRecord.readString(in);
+      try {
+        channelSelector=(ChannelSelector<? extends Record>)Class.forName(channelSelectorClassName,true,cl).newInstance();
+      }
+ catch (      InstantiationException e) {
+        throw new IOException(StringUtils.stringifyException(e));
+      }
+catch (      IllegalAccessException e) {
+        throw new IOException(StringUtils.stringifyException(e));
+      }
+catch (      ClassNotFoundException e) {
+        throw new IOException(StringUtils.stringifyException(e));
+      }
+    }
+    @SuppressWarnings("rawtypes") final OutputGate<? extends Record> eog=new OutputGate(type,i,channelSelector,isBroadcast);
     eog.read(in);
     this.outputGates.add(eog);
     this.unboundOutputGates.add(eog);
   }
   final int numInputGates=in.readInt();
   for (int i=0; i < numInputGates; i++) {
-    final InputGate<? extends Record> eig=new InputGate(null,i,null);
+    @SuppressWarnings("rawtypes") final InputGate<? extends Record> eig=new InputGate(null,i,null);
     eig.read(in);
     this.inputGates.add(eig);
     this.unboundInputGates.add(eig);
