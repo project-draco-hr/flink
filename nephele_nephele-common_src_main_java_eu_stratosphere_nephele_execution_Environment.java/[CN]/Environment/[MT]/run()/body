@@ -5,26 +5,32 @@
   changeExecutionState(ExecutionState.RUNNING,null);
   try {
     this.invokable.invoke();
-    if (this.isCanceled) {
-      throw new InterruptedException();
+  }
+ catch (  Exception e) {
+    if (!this.isCanceled) {
+      try {
+        this.invokable.cancel();
+      }
+ catch (      Exception e2) {
+        LOG.error(StringUtils.stringifyException(e2));
+      }
     }
-  }
- catch (  InterruptedException e) {
-    changeExecutionState(ExecutionState.CANCELED,null);
-  }
-catch (  Exception e) {
     try {
-      this.invokable.cancel();
+      closeInputGates();
+      requestAllOutputGatesToClose();
     }
- catch (    Exception e2) {
-      LOG.error(StringUtils.stringifyException(e2));
+ catch (    IOException ioe) {
+      LOG.error(StringUtils.stringifyException(ioe));
     }
-    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    if (this.isCanceled) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
     return;
   }
-  if (!this.isCanceled) {
-    changeExecutionState(ExecutionState.FINISHING,null);
-  }
+  changeExecutionState(ExecutionState.FINISHING,null);
   try {
     closeInputGates();
     requestAllOutputGatesToClose();
@@ -32,12 +38,8 @@ catch (  Exception e) {
     waitForOutputChannelsToBeClosed();
   }
  catch (  Exception e) {
-    if (!this.isCanceled) {
-      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
-      return;
-    }
+    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    return;
   }
-  if (!this.isCanceled) {
-    changeExecutionState(ExecutionState.FINISHED,null);
-  }
+  changeExecutionState(ExecutionState.FINISHED,null);
 }
