@@ -5,26 +5,25 @@
   freeSegmentsAtShutdown(outputSegments);
   List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
   CircularElement element=null;
+  boolean cacheOnly=true;
   if (buffersToKeepBeforeSpilling > 0) {
     while (isRunning()) {
       if (cache.size() >= buffersToKeepBeforeSpilling) {
-        queues.spill.put(cache);
-        cache.clear();
+        cacheOnly=false;
         break;
       }
       element=queues.spill.take();
+      cache.add(element);
       if (element == SENTINEL) {
+        cacheOnly=true;
         break;
-      }
- else {
-        cache.add(element);
       }
     }
   }
-  if (!cache.isEmpty()) {
+  if (cacheOnly) {
     List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
-    for (    CircularElement element : cache) {
-      iterators.add(element.buffer.getIterator());
+    for (    CircularElement cached : cache) {
+      iterators.add(cached.buffer.getIterator());
     }
     LOG.debug("Releasing sort-buffer memory.");
     while (!queues.empty.isEmpty()) {
@@ -33,7 +32,7 @@
     setResultIterator(new MergeIterator<K,V>(iterators,keyComparator));
   }
  else {
-    while (isRunning() && (element=queues.spill.take()) != SENTINEL) {
+    while (isRunning() && (element=takeNext(queues.spill,cache)) != SENTINEL) {
       Channel.ID channel=enumerator.next();
       channelIDs.add(channel);
       ChannelWriter writer=ioManager.createChannelWriter(channel,outputSegments);
