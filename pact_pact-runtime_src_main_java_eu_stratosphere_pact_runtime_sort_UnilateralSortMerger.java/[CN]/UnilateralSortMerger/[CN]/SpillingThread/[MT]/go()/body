@@ -1,8 +1,4 @@
 {
-  final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
-  List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
-  outputSegments=memoryManager.allocate(UnilateralSortMerger.this.parent,2,ioMemorySize / 2);
-  freeSegmentsAtShutdown(outputSegments);
   List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
   CircularElement element=null;
   boolean cacheOnly=false;
@@ -23,8 +19,12 @@
   if (cacheOnly) {
     LOG.debug("Initiating merge-iterator (in-memory segments).");
     List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
-    for (    CircularElement cached : cache) {
-      iterators.add(cached.buffer.getIterator());
+    Iterator<CircularElement> iter=cache.iterator();
+    while (iter.hasNext()) {
+      CircularElement cached=iter.next();
+      if (cached != SENTINEL) {
+        iterators.add(cached.buffer.getIterator());
+      }
     }
     LOG.debug("Releasing sort-buffer memory.");
     while (!queues.empty.isEmpty()) {
@@ -34,6 +34,10 @@
   }
  else {
     LOG.debug("Initiating merge-iterator (materialized segments).");
+    final Channel.Enumerator enumerator=ioManager.createChannelEnumerator();
+    List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
+    outputSegments=memoryManager.allocate(UnilateralSortMerger.this.parent,2,ioMemorySize / 2);
+    freeSegmentsAtShutdown(outputSegments);
     while (isRunning() && (element=takeNext(queues.spill,cache)) != SENTINEL) {
       Channel.ID channel=enumerator.next();
       channelIDs.add(channel);
