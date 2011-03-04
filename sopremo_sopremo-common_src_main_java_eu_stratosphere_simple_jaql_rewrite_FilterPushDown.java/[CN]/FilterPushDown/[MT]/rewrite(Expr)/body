@@ -1,0 +1,21 @@
+{
+  FilterExpr fe=(FilterExpr)expr;
+  BindingExpr filter_input=fe.binding();
+  if (fe.externalEffectPredicates())   return false;
+  if (filter_input.inExpr() instanceof TransformExpr)   return filterTransformRewrite(fe);
+ else   if (filter_input.inExpr() instanceof JoinExpr)   return filterJoinRewrite(fe);
+ else   if (filter_input.inExpr() instanceof GroupByExpr)   return filterGroupbyRewrite(fe);
+ else   if (filter_input.inExpr() instanceof ForExpr)   return filterExpandRewrite(fe);
+ else   if (filter_input.inExpr() instanceof SortExpr) {
+    ArrayList<Integer> child_ids=new ArrayList<Integer>();
+    child_ids.add(0);
+    return filterDirectpushRewrite(fe,child_ids);
+  }
+ else   if (filter_input.inExpr() instanceof UnionFn) {
+    UnionFn expr_below=(UnionFn)filter_input.inExpr();
+    ArrayList<Integer> child_ids=new ArrayList<Integer>();
+    for (int i=0; i < expr_below.numChildren(); i++)     child_ids.add(i);
+    return filterDirectpushRewrite(fe,child_ids);
+  }
+  return false;
+}

@@ -1,0 +1,41 @@
+{
+  Expr[] inList=null;
+  boolean hasPragma=binding.parent().parent() instanceof UnrollLoopPragma;
+  Expr inExpr=binding.inExpr();
+  if (inExpr instanceof ArrayExpr) {
+    if (hasPragma || inExpr.numChildren() <= 1) {
+      inList=inExpr.children();
+    }
+  }
+ else   if (inExpr instanceof ConstExpr) {
+    ConstExpr ce=(ConstExpr)inExpr;
+    JsonArray arr=(JsonArray)ce.value;
+    if (arr == null) {
+      return Expr.NO_EXPRS;
+    }
+ else {
+      int n=(int)arr.count();
+      if (hasPragma || n <= 1) {
+        inList=new Expr[n];
+        n=0;
+        for (        JsonValue v : arr) {
+          inList[n++]=new ConstExpr(v);
+        }
+      }
+    }
+  }
+  if (inList == null) {
+    return null;
+  }
+  Expr[] exprs=new Expr[inList.length];
+  int i=0;
+  Var var=binding.var;
+  VarMap varMap=engine.varMap;
+  for (  Expr e : inList) {
+    varMap.clear();
+    Var newVar=var.clone(varMap);
+    varMap.put(var,newVar);
+    exprs[i++]=new DoExpr(new BindingExpr(BindingExpr.Type.EQ,newVar,null,e),returnExpr.clone(varMap));
+  }
+  return exprs;
+}

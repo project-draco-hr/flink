@@ -1,0 +1,25 @@
+{
+  TeeExpr tee=(TeeExpr)expr;
+  int n=tee.numChildren();
+  Expr[] diamondLegs=new Expr[n + 1];
+  diamondLegs[0]=tee.child(0);
+  for (int i=1; i <= n; i++) {
+    Var var=engine.env.makeVar("$");
+    Expr body=new VarExpr(var);
+    DefineJaqlFunctionExpr fn=new DefineJaqlFunctionExpr(new Var[]{var},body);
+    diamondLegs[i]=fn;
+  }
+  Expr diamond=new DiamondTagFn(diamondLegs);
+  Expr[] splitLegs=new Expr[n + 1];
+  splitLegs[0]=diamond;
+  for (int i=1; i < n; i++) {
+    splitLegs[i]=tee.child(i);
+  }
+  Var var=engine.env.makeVar("$");
+  Expr body=new VarExpr(var);
+  DefineJaqlFunctionExpr fn=new DefineJaqlFunctionExpr(new Var[]{var},body);
+  splitLegs[n]=fn;
+  Expr split=new TagSplitFn(splitLegs);
+  tee.replaceInParent(split);
+  return true;
+}

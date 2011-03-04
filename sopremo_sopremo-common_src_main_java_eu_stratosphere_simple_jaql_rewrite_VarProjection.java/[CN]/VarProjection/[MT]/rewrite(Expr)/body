@@ -1,0 +1,46 @@
+{
+  PathExpr pathExpr=(PathExpr)expr;
+  Expr e=pathExpr.input();
+  if (!(e instanceof VarExpr)) {
+    return false;
+  }
+  VarExpr varExpr=(VarExpr)e;
+  BindingExpr bind=varExpr.findVarDef();
+  if (!(bind.parent() instanceof DoExpr)) {
+    return false;
+  }
+  e=bind.eqExpr();
+  if (!(e instanceof RecordExpr)) {
+    return false;
+  }
+  RecordExpr rec=(RecordExpr)e;
+  PathStep s=pathExpr.firstStep();
+  if (!(s instanceof PathFieldValue)) {
+    return false;
+  }
+  PathFieldValue pf=(PathFieldValue)s;
+  e=pf.nameExpr();
+  if (!(e instanceof ConstExpr)) {
+    return false;
+  }
+  ConstExpr ce=(ConstExpr)e;
+  JsonString field=(JsonString)ce.value;
+  Expr fieldValue=rec.findStaticFieldValue(field);
+  if (fieldValue == null) {
+    return false;
+  }
+  Var var=engine.env.makeVar(field.toString());
+  fieldValue.replaceInParent(new VarExpr(var));
+  BindingExpr bind2=new BindingExpr(BindingExpr.Type.EQ,var,null,fieldValue);
+  int slot=bind.getChildSlot();
+  bind.parent().addChildBefore(slot,bind2);
+  PathStep nextStep=pf.nextStep();
+  if (nextStep instanceof PathReturn) {
+    pathExpr.replaceInParent(new VarExpr(var));
+  }
+ else {
+    pathExpr.setChild(0,new VarExpr(var));
+    pathExpr.setChild(1,nextStep);
+  }
+  return true;
+}

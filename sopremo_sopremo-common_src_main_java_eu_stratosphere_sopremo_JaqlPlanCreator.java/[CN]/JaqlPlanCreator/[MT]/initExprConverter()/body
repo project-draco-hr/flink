@@ -1,0 +1,51 @@
+{
+  this.exprConverter.register(WriteFn.class,new SingleExprConverter<WriteFn>(){
+    @Override public Operator convert(    WriteFn expr,    List<Operator> childOperators){
+      return new Sink("hdfs",((AbstractHandleFn)expr.descriptor()).location().toString(),childOperators.get(0));
+    }
+  }
+);
+  this.exprConverter.register(FilterExpr.class,new SingleExprConverter<FilterExpr>(){
+    @Override public Operator convert(    FilterExpr expr,    List<Operator> childOperators){
+      return new Selection(JaqlPlanCreator.this.parseCondition(expr),childOperators.get(0));
+    }
+  }
+);
+  this.exprConverter.register(TransformExpr.class,new SingleExprConverter<TransformExpr>(){
+    @Override public Operator convert(    TransformExpr expr,    List<Operator> childOperators){
+      return new Projection(JaqlPlanCreator.this.parseTransformation(expr),childOperators.get(0));
+    }
+  }
+);
+  this.exprConverter.register(JoinExpr.class,new SingleExprConverter<JoinExpr>(){
+    @Override public Operator convert(    JoinExpr expr,    List<Operator> childOperators){
+      return new Join(null,null,childOperators);
+    }
+  }
+);
+  this.exprConverter.register(GroupByExpr.class,new SingleExprConverter<GroupByExpr>(){
+    @Override public Operator convert(    GroupByExpr expr,    List<Operator> childOperators){
+      if (childOperators.size() > 0)       return new Aggregation(null,null,childOperators.get(0));
+      return null;
+    }
+  }
+);
+  this.exprConverter.register(ReadFn.class,new SingleExprConverter<ReadFn>(){
+    @Override public Operator convert(    ReadFn expr,    List<Operator> childOperators){
+      return new Source("hdfs",((AbstractHandleFn)expr.child(0)).location().toString());
+    }
+  }
+);
+  this.exprConverter.register(BindingExpr.class,new ExprConverter<BindingExpr>(){
+    @Override public List<Operator> convertAll(    BindingExpr expr,    List<Operator> childOperators){
+      if (childOperators.isEmpty())       return childOperators;
+switch (expr.type) {
+case IN:
+        JaqlPlanCreator.this.bindings.put(expr.var.taggedName(),childOperators.get(0));
+      break;
+  }
+  return childOperators;
+}
+}
+);
+}

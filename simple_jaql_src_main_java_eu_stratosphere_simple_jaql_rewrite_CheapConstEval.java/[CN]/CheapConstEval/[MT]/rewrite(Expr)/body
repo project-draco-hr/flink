@@ -1,0 +1,30 @@
+{
+  boolean fired=false;
+  while (true) {
+    expr=expr.parent();
+    if (expr instanceof TopExpr) {
+      return fired;
+    }
+    if (expr instanceof BindingExpr || expr instanceof FieldExpr) {
+      expr=expr.parent();
+    }
+    if (expr.getProperty(ExprProperty.ALLOW_COMPILE_TIME_COMPUTATION,false).maybeNot()) {
+      return fired;
+    }
+    for (    Expr e : expr.children()) {
+      for (      Expr e2 : e.children()) {
+        if (e2.numChildren() > 0) {
+          return fired;
+        }
+      }
+    }
+    if (expr.isCompileTimeComputable().maybeNot()) {
+      return fired;
+    }
+    JsonValue value=expr.compileTimeEval();
+    ConstExpr c=new ConstExpr(value);
+    expr.replaceInParent(c);
+    expr=c;
+    fired=true;
+  }
+}

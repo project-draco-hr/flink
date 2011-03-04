@@ -1,0 +1,49 @@
+{
+  UnionFn union=(UnionFn)expr;
+  if (union.parent() instanceof UnionFn) {
+    union.replaceInParent(union.children(),0,union.numChildren());
+    return true;
+  }
+  if (union.numChildren() == 1) {
+    union.replaceInParent(asArray(union.child(0)));
+    return true;
+  }
+  Expr[] legs=union.children();
+  int firstArray=-1;
+  for (int i=0; i < legs.length; i++) {
+    if (legs[i] instanceof ConstExpr) {
+      JsonValue val=((ConstExpr)legs[i]).value;
+      if (val == null) {
+        legs[i].detach();
+        return true;
+      }
+ else       if (val instanceof JsonArray) {
+        JsonArray arr=(JsonArray)val;
+        long n=arr.count();
+        if (n == 0) {
+          legs[i].detach();
+          return true;
+        }
+        if (n < Integer.MAX_VALUE / 2) {
+          if (firstArray >= 0) {
+            mergeLegs(union,firstArray,i);
+            return true;
+          }
+          firstArray=i;
+        }
+      }
+    }
+ else     if (legs[i] instanceof ArrayExpr) {
+      if (legs[i].numChildren() == 0) {
+        legs[i].detach();
+        return true;
+      }
+      if (firstArray >= 0) {
+        mergeLegs(union,firstArray,i);
+        return true;
+      }
+      firstArray=i;
+    }
+  }
+  return false;
+}
