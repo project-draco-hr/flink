@@ -5,7 +5,7 @@
   freeSegmentsAtShutdown(outputSegments);
   List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
   CircularElement element=null;
-  boolean cacheOnly=true;
+  boolean cacheOnly=false;
   if (buffersToKeepBeforeSpilling > 0) {
     while (isRunning()) {
       if (cache.size() >= buffersToKeepBeforeSpilling) {
@@ -21,6 +21,7 @@
     }
   }
   if (cacheOnly) {
+    LOG.debug("Initiating merge-iterator (in-memory segments).");
     List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
     for (    CircularElement cached : cache) {
       iterators.add(cached.buffer.getIterator());
@@ -32,6 +33,7 @@
     setResultIterator(new MergeIterator<K,V>(iterators,keyComparator));
   }
  else {
+    LOG.debug("Initiating merge-iterator (materialized segments).");
     while (isRunning() && (element=takeNext(queues.spill,cache)) != SENTINEL) {
       Channel.ID channel=enumerator.next();
       channelIDs.add(channel);
