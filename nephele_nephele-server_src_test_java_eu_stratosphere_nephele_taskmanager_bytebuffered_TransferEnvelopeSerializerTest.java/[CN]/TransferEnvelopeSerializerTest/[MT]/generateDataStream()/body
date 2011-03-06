@@ -6,19 +6,17 @@
   final TransferEnvelopeSerializer serializer=new TransferEnvelopeSerializer();
   final ByteBuffer byteBuffer=ByteBuffer.allocate(BUFFER_SIZE);
   final ByteBuffer initBuffer=ByteBuffer.allocate(1);
-  final TransferEnvelopeProcessingLog processingLog=new TransferEnvelopeProcessingLog(true,true);
   initBuffer.put(BUFFER_CONTENT);
   initBuffer.flip();
   recycleQueue.add(byteBuffer);
   for (int i=0; i < BUFFER_SIZE; i++) {
-    final Buffer buffer=BufferFactory.createFromMemory(i,recycleQueue.poll(),recycleQueue);
+    final Buffer buffer=BufferFactory.createFromMemory(i,recycleQueue.poll(),recycleQueue,true);
     for (int j=0; j < i; j++) {
       buffer.write(initBuffer);
       initBuffer.position(0);
     }
     buffer.finishWritePhase();
-    final TransferEnvelope transferEnvelope=new TransferEnvelope(this.sourceChannelID,this.targetChannelID,processingLog);
-    transferEnvelope.setSequenceNumber(i);
+    final TransferEnvelope transferEnvelope=new TransferEnvelope(i,this.jobID,this.sourceChannelID);
     transferEnvelope.setBuffer(buffer);
     serializer.setTransferEnvelope(transferEnvelope);
     while (serializer.write(fileChannel))     ;
