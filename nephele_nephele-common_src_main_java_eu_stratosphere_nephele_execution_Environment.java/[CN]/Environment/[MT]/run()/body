@@ -5,16 +5,25 @@
   changeExecutionState(ExecutionState.RUNNING,null);
   try {
     this.invokable.invoke();
-    if (this.executingThread.isInterrupted()) {
+    if (this.isCanceled) {
       throw new InterruptedException();
     }
   }
- catch (  InterruptedException e) {
-    changeExecutionState(ExecutionState.CANCELLED,null);
-    return;
-  }
-catch (  Exception e) {
-    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+ catch (  Exception e) {
+    if (!this.isCanceled) {
+      try {
+        this.invokable.cancel();
+      }
+ catch (      Exception e2) {
+        LOG.error(StringUtils.stringifyException(e2));
+      }
+    }
+    if (this.isCanceled) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
     return;
   }
   changeExecutionState(ExecutionState.FINISHING,null);
