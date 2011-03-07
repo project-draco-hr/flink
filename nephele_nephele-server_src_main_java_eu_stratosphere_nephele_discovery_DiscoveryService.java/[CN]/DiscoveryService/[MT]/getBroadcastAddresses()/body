@@ -8,31 +8,37 @@
     LOG.error("Could not collect network interfaces of host",e);
     return broadcastAddresses;
   }
-  final InetAddress serviceAddress=getServiceAddress();
   while (ie.hasMoreElements()) {
     NetworkInterface nic=ie.nextElement();
     try {
       if (!nic.isUp()) {
         continue;
       }
-      for (      InterfaceAddress adr : nic.getInterfaceAddresses()) {
-        if (USEIPV6) {
-          try {
-            final InetAddress interfaceAddress=adr.getAddress();
-            if (interfaceAddress instanceof Inet6Address) {
-              final Inet6Address ipv6Address=(Inet6Address)interfaceAddress;
-              final InetAddress multicastAddress=InetAddress.getByName(IPV6MULTICASTADDRESS + "%" + Integer.toString(ipv6Address.getScopeId()));
-              broadcastAddresses.add(multicastAddress);
+      if (nic.isLoopback()) {
+        for (        InterfaceAddress adr : nic.getInterfaceAddresses()) {
+          broadcastAddresses.add(adr.getAddress());
+        }
+      }
+ else {
+        for (        InterfaceAddress adr : nic.getInterfaceAddresses()) {
+          if (USE_IPV6) {
+            try {
+              final InetAddress interfaceAddress=adr.getAddress();
+              if (interfaceAddress instanceof Inet6Address) {
+                final Inet6Address ipv6Address=(Inet6Address)interfaceAddress;
+                final InetAddress multicastAddress=InetAddress.getByName(IPV6MULTICASTADDRESS + "%" + Integer.toString(ipv6Address.getScopeId()));
+                broadcastAddresses.add(multicastAddress);
+              }
+            }
+ catch (            UnknownHostException e) {
+              LOG.error(e);
             }
           }
- catch (          UnknownHostException e) {
-            LOG.error(e);
-          }
-        }
  else {
-          final InetAddress broadcast=adr.getBroadcast();
-          if ((broadcast != null && serviceAddress == null) || (broadcast != null && DiscoveryService.onSameNetwork(serviceAddress,broadcast,adr.getNetworkPrefixLength()))) {
-            broadcastAddresses.add(broadcast);
+            final InetAddress broadcast=adr.getBroadcast();
+            if (broadcast != null) {
+              broadcastAddresses.add(broadcast);
+            }
           }
         }
       }
