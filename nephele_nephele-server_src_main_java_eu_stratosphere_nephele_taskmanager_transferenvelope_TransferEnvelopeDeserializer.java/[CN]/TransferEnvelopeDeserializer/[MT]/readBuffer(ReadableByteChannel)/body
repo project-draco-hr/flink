@@ -1,0 +1,73 @@
+{
+  if (!this.bufferExistanceDeserialized) {
+    final int bytesRead=readableByteChannel.read(this.existanceBuffer);
+    if (bytesRead == -1) {
+      if (this.existanceBuffer.get(0) == 0 && this.existanceBuffer.position() == 1) {
+        throw new EOFException();
+      }
+ else {
+        throw new IOException("Deserialization error: Expected at least " + this.existanceBuffer.remaining() + " more bytes to follow");
+      }
+    }
+    if (!this.existanceBuffer.hasRemaining()) {
+      this.bufferExistanceDeserialized=true;
+      if (this.existanceBuffer.get(0) == 0) {
+        this.transferEnvelope.setBuffer(null);
+        this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+        return false;
+      }
+    }
+ else {
+      return true;
+    }
+  }
+  if (this.sizeOfBuffer < 0) {
+    final int bytesRead=readableByteChannel.read(this.lengthBuffer);
+    if (bytesRead == -1) {
+      throw new IOException("Deserialization error: Expected at least " + this.existanceBuffer.remaining() + " more bytes to follow");
+    }
+    if (!this.lengthBuffer.hasRemaining()) {
+      this.sizeOfBuffer=byteBufferToInteger(this.lengthBuffer,0);
+      if (this.sizeOfBuffer <= 0) {
+        throw new IOException("Invalid buffer size: " + this.sizeOfBuffer);
+      }
+    }
+ else {
+      return true;
+    }
+  }
+  if (this.buffer == null) {
+    if (this.readsFromCheckpoint) {
+      if (!(readableByteChannel instanceof FileChannel)) {
+        throw new IOException("Reading from checkpoint, but readableByteChannel is no instance of FileChannel!");
+      }
+      final FileChannel fileChannel=(FileChannel)readableByteChannel;
+      this.buffer=BufferFactory.createFromCheckpoint(this.sizeOfBuffer,this.transferEnvelope.getSource(),fileChannel.position(),this.readBufferProvider.getFileBufferManager());
+      fileChannel.position(fileChannel.position() + sizeOfBuffer);
+      this.transferEnvelope.setBuffer(this.buffer);
+      this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+      return false;
+    }
+ else {
+      this.buffer=this.readBufferProvider.requestEmptyReadBuffer(this.sizeOfBuffer,this.transferEnvelope.getSource());
+      if (this.buffer == null) {
+        return true;
+      }
+    }
+  }
+ else {
+    final int bytesWritten=this.buffer.write(readableByteChannel);
+    if (!this.buffer.hasRemaining()) {
+      this.buffer.finishWritePhase();
+      this.transferEnvelope.setBuffer(this.buffer);
+      this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+      return false;
+    }
+ else {
+      if (bytesWritten == -1) {
+        throw new IOException("Deserialization error: Expected at least " + this.buffer.remaining() + " more bytes to follow");
+      }
+    }
+  }
+  return true;
+}

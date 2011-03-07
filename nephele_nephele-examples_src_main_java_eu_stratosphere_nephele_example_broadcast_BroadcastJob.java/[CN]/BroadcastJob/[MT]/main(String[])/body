@@ -1,0 +1,61 @@
+{
+  String jobManagerAddress=null;
+  if (args.length > 0) {
+    jobManagerAddress=args[0];
+  }
+  if (jobManagerAddress == null) {
+    jobManagerAddress=GlobalConfiguration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
+  }
+  if (jobManagerAddress == null) {
+    LOG.error("Cannot determine job manager RPC address");
+    return;
+  }
+  LOG.info("Trying to send job to " + jobManagerAddress);
+  final JobGraph jobGraph=new JobGraph("Broadcast Job");
+  final JobFileInputVertex producer=new JobFileInputVertex("Broadcast Producer",jobGraph);
+  producer.setFileInputClass(BroadcastProducer.class);
+  producer.setFilePath(new Path("file:///tmp/"));
+  final JobFileOutputVertex consumer=new JobFileOutputVertex("Broadcast Consumer",jobGraph);
+  consumer.setFileOutputClass(BroadcastConsumer.class);
+  consumer.setFilePath(new Path("file:///tmp/"));
+  try {
+    producer.connectTo(consumer,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    LOG.error(e);
+    return;
+  }
+  final File jarFile=new File("/tmp/broadcastJob.jar");
+  final JarFileCreator jarFileCreator=new JarFileCreator(jarFile);
+  jarFileCreator.addClass(BroadcastProducer.class);
+  jarFileCreator.addClass(BroadcastConsumer.class);
+  jarFileCreator.addClass(BroadcastRecord.class);
+  try {
+    jarFileCreator.createJarFile();
+  }
+ catch (  IOException ioe) {
+    if (jarFile.exists()) {
+      jarFile.delete();
+    }
+    LOG.error(ioe);
+    return;
+  }
+  jobGraph.addJar(new Path("file://" + jarFile.getAbsolutePath()));
+  final Configuration conf=new Configuration();
+  conf.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,jobManagerAddress);
+  final int ipcPort=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
+  conf.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ipcPort);
+  try {
+    final JobClient jobClient=new JobClient(jobGraph,conf);
+    jobClient.submitJobAndWait();
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+catch (  JobExecutionException e) {
+    LOG.error(e);
+  }
+  if (jarFile.exists()) {
+    jarFile.delete();
+  }
+}

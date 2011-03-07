@@ -1,0 +1,24 @@
+{
+synchronized (this.emptyWriteBuffers) {
+    while (this.emptyWriteBuffers.size() < bufferPairRequest.getNumberOfRequestedByteBuffers()) {
+synchronized (this.registeredOutOfWriteBuffersListeners) {
+        if (!this.registeredOutOfWriteBuffersListeners.isEmpty()) {
+          final Iterator<OutOfByteBuffersListener> it=this.registeredOutOfWriteBuffersListeners.iterator();
+          while (it.hasNext()) {
+            it.next().outOfByteBuffers();
+          }
+        }
+      }
+      this.emptyWriteBuffers.wait();
+    }
+    Buffer compressedDataBuffer=null;
+    Buffer uncompressedDataBuffer=null;
+    if (bufferPairRequest.getCompressedDataBufferSize() >= 0) {
+      compressedDataBuffer=BufferFactory.createFromMemory(bufferPairRequest.getCompressedDataBufferSize(),this.emptyWriteBuffers.poll(),this.emptyWriteBuffers,false);
+    }
+    if (bufferPairRequest.getUncompressedDataBufferSize() >= 0) {
+      uncompressedDataBuffer=BufferFactory.createFromMemory(bufferPairRequest.getUncompressedDataBufferSize(),this.emptyWriteBuffers.poll(),this.emptyWriteBuffers,false);
+    }
+    return new BufferPairResponse(compressedDataBuffer,uncompressedDataBuffer);
+  }
+}

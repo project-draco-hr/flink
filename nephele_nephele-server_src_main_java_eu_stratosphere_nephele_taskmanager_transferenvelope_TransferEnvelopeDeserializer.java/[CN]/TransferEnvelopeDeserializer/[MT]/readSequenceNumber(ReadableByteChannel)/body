@@ -1,0 +1,32 @@
+{
+  if (!this.sequenceNumberDeserializationStarted) {
+    this.lengthBuffer.clear();
+    this.sequenceNumberDeserializationStarted=true;
+  }
+  if (readableByteChannel.read(this.lengthBuffer) == -1) {
+    if (this.lengthBuffer.position() == 0) {
+      throw new EOFException();
+    }
+ else {
+      throw new IOException("Unexpected end of stream while deserializing the sequence number");
+    }
+  }
+  if (!this.lengthBuffer.hasRemaining()) {
+    final int sequenceNumber=byteBufferToInteger(this.lengthBuffer,0);
+    if (sequenceNumber < 0) {
+      throw new IOException("Received invalid sequence number: " + sequenceNumber);
+    }
+    this.deserializationState=DeserializationState.SEQUENCENUMBERDESERIALIZED;
+    this.sequenceNumberDeserializationStarted=false;
+    this.transferEnvelope=null;
+    this.sizeOfBuffer=-1;
+    this.bufferExistanceDeserialized=false;
+    this.existanceBuffer.clear();
+    this.lengthBuffer.clear();
+    this.jobIDDeserializationBuffer.clear();
+    this.channelIDDeserializationBuffer.clear();
+    this.buffer=null;
+    return false;
+  }
+  return true;
+}
