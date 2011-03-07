@@ -1,0 +1,48 @@
+{
+  UnionFn union=(UnionFn)expr;
+  int n=union.numChildren();
+  if (n <= 1) {
+    return false;
+  }
+  int identity=0;
+  for (  Expr e : union.children()) {
+    Expr s=getMappableSource(e);
+    if (!(s instanceof ReadFn)) {
+      return false;
+    }
+    ReadFn read=(ReadFn)s;
+    if (!read.isMapReducible()) {
+      return false;
+    }
+    if (s == e) {
+      identity++;
+    }
+  }
+  Expr[] fds=new Expr[n];
+  boolean jumping=n != identity;
+  Expr[] maps=jumping ? new Expr[1 + n] : null;
+  Var var=engine.env.makeVar("$");
+  for (int i=0; i < n; i++) {
+    Expr e=union.child(i);
+    ReadFn read=(ReadFn)getMappableSource(e);
+    fds[i]=read.descriptor();
+    if (jumping) {
+      Expr valExpr=new ArrayExpr(new IndexExpr(new VarExpr(var),1));
+      read.replaceInParent(valExpr);
+      if (read == e) {
+        e=valExpr;
+      }
+      maps[i + 1]=e;
+    }
+  }
+  Expr replaceBy=new ReadFn(CompositeOutputAdapter.makeDescriptor(fds));
+  if (jumping) {
+    maps[0]=new IndexExpr(new VarExpr(var),0);
+    replaceBy=new ForExpr(var,replaceBy,new JumpFn(maps));
+  }
+ else {
+    replaceBy=new TransformExpr(var,replaceBy,new IndexExpr(new VarExpr(var),1));
+  }
+  union.replaceInParent(replaceBy);
+  return true;
+}

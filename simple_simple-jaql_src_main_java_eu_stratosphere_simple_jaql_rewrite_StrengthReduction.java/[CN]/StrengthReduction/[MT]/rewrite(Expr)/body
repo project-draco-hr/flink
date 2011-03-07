@@ -1,0 +1,23 @@
+{
+  if (!expr.isMappable(0)) {
+    return false;
+  }
+  scope=expr;
+  int n=expr.numChildren();
+  for (int i=1; i < n; i++) {
+    Expr c=expr.child(i);
+    Expr indep=findIndependentExpr(c);
+    if (indep instanceof AbstractReadExpr) {
+      indep=indep.child(0);
+    }
+    if (!isPromotable(indep)) {
+      continue;
+    }
+    Var v=engine.env.makeVar("$temp",indep.getSchema());
+    indep.replaceInParent(new VarExpr(v));
+    BindingExpr bind=new BindingExpr(BindingExpr.Type.EQ,v,null,indep);
+    new DoExpr(bind,expr.injectAbove());
+    return true;
+  }
+  return false;
+}

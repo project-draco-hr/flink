@@ -1,0 +1,31 @@
+{
+  Expr e=write.parent();
+  if (e instanceof DoExpr || (e instanceof BindingExpr && e.parent() instanceof DoExpr)) {
+    return false;
+  }
+  Expr safe=write;
+  HashSet<Var> captures=write.getCapturedVars();
+  findSafe:   while (e != null) {
+    if (e instanceof BindingExpr) {
+      e=e.parent();
+    }
+    if (e instanceof ExplainExpr || e instanceof QueryExpr || e.evaluatesChildOnce(safe.getChildSlot()).maybeNot()) {
+      break findSafe;
+    }
+    for (    Var v : captures) {
+      if (e.definesVar(v)) {
+        break findSafe;
+      }
+    }
+    safe=e;
+    e=e.parent();
+  }
+  if (safe == write) {
+    return false;
+  }
+  Var v=engine.env.makeVar("$fd_" + engine.counter(),write.getSchema());
+  write.replaceInParent(new VarExpr(v));
+  BindingExpr bind=new BindingExpr(BindingExpr.Type.EQ,v,null,write);
+  new DoExpr(bind,safe.injectAbove());
+  return true;
+}

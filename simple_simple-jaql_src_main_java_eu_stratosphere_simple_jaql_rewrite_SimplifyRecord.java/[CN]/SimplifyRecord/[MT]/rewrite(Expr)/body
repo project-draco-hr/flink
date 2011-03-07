@@ -1,0 +1,59 @@
+{
+  RecordExpr target=(RecordExpr)expr;
+  for (  Expr e : target.children()) {
+    if (e instanceof NameValueBinding) {
+      NameValueBinding nv=(NameValueBinding)e;
+      if (!(nv.nameExpr() instanceof ConstExpr)) {
+        return false;
+      }
+    }
+ else     if (e instanceof CopyField) {
+      CopyField f=(CopyField)e;
+      Expr ne=f.nameExpr();
+      if (!(ne instanceof ConstExpr)) {
+        return false;
+      }
+      JsonString name=(JsonString)((ConstExpr)ne).value;
+      if (name == null) {
+        throw new RuntimeException("null field names are not allowed:\n" + expr);
+      }
+      e=f.recExpr();
+      if (e instanceof RecordExpr) {
+        e=((RecordExpr)e).findStaticFieldValue(name);
+        if (e != null) {
+          f.replaceInParent(new NameValueBinding(name,e,f.getWhen() != When.NONNULL));
+          return true;
+        }
+      }
+ else       if (e instanceof ConstExpr) {
+        JsonValue val=((ConstExpr)e).value;
+        if (val == null) {
+          if (f.getWhen() != When.ALWAYS) {
+            f.detach();
+            return true;
+          }
+        }
+ else         if (val instanceof JsonRecord) {
+          JsonRecord rec=(JsonRecord)val;
+          val=rec.get(name);
+        }
+ else {
+          throw new ClassCastException("record is required in " + f + " found "+ val);
+        }
+        f.replaceInParent(new NameValueBinding(name,new ConstExpr(val),true));
+        return true;
+      }
+    }
+ else     if (e instanceof CopyRecord) {
+      CopyRecord f=(CopyRecord)e;
+      e=f.recExpr();
+      if (e instanceof RecordExpr) {
+        return copyRecordConstructor(target,(RecordExpr)e);
+      }
+ else       if (e instanceof ConstExpr) {
+        return copyConstRecord(target,(ConstExpr)e);
+      }
+    }
+  }
+  return false;
+}

@@ -1,0 +1,49 @@
+{
+  Expr input=expr.child(0);
+  Schema schema=input.getSchema();
+  if (schema.is(NULL).always()) {
+    expr.replaceInParent(new ArrayExpr());
+    return true;
+  }
+  if (schema.is(ARRAY).always()) {
+    expr.replaceInParent(input);
+    return true;
+  }
+  if (expr.parent() instanceof BindingExpr) {
+    Expr gp=expr.parent().parent();
+    if (gp instanceof ForExpr || gp instanceof TransformExpr || (gp instanceof GroupByExpr && expr.parent() == ((GroupByExpr)gp).inBinding())) {
+      expr.replaceInParent(input);
+      return true;
+    }
+  }
+  if (expr.parent() instanceof ForExpr) {
+    expr.replaceInParent(input);
+    return true;
+  }
+  if (schema.is(ARRAY,NULL).always()) {
+    expr.replaceInParent(new EmptyOnNullFn(input));
+    return true;
+  }
+  if (input instanceof IfExpr) {
+    IfExpr ifExpr=(IfExpr)input;
+    expr.replaceInParent(ifExpr);
+    Expr e=ifExpr.trueExpr();
+    schema=e.getSchema();
+    if (schema.is(NULL).always()) {
+      e.replaceInParent(new ArrayExpr());
+    }
+ else     if (!(schema.is(ARRAY).always())) {
+      ifExpr.setChild(1,new AsArrayFn(e));
+    }
+    e=ifExpr.falseExpr();
+    schema=e.getSchema();
+    if (schema.is(NULL).always()) {
+      e.replaceInParent(new ArrayExpr());
+    }
+ else     if (!(schema.is(ARRAY).always())) {
+      ifExpr.setChild(2,new AsArrayFn(e));
+    }
+    return true;
+  }
+  return false;
+}
