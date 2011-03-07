@@ -9,25 +9,25 @@
     coGroupIterator.open();
     LOG.debug("Start processing: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     coGroup.open();
-    while (coGroupIterator.next()) {
+    while (coGroupIterator.next() && !taskCanceled) {
       coGroup.coGroup(coGroupIterator.getKey(),coGroupIterator.getValues1(),coGroupIterator.getValues2(),collector);
+    }
+  }
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",ex);
+      throw ex;
+    }
+  }
+ finally {
+    if (coGroupIterator != null) {
+      coGroupIterator.close();
     }
     try {
       coGroup.close();
     }
  catch (    Throwable t) {
       LOG.error("Error while closing the CoGroup user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
-    }
-  }
- catch (  IOException ioe) {
-    throw new RuntimeException("An IO error occured during processing CoGroupTask",ioe);
-  }
-catch (  Throwable t) {
-    throw new RuntimeException("An unclassified error occured during processing CoGroupTask",t);
-  }
- finally {
-    if (coGroupIterator != null) {
-      coGroupIterator.close();
     }
     collector.close();
   }
