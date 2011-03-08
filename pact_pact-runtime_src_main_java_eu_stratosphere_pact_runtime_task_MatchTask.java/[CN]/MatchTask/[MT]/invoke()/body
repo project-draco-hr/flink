@@ -1,23 +1,31 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  final MatchTaskIterator matchIterator=getIterator(reader1,reader2);
-  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  match.open();
+  MatchTaskIterator matchIterator=null;
   try {
+    matchIterator=getIterator(reader1,reader2);
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     matchIterator.open();
+    matchStub.open();
     while (matchIterator.next()) {
-      match.run(matchIterator.getKey(),matchIterator.getValues1(),matchIterator.getValues2(),output);
+      crossValues(matchIterator.getKey(),matchIterator.getValues1(),matchIterator.getValues2());
+    }
+    try {
+      matchStub.close();
+    }
+ catch (    Throwable t) {
+      LOG.error("Error while closing the Match user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
     }
   }
  catch (  IOException ioe) {
-    throw new RuntimeException("Error occured during processing MatchTask",ioe);
+    throw new RuntimeException("An I/O error occured during processing MatchTask",ioe);
   }
-catch (  InterruptedException ie) {
-    throw new RuntimeException("Error occured during processing MatchTask",ie);
+catch (  Throwable t) {
+    throw new RuntimeException("An unclassified error occured during processing CoGroupTask",t);
   }
  finally {
-    match.close();
-    matchIterator.close();
+    if (matchIterator != null) {
+      matchIterator.close();
+    }
     output.close();
   }
   LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");

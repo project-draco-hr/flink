@@ -1,0 +1,47 @@
+{
+  final long currentTime=System.currentTimeMillis();
+  if (currentTime - this.timstampOfLastRetry >= RETRYINTERVAL) {
+    LOG.error("Cannot connect to " + this.connectionAddress + ", "+ this.retriesLeft+ " retries left");
+  }
+synchronized (this.queuedEnvelopes) {
+    if (this.selectionKey != null) {
+      final SocketChannel socketChannel=(SocketChannel)this.selectionKey.channel();
+      if (socketChannel != null) {
+        try {
+          socketChannel.close();
+        }
+ catch (        IOException e) {
+          LOG.debug("Error while trying to close the socket channel to " + this.connectionAddress);
+        }
+      }
+      this.selectionKey.cancel();
+      this.selectionKey=null;
+      this.isConnected=false;
+      this.isSubscribedToWriteEvent=false;
+    }
+    if (hasRetriesLeft(currentTime)) {
+      this.connectionThread.triggerConnect(this);
+      this.isConnected=true;
+      this.isSubscribedToWriteEvent=true;
+      return;
+    }
+    LOG.error(ioe);
+    if (this.currentEnvelope != null) {
+      this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(this.currentEnvelope.getSource(),ioe);
+      if (this.currentEnvelope.getBuffer() != null) {
+        this.currentEnvelope.getBuffer().recycleBuffer();
+        this.currentEnvelope=null;
+      }
+    }
+    final Iterator<TransferEnvelope> iter=this.queuedEnvelopes.iterator();
+    while (iter.hasNext()) {
+      final TransferEnvelope envelope=iter.next();
+      iter.remove();
+      this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(envelope.getSource(),ioe);
+      if (envelope.getBuffer() != null) {
+        envelope.getBuffer().recycleBuffer();
+      }
+    }
+    this.queuedEnvelopes.clear();
+  }
+}

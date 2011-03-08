@@ -1,0 +1,50 @@
+{
+  int writtenPairs=0, readPairs=0;
+  MemorySegment unsortedMemory=memoryManager.allocate(new DummyInvokable(),MEMORY_SIZE >> 1);
+  final BufferSortable<TestData.Key,TestData.Value> unsortedBuffer=newSortBuffer(unsortedMemory,OFFSETS_PERCENTAGE);
+{
+    TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    while (unsortedBuffer.write(generator.next())) {
+      writtenPairs++;
+    }
+    LOG.debug("Written " + writtenPairs + " pairs.");
+  }
+  MemorySegment sortedMemory=memoryManager.allocate(new DummyInvokable(),MEMORY_SIZE >> 1);
+  final Buffer.Output sortedBuffer=new Buffer.Output(sortedMemory);
+{
+    long start=System.currentTimeMillis();
+    new QuickSort().sort(unsortedBuffer);
+    long elapsed=System.currentTimeMillis() - start;
+    LOG.info("Sorting took " + (((float)elapsed) / 1000f) + " secs");
+    Writer writer=new Writer(){
+      @Override public Collection<MemorySegment> close(){
+        return Collections.emptyList();
+      }
+      @Override public boolean write(      IOReadableWritable readable){
+        return sortedBuffer.write(readable);
+      }
+    }
+;
+    unsortedBuffer.writeToChannel(writer);
+  }
+  int outPos=sortedBuffer.getPosition();
+  unsortedMemory=unsortedBuffer.unbind();
+  sortedMemory=sortedBuffer.dispose();
+{
+    Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+    Buffer.Input buffer=new Buffer.Input(sortedMemory);
+    buffer.reset(outPos);
+    KeyValuePair<TestData.Key,TestData.Value> pair1=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
+    KeyValuePair<TestData.Key,TestData.Value> pair2=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
+    buffer.read(pair1);
+    readPairs++;
+    while (buffer.read(pair2)) {
+      readPairs++;
+      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
+      pair1=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(pair2.getKey().getKey()),new TestData.Value(pair2.getValue().getValue()));
+    }
+  }
+  Assert.assertEquals(writtenPairs,readPairs);
+  memoryManager.release(unsortedMemory);
+  memoryManager.release(sortedMemory);
+}

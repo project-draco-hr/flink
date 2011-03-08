@@ -1,18 +1,23 @@
 {
-  try {
-    IORequest<Buffer.Output> request=requestQueue.take();
-    while (request != SENTINEL) {
+  while (this.alive) {
+    IORequest<Buffer.Output> request=null;
+    while (request == null) {
       try {
-        request.buffer.writeToChannel(request.channelAccess.fileChannel);
+        request=requestQueue.take();
       }
- catch (      IOException e) {
-        throw new RuntimeException(e);
+ catch (      InterruptedException iex) {
+        if (!this.alive) {
+          return;
+        }
       }
-      request.channelAccess.handleProcessedBuffer(request.buffer);
-      request=requestQueue.take();
     }
-  }
- catch (  InterruptedException e) {
-    throw new RuntimeException(e);
+    IOException ioex=null;
+    try {
+      request.buffer.writeToChannel(request.channel.fileChannel);
+    }
+ catch (    IOException e) {
+      ioex=e;
+    }
+    request.channel.handleProcessedBuffer(request.buffer,ioex);
   }
 }

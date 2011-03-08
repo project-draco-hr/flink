@@ -5,56 +5,87 @@
       element=queues.empty.take();
     }
  catch (    InterruptedException iex) {
-      if (!isRunning())       return;
+      if (isRunning()) {
+        LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+      }
+ else {
+        return;
+      }
     }
   }
   if (LOG.isDebugEnabled()) {
     while (isRunning() && reader.hasNext()) {
-      KeyValuePair<K,V> pair=reader.next();
-      if (!element.buffer.write(pair)) {
-        LOG.debug("Emitting full read buffer " + element.id + ".");
-        queues.sort.put(element);
-        element=null;
-        do {
-          try {
-            element=queues.empty.take();
-          }
- catch (          InterruptedException iex) {
-            if (!isRunning()) {
-              return;
+      try {
+        KeyValuePair<K,V> pair=reader.next();
+        if (!element.buffer.write(pair)) {
+          LOG.debug("Emitting full read buffer " + element.id + ".");
+          queues.sort.add(element);
+          element=null;
+          do {
+            try {
+              element=queues.empty.take();
+            }
+ catch (            InterruptedException iex) {
+              if (isRunning()) {
+                LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+              }
+ else {
+                return;
+              }
             }
           }
-        }
  while (element == null);
-        if (!element.buffer.isEmpty()) {
-          LOG.error("New buffer is not empty.");
+          if (!element.buffer.isEmpty()) {
+            LOG.error("New buffer is not empty.");
+          }
+          element.buffer.write(pair);
+          LOG.debug("Retrieved empty read buffer " + element.id + ".");
         }
-        element.buffer.write(pair);
-        LOG.debug("Retrieved empty read buffer " + element.id + ".");
+      }
+ catch (      InterruptedException iex) {
+        if (isRunning()) {
+          LOG.error("Reading thread was interrupted (without being shut down) reading a record from the reader. " + "Retrying the read operation.");
+        }
+ else {
+          return;
+        }
       }
     }
   }
  else {
-    while (isRunning() && reader.hasNext()) {
-      KeyValuePair<K,V> pair=reader.next();
-      if (!element.buffer.write(pair)) {
-        queues.sort.put(element);
-        element=null;
-        do {
-          try {
-            element=queues.empty.take();
-          }
- catch (          InterruptedException iex) {
-            if (!isRunning()) {
-              return;
+    while (isRunning() && this.reader.hasNext()) {
+      try {
+        KeyValuePair<K,V> pair=this.reader.next();
+        if (!element.buffer.write(pair)) {
+          queues.sort.add(element);
+          element=null;
+          do {
+            try {
+              element=queues.empty.take();
+            }
+ catch (            InterruptedException iex) {
+              if (isRunning()) {
+                LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+              }
+ else {
+                return;
+              }
             }
           }
-        }
  while (element == null);
-        if (!element.buffer.isEmpty()) {
-          LOG.error("New buffer is not empty.");
+          if (!element.buffer.isEmpty()) {
+            LOG.error("New buffer is not empty.");
+          }
+          element.buffer.write(pair);
         }
-        element.buffer.write(pair);
+      }
+ catch (      InterruptedException iex) {
+        if (isRunning()) {
+          LOG.error("Reading thread was interrupted (without being shut down) reading a record from the reader. " + "Retrying the read operation.");
+        }
+ else {
+          return;
+        }
       }
     }
   }
@@ -63,8 +94,8 @@
   }
   if (!element.buffer.isEmpty()) {
     LOG.debug("Emitting last read buffer " + element.id + ".");
-    queues.sort.put(element);
+    queues.sort.add(element);
   }
-  queues.sort.put(SENTINEL);
+  queues.sort.add(SENTINEL);
   LOG.debug("Reading thread done.");
 }

@@ -1,8 +1,8 @@
 {
   while (!isInterrupted()) {
-synchronized (this.pendingOutgoingConnections) {
-      if (!pendingOutgoingConnections.isEmpty()) {
-        final OutgoingConnection outgoingConnection=pendingOutgoingConnections.poll();
+synchronized (this.synchronizationObject) {
+      if (!this.pendingConnectionRequests.isEmpty()) {
+        final OutgoingConnection outgoingConnection=this.pendingConnectionRequests.poll();
         try {
           final SocketChannel socketChannel=SocketChannel.open();
           socketChannel.configureBlocking(false);
@@ -11,19 +11,47 @@ synchronized (this.pendingOutgoingConnections) {
           key.attach(outgoingConnection);
         }
  catch (        IOException ioe) {
-          outgoingConnection.reportConnectionProblem(null,null,ioe);
+          outgoingConnection.reportConnectionProblem(ioe);
+        }
+      }
+      if (!this.pendingWriteEventSubscribeRequests.isEmpty()) {
+        final SelectionKey oldSelectionKey=this.pendingWriteEventSubscribeRequests.poll();
+        final OutgoingConnection outgoingConnection=(OutgoingConnection)oldSelectionKey.attachment();
+        final SocketChannel socketChannel=(SocketChannel)oldSelectionKey.channel();
+        try {
+          final SelectionKey newSelectionKey=socketChannel.register(this.selector,SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+          newSelectionKey.attach(outgoingConnection);
+          outgoingConnection.setSelectionKey(newSelectionKey);
+        }
+ catch (        IOException ioe) {
+          outgoingConnection.reportTransmissionProblem(ioe);
+        }
+      }
+      final Iterator<Map.Entry<OutgoingConnection,Long>> closeIt=this.connectionsToClose.entrySet().iterator();
+      final long now=System.currentTimeMillis();
+      while (closeIt.hasNext()) {
+        final Map.Entry<OutgoingConnection,Long> entry=closeIt.next();
+        if ((entry.getValue().longValue() + MIN_IDLE_TIME_BEFORE_CLOSE) < now) {
+          final OutgoingConnection outgoingConnection=entry.getKey();
+          closeIt.remove();
+          try {
+            outgoingConnection.closeConnection();
+          }
+ catch (          IOException ioe) {
+            outgoingConnection.reportTransmissionProblem(ioe);
+          }
         }
       }
     }
     try {
-      selector.select(500);
+      this.selector.select(500);
     }
  catch (    IOException e) {
-      e.printStackTrace();
+      LOG.error(e);
     }
-    Iterator<SelectionKey> iter=selector.selectedKeys().iterator();
+    final Iterator<SelectionKey> iter=this.selector.selectedKeys().iterator();
     while (iter.hasNext()) {
-      SelectionKey key=iter.next();
+      final SelectionKey key=iter.next();
       iter.remove();
       if (key.isValid()) {
         if (key.isConnectable()) {

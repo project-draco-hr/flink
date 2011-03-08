@@ -1,23 +1,26 @@
 {
-  if (args.length != 3) {
-    return null;
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String paths=(args.length > 1 ? args[1] : "");
+  String output=(args.length > 2 ? args[2] : "");
+  boolean rdfInput=(args.length > 3 ? Boolean.parseBoolean(args[3]) : false);
+  DataSourceContract<NodePair,Path> pathsInput;
+  if (rdfInput) {
+    pathsInput=new DataSourceContract<NodePair,Path>(RDFTripleInFormat.class,paths);
   }
-  int noSubTasks=Integer.parseInt(args[0]);
-  String paths=args[1];
-  String output=args[2];
-  DataSourceContract<Edge,ConnectionInfo> pathsInput=new DataSourceContract<Edge,ConnectionInfo>(PathInFormat.class,paths);
+ else {
+    pathsInput=new DataSourceContract<NodePair,Path>(PathInFormat.class,paths);
+  }
   pathsInput.setFormatParameter("delimiter","\n");
   pathsInput.setDegreeOfParallelism(noSubTasks);
-  pathsInput.setOutputContract(UniqueKey.class);
-  MapContract<Edge,ConnectionInfo,PactInteger,ConnectionInfo> pathStarts=new MapContract<Edge,ConnectionInfo,PactInteger,ConnectionInfo>(ProjectPathStart.class,"Project Starts");
+  MapContract<NodePair,Path,PactString,Path> pathStarts=new MapContract<NodePair,Path,PactString,Path>(ProjectPathStart.class,"Project Starts");
   pathStarts.setDegreeOfParallelism(noSubTasks);
-  MapContract<Edge,ConnectionInfo,PactInteger,ConnectionInfo> pathEnds=new MapContract<Edge,ConnectionInfo,PactInteger,ConnectionInfo>(ProjectPathEnd.class,"Project Ends");
+  MapContract<NodePair,Path,PactString,Path> pathEnds=new MapContract<NodePair,Path,PactString,Path>(ProjectPathEnd.class,"Project Ends");
   pathEnds.setDegreeOfParallelism(noSubTasks);
-  MatchContract<PactInteger,ConnectionInfo,ConnectionInfo,Edge,ConnectionInfo> concatPaths=new MatchContract<PactInteger,ConnectionInfo,ConnectionInfo,Edge,ConnectionInfo>(ConcatPath.class,"Concat Paths");
+  MatchContract<PactString,Path,Path,NodePair,Path> concatPaths=new MatchContract<PactString,Path,Path,NodePair,Path>(ConcatPaths.class,"Concat Paths");
   concatPaths.setDegreeOfParallelism(noSubTasks);
-  CoGroupContract<Edge,ConnectionInfo,ConnectionInfo,Edge,ConnectionInfo> findShortestPaths=new CoGroupContract<Edge,ConnectionInfo,ConnectionInfo,Edge,ConnectionInfo>(FindShortestPath.class,"Find Shortest Paths");
+  CoGroupContract<NodePair,Path,Path,PactNull,Path> findShortestPaths=new CoGroupContract<NodePair,Path,Path,PactNull,Path>(FindShortestPath.class,"Find Shortest Paths");
   findShortestPaths.setDegreeOfParallelism(noSubTasks);
-  DataSinkContract<Edge,ConnectionInfo> result=new DataSinkContract<Edge,ConnectionInfo>(PathOutFormat.class,output);
+  DataSinkContract<PactNull,Path> result=new DataSinkContract<PactNull,Path>(PathOutFormat.class,output);
   result.setDegreeOfParallelism(noSubTasks);
   result.setInput(findShortestPaths);
   findShortestPaths.setFirstInput(pathsInput);
@@ -26,5 +29,5 @@
   pathStarts.setInput(pathsInput);
   concatPaths.setSecondInput(pathEnds);
   pathEnds.setInput(pathsInput);
-  return new Plan(result,"All2All Shortest Paths");
+  return new Plan(result,"All-2-All Shortest Paths");
 }

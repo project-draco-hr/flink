@@ -1,19 +1,16 @@
 {
-  if (!isClosing) {
-    isClosing=true;
-    requestQueue.add(new IORequest<Buffer.Output>(this,currentBuffer));
-    lock.lock();
-    while (emptyBufferQueue.size() < emptyBufferQueueSize) {
-      allRequestsHandled.awaitUninterruptibly();
+synchronized (this) {
+    if (this.closed) {
+      throw new IllegalStateException("Writer is already closing or has been closed.");
     }
-    lock.unlock();
-    try {
-      fileChannel.force(true);
-      file.close();
-    }
- catch (    IOException e) {
-      throw new ServiceException(e);
-    }
+    this.closed=true;
   }
-  return IOManager.unbindBuffers(emptyBufferQueue);
+  checkErroneous();
+  if (this.currentBuffer != null) {
+    this.requestQueue.add(new IORequest<Buffer.Output>(this,this.currentBuffer));
+    this.currentBuffer=null;
+  }
+  final List<MemorySegment> segments=super.close();
+  this.fileChannel.close();
+  return segments;
 }

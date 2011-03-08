@@ -1,0 +1,35 @@
+{
+  final SerializationFactory<TestData.Key> keySerialization=new WritableSerializationFactory<TestData.Key>(TestData.Key.class);
+  final SerializationFactory<TestData.Value> valSerialization=new WritableSerializationFactory<TestData.Value>(TestData.Value.class);
+  final Hashtable<TestData.Key,Integer> countTable=new Hashtable<TestData.Key,Integer>(KEY_MAX);
+  for (int i=1; i <= KEY_MAX; i++) {
+    countTable.put(new TestData.Key(i),new Integer(0));
+  }
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>> reader=new MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>>();
+  LOG.debug("initializing sortmerger");
+  SortMerger<TestData.Key,TestData.Value> merger=new CombiningUnilateralSortMerger<TestData.Key,TestData.Value>(new TestCountCombiner2(),memoryManager,ioManager,1,1024 * 1024 * 4,1024 * 1024 * 12,2,keySerialization,valSerialization,keyComparator,reader,parentTask,true);
+  LOG.debug("emitting data");
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  for (int i=0; i < NUM_PAIRS; i++) {
+    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
+    pair.setValue(new TestData.Value("1"));
+    reader.emit(pair);
+    countTable.put(pair.getKey(),countTable.get(pair.getKey()) + 1);
+  }
+  reader.close();
+  Iterator<KeyValuePair<TestData.Key,TestData.Value>> iterator=merger.getIterator();
+  LOG.debug("checking results");
+  KeyValuePair<TestData.Key,TestData.Value> pair1=null;
+  while (iterator.hasNext()) {
+    KeyValuePair<TestData.Key,TestData.Value> pair2=iterator.next();
+    if (pair1 != null && pair2 != null) {
+      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) < 0);
+    }
+    countTable.put(pair2.getKey(),countTable.get(pair2.getKey()) - (Integer.parseInt(pair2.getValue().toString())));
+    pair1=pair2;
+  }
+  for (  Integer cnt : countTable.values()) {
+    Assert.assertTrue(cnt == 0);
+  }
+}

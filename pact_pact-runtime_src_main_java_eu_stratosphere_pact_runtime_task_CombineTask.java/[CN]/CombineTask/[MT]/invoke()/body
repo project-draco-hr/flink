@@ -1,11 +1,20 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   LOG.debug("Start obtaining iterator: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  final Iterator<KeyValuePair<Key,Value>> iterator=getCombiningIterator();
-  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  while (iterator.hasNext()) {
-    KeyValuePair<Key,Value> pair=iterator.next();
-    output.collect(pair.getKey(),pair.getValue());
+  CloseableInputProvider<KeyValuePair<Key,Value>> sortedInputProvider=null;
+  try {
+    sortedInputProvider=obtainInput();
+    Iterator<KeyValuePair<Key,Value>> iterator=sortedInputProvider.getIterator();
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    while (iterator.hasNext()) {
+      KeyValuePair<Key,Value> pair=iterator.next();
+      output.collect(pair.getKey(),pair.getValue());
+    }
+    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   }
-  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  finally {
+    if (sortedInputProvider != null) {
+      sortedInputProvider.close();
+    }
+  }
 }

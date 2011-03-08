@@ -1,9 +1,8 @@
 {
   fitsIntoMem=true;
-  Vector<Buffer.Output> outputBuffers=new Vector<Buffer.Output>(nrOfBuffers);
+  ArrayList<Buffer.Output> outputBuffers=new ArrayList<Buffer.Output>(nrOfBuffers);
   for (  MemorySegment segment : memorySegments) {
-    Buffer.Output out=new Buffer.Output();
-    out.bind(segment);
+    Buffer.Output out=new Buffer.Output(segment);
     outputBuffers.add(out);
   }
   while (recordReader.hasNext()) {
@@ -27,17 +26,16 @@
       writer.write(recordReader.next());
     }
     writer.close();
-    ioReader=ioManager.createChannelReader(bufferID,memorySegments);
+    ioReader=ioManager.createChannelReader(bufferID,memorySegments,false);
     LOG.debug("Iterator opened, serialized " + count + " objects to disk.");
   }
  else {
     usedBuffers=currentBuffer + 1;
-    inputBuffers=new Vector<Buffer.Input>(nrOfBuffers);
+    inputBuffers=new ArrayList<Buffer.Input>(nrOfBuffers);
     for (    Buffer.Output out : outputBuffers) {
       int offset=out.getPosition();
-      MemorySegment segment=out.unbind();
-      Buffer.Input in=new Buffer.Input();
-      in.bind(segment);
+      MemorySegment segment=out.dispose();
+      Buffer.Input in=new Buffer.Input(segment);
       in.reset(offset);
       inputBuffers.add(in);
     }
