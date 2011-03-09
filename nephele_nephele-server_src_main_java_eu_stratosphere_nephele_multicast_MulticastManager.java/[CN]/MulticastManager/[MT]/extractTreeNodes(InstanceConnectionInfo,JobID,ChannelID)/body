@@ -1,0 +1,40 @@
+{
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
+  final OutputGate<? extends Record> broadcastgate=outputChannel.getOutputGate();
+  final LinkedList<AbstractOutputChannel<? extends Record>> outputChannels=new LinkedList<AbstractOutputChannel<? extends Record>>();
+  for (  AbstractOutputChannel<? extends Record> c : broadcastgate.getOutputChannels()) {
+    if (c.isBroadcastChannel()) {
+      outputChannels.add(c);
+    }
+  }
+  final LinkedList<TreeNode> treenodes=new LinkedList<TreeNode>();
+  TreeNode actualnode;
+  actualnode=new TreeNode(source);
+  for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
+    AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
+    ExecutionVertex targetVertex=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
+    if (targetVertex.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(source)) {
+      actualnode.addLocalTarget(actualoutputchannel.getConnectedChannelID());
+      iter.remove();
+    }
+  }
+  treenodes.add(actualnode);
+  while (outputChannels.size() > 0) {
+    AbstractOutputChannel<? extends Record> firstChannel=outputChannels.pollFirst();
+    ExecutionVertex firstTarget=eg.getVertexByChannelID(firstChannel.getConnectedChannelID());
+    InstanceConnectionInfo actualinstance=firstTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo();
+    actualnode=new TreeNode(actualinstance);
+    actualnode.addLocalTarget(firstChannel.getConnectedChannelID());
+    for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
+      AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
+      ExecutionVertex actualTarget=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
+      if (actualTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(actualinstance)) {
+        actualnode.addLocalTarget(actualoutputchannel.getConnectedChannelID());
+        iter.remove();
+      }
+    }
+    treenodes.add(actualnode);
+  }
+  return treenodes;
+}
