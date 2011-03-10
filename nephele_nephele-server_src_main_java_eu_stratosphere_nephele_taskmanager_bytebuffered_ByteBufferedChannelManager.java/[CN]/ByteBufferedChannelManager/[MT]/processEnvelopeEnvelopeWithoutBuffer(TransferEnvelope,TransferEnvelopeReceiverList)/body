@@ -1,0 +1,21 @@
+{
+  System.out.println("Received envelope without buffer");
+  final Iterator<ChannelID> localIt=receiverList.getLocalReceivers().iterator();
+  while (localIt.hasNext()) {
+    final ChannelID localReceiver=localIt.next();
+synchronized (this.registeredChannels) {
+      final ByteBufferedChannelWrapper channelWrapper=this.registeredChannels.get(localReceiver);
+      if (channelWrapper == null) {
+        LOG.error("Cannot find local receiver " + localReceiver + " for job "+ transferEnvelope.getJobID());
+        continue;
+      }
+      channelWrapper.queueTransferEnvelope(transferEnvelope);
+    }
+  }
+  final Iterator<InetSocketAddress> remoteIt=receiverList.getRemoteReceivers().iterator();
+  while (remoteIt.hasNext()) {
+    final InetSocketAddress remoteReceiver=remoteIt.next();
+    this.networkConnectionManager.queueEnvelopeForTransfer(remoteReceiver,transferEnvelope);
+  }
+  return true;
+}
