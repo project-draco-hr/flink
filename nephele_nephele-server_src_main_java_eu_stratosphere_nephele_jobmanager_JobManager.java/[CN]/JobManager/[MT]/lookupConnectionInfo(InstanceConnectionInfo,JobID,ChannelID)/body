@@ -5,6 +5,22 @@
     return ConnectionInfoLookupResponse.createReceiverNotFound();
   }
   final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
+  if (outputChannel == null) {
+    AbstractInputChannel<? extends Record> inputChannel=eg.getInputChannelByID(sourceChannelID);
+    final ChannelID connectedChannelID=inputChannel.getConnectedChannelID();
+    final ExecutionVertex connectedVertex=eg.getVertexByChannelID(connectedChannelID);
+    final AbstractInstance assignedInstance=connectedVertex.getAllocatedResource().getInstance();
+    if (assignedInstance == null) {
+      LOG.error("Cannot resolve lookup: vertex found for channel ID " + connectedChannelID + " but no instance assigned");
+      return ConnectionInfoLookupResponse.createReceiverNotReady();
+    }
+    if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
+      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(connectedChannelID);
+    }
+ else {
+      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+    }
+  }
   if (outputChannel.isBroadcastChannel() && outputChannel.getType() != ChannelType.INMEMORY) {
     return multicastManager.lookupConnectionInfo(caller,jobID,sourceChannelID);
   }
