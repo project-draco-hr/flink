@@ -6,27 +6,19 @@
     LOG.debug("Connecting compiler to JobManager.");
   }
   Map<InstanceType,InstanceTypeDescription> instances=null;
-  ExtendedManagementProtocol jobManagerConnection=null;
+  JobManagerConnector jmc=new JobManagerConnector(this.jobManagerAddress);
+  Thread connectorThread=new Thread(jmc,"Compiler - JobManager connector.");
+  connectorThread.setDaemon(true);
+  connectorThread.start();
   try {
-    jobManagerConnection=(ExtendedManagementProtocol)RPC.getProxy(ExtendedManagementProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
-    instances=jobManagerConnection.getMapOfAvailableInstanceTypes();
+    jmc.waitForCompletion();
+    instances=jmc.instances;
     if (instances == null) {
-      throw new IOException();
+      throw new NullPointerException("Returned instance map is <null>");
     }
   }
- catch (  IOException ioex) {
-    throw new CompilerException("Could not instantiate the connection to the job-manager",ioex);
-  }
- finally {
-    if (jobManagerConnection != null) {
-      try {
-        RPC.stopProxy(jobManagerConnection);
-      }
- catch (      Throwable t) {
-        LOG.error("Could not cleanly shut down connection from compiler to job manager,",t);
-      }
-    }
-    jobManagerConnection=null;
+ catch (  Throwable t) {
+    throw new CompilerException("Available instances could not be determined from job manager: " + t.getMessage(),t);
   }
   int maxMachinesJob=pactPlan.getMaxNumberMachines();
   if (maxMachinesJob < 1) {
