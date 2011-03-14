@@ -1,0 +1,24 @@
+{
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  if (eg == null) {
+    return;
+  }
+  final Set<AbstractInstance> allocatedInstance=new HashSet<AbstractInstance>();
+  final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
+  while (it.hasNext()) {
+    final ExecutionVertex vertex=it.next();
+    final ExecutionState state=vertex.getExecutionState();
+    if (state == ExecutionState.RUNNING || state == ExecutionState.FINISHING) {
+      final AbstractInstance instance=vertex.getAllocatedResource().getInstance();
+      if (instance instanceof DummyInstance) {
+        LOG.error("Found instance of type DummyInstance for vertex " + vertex.getName() + " (state "+ state+ ")");
+        continue;
+      }
+      allocatedInstance.add(instance);
+    }
+  }
+  final Iterator<AbstractInstance> it2=allocatedInstance.iterator();
+  while (it2.hasNext()) {
+    it2.next().logBufferUtilization();
+  }
+}
