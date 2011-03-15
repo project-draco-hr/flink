@@ -1,0 +1,19 @@
+{
+  final long ioMemoryPerChannel=totalReadMemory / numChannels;
+  final int numBuffers=ioMemoryPerChannel < 2 * MIN_IO_BUFFER_SIZE ? 1 : ioMemoryPerChannel < 2 * MAX_IO_BUFFER_SIZE ? 2 : (int)(ioMemoryPerChannel / MAX_IO_BUFFER_SIZE);
+  final long bufferSize=(ioMemoryPerChannel / numBuffers) & BUFFER_ALIGNMENT_MASK;
+  final List<MemorySegment> memorySegments=this.memoryManager.allocate(this.parent,bufferSize * numBuffers * numChannels,numBuffers * numChannels,MIN_IO_BUFFER_SIZE);
+  for (int i=0, buffer=0; i < numChannels - 1; i++) {
+    List<MemorySegment> segs=new ArrayList<MemorySegment>(numBuffers);
+    target.add(segs);
+    for (int k=0; k < numBuffers; k++, buffer++) {
+      segs.add(memorySegments.get(buffer));
+    }
+  }
+  List<MemorySegment> segsForLast=new ArrayList<MemorySegment>(numBuffers);
+  target.add(segsForLast);
+  for (int i=(numChannels - 1) * numBuffers; i < memorySegments.size(); i++) {
+    segsForLast.add(memorySegments.get(i));
+  }
+  return memorySegments;
+}
