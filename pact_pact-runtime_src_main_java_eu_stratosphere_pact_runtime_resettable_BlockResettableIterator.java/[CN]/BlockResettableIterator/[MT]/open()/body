@@ -1,6 +1,22 @@
 {
   LOG.debug("Iterator opened.");
-  blockFetcherThread=new Thread(blockFetcher);
-  blockFetcherThread.start();
+  final UncaughtExceptionHandler uceh=new UncaughtExceptionHandler(){
+    @Override public void uncaughtException(    Thread t,    Throwable e){
+      if (!BlockResettableIterator.this.closed) {
+        if (e instanceof RuntimeException && e.getCause() != null) {
+          BlockResettableIterator.this.error=e.getCause();
+        }
+ else {
+          BlockResettableIterator.this.error=e;
+        }
+      }
+    }
+  }
+;
+  this.blockFetcherThread=new Thread(blockFetcher);
+  this.blockFetcherThread.setDaemon(true);
+  this.blockFetcherThread.setName("Block Resettable Iterator Fetching Thread.");
+  this.blockFetcherThread.setUncaughtExceptionHandler(uceh);
+  this.blockFetcherThread.start();
   nextBlock();
 }
