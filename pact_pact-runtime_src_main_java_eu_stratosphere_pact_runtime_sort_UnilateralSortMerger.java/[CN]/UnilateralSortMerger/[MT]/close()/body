@@ -50,7 +50,21 @@ synchronized (this.iteratorLock) {
     }
   }
   finally {
-    memoryManager.release(this.allocatedMemory);
-    this.allocatedMemory.clear();
+    for (    List<ChannelAccess<?>> channels : this.channelsToDeleteAtShutdown) {
+      for (      ChannelAccess<?> channel : channels) {
+        try {
+          if (!channel.isClosed()) {
+            channel.close();
+          }
+          channel.deleteChannel();
+        }
+ catch (        Throwable t) {
+        }
+      }
+    }
+    for (    List<MemorySegment> segments : this.memoryToReleaseAtShutdown) {
+      memoryManager.release(segments);
+    }
+    this.memoryToReleaseAtShutdown.clear();
   }
 }
