@@ -1,26 +1,27 @@
 {
   fitsIntoMem=true;
-  ArrayList<Buffer.Output> outputBuffers=new ArrayList<Buffer.Output>(nrOfBuffers);
+  ArrayList<Buffer.Output> outputBuffers=new ArrayList<Buffer.Output>(this.numBuffers);
   for (  MemorySegment segment : memorySegments) {
     Buffer.Output out=new Buffer.Output(segment);
     outputBuffers.add(out);
   }
-  while (recordReader.hasNext() && !this.abortFlag) {
-    next=recordReader.next();
+  T nextRecord=null;
+  while (this.recordReader.hasNext() && !this.abortFlag) {
+    nextRecord=this.recordReader.next();
     count++;
-    if (!outputBuffers.get(currentBuffer).write(next)) {
+    if (!outputBuffers.get(currentBuffer).write(nextRecord)) {
       currentBuffer++;
-      if (currentBuffer == nrOfBuffers) {
+      if (currentBuffer == this.numBuffers) {
         fitsIntoMem=false;
         break;
       }
-      outputBuffers.get(currentBuffer).write(next);
+      outputBuffers.get(currentBuffer).write(nextRecord);
     }
   }
   if (!fitsIntoMem) {
     bufferID=this.ioManager.createChannel();
     ChannelWriter writer=ioManager.createChannelWriter(bufferID,outputBuffers,true);
-    writer.write(next);
+    writer.write(nextRecord);
     while (recordReader.hasNext() && !this.abortFlag) {
       count++;
       writer.write(recordReader.next());
@@ -31,7 +32,7 @@
   }
  else {
     usedBuffers=currentBuffer + 1;
-    inputBuffers=new ArrayList<Buffer.Input>(nrOfBuffers);
+    inputBuffers=new ArrayList<Buffer.Input>(this.numBuffers);
     for (    Buffer.Output out : outputBuffers) {
       int offset=out.getPosition();
       MemorySegment segment=out.dispose();
@@ -43,7 +44,6 @@
     LOG.debug("Iterator opened, serialized " + count + " objects to memory.");
   }
   count=0;
-  next=null;
   if (this.abortFlag) {
     this.close();
   }

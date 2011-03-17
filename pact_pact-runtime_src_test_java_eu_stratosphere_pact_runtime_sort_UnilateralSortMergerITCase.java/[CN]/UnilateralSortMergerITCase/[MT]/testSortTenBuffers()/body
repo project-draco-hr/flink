@@ -3,16 +3,16 @@
   final SerializationFactory<TestData.Value> valSerialization=new WritableSerializationFactory<TestData.Value>(TestData.Value.class);
   final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
   MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>> reader=new MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>>();
-  LOG.debug("initializing sortmerger");
-  SortMerger<TestData.Key,TestData.Value> merger=new UnilateralSortMerger<TestData.Key,TestData.Value>(memoryManager,ioManager,10,1024 * 16,1024 * 1024 * 12,2,keySerialization,valSerialization,keyComparator,reader,parentTask);
-  LOG.debug("emitting data");
+  LOG.debug("Initializing sortmerger...");
+  SortMerger<TestData.Key,TestData.Value> merger=new UnilateralSortMerger<TestData.Key,TestData.Value>(memoryManager,ioManager,1024 * 1024 * 42,1024 * 1024 * 2,10,2,keySerialization,valSerialization,keyComparator,reader,parentTask);
+  LOG.debug("Emitting data...");
   TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
-  for (int i=0; i < NUM_PAIRS; i++) {
+  for (int i=0; i < NUM_PAIRS * 10; i++) {
     reader.emit(generator.next());
   }
   reader.close();
   Iterator<KeyValuePair<TestData.Key,TestData.Value>> iterator=merger.getIterator();
-  LOG.debug("checking results");
+  LOG.debug("Checking results...");
   int pairsEmitted=0;
   KeyValuePair<TestData.Key,TestData.Value> pair1=null;
   while (iterator.hasNext()) {
@@ -21,7 +21,8 @@
     if (pair1 != null && pair2 != null) {
       Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
     }
-    pair2=pair1;
+    pair1=pair2;
   }
-  Assert.assertTrue(NUM_PAIRS == pairsEmitted);
+  Assert.assertTrue(NUM_PAIRS * 10 == pairsEmitted);
+  merger.close();
 }

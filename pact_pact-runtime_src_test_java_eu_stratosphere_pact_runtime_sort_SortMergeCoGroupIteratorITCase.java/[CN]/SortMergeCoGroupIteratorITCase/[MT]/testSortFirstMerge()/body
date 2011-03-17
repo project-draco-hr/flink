@@ -1,0 +1,38 @@
+{
+  try {
+    generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    generator2=new Generator(SEED2,500,2048,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
+    reader1=new RecordReaderMock(generator1,INPUT_1_SIZE);
+    reader2=new RecordReaderMock(generator2,INPUT_2_SIZE);
+    Map<Key,Collection<Value>> expectedValuesMap1=collectData(generator1,INPUT_1_SIZE);
+    Map<Key,Collection<Value>> expectedValuesMap2=collectData(generator2,INPUT_2_SIZE);
+    Map<Key,List<Collection<Value>>> expectedCoGroupsMap=coGroupValues(expectedValuesMap1,expectedValuesMap2);
+    generator1.reset();
+    generator2.reset();
+    SortMergeCoGroupIterator<TestData.Key,TestData.Value,TestData.Value> iterator=new SortMergeCoGroupIterator<TestData.Key,TestData.Value,TestData.Value>(memoryManager,ioManager,reader1,reader2,TestData.Key.class,TestData.Value.class,TestData.Value.class,MEMORY_SIZE,64,LocalStrategy.SORT_FIRST_MERGE,parentTask);
+    iterator.open();
+    while (iterator.next()) {
+      TestData.Key key=new TestData.Key(iterator.getKey().getKey());
+      Assert.assertTrue("No matches for key " + key + " are expected",expectedCoGroupsMap.containsKey(key));
+      Iterator<TestData.Value> iter1=iterator.getValues1();
+      Iterator<TestData.Value> iter2=iterator.getValues2();
+      Collection<Value> expValues1=expectedCoGroupsMap.get(key).get(0);
+      Collection<Value> expValues2=expectedCoGroupsMap.get(key).get(1);
+      while (iter1.hasNext()) {
+        Assert.assertTrue("Value not in expected set of first input",expValues1.remove(iter1.next()));
+      }
+      Assert.assertTrue("Expected set of first input not empty",expValues1.isEmpty());
+      while (iter2.hasNext()) {
+        Assert.assertTrue("Value not in expected set of second input",expValues2.remove(iter2.next()));
+      }
+      Assert.assertTrue("Expected set of second input not empty",expValues2.isEmpty());
+      expectedCoGroupsMap.remove(key);
+    }
+    iterator.close();
+    Assert.assertTrue("Expected key set not empty",expectedCoGroupsMap.isEmpty());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("An exception occurred during the test: " + e.getMessage());
+  }
+}
