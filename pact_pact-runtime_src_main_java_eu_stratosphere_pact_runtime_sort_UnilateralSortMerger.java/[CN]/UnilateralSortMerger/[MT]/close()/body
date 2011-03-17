@@ -1,5 +1,15 @@
 {
+  if (this.closed) {
+    return;
+  }
+  this.closed=true;
   try {
+synchronized (this.iteratorLock) {
+      if (this.iterator == null && this.iteratorException == null) {
+        this.iteratorException=new IOException("The sort-merger has been closed.");
+        this.iteratorLock.notifyAll();
+      }
+    }
     if (readThread != null) {
       try {
         readThread.shutdown();
@@ -40,7 +50,21 @@
     }
   }
   finally {
-    memoryManager.release(this.allocatedMemory);
-    this.allocatedMemory.clear();
+    for (    List<ChannelAccess<?>> channels : this.channelsToDeleteAtShutdown) {
+      for (      ChannelAccess<?> channel : channels) {
+        try {
+          if (!channel.isClosed()) {
+            channel.close();
+          }
+          channel.deleteChannel();
+        }
+ catch (        Throwable t) {
+        }
+      }
+    }
+    for (    List<MemorySegment> segments : this.memoryToReleaseAtShutdown) {
+      memoryManager.release(segments);
+    }
+    this.memoryToReleaseAtShutdown.clear();
   }
 }

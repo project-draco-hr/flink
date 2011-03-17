@@ -9,41 +9,47 @@
     socket=new DatagramSocket();
     LOG.debug("Setting socket timeout to " + CLIENTSOCKETTIMEOUT);
     socket.setSoTimeout(CLIENTSOCKETTIMEOUT);
-    final DatagramPacket pongBuffer=new DatagramPacket(new byte[100],100);
+    final DatagramPacket responsePacket=new DatagramPacket(new byte[RESPONSE_PACKET_SIZE],RESPONSE_PACKET_SIZE);
     for (int retries=0; retries < DISCOVERFAILURERETRIES; retries++) {
+      final DatagramPacket lookupRequest=createJobManagerLookupRequestPacket();
       for (      InetAddress broadcast : targetAddresses) {
-        final DatagramPacket ping=createPingPacket();
-        ping.setAddress(broadcast);
-        ping.setPort(DISCOVERYPORT);
-        LOG.debug("Sending discovery request to " + ping.getSocketAddress());
-        socket.send(ping);
+        lookupRequest.setAddress(broadcast);
+        lookupRequest.setPort(DISCOVERYPORT);
+        LOG.debug("Sending discovery request to " + lookupRequest.getSocketAddress());
+        socket.send(lookupRequest);
       }
       try {
-        socket.receive(pongBuffer);
+        socket.receive(responsePacket);
       }
  catch (      SocketTimeoutException ste) {
         LOG.debug("Timeout wainting for discovery reply. Retrying...");
         continue;
       }
-      final int ipcPort=extractIpcPort(pongBuffer);
-      if (ipcPort < 0) {
+      if (!isPacketForUs(responsePacket)) {
+        LOG.debug("Received packet which is not destined to this Nephele setup");
         continue;
       }
-      if (USEIPV6) {
-        if (pongBuffer.getAddress() instanceof Inet6Address) {
+      final int packetTypeID=getPacketTypeID(responsePacket);
+      if (packetTypeID != JM_LOOKUP_REPLY_ID) {
+        LOG.debug("Received unexpected packet type " + packetTypeID + ", discarding... ");
+        continue;
+      }
+      final int ipcPort=extractIpcPort(responsePacket);
+      if (USE_IPV6) {
+        if (responsePacket.getAddress() instanceof Inet6Address) {
           try {
-            jobManagerAddress=new InetSocketAddress(InetAddress.getByAddress(pongBuffer.getAddress().getAddress()),ipcPort);
+            jobManagerAddress=new InetSocketAddress(InetAddress.getByAddress(responsePacket.getAddress().getAddress()),ipcPort);
           }
  catch (          UnknownHostException e) {
             throw new DiscoveryException(StringUtils.stringifyException(e));
           }
         }
  else {
-          throw new DiscoveryException(pongBuffer.getAddress() + " is not a valid IPv6 address");
+          throw new DiscoveryException(responsePacket.getAddress() + " is not a valid IPv6 address");
         }
       }
  else {
-        jobManagerAddress=new InetSocketAddress(pongBuffer.getAddress(),ipcPort);
+        jobManagerAddress=new InetSocketAddress(responsePacket.getAddress(),ipcPort);
       }
       LOG.debug("Discovered job manager at " + jobManagerAddress);
       break;

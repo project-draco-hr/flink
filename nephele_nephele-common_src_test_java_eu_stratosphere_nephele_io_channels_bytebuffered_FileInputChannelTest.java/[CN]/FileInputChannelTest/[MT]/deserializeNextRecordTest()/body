@@ -1,31 +1,37 @@
 {
-  StringRecord record=new StringRecord("abc");
+  final StringRecord record=new StringRecord("abc");
   Decompressor decompressorMock=mock(Decompressor.class);
   this.uncompressedDataBuffer=mock(Buffer.class);
   BufferPairResponse bufferPair=new BufferPairResponse(this.uncompressedDataBuffer,this.uncompressedDataBuffer);
   PowerMockito.mockStatic(CompressionLoader.class);
   when(CompressionLoader.getDecompressorByCompressionLevel(Matchers.any(CompressionLevel.class))).thenReturn(decompressorMock);
-  InputGate<StringRecord> inGate=mock(InputGate.class);
-  ByteBufferedInputChannelBroker inputBroker=mock(ByteBufferedInputChannelBroker.class);
+  @SuppressWarnings("unchecked") final InputGate<StringRecord> inGate=mock(InputGate.class);
+  final ByteBufferedInputChannelBroker inputBroker=mock(ByteBufferedInputChannelBroker.class);
   when(inputBroker.getReadBufferToConsume()).thenReturn(bufferPair);
   try {
     when(this.deserializationBuffer.readData(Matchers.any(ReadableByteChannel.class))).thenReturn(null,record);
   }
  catch (  IOException e) {
-    e.printStackTrace();
   }
   when(this.uncompressedDataBuffer.remaining()).thenReturn(0);
-  FileInputChannel<StringRecord> fileInputChannel=new FileInputChannel<StringRecord>(inGate,1,this.deserializer,null,CompressionLevel.NO_COMPRESSION);
+  final FileInputChannel<StringRecord> fileInputChannel=new FileInputChannel<StringRecord>(inGate,1,this.deserializer,null,CompressionLevel.NO_COMPRESSION);
   fileInputChannel.setInputChannelBroker(inputBroker);
   Whitebox.setInternalState(fileInputChannel,"deserializationBuffer",this.deserializationBuffer);
   try {
     fileInputChannel.readRecord();
   }
  catch (  IOException e) {
-    fail();
-    e.printStackTrace();
+    fail(StringUtils.stringifyException(e));
   }
-  fileInputChannel.close();
+  try {
+    fileInputChannel.close();
+  }
+ catch (  IOException e) {
+    fail(StringUtils.stringifyException(e));
+  }
+catch (  InterruptedException e) {
+    fail(StringUtils.stringifyException(e));
+  }
   assertEquals(false,fileInputChannel.isClosed());
   fileInputChannel.processEvent(new ByteBufferedChannelCloseEvent());
   assertEquals(true,fileInputChannel.isClosed());

@@ -1,13 +1,32 @@
 {
-  if (in != null)   emptySegments.add(in.dispose());
+  if (this.closed) {
+    throw new IllegalStateException("Iterator has been closed.");
+  }
+  if (this.error != null) {
+    throw new RuntimeException("The iterator encountered an error: " + error.getMessage(),error);
+  }
   try {
-    in=filledBuffers.take();
+    if (this.in != null)     this.emptySegments.add(this.in.dispose());
+    try {
+      this.in=this.filledBuffers.take();
+    }
+ catch (    InterruptedException e) {
+      throw new RuntimeException("BlockResettableIterator: Unable to fetch the next filled buffer",e);
+    }
+    if (in.getRemainingBytes() == 0) {
+      return false;
+    }
+    return true;
   }
- catch (  InterruptedException e) {
-    throw new RuntimeException("BlockResettableIterator: Unable to fetch the last filled buffer",e);
+ catch (  RuntimeException ex) {
+    if (this.closed) {
+      throw new IllegalStateException("The iterator has been closed.");
+    }
+ else     if (this.error != null) {
+      throw new RuntimeException("The iterator encountered an error: " + error.getMessage(),error);
+    }
+ else {
+      throw ex;
+    }
   }
-  if (in.getRemainingBytes() == 0) {
-    return false;
-  }
-  return true;
 }

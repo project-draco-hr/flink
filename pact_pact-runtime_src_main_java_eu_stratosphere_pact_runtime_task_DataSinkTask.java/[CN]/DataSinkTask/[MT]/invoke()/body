@@ -1,24 +1,46 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  final Path path=getFileOutputPath();
   FSDataOutputStream fdos=null;
-  Path path=getFileOutputPath();
-  FileSystem fs=path.getFileSystem();
-  if (fs.exists(path) && fs.getFileStatus(path).isDir()) {
-    path=path.suffix("/" + (this.getEnvironment().getIndexInSubtaskGroup() + 1));
+  OutputPathOpenThread opot=new OutputPathOpenThread(path,this.getEnvironment().getIndexInSubtaskGroup() + 1);
+  opot.start();
+  try {
+    opot.join();
   }
-  fdos=fs.create(path,true);
-  LOG.debug("Start writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  format.setOutput(fdos);
-  format.open();
-  while (reader.hasNext()) {
-    KeyValuePair pair=reader.next();
-    format.writePair(pair);
+ catch (  InterruptedException ie) {
   }
-  format.close();
-  fdos.close();
-  LOG.debug("Finished writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  if (fdos != null) {
-    fdos.close();
+  ;
+  if (!this.taskCanceled) {
+    try {
+      if (!opot.fsDataOutputStreamSuccessfullyObtained()) {
+        throw opot.getException();
+      }
+      fdos=opot.getFSDataOutputStream();
+      LOG.debug("Start writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      format.setOutput(fdos);
+      format.open();
+      while (!this.taskCanceled && reader.hasNext()) {
+        KeyValuePair pair=reader.next();
+        format.writePair(pair);
+      }
+      format.close();
+      fdos.close();
+      if (fdos != null) {
+        fdos.close();
+      }
+    }
+ catch (    Exception ex) {
+      if (!this.taskCanceled) {
+        LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+        throw ex;
+      }
+    }
   }
-  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  if (!this.taskCanceled) {
+    LOG.debug("Finished writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+ else {
+    LOG.warn("PACT code cancelled: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
 }
