@@ -1,0 +1,83 @@
+{
+  Key copyKey;
+  final Value origVal=values.next();
+  Value copyVal=valSerialization.newInstance();
+  valCopier.setCopy(origVal);
+  valCopier.getCopy(copyVal);
+  stub.match(key,origVal,copyVal,out);
+  if (values.hasNext()) {
+    Reader<Value> valReader=new Reader<Value>(){
+      boolean firstValue=true;
+      Key copyKey;
+      Value copyVal;
+      Value copyNextVal;
+      SerializationCopier<Value> nextValCopier=new SerializationCopier<Value>();
+      @Override public List<AbstractInputChannel<Value>> getInputChannels(){
+        throw new UnsupportedOperationException();
+      }
+      @Override public boolean hasNext(){
+        if (taskCanceled)         return false;
+        if (firstValue)         return true;
+        return values.hasNext();
+      }
+      @Override public Value next() throws IOException, InterruptedException {
+        if (firstValue) {
+          firstValue=false;
+          return origVal;
+        }
+ else {
+          Value nextVal=values.next();
+          copyKey=keySerialization.newInstance();
+          keyCopier.getCopy(copyKey);
+          copyVal=valSerialization.newInstance();
+          valCopier.getCopy(copyVal);
+          nextValCopier.setCopy(nextVal);
+          copyNextVal=valSerialization.newInstance();
+          nextValCopier.getCopy(copyNextVal);
+          stub.match(copyKey,copyVal,copyNextVal,out);
+          return nextVal;
+        }
+      }
+    }
+;
+    SpillingResettableIterator<Value> valResettableIterator=null;
+    try {
+      ValueDeserializer<Value> v1Deserializer=new ValueDeserializer<Value>(stub.getFirstInValueType());
+      valResettableIterator=new SpillingResettableIterator<Value>(getEnvironment().getMemoryManager(),getEnvironment().getIOManager(),valReader,(long)(this.availableMemory * MEMORY_SHARE_RATIO),v1Deserializer,this);
+      valResettableIterator.open();
+      long readCnt=1;
+      long cnt=0;
+      while (!this.taskCanceled && cnt < readCnt && valResettableIterator.hasNext()) {
+        valResettableIterator.next();
+        cnt++;
+      }
+      while (!this.taskCanceled && valResettableIterator.hasNext()) {
+        Value crossVal=valResettableIterator.next();
+        readCnt++;
+        valCopier.setCopy(crossVal);
+        valResettableIterator.reset();
+        while (!this.taskCanceled && valResettableIterator.hasNext()) {
+          copyKey=keySerialization.newInstance();
+          keyCopier.getCopy(copyKey);
+          copyVal=valSerialization.newInstance();
+          valCopier.getCopy(copyVal);
+          stub.match(copyKey,copyVal,valResettableIterator.next(),out);
+        }
+        valResettableIterator.reset();
+        cnt=0;
+        while (!this.taskCanceled && cnt < readCnt && valResettableIterator.hasNext()) {
+          valResettableIterator.next();
+          cnt++;
+        }
+      }
+    }
+ catch (    Exception e) {
+      throw new RuntimeException(e);
+    }
+ finally {
+      if (valResettableIterator != null) {
+        valResettableIterator.close();
+      }
+    }
+  }
+}

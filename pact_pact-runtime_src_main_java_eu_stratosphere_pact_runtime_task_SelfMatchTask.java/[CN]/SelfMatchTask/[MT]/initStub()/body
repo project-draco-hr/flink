@@ -1,0 +1,28 @@
+{
+  config=new TaskConfig(getRuntimeConfiguration());
+  this.availableMemory=config.getMemorySize();
+  this.maxFileHandles=config.getNumFilehandles();
+  if (this.availableMemory < MIN_REQUIRED_MEMORY) {
+    throw new RuntimeException("The SelfMatch task was initialized with too little memory: " + this.availableMemory + ". Required is at least "+ MIN_REQUIRED_MEMORY+ " bytes.");
+  }
+  try {
+    ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    Class<? extends MatchStub> stubClass=config.getStubClass(MatchStub.class,cl);
+    stub=stubClass.newInstance();
+    stub.configure(config.getStubParameters());
+    this.keySerialization=new WritableSerializationFactory<Key>(stub.getFirstInKeyType());
+    this.valSerialization=new WritableSerializationFactory<Value>(stub.getFirstInValueType());
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+  }
+catch (  ClassNotFoundException cnfe) {
+    throw new RuntimeException("Stub implementation class was not found.",cnfe);
+  }
+catch (  InstantiationException ie) {
+    throw new RuntimeException("Stub implementation could not be instanciated.",ie);
+  }
+catch (  IllegalAccessException iae) {
+    throw new RuntimeException("Stub implementations nullary constructor is not accessible.",iae);
+  }
+}
