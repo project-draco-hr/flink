@@ -1,27 +1,28 @@
 {
-  T nextRecord=null;
-  while (true) {
-    if (this.uncompressedDataBuffer == null) {
+  if (this.bufferedRecord != null) {
+    final T record=this.bufferedRecord;
+    this.bufferedRecord=null;
+    return record;
+  }
+  if (this.uncompressedDataBuffer == null) {
 synchronized (this.synchronisationObject) {
-        if (this.ioException != null) {
-          throw this.ioException;
-        }
-        requestReadBuffersFromBroker();
+      if (this.ioException != null) {
+        throw this.ioException;
       }
-      if (this.uncompressedDataBuffer == null) {
-        break;
-      }
-      if (this.decompressor != null) {
-        this.decompressor.decompress();
-      }
+      requestReadBuffersFromBroker();
     }
-    nextRecord=this.deserializationBuffer.readData(this.uncompressedDataBuffer);
-    if (nextRecord != null) {
-      break;
+    if (this.uncompressedDataBuffer == null) {
+      return null;
     }
-    if (this.uncompressedDataBuffer.remaining() == 0) {
-      releasedConsumedReadBuffer();
+    if (this.decompressor != null) {
+      this.decompressor.decompress();
     }
+  }
+  final T nextRecord=this.deserializationBuffer.readData(this.uncompressedDataBuffer);
+  if (this.uncompressedDataBuffer.remaining() == 0) {
+    releasedConsumedReadBuffer();
+    this.bufferedRecord=nextRecord;
+    return null;
   }
   return nextRecord;
 }
