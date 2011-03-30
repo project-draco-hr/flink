@@ -2,28 +2,29 @@
   KeyValuePair<Key,Value> pair=null;
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   final Iterator<FileInputSplit> splitIterator=getFileInputSplits();
-  boolean immutable=config.getMutability() == Config.Mutability.IMMUTABLE;
-  while (splitIterator.hasNext()) {
-    if (this.taskCanceled) {
-      break;
-    }
+  boolean immutable=config.getMutability() == DataSourceConfig.Mutability.IMMUTABLE;
+  while (!this.taskCanceled && splitIterator.hasNext()) {
     final FileInputSplit split=splitIterator.next();
     final long start=split.getStart();
     final long length=split.getLength();
     LOG.debug("Opening input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    FSDataInputStream fdis=null;
     InputSplitOpenThread isot=new InputSplitOpenThread(split);
     isot.start();
     try {
       isot.join();
     }
  catch (    InterruptedException ie) {
+      if (isot.getFSDataInputStream() != null) {
+        isot.getFSDataInputStream().close();
+      }
     }
     if (!this.taskCanceled) {
       try {
         if (!isot.fsDataInputStreamSuccessfullyObtained()) {
           throw isot.getException();
         }
-        FSDataInputStream fdis=isot.getFSDataInputStream();
+        fdis=isot.getFSDataInputStream();
         format.setInput(new DistributedDataInputStream(fdis),start,length,(1024 * 1024));
         format.open();
         LOG.debug("Starting reader on file " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
@@ -39,13 +40,30 @@
             output.collect(pair.getKey(),pair.getValue());
           }
         }
-        format.close();
         LOG.debug("Closing input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
       }
  catch (      Exception ex) {
         if (!this.taskCanceled) {
           LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
           throw ex;
+        }
+      }
+ finally {
+        if (format != null) {
+          try {
+            format.closeInput();
+          }
+ catch (          IOException ioe) {
+            LOG.error("Exception caught while closing input of InputFormat");
+            throw ioe;
+          }
+          try {
+            format.close();
+          }
+ catch (          IOException ioe) {
+            LOG.error("Exception caught while closing InputFormat");
+            throw ioe;
+          }
         }
       }
     }

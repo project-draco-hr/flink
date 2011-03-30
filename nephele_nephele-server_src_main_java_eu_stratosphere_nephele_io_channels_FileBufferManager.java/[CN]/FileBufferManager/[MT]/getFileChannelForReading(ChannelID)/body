@@ -1,12 +1,32 @@
 {
-  FileBufferManagerEntry fbme;
-synchronized (this.dataSources) {
-    fbme=this.dataSources.get(sourceChannelID);
-    if (fbme == null) {
-      final IOException ioe=new IOException("Cannot find data source for channel " + sourceChannelID);
-      LOG.error(ioe);
-      throw ioe;
+  final Object groupObject=getGroupObject(sourceChannelID);
+  Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+    queue=this.readableSpillingFileMap.get(groupObject);
+    if (queue == null) {
+      queue=new ArrayDeque<ReadableSpillingFile>(1);
+      this.readableSpillingFileMap.put(groupObject,queue);
     }
   }
-  return fbme.getFileChannelForReading();
+  ReadableSpillingFile readableSpillingFile=null;
+synchronized (queue) {
+    while (queue.isEmpty()) {
+synchronized (this.writableSpillingFileMap) {
+        WritableSpillingFile writableSpillingFile=this.writableSpillingFileMap.get(groupObject);
+        if (writableSpillingFile != null) {
+          writableSpillingFile.requestReadAccess();
+          if (writableSpillingFile.isSafeToClose()) {
+            writableSpillingFile.close();
+            this.writableSpillingFileMap.remove(groupObject);
+            queue.add(new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+          }
+        }
+      }
+      if (queue.isEmpty()) {
+        queue.wait(WritableSpillingFile.MAXIMUM_TIME_WITHOUT_WRITE_ACCESS);
+      }
+    }
+    readableSpillingFile=queue.peek();
+  }
+  return readableSpillingFile.lockReadableFileChannel(sourceChannelID);
 }
