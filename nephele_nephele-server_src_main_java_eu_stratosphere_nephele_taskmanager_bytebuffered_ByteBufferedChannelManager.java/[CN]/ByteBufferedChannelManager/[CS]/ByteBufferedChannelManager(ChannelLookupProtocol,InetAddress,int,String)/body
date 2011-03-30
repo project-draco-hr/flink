@@ -1,26 +1,14 @@
 {
   final Configuration configuration=GlobalConfiguration.getConfiguration();
-  this.fileBufferManager=new FileBufferManager(tmpDir);
   this.numberOfReadBuffers=configuration.getInteger("channel.network.numberOfReadBuffers",DEFAULT_NUMBER_OF_READ_BUFFERS);
   this.numberOfWriteBuffers=configuration.getInteger("channel.network.numberOfWriteBuffers",DEFAULT_NUMBER_OF_WRITE_BUFFERS);
   this.bufferSizeInBytes=configuration.getInteger("channel.network.bufferSizeInBytes",DEFAULT_BUFFER_SIZE_IN_BYTES);
   this.channelLookupService=channelLookupService;
-  final int numberOfOutgoingConnectionThreads=configuration.getInteger("channel.network.numberOfOutgoingConnectionThreads",DEFAULT_NUMBER_OF_OUTGOING_CONNECTION_THREADS);
-synchronized (this.outgoingConnectionThreads) {
-    for (int i=0; i < numberOfOutgoingConnectionThreads; i++) {
-      final OutgoingConnectionThread outgoingConnectionThread=new OutgoingConnectionThread();
-      outgoingConnectionThread.start();
-      this.outgoingConnectionThreads.add(outgoingConnectionThread);
-    }
-  }
-  final int numberOfIncomingConnectionThreads=configuration.getInteger("channel.network.numgerOfIncomingConnectionThreads",DEFAULT_NUMBER_OF_INCOMING_CONNECTION_THREADS);
-synchronized (this.incomingConnectionThreads) {
-    for (int i=0; i < numberOfIncomingConnectionThreads; i++) {
-      final IncomingConnectionThread incomingConnectionThread=new IncomingConnectionThread(this,(i == 0),new InetSocketAddress(incomingDataAddress,incomingDataPort));
-      incomingConnectionThread.start();
-      this.incomingConnectionThreads.add(incomingConnectionThread);
-    }
-  }
+  this.fileBufferManager=FileBufferManager.getInstance();
+  this.outgoingConnectionThread=new OutgoingConnectionThread();
+  this.outgoingConnectionThread.start();
+  this.incomingConnectionThread=new IncomingConnectionThread(this,true,new InetSocketAddress(incomingDataAddress,incomingDataPort));
+  this.incomingConnectionThread.start();
   this.numberOfConnectionRetries=configuration.getInteger("channel.network.numberOfConnectionRetries",DEFAULT_NUMBER_OF_CONNECTION_RETRIES);
   this.isSpillingAllowed=configuration.getBoolean("channel.network.allowSpilling",DEFAULT_ALLOW_SPILLING);
   LOG.info("Starting NetworkChannelManager with Spilling " + (this.isSpillingAllowed ? "activated" : "deactivated"));
