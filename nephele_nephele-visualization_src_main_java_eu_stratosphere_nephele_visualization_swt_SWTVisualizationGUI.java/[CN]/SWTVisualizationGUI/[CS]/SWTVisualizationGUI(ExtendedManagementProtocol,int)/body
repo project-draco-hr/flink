@@ -2,7 +2,7 @@
   this.jobManager=jobManager;
   this.QUERYINTERVAL=queryInterval;
   this.display=new Display();
-  this.shell=new Shell(display);
+  this.shell=new Shell(this.display);
   this.detectBottlenecks=GlobalConfiguration.getBoolean("visualization.bottleneckDetection.enable",false);
   this.shell.setText("Nephele Job Visualization");
   this.shell.setSize(1280,1024);
@@ -18,12 +18,89 @@
   final SashForm horizontalSash=new SashForm(this.shell,SWT.HORIZONTAL);
   horizontalSash.setLayoutData(new GridData(GridData.FILL_BOTH));
   final Group jobGroup=new Group(horizontalSash,SWT.NONE);
-  jobGroup.setText("Visualizable Jobs");
+  jobGroup.setText("Recent Jobs");
   jobGroup.setLayout(new FillLayout());
   this.jobTree=new Tree(jobGroup,SWT.SINGLE | SWT.BORDER);
   this.jobTree.addSelectionListener(this);
   this.jobTabFolder=new CTabFolder(horizontalSash,SWT.TOP);
   this.jobTabFolder.addSelectionListener(this);
   horizontalSash.setWeights(new int[]{2,8});
+  this.menuBar=new Menu(this.shell,SWT.BAR);
+  final MenuItem fileMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+  fileMenuItem.setText("&File");
+  final Menu fileMenu=new Menu(this.shell,SWT.DROP_DOWN);
+  fileMenuItem.setMenu(fileMenu);
+  final MenuItem fileExitItem=new MenuItem(fileMenu,SWT.PUSH);
+  fileExitItem.setText("E&xit");
+  fileExitItem.addSelectionListener(new SelectionAdapter(){
+    @Override public void widgetSelected(    SelectionEvent arg0){
+      shell.close();
+      display.dispose();
+    }
+  }
+);
+  final MenuItem diagnosisMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+  diagnosisMenuItem.setText("&Diagnosis");
+  final Menu diagnosisMenu=new Menu(this.shell,SWT.DROP_DOWN);
+  diagnosisMenuItem.setMenu(diagnosisMenu);
+  final MenuItem diagnosisLBUItem=new MenuItem(diagnosisMenu,SWT.PUSH);
+  diagnosisLBUItem.setText("&Log buffer utilization");
+  diagnosisLBUItem.addSelectionListener(new SelectionAdapter(){
+    @Override public void widgetSelected(    SelectionEvent arg0){
+      logBufferUtilization();
+      shell.setMenuBar(null);
+    }
+  }
+);
+  final MenuItem helpMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+  helpMenuItem.setText("&Help");
+  final Menu helpMenu=new Menu(this.shell,SWT.DROP_DOWN);
+  helpMenuItem.setMenu(helpMenu);
+  final MenuItem helpJavaDocItem=new MenuItem(helpMenu,SWT.PUSH);
+  helpJavaDocItem.setText("&View JavaDoc...");
+  helpJavaDocItem.addSelectionListener(new SelectionAdapter(){
+    @Override public void widgetSelected(    SelectionEvent arg0){
+      viewJavaDoc();
+      shell.setMenuBar(null);
+    }
+  }
+);
+  new MenuItem(helpMenu,SWT.SEPARATOR);
+  final MenuItem helpAboutItem=new MenuItem(helpMenu,SWT.PUSH);
+  helpAboutItem.setText("&About...");
+  helpAboutItem.addSelectionListener(new SelectionAdapter(){
+    @Override public void widgetSelected(    SelectionEvent arg0){
+      showAboutDialog();
+      shell.setMenuBar(null);
+    }
+  }
+);
+  this.display.addFilter(SWT.KeyDown,new Listener(){
+    /** 
+ * {@inheritDoc}
+ */
+    @Override public void handleEvent(    final Event arg0){
+      if (arg0.keyCode == SWT.ALT) {
+        if (shell.getMenuBar() == null) {
+          shell.setMenuBar(menuBar);
+        }
+ else {
+          shell.setMenuBar(null);
+        }
+      }
+    }
+  }
+);
+  this.display.addFilter(SWT.MouseDown,new Listener(){
+    /** 
+ * {@inheritDoc}
+ */
+    @Override public void handleEvent(    final Event arg0){
+      if (shell.getMenuBar() != null) {
+        shell.setMenuBar(null);
+      }
+    }
+  }
+);
   this.display.timerExec(QUERYINTERVAL * 1000,this);
 }
