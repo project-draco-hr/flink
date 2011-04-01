@@ -1,13 +1,33 @@
 {
   this.pathConverter.register(PathExpr.class,new PathConverter<PathExpr>(){
-    @Override public JsonPath convert(    PathExpr expr,    List<JsonPath> childPath){
-      for (int index=0; index < childPath.size() - 1; index++)       childPath.get(index).setSelector(childPath.get(index + 1));
-      return childPath.get(0);
+    @Override public JsonPath convert(    PathExpr expr,    List<JsonPath> childPaths){
+      for (int index=childPaths.size() - 2; index >= 0; index--) {
+        JsonPath childPath=childPaths.get(index);
+        JsonPath lastSelector;
+        if (childPath.getSelector() == null)         childPaths.set(index,lastSelector=childPath.clone());
+ else {
+          JsonPath lastButOneSelector=childPath.getSelector(-2);
+          lastButOneSelector.setSelector(lastSelector=lastButOneSelector.getSelector().clone());
+        }
+        lastSelector.setSelector(childPaths.get(index + 1));
+      }
+      return childPaths.get(0);
     }
   }
 );
   this.pathConverter.register(VarExpr.class,new PathConverter<VarExpr>(){
     @Override public JsonPath convert(    VarExpr expr,    List<JsonPath> childPath){
+      Binding binding=JaqlPlanCreator.this.bindings.get(expr.var().taggedName());
+      Object var=binding.getTransformed();
+      if (expressionToOperators.containsKey(binding.getExpr())) {
+        var=expressionToOperators.get(binding.getExpr());
+      }
+      if (var instanceof Operator) {
+        int index=JaqlPlanCreator.this.findInputIndex((Operator)var);
+        if (index != -1)         return new JsonPath.Input(index);
+      }
+      if (var instanceof JsonPath)       return (JsonPath)var;
+      System.out.println(expr.var().taggedName() + " -> " + var);
       return new JsonPath.IdentifierAccess(expr.var().taggedName());
     }
   }
@@ -26,11 +46,31 @@
     }
   }
 );
+  this.pathConverter.register(PathIndex.class,new PathConverter<PathIndex>(){
+    @Override public JsonPath convert(    PathIndex expr,    List<JsonPath> childPath){
+      return new JsonPath.ArrayAccess(((Constant)childPath.get(0)).asInt());
+    }
+  }
+);
+  this.pathConverter.register(PathArrayAll.class,new PathConverter<PathArrayAll>(){
+    @Override public JsonPath convert(    PathArrayAll expr,    List<JsonPath> childPath){
+      JsonPath.ArrayAccess path=new JsonPath.ArrayAccess();
+      path.setSelector(childPath.get(0));
+      return path;
+    }
+  }
+);
   this.pathConverter.register(Expr.class,new PathConverter<Expr>(){
     @Override public JsonPath convert(    Expr expr,    List<JsonPath> childPaths){
       if (!expr.getClass().getSimpleName().endsWith("Fn"))       return null;
       BuiltInFunctionDescriptor d=BuiltInFunction.getDescriptor(expr.getClass());
       return new JsonPath.Function(d.getName(),childPaths.toArray(new JsonPath[childPaths.size()]));
+    }
+  }
+);
+  this.pathConverter.register(ArrayExpr.class,new PathConverter<ArrayExpr>(){
+    @Override public JsonPath convert(    ArrayExpr expr,    List<JsonPath> childPaths){
+      return new JsonPath.ArrayCreation(childPaths);
     }
   }
 );
