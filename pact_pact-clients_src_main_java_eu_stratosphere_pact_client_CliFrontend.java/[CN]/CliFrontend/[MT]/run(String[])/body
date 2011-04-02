@@ -1,59 +1,55 @@
 {
+  File jarFile=null;
+  String assemblerClass=null;
+  String[] programArgs=null;
   CommandLine line=null;
   try {
-    line=parser.parse(options,args,true);
+    line=parser.parse(this.options.get(ACTION_RUN),args,false);
   }
  catch (  Exception e) {
     handleError(e);
   }
-  verbose=line.hasOption(VERBOSE_OPTION.getOpt());
-  if (line.hasOption(HELP_OPTION.getOpt())) {
-    printHelp();
-    System.exit(0);
+  if (line.hasOption(JAR_OPTION.getOpt())) {
+    String jarFilePath=line.getOptionValue(JAR_OPTION.getOpt());
+    jarFile=new File(jarFilePath);
+    if (!jarFile.exists()) {
+      System.err.println("Error: Jar file does not exist.");
+      printHelp();
+      System.exit(1);
+    }
+ else     if (!jarFile.isFile()) {
+      System.err.println("Error: Jar file is not a file.");
+      printHelp();
+      System.exit(1);
+    }
   }
-  String[] program=line.getArgs();
-  if (program.length < 1) {
-    System.out.println("Error: Jar file is not set");
+ else {
+    System.err.println("Error: Jar file is not set.");
     printHelp();
     System.exit(1);
   }
-  String[] pactArgs=new String[program.length - 1];
-  System.arraycopy(program,1,pactArgs,0,pactArgs.length);
-  String jarPath=program[0];
-  File jar=new File(jarPath);
-  String clazz=line.getOptionValue(CLASS_OPTION.getOpt());
-  PactProgram prog=null;
+  if (line.hasOption(CLASS_OPTION.getOpt())) {
+    assemblerClass=line.getOptionValue(CLASS_OPTION.getOpt());
+  }
+  if (line.hasOption(ARGS_OPTION.getOpt())) {
+    programArgs=line.getOptionValues(ARGS_OPTION.getOpt());
+  }
+  PactProgram program=null;
   try {
-    if (clazz == null) {
-      prog=new PactProgram(jar,pactArgs);
+    if (assemblerClass == null) {
+      program=new PactProgram(jarFile,programArgs);
     }
  else {
-      prog=new PactProgram(jar,clazz,pactArgs);
+      program=new PactProgram(jarFile,assemblerClass,programArgs);
     }
   }
  catch (  ProgramInvocationException e) {
     handleError(e);
   }
-  if (line.hasOption(DESCR_OPTION.getOpt())) {
-    String descr=null;
-    try {
-      descr=prog.getTextDescription();
-    }
- catch (    Exception e) {
-      handleError(e);
-    }
-    if (descr != null) {
-      System.out.println(descr);
-    }
- else {
-      System.out.println("No description available for this plan.");
-    }
-    System.exit(0);
-  }
   Configuration configuration=getConfiguration();
   Client client=new Client(configuration);
   try {
-    client.run(prog);
+    client.run(program);
   }
  catch (  ProgramInvocationException e) {
     handleError(e);
