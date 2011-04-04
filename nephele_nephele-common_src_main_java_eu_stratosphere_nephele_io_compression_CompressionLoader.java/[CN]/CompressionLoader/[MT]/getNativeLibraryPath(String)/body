@@ -1,0 +1,41 @@
+{
+  final ClassLoader cl=ClassLoader.getSystemClassLoader();
+  if (cl == null) {
+    LOG.error("Cannot find system class loader");
+    return null;
+  }
+  final String classLocation=libraryClass.replace('.','/') + ".class";
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Class location is " + classLocation);
+  }
+  final URL location=cl.getResource(classLocation);
+  if (location == null) {
+    LOG.error("Cannot determine location of CompressionLoader class");
+    return null;
+  }
+  final String locationString=location.toString();
+  if (locationString.contains(".jar!")) {
+    final String pathName=GlobalConfiguration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH) + File.separator + NATIVELIBRARYCACHENAME;
+    final File path=new File(pathName);
+    if (!path.exists()) {
+      if (!path.mkdir()) {
+        LOG.error("Cannot create directory for native library cache.");
+        return null;
+      }
+    }
+    return pathName;
+  }
+ else {
+    String result="";
+    int pos=locationString.indexOf(classLocation);
+    if (pos < 0) {
+      LOG.error("Cannot find extract native path from class location");
+      return null;
+    }
+    result=locationString.substring(0,pos) + "META-INF/lib";
+    if (result.startsWith("file:")) {
+      result=result.substring(5);
+    }
+    return result;
+  }
+}
