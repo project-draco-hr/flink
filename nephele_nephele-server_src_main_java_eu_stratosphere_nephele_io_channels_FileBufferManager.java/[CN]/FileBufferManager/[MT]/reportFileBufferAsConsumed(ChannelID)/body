@@ -1,6 +1,14 @@
 {
   try {
-    final Object groupObject=getGroupObject(sourceChannelID);
+    final Object groupObject=this.channelGroupMap.get(sourceChannelID);
+    if (groupObject == null) {
+      if (this.canceledChannels.contains(sourceChannelID)) {
+        return;
+      }
+ else {
+        throw new IOException("Cannot find input gate for source channel ID " + sourceChannelID);
+      }
+    }
     Queue<ReadableSpillingFile> queue=null;
 synchronized (this.readableSpillingFileMap) {
       queue=this.readableSpillingFileMap.get(groupObject);
@@ -10,11 +18,29 @@ synchronized (this.readableSpillingFileMap) {
       ReadableSpillingFile readableSpillingFile=null;
 synchronized (queue) {
         readableSpillingFile=queue.peek();
-        readableSpillingFile.unlockReadableFileChannel(sourceChannelID);
-        if (readableSpillingFile.checkForEndOfFile()) {
-          queue.poll();
-          if (queue.isEmpty()) {
-            this.readableSpillingFileMap.remove(groupObject);
+        if (readableSpillingFile == null) {
+          if (this.canceledChannels.contains(sourceChannelID)) {
+            return;
+          }
+ else {
+            throw new IOException("Cannot find readable spilling file for source channel " + sourceChannelID);
+          }
+        }
+        try {
+          readableSpillingFile.unlockReadableFileChannel(sourceChannelID);
+          if (readableSpillingFile.checkForEndOfFile()) {
+            queue.poll();
+            if (queue.isEmpty()) {
+              this.readableSpillingFileMap.remove(groupObject);
+            }
+          }
+        }
+ catch (        ClosedChannelException e) {
+          if (this.canceledChannels.contains(sourceChannelID)) {
+            readableSpillingFile.getPhysicalFile().delete();
+          }
+ else {
+            throw e;
           }
         }
       }
