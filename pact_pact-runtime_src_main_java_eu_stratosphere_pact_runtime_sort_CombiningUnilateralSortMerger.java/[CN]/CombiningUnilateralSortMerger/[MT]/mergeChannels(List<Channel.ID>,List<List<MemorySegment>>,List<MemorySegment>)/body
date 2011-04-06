@@ -1,0 +1,17 @@
+{
+  final List<StreamChannelAccess<?>> channelAccesses=new ArrayList<StreamChannelAccess<?>>(channelIDs.size());
+  registerChannelsToBeRemovedAtShudown(channelAccesses);
+  final Iterator<KeyValuePair<K,V>> mergeIterator=getMergingIterator(channelIDs,readBuffers,channelAccesses);
+  final KeyGroupedIterator<K,V> groupedIter=new KeyGroupedIterator<K,V>(mergeIterator);
+  final Channel.ID mergedChannelID=this.ioManager.createChannel();
+  final ChannelWriter writer=this.ioManager.createChannelWriter(mergedChannelID,writeBuffers);
+  channelAccesses.add(writer);
+  final WriterCollector<K,V> collector=new WriterCollector<K,V>(writer);
+  final ReduceStub<K,V,?,?> combineStub=this.combineStub;
+  while (groupedIter.nextKey()) {
+    combineStub.combine(groupedIter.getKey(),groupedIter.getValues(),collector);
+  }
+  writer.close();
+  unregisterChannelsToBeRemovedAtShudown(channelAccesses);
+  return mergedChannelID;
+}

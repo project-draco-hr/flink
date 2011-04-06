@@ -1,8 +1,25 @@
 {
 synchronized (this.queuedEnvelopes) {
+    final int sequenceNumber=transferEnvelope.getSequenceNumber();
+    if (sequenceNumber != this.nextExpectedSequenceNumber) {
+      if (sequenceNumber > this.nextExpectedSequenceNumber) {
+        while (sequenceNumber > this.nextExpectedSequenceNumber) {
+          this.queuedEnvelopes.wait(100);
+        }
+      }
+ else {
+        throw new IOException("Received envelope with sequence number " + sequenceNumber + ", but "+ this.nextExpectedSequenceNumber+ " is expected");
+      }
+    }
     this.queuedEnvelopes.add(transferEnvelope);
-    if (this.queuedEnvelopes.size() == (this.maximumQueueLengthForThrottling + 1)) {
-      startThrottling();
+    ++this.nextExpectedSequenceNumber;
+    if (transferEnvelope.getBuffer() != null) {
+      if (transferEnvelope.getBuffer().isBackedByMemory()) {
+        ++this.numberOfMemoryBuffers;
+      }
+ else {
+        ++this.numberOfFileBuffers;
+      }
     }
   }
   this.byteBufferedInputChannel.checkForNetworkEvents();

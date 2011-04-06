@@ -1,32 +1,77 @@
 {
   KeyValuePair<Key,Value> pair=null;
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  FileInputSplit[] splits=getFileInputSplits();
-  boolean immutable=config.getMutability() == Config.Mutability.IMMUTABLE;
-  for (int i=0; i < splits.length; i++) {
-    FileInputSplit split=splits[i];
-    long start=split.getStart();
-    long length=split.getLength();
+  final Iterator<FileInputSplit> splitIterator=getFileInputSplits();
+  boolean immutable=config.getMutability() == DataSourceConfig.Mutability.IMMUTABLE;
+  while (!this.taskCanceled && splitIterator.hasNext()) {
+    final FileInputSplit split=splitIterator.next();
+    final long start=split.getStart();
+    final long length=split.getLength();
     LOG.debug("Opening input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-    FileSystem fs=FileSystem.get(split.getPath().toUri(),new org.apache.hadoop.conf.Configuration());
-    FSDataInputStream fdis=fs.open(new Path(split.getPath().toUri().toString()));
-    format.setInput(new DistributedDataInputStream(fdis),start,length,(1024 * 1024));
-    format.open();
-    LOG.debug("Starting reader on file " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-    if (!immutable) {
-      pair=format.createPair();
+    FSDataInputStream fdis=null;
+    InputSplitOpenThread isot=new InputSplitOpenThread(split);
+    isot.start();
+    try {
+      isot.join();
     }
-    while (!format.reachedEnd()) {
-      if (immutable) {
-        pair=format.createPair();
-      }
-      boolean valid=format.nextPair(pair);
-      if (valid) {
-        output.collect(pair.getKey(),pair.getValue());
+ catch (    InterruptedException ie) {
+      if (isot.getFSDataInputStream() != null) {
+        isot.getFSDataInputStream().close();
       }
     }
-    format.close();
-    LOG.debug("Closing input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    if (!this.taskCanceled) {
+      try {
+        if (!isot.fsDataInputStreamSuccessfullyObtained()) {
+          throw isot.getException();
+        }
+        fdis=isot.getFSDataInputStream();
+        format.setInput(new DistributedDataInputStream(fdis),start,length,(1024 * 1024));
+        format.open();
+        LOG.debug("Starting reader on file " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+        if (!immutable) {
+          pair=format.createPair();
+        }
+        while (!this.taskCanceled && !format.reachedEnd()) {
+          if (immutable) {
+            pair=format.createPair();
+          }
+          boolean valid=format.nextPair(pair);
+          if (valid) {
+            output.collect(pair.getKey(),pair.getValue());
+          }
+        }
+        LOG.debug("Closing input split " + split.getPath() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      }
+ catch (      Exception ex) {
+        if (!this.taskCanceled) {
+          LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+          throw ex;
+        }
+      }
+ finally {
+        if (format != null) {
+          try {
+            format.closeInput();
+          }
+ catch (          IOException ioe) {
+            LOG.error("Exception caught while closing input of InputFormat");
+            throw ioe;
+          }
+          try {
+            format.close();
+          }
+ catch (          IOException ioe) {
+            LOG.error("Exception caught while closing InputFormat");
+            throw ioe;
+          }
+        }
+      }
+    }
   }
-  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  if (!this.taskCanceled) {
+    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+ else {
+    LOG.warn("PACT code cancelled: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
 }

@@ -1,25 +1,35 @@
 {
-  boolean finished=false;
-  while (!finished) {
+  final Reader<R> reader=this.reader;
+  R next=null;
+  boolean allRead=false;
+  while (this.alive && !allRead) {
     MemorySegment request=null;
     try {
-      request=requestQueue.take();
+      request=this.requestQueue.take();
     }
- catch (    InterruptedException e1) {
-      throw new RuntimeException("BlockResettableIterator: Unable to take next request",e1);
+ catch (    InterruptedException iex) {
+      if (this.alive) {
+        throw new RuntimeException(iex);
+      }
+ else {
+        return;
+      }
     }
     Buffer.Output out=new Buffer.Output(request);
-    if (next != null)     out.write(next);
-    finished=true;
-    while (reader.hasNext()) {
+    if (next != null) {
+      out.write(next);
+    }
+    while (this.alive && reader.hasNext()) {
       try {
         next=reader.next();
       }
- catch (      Exception e) {
-        throw new RuntimeException(e);
+ catch (      IOException ioex) {
+        throw new RuntimeException(ioex);
+      }
+catch (      InterruptedException iex) {
+        throw new RuntimeException(iex);
       }
       if (!out.write(next)) {
-        finished=false;
         break;
       }
     }
@@ -27,14 +37,25 @@
     MemorySegment seg=out.dispose();
     Buffer.Input in=new Buffer.Input(seg);
     in.reset(pos);
-    finishedTasks.add(in);
+    this.finishedTasks.add(in);
+    if (!reader.hasNext()) {
+      allRead=true;
+    }
+  }
+  if (!this.alive) {
+    return;
   }
   MemorySegment request=null;
   try {
     request=requestQueue.take();
   }
- catch (  InterruptedException e1) {
-    throw new RuntimeException("BlockResettableIterator: Unable to take next request",e1);
+ catch (  InterruptedException iex) {
+    if (this.alive) {
+      throw new RuntimeException(iex);
+    }
+ else {
+      return;
+    }
   }
-  finishedTasks.add(new Buffer.Input(request));
+  this.finishedTasks.add(new Buffer.Input(request));
 }

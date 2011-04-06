@@ -1,0 +1,34 @@
+{
+  int keyCnt=10;
+  int valCnt=1;
+  super.initEnvironment(1 * 1024 * 1024);
+  super.addInput(new RegularlyGeneratedInputGenerator(keyCnt,valCnt,false));
+  super.addInput(new DelayingInfinitiveInputIterator(100));
+  super.addOutput(outList);
+  final CrossTask testTask=new CrossTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND);
+  super.getTaskConfig().setMemorySize(1 * 1024 * 1024);
+  super.registerTask(testTask,MockCrossStub.class);
+  Thread taskRunner=new Thread(){
+    public void run(){
+      try {
+        testTask.invoke();
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+        Assert.fail("Task threw exception although it was properly canceled");
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(1,taskRunner,testTask);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+}

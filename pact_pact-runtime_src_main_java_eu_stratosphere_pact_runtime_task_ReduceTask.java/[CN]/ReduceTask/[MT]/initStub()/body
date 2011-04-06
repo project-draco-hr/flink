@@ -1,25 +1,38 @@
 {
   config=new TaskConfig(getRuntimeConfiguration());
-  NUM_SORT_BUFFERS=config.getNumSortBuffer();
-  SIZE_SORT_BUFFER=config.getSortBufferSize() * 1024 * 1024;
-  MEMORY_IO=config.getIOBufferSize() * 1024 * 1024;
-  MAX_NUM_FILEHANLDES=config.getMergeFactor();
-  try {
-    ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
-    Class<? extends ReduceStub> stubClass=config.getStubClass(ReduceStub.class,cl);
-    stub=stubClass.newInstance();
-    stub.configure(config.getStubParameters());
-  }
- catch (  IOException ioe) {
-    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
-  }
-catch (  ClassNotFoundException cnfe) {
-    throw new RuntimeException("Stub implementation class was not found.",cnfe);
-  }
-catch (  InstantiationException ie) {
-    throw new RuntimeException("Stub implementation could not be instanciated.",ie);
-  }
-catch (  IllegalAccessException iae) {
-    throw new RuntimeException("Stub implementations nullary constructor is not accessible.",iae);
-  }
+  this.availableMemory=config.getMemorySize();
+  this.maxFileHandles=config.getNumFilehandles();
+  long strategyMinMem=0;
+switch (config.getLocalStrategy()) {
+case SORT:
+    strategyMinMem=MIN_REQUIRED_MEMORY;
+  break;
+case COMBININGSORT:
+strategyMinMem=MIN_REQUIRED_MEMORY;
+break;
+case NONE:
+strategyMinMem=0;
+break;
+}
+if (this.availableMemory < strategyMinMem) {
+throw new RuntimeException("The Reduce task was initialized with too little memory for local strategy " + config.getLocalStrategy() + " : "+ this.availableMemory+ " bytes."+ "Required is at least "+ strategyMinMem+ " bytes.");
+}
+try {
+ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+Class<? extends ReduceStub> stubClass=config.getStubClass(ReduceStub.class,cl);
+stub=stubClass.newInstance();
+stub.configure(config.getStubParameters());
+}
+ catch (IOException ioe) {
+throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+}
+catch (ClassNotFoundException cnfe) {
+throw new RuntimeException("Stub implementation class was not found.",cnfe);
+}
+catch (InstantiationException ie) {
+throw new RuntimeException("Stub implementation could not be instanciated.",ie);
+}
+catch (IllegalAccessException iae) {
+throw new RuntimeException("Stub implementations nullary constructor is not accessible.",iae);
+}
 }
