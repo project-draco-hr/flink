@@ -1,43 +1,43 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   final Path path=getFileOutputPath();
-  FSDataOutputStream fdos=null;
-  OutputPathOpenThread opot=new OutputPathOpenThread(path,this.getEnvironment().getIndexInSubtaskGroup() + 1);
+  final RecordReader<KeyValuePair<Key,Value>> reader=this.reader;
+  final OutputFormat format=this.format;
+  OutputPathOpenThread opot=new OutputPathOpenThread(path,this.getEnvironment().getIndexInSubtaskGroup() + 1,10000);
   opot.start();
+  FSDataOutputStream fdos=null;
   try {
-    opot.join();
-  }
- catch (  InterruptedException ie) {
-    if (opot.getFSDataOutputStream() != null) {
-      opot.getFSDataOutputStream().close();
+    fdos=opot.getFSDataOutputStream();
+    if (this.taskCanceled) {
+      return;
+    }
+    LOG.debug("Start writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    format.setOutput(fdos);
+    format.open();
+    while (!this.taskCanceled && reader.hasNext()) {
+      KeyValuePair pair=reader.next();
+      format.writePair(pair);
     }
   }
-  if (!this.taskCanceled) {
-    try {
-      if (!opot.fsDataOutputStreamSuccessfullyObtained()) {
-        throw opot.getException();
-      }
-      fdos=opot.getFSDataOutputStream();
-      LOG.debug("Start writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-      format.setOutput(fdos);
-      format.open();
-      while (!this.taskCanceled && reader.hasNext()) {
-        KeyValuePair pair=reader.next();
-        format.writePair(pair);
-      }
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      throw ex;
     }
- catch (    Exception ex) {
-      if (!this.taskCanceled) {
-        LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-        throw ex;
-      }
-    }
+  }
  finally {
-      if (format != null) {
-        format.close();
+    if (this.format != null) {
+      try {
+        this.format.close();
       }
-      if (fdos != null) {
+ catch (      Throwable t) {
+      }
+    }
+    if (fdos != null) {
+      try {
         fdos.close();
+      }
+ catch (      Throwable t) {
       }
     }
   }
