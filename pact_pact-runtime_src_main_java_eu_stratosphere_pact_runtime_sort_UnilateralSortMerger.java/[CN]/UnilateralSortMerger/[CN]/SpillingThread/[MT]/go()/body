@@ -1,4 +1,45 @@
 {
+  List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
+  CircularElement element=null;
+  boolean cacheOnly=false;
+  if (buffersToKeepBeforeSpilling > 0) {
+    while (isRunning()) {
+      if (cache.size() >= buffersToKeepBeforeSpilling) {
+        cacheOnly=false;
+        break;
+      }
+      try {
+        element=this.queues.spill.take();
+      }
+ catch (      InterruptedException iex) {
+        if (isRunning()) {
+          LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+          continue;
+        }
+ else {
+          return;
+        }
+      }
+      cache.add(element);
+      if (element == SENTINEL) {
+        cacheOnly=true;
+        break;
+      }
+    }
+  }
+  if (cacheOnly) {
+    LOG.debug("Initiating merge-iterator (in-memory segments).");
+    List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
+    for (    CircularElement cached : cache) {
+      if (cached != SENTINEL) {
+        iterators.add(cached.buffer.getIterator());
+      }
+    }
+    LOG.debug("Releasing sort-buffer memory.");
+    releaseSortBuffers();
+    setResultIterator(new MergeIterator<K,V>(iterators,keyComparator));
+    return;
+  }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
   final List<MemorySegment> writeBuffers;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
@@ -10,9 +51,8 @@
     throw new IOException("Spilling thread was unable to allocate memory for the channel writer.",maex);
   }
   while (isRunning()) {
-    CircularElement element=null;
     try {
-      element=this.queues.spill.take();
+      element=takeNext(queues.spill,cache);
     }
  catch (    InterruptedException iex) {
       if (isRunning()) {
@@ -41,23 +81,7 @@
   }
   LOG.debug("Spilling done.");
   LOG.debug("Releasing sort-buffer memory.");
-  while (!queues.empty.isEmpty()) {
-    try {
-      memoryManager.release(queues.empty.take().buffer.unbind());
-    }
- catch (    InterruptedException iex) {
-      if (isRunning()) {
-        LOG.error("Spilling thread was interrupted (without being shut down) while collecting empty buffers to release them. " + "Retrying to collect buffers...");
-      }
- else {
-        return;
-      }
-    }
-  }
-  if (UnilateralSortMerger.this.sortSegments != null) {
-    unregisterSegmentsToBeFreedAtShutdown(UnilateralSortMerger.this.sortSegments);
-    UnilateralSortMerger.this.sortSegments.clear();
-  }
+  releaseSortBuffers();
   try {
     while (channelIDs.size() > UnilateralSortMerger.this.maxNumFileHandles) {
       channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
