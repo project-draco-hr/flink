@@ -1,43 +1,41 @@
 {
-  List<CircularElement> cache=new ArrayList<CircularElement>(buffersToKeepBeforeSpilling);
+  final List<CircularElement> cache=new ArrayList<CircularElement>();
   CircularElement element=null;
   boolean cacheOnly=false;
-  if (buffersToKeepBeforeSpilling > 0) {
-    while (isRunning()) {
-      if (cache.size() >= buffersToKeepBeforeSpilling) {
-        cacheOnly=false;
-        break;
+  while (isRunning()) {
+    try {
+      element=this.queues.spill.take();
+    }
+ catch (    InterruptedException iex) {
+      if (isRunning()) {
+        LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+        continue;
       }
-      try {
-        element=this.queues.spill.take();
-      }
- catch (      InterruptedException iex) {
-        if (isRunning()) {
-          LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
-          continue;
-        }
  else {
-          return;
-        }
-      }
-      cache.add(element);
-      if (element == SENTINEL) {
-        cacheOnly=true;
-        break;
+        return;
       }
     }
+    if (element == SPILLING_MARKER) {
+      break;
+    }
+ else     if (element == SENTINEL) {
+      cacheOnly=true;
+      break;
+    }
+    cache.add(element);
+  }
+  if (!isRunning()) {
+    return;
   }
   if (cacheOnly) {
     LOG.debug("Initiating merge-iterator (in-memory segments).");
     List<Iterator<KeyValuePair<K,V>>> iterators=new ArrayList<Iterator<KeyValuePair<K,V>>>();
     for (    CircularElement cached : cache) {
-      if (cached != SENTINEL) {
-        iterators.add(cached.buffer.getIterator());
-      }
+      iterators.add(cached.buffer.getIterator());
     }
-    LOG.debug("Releasing sort-buffer memory.");
+    LOG.debug("Releasing unused sort-buffer memory.");
     releaseSortBuffers();
-    setResultIterator(new MergeIterator<K,V>(iterators,keyComparator));
+    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator<K,V>(iterators,keyComparator));
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
@@ -77,11 +75,15 @@
     LOG.debug("Spilled buffer " + element.id + ".");
     writer.close();
     element.buffer.reset();
-    queues.empty.add(element);
+    this.queues.empty.add(element);
   }
   LOG.debug("Spilling done.");
   LOG.debug("Releasing sort-buffer memory.");
   releaseSortBuffers();
+  if (UnilateralSortMerger.this.sortSegments != null) {
+    unregisterSegmentsToBeFreedAtShutdown(UnilateralSortMerger.this.sortSegments);
+    UnilateralSortMerger.this.sortSegments.clear();
+  }
   try {
     while (channelIDs.size() > UnilateralSortMerger.this.maxNumFileHandles) {
       channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
