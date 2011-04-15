@@ -1,0 +1,38 @@
+{
+  OptimizerNode sourcePact=conn.getSourcePact();
+  OptimizerNode targetPact=conn.getTargetPact();
+  if (sourcePact instanceof DataSourceNode) {
+    DataSourceNode duplicateDataSource=new DataSourceNode((DataSourceContract<?,?>)sourcePact.getPactContract());
+    PactConnection newConn=new PactConnection(conn,duplicateDataSource,targetPact);
+    sourcePact.getOutgoingConnections().remove(conn);
+    duplicateDataSource.addOutgoingConnection(newConn);
+    if (targetPact instanceof SingleInputNode) {
+      ((SingleInputNode)targetPact).setInputConnection(newConn);
+    }
+ else     if (targetPact instanceof TwoInputNode) {
+      if (((TwoInputNode)targetPact).getFirstInputConnection() == conn) {
+        ((TwoInputNode)targetPact).setFirstInputConnection(newConn);
+      }
+ else {
+        ((TwoInputNode)targetPact).setSecondInputConnection(newConn);
+      }
+    }
+  }
+ else   if (sourcePact.getIncomingConnections().size() > 1) {
+    conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
+  }
+ else   if (sourcePact.getOutgoingConnections().size() > 1) {
+    conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
+  }
+ else {
+    PactConnection predConn=sourcePact.getIncomingConnections().get(0);
+    long curSize=sourcePact.getEstimatedOutputSize();
+    long predSize=predConn.getSourcePact().getEstimatedOutputSize();
+    if (curSize < predSize) {
+      conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
+    }
+ else {
+      resolveDeadlock(predConn);
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   while (!isInterrupted()) {
-synchronized (this.synchronizationObject) {
+synchronized (this.pendingConnectionRequests) {
       if (!this.pendingConnectionRequests.isEmpty()) {
         final OutgoingConnection outgoingConnection=this.pendingConnectionRequests.poll();
         try {
@@ -10,10 +10,18 @@ synchronized (this.synchronizationObject) {
           socketChannel.connect(outgoingConnection.getConnectionAddress());
           key.attach(outgoingConnection);
         }
- catch (        IOException ioe) {
-          outgoingConnection.reportConnectionProblem(ioe);
+ catch (        final IOException ioe) {
+          final Runnable reporterThread=new Runnable(){
+            @Override public void run(){
+              outgoingConnection.reportConnectionProblem(ioe);
+            }
+          }
+;
+          new Thread(reporterThread).start();
         }
       }
+    }
+synchronized (this.pendingWriteEventSubscribeRequests) {
       if (!this.pendingWriteEventSubscribeRequests.isEmpty()) {
         final SelectionKey oldSelectionKey=this.pendingWriteEventSubscribeRequests.poll();
         final OutgoingConnection outgoingConnection=(OutgoingConnection)oldSelectionKey.attachment();
@@ -23,10 +31,18 @@ synchronized (this.synchronizationObject) {
           newSelectionKey.attach(outgoingConnection);
           outgoingConnection.setSelectionKey(newSelectionKey);
         }
- catch (        IOException ioe) {
-          outgoingConnection.reportTransmissionProblem(ioe);
+ catch (        final IOException ioe) {
+          final Runnable reporterThread=new Runnable(){
+            @Override public void run(){
+              outgoingConnection.reportTransmissionProblem(ioe);
+            }
+          }
+;
+          new Thread(reporterThread).start();
         }
       }
+    }
+synchronized (this.connectionsToClose) {
       final Iterator<Map.Entry<OutgoingConnection,Long>> closeIt=this.connectionsToClose.entrySet().iterator();
       final long now=System.currentTimeMillis();
       while (closeIt.hasNext()) {
@@ -34,12 +50,18 @@ synchronized (this.synchronizationObject) {
         if ((entry.getValue().longValue() + MIN_IDLE_TIME_BEFORE_CLOSE) < now) {
           final OutgoingConnection outgoingConnection=entry.getKey();
           closeIt.remove();
-          try {
-            outgoingConnection.closeConnection();
+          final Runnable closeThread=new Runnable(){
+            @Override public void run(){
+              try {
+                outgoingConnection.closeConnection();
+              }
+ catch (              IOException ioe) {
+                outgoingConnection.reportTransmissionProblem(ioe);
+              }
+            }
           }
- catch (          IOException ioe) {
-            outgoingConnection.reportTransmissionProblem(ioe);
-          }
+;
+          new Thread(closeThread).start();
         }
       }
     }

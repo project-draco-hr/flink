@@ -3,16 +3,25 @@
     return false;
   }
   for (  PactConnection c : visitable.getIncomingConnections()) {
-    c.getSourcePact().addOutgoingConnection(c);
-  }
-  if (visitable instanceof DataSinkNode) {
-    sinks.add((DataSinkNode)visitable);
-  }
- else   if (visitable instanceof DataSourceNode) {
-    sources.add((DataSourceNode)visitable);
-  }
-  if (visitable.isMemoryConsumer()) {
-    memoryConsumers+=visitable.getInstancesPerMachine();
-  }
-  return true;
+switch (c.getTempMode()) {
+case NONE:
+      break;
+case TEMP_SENDER_SIDE:
+    this.memoryPerInstance-=PactCompiler.DEFAULT_TEMP_TASK_MEMORY * c.getSourcePact().getDegreeOfParallelism();
+  LOG.debug("Memory reduced to " + memoryPerInstance + " due to TempTask");
+break;
+case TEMP_RECEIVER_SIDE:
+this.memoryPerInstance-=PactCompiler.DEFAULT_TEMP_TASK_MEMORY * c.getTargetPact().getDegreeOfParallelism();
+LOG.debug("Memory reduced to " + memoryPerInstance + " due to TempTask");
+break;
+}
+}
+if (visitable instanceof DataSinkNode) {
+sinks.add((DataSinkNode)visitable);
+}
+ else if (visitable instanceof DataSourceNode) {
+sources.add((DataSourceNode)visitable);
+}
+memoryConsumers+=visitable.getMemoryConsumerCount() * visitable.getInstancesPerMachine();
+return true;
 }

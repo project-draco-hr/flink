@@ -4,102 +4,23 @@
   if (firstV1 == null || firstV2 == null) {
     return;
   }
-  boolean v1HasNext=values1.hasNext();
-  boolean v2HasNext=values2.hasNext();
+  final boolean v1HasNext=values1.hasNext();
+  final boolean v2HasNext=values2.hasNext();
   if (!v1HasNext && !v2HasNext) {
     matchStub.match(key,firstV1,firstV2,output);
     return;
   }
-  Value v1;
-  Value v2;
-  keyCopier.setCopy(key);
-  if (!v1HasNext) {
-    this.v1Copier.setCopy(firstV1);
-    matchStub.match(key,firstV1,firstV2,output);
-    while (v2HasNext) {
-      key=this.keySerialization.newInstance();
-      this.keyCopier.getCopy(key);
-      v1=this.v1Serialization.newInstance();
-      this.v1Copier.getCopy(v1);
-      v2=values2.next();
-      v2HasNext=values2.hasNext();
-      matchStub.match(key,v1,v2,output);
-    }
+  if (!this.taskCanceled && !v1HasNext) {
+    ValueIncludingIterator v2Iterator=new ValueIncludingIterator(firstV2,values2);
+    cross1withNValues(key,firstV1,v2Iterator,false);
   }
- else   if (!v2HasNext) {
-    this.v2Copier.setCopy(firstV2);
-    matchStub.match(key,firstV1,firstV2,output);
-    while (v1HasNext) {
-      key=this.keySerialization.newInstance();
-      this.keyCopier.getCopy(key);
-      v2=this.v2Serialization.newInstance();
-      this.v2Copier.getCopy(v2);
-      v1=values1.next();
-      v1HasNext=values1.hasNext();
-      matchStub.match(key,v1,v2,output);
-    }
+ else   if (!this.taskCanceled && !v2HasNext) {
+    ValueIncludingIterator v1Iterator=new ValueIncludingIterator(firstV1,values1);
+    cross1withNValues(key,firstV2,v1Iterator,true);
   }
  else {
-    Reader<Value> v1Reader=new Reader<Value>(){
-      boolean firstValue=true;
-      @Override public List<AbstractInputChannel<Value>> getInputChannels(){
-        throw new UnsupportedOperationException();
-      }
-      @Override public boolean hasNext(){
-        if (firstValue)         return true;
-        return values1.hasNext();
-      }
-      @Override public Value next() throws IOException, InterruptedException {
-        if (firstValue) {
-          firstValue=false;
-          return firstV1;
-        }
-        return values1.next();
-      }
-    }
-;
-    SpillingResettableIterator<Value> v1ResettableIterator=null;
-    try {
-      ValueDeserializer<Value> v1Deserializer=new ValueDeserializer<Value>(matchStub.getFirstInValueType());
-      v1ResettableIterator=new SpillingResettableIterator<Value>(getEnvironment().getMemoryManager(),getEnvironment().getIOManager(),v1Reader,((int)(MEMORY_IO * MEMORY_SHARE_RATIO)),v1Deserializer,this);
-      v1ResettableIterator.open();
-      this.v2Copier.setCopy(firstV2);
-      while (v1ResettableIterator.hasNext()) {
-        key=this.keySerialization.newInstance();
-        this.keyCopier.getCopy(key);
-        v2=this.v2Serialization.newInstance();
-        this.v2Copier.getCopy(v2);
-        v1=v1ResettableIterator.next();
-        matchStub.match(key,v1,v2,output);
-      }
-      v1ResettableIterator.reset();
-      while (values2.hasNext()) {
-        v2=values2.next();
-        this.v2Copier.setCopy(v2);
-        while (v1ResettableIterator.hasNext()) {
-          key=this.keySerialization.newInstance();
-          this.keyCopier.getCopy(key);
-          v2=this.v2Serialization.newInstance();
-          this.v2Copier.getCopy(v2);
-          v1=v1ResettableIterator.next();
-          matchStub.match(key,v1,v2,output);
-        }
-        v1ResettableIterator.reset();
-      }
-      v1ResettableIterator.close();
-    }
- catch (    Exception e) {
-      throw new RuntimeException(e);
-    }
- finally {
-      if (v1ResettableIterator != null) {
-        try {
-          v1ResettableIterator.close();
-        }
- catch (        ServiceException e) {
-          LOG.warn(e);
-        }
-      }
-    }
+    IteratorNepheleReader v1Reader=new IteratorNepheleReader(new ValueIncludingIterator(firstV1,values1));
+    IteratorNepheleReader v2Reader=new IteratorNepheleReader(new ValueIncludingIterator(firstV2,values2));
+    crossMwithNValues(key,v2Reader,v1Reader,true);
   }
 }

@@ -1,0 +1,28 @@
+{
+  while (this.alive) {
+    IORequest<Buffer.Input> request=null;
+    while (request == null) {
+      try {
+        request=this.requestQueue.take();
+      }
+ catch (      InterruptedException iex) {
+        if (!this.alive) {
+          return;
+        }
+      }
+    }
+    IOException ioex=null;
+    try {
+      if (!request.buffer.memory.isFree()) {
+        request.buffer.readFromChannel(request.channel.fileChannel);
+      }
+    }
+ catch (    IOException e) {
+      ioex=e;
+    }
+catch (    Throwable t) {
+      ioex=new IOException("The buffer could not be read: " + t.getMessage(),t);
+    }
+    request.channel.handleProcessedBuffer(request.buffer,ioex);
+  }
+}

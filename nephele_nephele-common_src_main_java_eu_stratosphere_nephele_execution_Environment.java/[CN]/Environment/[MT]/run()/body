@@ -3,6 +3,10 @@
     LOG.fatal("ExecutionEnvironment has no Invokable set");
   }
   changeExecutionState(ExecutionState.RUNNING,null);
+  if (this.isCanceled) {
+    changeExecutionState(ExecutionState.CANCELED,null);
+    return;
+  }
   try {
     this.invokable.invoke();
     if (this.isCanceled) {
@@ -18,6 +22,7 @@
         LOG.error(StringUtils.stringifyException(e2));
       }
     }
+    releaseAllChannelResources();
     if (this.isCanceled) {
       changeExecutionState(ExecutionState.CANCELED,null);
     }
@@ -34,8 +39,15 @@
     waitForOutputChannelsToBeClosed();
   }
  catch (  Exception e) {
-    changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    releaseAllChannelResources();
+    if (this.isCanceled) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
     return;
   }
+  releaseAllChannelResources();
   changeExecutionState(ExecutionState.FINISHED,null);
 }

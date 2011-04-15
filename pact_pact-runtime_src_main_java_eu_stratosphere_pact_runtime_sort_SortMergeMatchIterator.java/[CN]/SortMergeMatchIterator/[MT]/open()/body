@@ -5,16 +5,34 @@
     }
   }
 ;
-{
+  if (this.localStrategy == LocalStrategy.SORT_BOTH_MERGE || this.localStrategy == LocalStrategy.SORT_FIRST_MERGE) {
     final SerializationFactory<K> keySerialization=new WritableSerializationFactory<K>(keyClass);
     final SerializationFactory<V1> valSerialization=new WritableSerializationFactory<V1>(valueClass1);
-    this.sortMerger1=new UnilateralSortMerger<K,V1>(memoryManager,ioManager,numSortBufferPerChannel,sizeSortBufferPerChannel,ioMemoryPerChannel,fileHandlesPerChannel,keySerialization,valSerialization,keyComparator,reader1,parentTask);
+    this.sortMerger1=new UnilateralSortMerger<K,V1>(this.memoryManager,this.ioManager,this.memoryPerChannel,this.fileHandlesPerChannel,keySerialization,valSerialization,keyComparator,this.reader1,this.parentTask,this.spillingThreshold);
   }
-{
+  if (this.localStrategy == LocalStrategy.SORT_BOTH_MERGE || this.localStrategy == LocalStrategy.SORT_SECOND_MERGE) {
     final SerializationFactory<K> keySerialization=new WritableSerializationFactory<K>(keyClass);
     final SerializationFactory<V2> valSerialization=new WritableSerializationFactory<V2>(valueClass2);
-    this.sortMerger2=new UnilateralSortMerger<K,V2>(memoryManager,ioManager,numSortBufferPerChannel,sizeSortBufferPerChannel,ioMemoryPerChannel,fileHandlesPerChannel,keySerialization,valSerialization,keyComparator,reader2,parentTask);
+    this.sortMerger2=new UnilateralSortMerger<K,V2>(this.memoryManager,this.ioManager,this.memoryPerChannel,this.fileHandlesPerChannel,keySerialization,valSerialization,keyComparator,this.reader2,this.parentTask,this.spillingThreshold);
   }
-  this.iterator1=new KeyValueIterator<V1>(sortMerger1.getIterator());
+switch (this.localStrategy) {
+case SORT_BOTH_MERGE:
+    this.iterator1=new KeyValueIterator<V1>(sortMerger1.getIterator());
   this.iterator2=new KeyValueIterator<V2>(sortMerger2.getIterator());
+break;
+case SORT_FIRST_MERGE:
+this.iterator1=new KeyValueIterator<V1>(sortMerger1.getIterator());
+this.iterator2=new KeyValueIterator<V2>(new NepheleReaderIterator<KeyValuePair<K,V2>>(reader2));
+break;
+case SORT_SECOND_MERGE:
+this.iterator1=new KeyValueIterator<V1>(new NepheleReaderIterator<KeyValuePair<K,V1>>(reader1));
+this.iterator2=new KeyValueIterator<V2>(sortMerger2.getIterator());
+break;
+case MERGE:
+this.iterator1=new KeyValueIterator<V1>(new NepheleReaderIterator<KeyValuePair<K,V1>>(reader1));
+this.iterator2=new KeyValueIterator<V2>(new NepheleReaderIterator<KeyValuePair<K,V2>>(reader2));
+break;
+default :
+throw new RuntimeException("Unsupported Local Strategy in SortMergeMatchIterator: " + this.localStrategy);
+}
 }
