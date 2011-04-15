@@ -1,80 +1,95 @@
 {
-  this.pathConverter.register(PathExpr.class,new PathConverter<PathExpr>(){
+  this.pathConverter.register(new PathConverter<PathExpr>(){
     @Override public JsonPath convert(    PathExpr expr,    List<JsonPath> childPaths){
       for (int index=childPaths.size() - 2; index >= 0; index--) {
         JsonPath childPath=childPaths.get(index);
-        JsonPath lastSelector;
-        if (childPath.getSelector() == null)         childPaths.set(index,lastSelector=childPath.clone());
- else {
-          JsonPath lastButOneSelector=childPath.getSelector(-2);
-          lastButOneSelector.setSelector(lastSelector=lastButOneSelector.getSelector().clone());
-        }
+        JsonPath lastSelector=childPath.getSelector(-1);
         lastSelector.setSelector(childPaths.get(index + 1));
       }
       return childPaths.get(0);
     }
   }
-);
-  this.pathConverter.register(VarExpr.class,new PathConverter<VarExpr>(){
+).register(new PathConverter<VarExpr>(){
     @Override public JsonPath convert(    VarExpr expr,    List<JsonPath> childPath){
       Binding binding=JaqlPlanCreator.this.bindings.get(expr.var().taggedName());
+      if (binding == null)       return JsonPath.Unknown;
       Object var=binding.getTransformed();
-      if (expressionToOperators.containsKey(binding.getExpr())) {
-        var=expressionToOperators.get(binding.getExpr());
-      }
+      if (JaqlPlanCreator.this.expressionToOperators.containsKey(binding.getExpr()))       var=JaqlPlanCreator.this.expressionToOperators.get(binding.getExpr());
       if (var instanceof Operator) {
         int index=JaqlPlanCreator.this.findInputIndex((Operator)var);
         if (index != -1)         return new JsonPath.Input(index);
       }
-      if (var instanceof JsonPath)       return (JsonPath)var;
-      System.out.println(expr.var().taggedName() + " -> " + var);
+      if (var instanceof JsonPath)       return ((JsonPath)var).clone();
+      if (var instanceof Transformation)       return ((Transformation)var).asPath();
       return new JsonPath.IdentifierAccess(expr.var().taggedName());
     }
   }
-);
-  this.pathConverter.register(PathFieldValue.class,new PathConverter<PathFieldValue>(){
+).register(new PathConverter<PathFieldValue>(){
     @Override public JsonPath convert(    PathFieldValue expr,    List<JsonPath> childPath){
       JsonPath.FieldAccess fieldAccess=new JsonPath.FieldAccess(((ConstExpr)expr.nameExpr()).value.toString());
       if (childPath.size() > 1)       fieldAccess.setSelector(childPath.get(1));
       return fieldAccess;
     }
   }
-);
-  this.pathConverter.register(ConstExpr.class,new PathConverter<ConstExpr>(){
+).register(new PathConverter<ConstExpr>(){
     @Override public JsonPath convert(    ConstExpr expr,    List<JsonPath> childPath){
-      return new JsonPath.Constant(expr.value);
+      return new JsonPath.Constant(toJavaValue(expr.value));
+    }
+    private Object toJavaValue(    JsonValue value){
+      if (value instanceof JsonLong)       return ((JsonLong)value).longValue();
+      if (value instanceof JsonDouble)       return ((JsonDouble)value).doubleValue();
+      if (value instanceof JsonDecimal)       return ((JsonDecimal)value).decimalValue();
+      if (value instanceof JsonBool)       return ((JsonBool)value).get();
+      return value.toString();
     }
   }
-);
-  this.pathConverter.register(PathIndex.class,new PathConverter<PathIndex>(){
+).register(new PathConverter<PathIndex>(){
     @Override public JsonPath convert(    PathIndex expr,    List<JsonPath> childPath){
       return new JsonPath.ArrayAccess(((Constant)childPath.get(0)).asInt());
     }
   }
-);
-  this.pathConverter.register(PathArrayAll.class,new PathConverter<PathArrayAll>(){
+).register(new PathConverter<FixedRecordExpr>(){
+    @Override public JsonPath convert(    FixedRecordExpr expr,    List<JsonPath> childPath){
+      return new JsonPath.ObjectCreation((List)parseTransformation(expr).getMappings());
+    }
+  }
+).register(new PathConverter<PathArrayAll>(){
     @Override public JsonPath convert(    PathArrayAll expr,    List<JsonPath> childPath){
       JsonPath.ArrayAccess path=new JsonPath.ArrayAccess();
       path.setSelector(childPath.get(0));
       return path;
     }
   }
-);
-  this.pathConverter.register(Expr.class,new PathConverter<Expr>(){
+).register(new PathConverter<Expr>(){
     @Override public JsonPath convert(    Expr expr,    List<JsonPath> childPaths){
-      if (!expr.getClass().getSimpleName().endsWith("Fn"))       return null;
-      BuiltInFunctionDescriptor d=BuiltInFunction.getDescriptor(expr.getClass());
-      return new JsonPath.Function(d.getName(),childPaths.toArray(new JsonPath[childPaths.size()]));
+      if (expr.getClass().getSimpleName().endsWith("Fn")) {
+        BuiltInFunctionDescriptor d=BuiltInFunction.getDescriptor(expr.getClass());
+        return new JsonPath.Function(d.getName(),childPaths.toArray(new JsonPath[childPaths.size()]));
+      }
+      Operator operator=parseOperator(expr);
+      if (operator instanceof Aggregation && operator.getTransformation().getMappingSize() == 1) {
+        return new JsonPath.Function("distinct",childPaths.get(childPaths.size() - 1));
+      }
+      return null;
     }
   }
-);
-  this.pathConverter.register(ArrayExpr.class,new PathConverter<ArrayExpr>(){
+).register(new PathConverter<ArrayExpr>(){
     @Override public JsonPath convert(    ArrayExpr expr,    List<JsonPath> childPaths){
       return new JsonPath.ArrayCreation(childPaths);
     }
   }
-);
-  this.pathConverter.register(MathExpr.class,new PathConverter<MathExpr>(){
+).register(new PathConverter<Aggregate>(){
+    @Override public JsonPath convert(    Aggregate expr,    List<JsonPath> childPaths){
+      BuiltInFunctionDescriptor d=BuiltInFunction.getDescriptor(expr.getClass());
+      return new JsonPath.Function(d.getName(),childPaths.toArray(new JsonPath[childPaths.size()]));
+    }
+  }
+).register(new PathConverter<PathReturn>(){
+    @Override public JsonPath convert(    PathReturn expr,    List<JsonPath> childPaths){
+      return childPaths.isEmpty() ? null : childPaths.get(0);
+    }
+  }
+).register(new PathConverter<MathExpr>(){
     private Field OpField;
     private ArithmeticOperator[] OperatorMapping={ArithmeticOperator.PLUS,ArithmeticOperator.MINUS,ArithmeticOperator.MULTIPLY,ArithmeticOperator.DIVIDE};
 {

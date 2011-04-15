@@ -1,32 +1,38 @@
 {
-  operatorConverter.addListener(new TypeHandlerListener<Expr,Operator>(){
+  this.operatorConverter.addListener(new TypeHandlerListener<Expr,Operator>(){
     @Override public void beforeConversion(    Expr in,    Object[] params){
-      operatorInputs.addLast((List<Operator>)params[0]);
+      JaqlPlanCreator.this.operatorInputs.addLast((List<Operator>)params[0]);
     }
     @Override public void afterConversion(    Expr in,    Object[] params,    Operator out){
-      expressionToOperators.put(in,out);
+      JaqlPlanCreator.this.expressionToOperators.put(in,out);
+    }
+    @Override public void afterHierarchicalConversion(    Expr in,    Object[] params,    Operator out){
+      if (!(in instanceof BindingExpr))       JaqlPlanCreator.this.bindings.removeScope();
+    }
+    @Override public void beforeHierarchicalConversion(    Expr in,    Object[] params){
+      if (!(in instanceof BindingExpr))       JaqlPlanCreator.this.bindings.addScope();
     }
   }
 );
-  this.operatorConverter.register(WriteFn.class,new ExprConverter<WriteFn>(){
+  this.operatorConverter.register(new ExprConverter<WriteFn>(){
     @Override public Operator convert(    WriteFn expr,    List<Operator> childOperators){
-      return new Sink("hdfs",((AbstractHandleFn)expr.descriptor()).location().toString(),childOperators.get(0));
+      return new Sink(DataType.HDFS,((AbstractHandleFn)expr.descriptor()).location().toString(),childOperators.get(0));
     }
   }
 );
-  this.operatorConverter.register(FilterExpr.class,new ExprConverter<FilterExpr>(){
+  this.operatorConverter.register(new ExprConverter<FilterExpr>(){
     @Override public Operator convert(    FilterExpr expr,    List<Operator> childOperators){
       return new Selection(JaqlPlanCreator.this.parseCondition(expr),childOperators.get(0));
     }
   }
 );
-  this.operatorConverter.register(TransformExpr.class,new ExprConverter<TransformExpr>(){
+  this.operatorConverter.register(new ExprConverter<TransformExpr>(){
     @Override public Operator convert(    TransformExpr expr,    List<Operator> childOperators){
       return new Projection(JaqlPlanCreator.this.parseTransformation(expr),childOperators.get(0));
     }
   }
 );
-  this.operatorConverter.register(JoinExpr.class,new ExprConverter<JoinExpr>(){
+  this.operatorConverter.register(new ExprConverter<JoinExpr>(){
     private List<String> inputAliases=new ArrayList<String>();
     @Override public Operator convert(    JoinExpr expr,    List<Operator> childOperators){
       List<List<JsonPath>> onPaths=new ArrayList<List<JsonPath>>();
@@ -38,16 +44,16 @@
       }
       Condition condition=null;
       for (int index=0; index < onPaths.get(0).size(); index++)       condition=new Condition(new Comparison(onPaths.get(0).get(index),BinaryOperator.EQUAL,onPaths.get(1).get(index)),Combination.AND,condition);
-      if (inputAliases.size() < childOperators.size())       inputAliases.addAll(Arrays.asList(new String[childOperators.size() - inputAliases.size()]));
-      for (int index=0; index < childOperators.size(); index++)       childOperators.set(index,withoutNameBinding(childOperators.get(index),index));
-      return new Join(parseTransformation(expr,childOperators.size()),condition,childOperators);
+      if (this.inputAliases.size() < childOperators.size())       this.inputAliases.addAll(Arrays.asList(new String[childOperators.size() - this.inputAliases.size()]));
+      for (int index=0; index < childOperators.size(); index++)       childOperators.set(index,this.withoutNameBinding(childOperators.get(index),index));
+      return new Join(this.parseTransformation(expr,childOperators.size()),condition,childOperators);
     }
     private Transformation parseTransformation(    JoinExpr expr,    int numInputs){
-      bindings.put("$",new Binding(null,new JsonPath.Input(0)));
+      JaqlPlanCreator.this.bindings.set("$",new Binding(null,new JsonPath.Input(0)));
       Transformation transformation=JaqlPlanCreator.this.parseTransformation(((ForExpr)expr.parent().parent()).collectExpr());
       for (int inputIndex=0; inputIndex < numInputs; inputIndex++) {
         JsonPath alias=new JsonPath.Input(inputIndex);
-        alias.setSelector(new JsonPath.FieldAccess(inputAliases.get(inputIndex)));
+        alias.setSelector(new JsonPath.FieldAccess(this.inputAliases.get(inputIndex)));
         transformation.replace(alias,new JsonPath.Input(inputIndex));
       }
       return transformation;
@@ -57,12 +63,12 @@
         Mapping mapping=operator.getTransformation().getMapping(0);
         if (mapping instanceof ValueAssignment && ((ValueAssignment)mapping).getTransformation() instanceof JsonPath.Input) {
           Operator coreInput=operator.getInputs().get(((Input)((ValueAssignment)mapping).getTransformation()).getIndex());
-          Iterator<Entry<String,Binding>> iterator=bindings.entrySet().iterator();
+          Iterator<Entry<String,Binding>> iterator=JaqlPlanCreator.this.bindings.getAll().entrySet().iterator();
           while (iterator.hasNext()) {
             Binding binding=iterator.next().getValue();
             if (binding.getTransformed() == operator)             binding.setTransformed(coreInput);
           }
-          inputAliases.set(inputIndex,mapping.getTarget());
+          this.inputAliases.set(inputIndex,mapping.getTarget());
           return coreInput;
         }
       }
@@ -70,18 +76,23 @@
     }
   }
 );
-  this.operatorConverter.register(GroupByExpr.class,new ExprConverter<GroupByExpr>(){
+  this.operatorConverter.register(new ExprConverter<GroupByExpr>(){
     @Override public Operator convert(    GroupByExpr expr,    List<Operator> childOperators){
-      if (childOperators.size() > 0)       return new Aggregation(JaqlPlanCreator.this.parseTransformation(((ArrayExpr)expr.collectExpr()).child(0)),JaqlPlanCreator.this.parsePath(expr.byBinding()),childOperators.get(0));
-      return null;
+      return new Aggregation(JaqlPlanCreator.this.parseTransformation(((ArrayExpr)expr.collectExpr()).child(0)),JaqlPlanCreator.this.parsePath(expr.byBinding()),childOperators.isEmpty() ? null : childOperators.get(0));
     }
   }
 );
-  this.operatorConverter.register(ReadFn.class,new ExprConverter<ReadFn>(){
+  this.operatorConverter.register(new ExprConverter<ReadFn>(){
     @Override public Operator convert(    ReadFn expr,    List<Operator> childOperators){
-      return new Source("hdfs",((AbstractHandleFn)expr.child(0)).location().toString());
+      return new Source(DataType.HDFS,((ConstExpr)((AbstractHandleFn)expr.child(0)).location()).value.toString());
     }
   }
 );
-  this.operatorConverter.register(BindingExpr.class,new BindingExtractor<Operator>());
+  this.operatorConverter.register(new ExprConverter<ArrayExpr>(){
+    @Override public Operator convert(    ArrayExpr expr,    List<Operator> childOperators){
+      return new Source(parsePath(expr));
+    }
+  }
+);
+  this.operatorConverter.register(new BindingExtractor<Operator>());
 }
