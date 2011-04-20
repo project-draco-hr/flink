@@ -33,6 +33,7 @@
   }
 ).register(new PathConverter<ConstExpr>(){
     @Override public JsonPath convert(    ConstExpr expr,    List<JsonPath> childPath){
+      if (expr.value == null)       return null;
       return new JsonPath.Constant(toJavaValue(expr.value));
     }
     private Object toJavaValue(    JsonValue value){
@@ -44,8 +45,13 @@
     }
   }
 ).register(new PathConverter<PathIndex>(){
-    @Override public JsonPath convert(    PathIndex expr,    List<JsonPath> childPath){
-      return new JsonPath.ArrayAccess(((Constant)childPath.get(0)).asInt());
+    @Override public JsonPath convert(    PathIndex expr,    List<JsonPath> childPaths){
+      for (int index=childPaths.size() - 2; index >= 1; index--) {
+        JsonPath childPath=childPaths.get(index);
+        JsonPath lastSelector=childPath.getSelector(-1);
+        lastSelector.setSelector(childPaths.get(index + 1));
+      }
+      return new JsonPath.ArrayAccess(((Constant)childPaths.get(0)).asInt());
     }
   }
 ).register(new PathConverter<FixedRecordExpr>(){
