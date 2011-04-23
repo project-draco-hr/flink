@@ -1,25 +1,33 @@
 {
-  if (this.in == null) {
-    if (this.closed) {
-      throw new IllegalStateException("Iterator has been closed.");
-    }
- else {
-      throw new IllegalStateException("Iterator has not been opened.");
-    }
+  if (this.closed) {
+    throw new IllegalStateException("Iterator was closed.");
   }
-  try {
-    this.in.rewind();
-    this.deserializationInstance=null;
+  List<Buffer.Input> fullBuffsLeft=null;
+  if (!this.fullBuffers.isEmpty()) {
+    fullBuffsLeft=new ArrayList<Buffer.Input>(this.fullBuffers.size());
+    fullBuffsLeft.addAll(this.fullBuffers);
+    this.fullBuffers.clear();
   }
- catch (  RuntimeException ex) {
-    if (this.closed) {
-      throw new IllegalStateException("The iterator has been closed.");
-    }
- else     if (this.error != null) {
-      throw new RuntimeException("The iterator encountered an error: " + error.getMessage(),error);
-    }
- else {
-      throw ex;
-    }
+  for (int i=0; i < this.consumedBuffers.size(); i++) {
+    Buffer.Input in=this.consumedBuffers.get(i);
+    in.rewind();
+    this.fullBuffers.add(in);
   }
+  this.consumedBuffers.clear();
+  if (this.bufferCurrentlyRead != null) {
+    this.bufferCurrentlyRead.rewind();
+    this.fullBuffers.add(this.bufferCurrentlyRead);
+    this.bufferCurrentlyRead=null;
+  }
+  if (fullBuffsLeft != null) {
+    this.fullBuffers.addAll(fullBuffsLeft);
+  }
+  if (this.bufferCurrentlyFilled != null) {
+    final int pos=this.bufferCurrentlyFilled.getPosition();
+    final Buffer.Input in=new Buffer.Input(this.bufferCurrentlyFilled.dispose());
+    in.reset(pos);
+    this.fullBuffers.add(in);
+    this.bufferCurrentlyFilled=null;
+  }
+  this.bufferCurrentlyRead=this.fullBuffers.remove(0);
 }

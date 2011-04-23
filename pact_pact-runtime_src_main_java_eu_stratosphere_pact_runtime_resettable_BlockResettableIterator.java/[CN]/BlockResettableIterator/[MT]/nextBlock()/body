@@ -2,31 +2,17 @@
   if (this.closed) {
     throw new IllegalStateException("Iterator has been closed.");
   }
-  if (this.error != null) {
-    throw new RuntimeException("The iterator encountered an error: " + error.getMessage(),error);
+  if (this.noMoreBlocks) {
+    return false;
   }
-  try {
-    if (this.in != null)     this.emptySegments.add(this.in.dispose());
-    try {
-      this.in=this.filledBuffers.take();
+  collectAllBuffers(this.emptySegments);
+  this.bufferCurrentlyFilled=new Buffer.Output(this.emptySegments.remove(this.emptySegments.size() - 1));
+  if (this.leftOverElement != null) {
+    if (!this.bufferCurrentlyFilled.write(this.leftOverElement)) {
+      throw new RuntimeException("BlockResettableIterator: " + "Could not serialize element into fresh block buffer - element is too large.");
     }
- catch (    InterruptedException e) {
-      throw new RuntimeException("BlockResettableIterator: Unable to fetch the next filled buffer",e);
-    }
-    if (in.getRemainingBytes() == 0) {
-      return false;
-    }
-    return true;
+    this.nextElement=this.leftOverElement;
+    this.leftOverElement=null;
   }
- catch (  RuntimeException ex) {
-    if (this.closed) {
-      throw new IllegalStateException("The iterator has been closed.");
-    }
- else     if (this.error != null) {
-      throw new RuntimeException("The iterator encountered an error: " + error.getMessage(),error);
-    }
- else {
-      throw ex;
-    }
-  }
+  return true;
 }
