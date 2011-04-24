@@ -1,13 +1,26 @@
 {
   try {
-    FileSystem fs=path.getFileSystem();
+    final FileSystem fs=path.getFileSystem();
+    Path p=this.path;
     if (fs.exists(this.path) && fs.getFileStatus(this.path).isDir()) {
-      this.path=this.path.suffix("/" + this.taskIndex);
+      p=this.path.suffix("/" + this.taskIndex);
     }
-    this.fdos=fs.create(path,true);
+    final FSDataOutputStream stream=fs.create(p,true);
+synchronized (this.lock) {
+      this.lock.notifyAll();
+      if (!this.canceled) {
+        this.fdos=stream;
+      }
+ else {
+        this.fdos=null;
+        stream.close();
+      }
+    }
   }
  catch (  Exception t) {
-    this.success=false;
-    this.exception=t;
+synchronized (this.lock) {
+      this.canceled=true;
+      this.exception=t;
+    }
   }
 }
