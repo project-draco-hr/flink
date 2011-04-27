@@ -1,12 +1,9 @@
 {
-  if (args.length != 5) {
-    throw new IllegalArgumentException("Must provide five arguments: <parallelism> <docs_input> <ranks_input> <visits_input> <result_directory>");
-  }
-  int noSubTasks=Integer.parseInt(args[0]);
-  String docsInput=args[1];
-  String ranksInput=args[2];
-  String visitsInput=args[3];
-  String output=args[4];
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String docsInput=(args.length > 1 ? args[1] : "");
+  String ranksInput=(args.length > 2 ? args[2] : "");
+  String visitsInput=(args.length > 3 ? args[3] : "");
+  String output=(args.length > 4 ? args[4] : "");
   DataSourceContract<PactString,Tuple> docs=new DataSourceContract<PactString,Tuple>(StringTupleDataInFormat.class,docsInput,"Documents");
   docs.setFormatParameter(TextInputFormat.FORMAT_PAIR_DELIMITER,"\n");
   docs.setDegreeOfParallelism(noSubTasks);
@@ -19,20 +16,20 @@
   visits.setDegreeOfParallelism(noSubTasks);
   MapContract<PactString,Tuple,PactString,PactNull> filterDocs=new MapContract<PactString,Tuple,PactString,PactNull>(FilterDocs.class,"Filter Docs");
   filterDocs.setDegreeOfParallelism(noSubTasks);
-  filterDocs.getCompilerHints().setSelectivity(0.15f);
+  filterDocs.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.15f);
   filterDocs.getCompilerHints().setAvgBytesPerRecord(60);
   MapContract<PactString,Tuple,PactString,Tuple> filterRanks=new MapContract<PactString,Tuple,PactString,Tuple>(FilterRanks.class,"Filter Ranks");
   filterRanks.setDegreeOfParallelism(noSubTasks);
-  filterRanks.getCompilerHints().setSelectivity(0.25f);
+  filterRanks.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.25f);
   MapContract<PactString,Tuple,PactString,PactNull> filterVisits=new MapContract<PactString,Tuple,PactString,PactNull>(FilterVisits.class,"Filter Visits");
   filterVisits.setDegreeOfParallelism(noSubTasks);
   filterVisits.getCompilerHints().setAvgBytesPerRecord(60);
-  filterVisits.getCompilerHints().setSelectivity(0.2f);
+  filterVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.2f);
   MatchContract<PactString,Tuple,PactNull,PactString,Tuple> joinDocsRanks=new MatchContract<PactString,Tuple,PactNull,PactString,Tuple>(JoinDocRanks.class,"Join DocRanks");
   joinDocsRanks.setDegreeOfParallelism(noSubTasks);
-  joinDocsRanks.getCompilerHints().setSelectivity(0.15f);
   CoGroupContract<PactString,PactNull,Tuple,PactString,Tuple> antiJoinVisits=new CoGroupContract<PactString,PactNull,Tuple,PactString,Tuple>(AntiJoinVisits.class,"Antijoin DocsVisits");
   antiJoinVisits.setDegreeOfParallelism(noSubTasks);
+  antiJoinVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.8f);
   DataSinkContract<PactString,Tuple> result=new DataSinkContract<PactString,Tuple>(StringTupleDataOutFormat.class,output,"Result");
   result.setDegreeOfParallelism(noSubTasks);
   filterDocs.setInput(docs);

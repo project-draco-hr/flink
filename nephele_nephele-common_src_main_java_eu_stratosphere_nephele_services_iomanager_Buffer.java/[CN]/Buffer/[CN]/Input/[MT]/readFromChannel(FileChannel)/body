@@ -1,17 +1,13 @@
 {
-  if (!isBound()) {
-    throw new UnboundMemoryBackedException();
+  final long bytesRemaining=channel.size() - channel.position();
+  if (bytesRemaining < 1) {
+    this.position=0;
+    this.limit=0;
+    return;
   }
-  int limit=(int)Math.min(memory.size,channel.size() - channel.position());
-  channel.read(memory.wrap(0,limit));
-  int readableBytes=0, currentObjectLength=0;
-  while (readableBytes + currentObjectLength <= limit) {
-    readableBytes+=currentObjectLength;
-    if (readableBytes + 4 >= limit) {
-      break;
-    }
-    currentObjectLength=4 + memory.randomAccessView.getInt(readableBytes);
-  }
-  reset(readableBytes);
-  channel.position(channel.position() - (limit - readableBytes));
+  final int toRead=(int)Math.min(this.memory.size(),bytesRemaining);
+  int bytesRead=channel.read(memory.wrap(0,toRead));
+  this.position=0;
+  this.limit=bytesRead;
+  this.inView.reset();
 }

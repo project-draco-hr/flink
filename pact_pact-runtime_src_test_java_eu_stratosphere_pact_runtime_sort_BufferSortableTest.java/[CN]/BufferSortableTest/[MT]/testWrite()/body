@@ -1,6 +1,7 @@
 {
-  MemorySegment memory=memoryManager.allocate(MEMORY_SIZE);
+  MemorySegment memory=memoryManager.allocate(new DummyInvokable(),MEMORY_SIZE);
   int writtenPairs=0, readPairs=0;
+  int pos=0;
 {
     TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.SORTED,ValueMode.FIX_LENGTH);
     BufferSortable<TestData.Key,TestData.Value> buffer=newSortBuffer(memory,OFFSETS_PERCENTAGE);
@@ -12,17 +13,19 @@
       pair=generator.next();
     }
     LOG.debug("Written " + writtenPairs + " pairs to buffer which occupied "+ writtenBytes+ " of "+ MEMORY_SIZE+ " bytes.");
+    pos=buffer.position;
     memory=buffer.unbind();
   }
 {
-    Buffer.Input buffer=new Buffer.Input();
-    buffer.bind(memory);
+    Buffer.Input buffer=new Buffer.Input(memory);
+    buffer.reset(pos);
+    IntegerRecord intRec=new IntegerRecord();
     KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
-    while (buffer.read(pair)) {
+    while (buffer.read(intRec) && buffer.read(pair)) {
       readPairs++;
     }
     LOG.debug("Read " + readPairs + " pairs from buffer.");
-    memory=buffer.unbind();
+    memory=buffer.dispose();
   }
   Assert.assertEquals(writtenPairs,readPairs);
   memoryManager.release(memory);

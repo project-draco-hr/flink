@@ -1,81 +1,113 @@
 {
   SpillingResettableIterator<KeyValuePair<Key,Value>> innerInput=null;
   BlockResettableIterator<KeyValuePair<Key,Value>> outerInput=null;
-  if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND) {
-    try {
-      innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,MEMORY_IO / 2,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()));
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Unable to obtain SpillingResettableIterator for first input",mae);
-    }
-    try {
-      outerInput=new BlockResettableIterator<KeyValuePair<Key,Value>>(memoryManager,outerReader,MEMORY_IO / 2,1,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()));
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Unable to obtain BlockResettableIterator for second input",mae);
-    }
-  }
- else   if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_FIRST) {
-    try {
-      innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,MEMORY_IO / 2,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()));
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Unable to obtain SpillingResettableIterator for second input",mae);
-    }
-    try {
-      outerInput=new BlockResettableIterator<KeyValuePair<Key,Value>>(memoryManager,outerReader,MEMORY_IO / 2,1,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()));
-    }
- catch (    MemoryAllocationException mae) {
-      throw new RuntimeException("Unable to obtain BlockResettableIterator for first input",mae);
-    }
-  }
- else {
-    throw new RuntimeException("Invalid local strategy for CrossTask: " + config.getLocalStrategy());
-  }
   try {
-    innerInput.open();
-  }
- catch (  ServiceException se) {
-    throw new RuntimeException("Unable to open SpillingResettableIterator",se);
-  }
-catch (  IOException ioe) {
-    throw new RuntimeException("Unable to open SpillingResettableIterator",ioe);
-  }
-catch (  InterruptedException ie) {
-    throw new RuntimeException("Unable to open SpillingResettableIterator",ie);
-  }
-  outerInput.open();
-  LOG.debug("SpillingResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  LOG.debug("BlockResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  stub.open();
-  do {
-    while (innerInput.hasNext()) {
-      Pair<Key,Value> innerPair=innerInput.next();
-      while (outerInput.hasNext()) {
-        Pair<Key,Value> outerPair=outerInput.next();
-        if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND) {
-          stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),output);
-        }
- else {
-          stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
-        }
+    final boolean firstInputIsOuter;
+    if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND) {
+      try {
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory / 2,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()),this);
+        spillingResetIt=innerInput;
       }
-      outerInput.reset();
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain SpillingResettableIterator for first input",mae);
+      }
+      try {
+        outerInput=new BlockResettableIterator<KeyValuePair<Key,Value>>(memoryManager,outerReader,this.availableMemory / 2,1,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()),this);
+        blockResetIt=outerInput;
+      }
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain BlockResettableIterator for second input",mae);
+      }
+      firstInputIsOuter=false;
     }
-    innerInput.reset();
+ else     if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_FIRST) {
+      try {
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory / 2,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()),this);
+        spillingResetIt=innerInput;
+      }
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain SpillingResettableIterator for second input",mae);
+      }
+      try {
+        outerInput=new BlockResettableIterator<KeyValuePair<Key,Value>>(memoryManager,outerReader,this.availableMemory / 2,1,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()),this);
+        blockResetIt=outerInput;
+      }
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain BlockResettableIterator for first input",mae);
+      }
+      firstInputIsOuter=true;
+    }
+ else {
+      throw new RuntimeException("Invalid local strategy for CrossTask: " + config.getLocalStrategy());
+    }
+    try {
+      innerInput.open();
+    }
+ catch (    ServiceException se) {
+      throw new RuntimeException("Unable to open SpillingResettableIterator",se);
+    }
+catch (    IOException ioe) {
+      throw new RuntimeException("Unable to open SpillingResettableIterator",ioe);
+    }
+catch (    InterruptedException ie) {
+      throw new RuntimeException("Unable to open SpillingResettableIterator",ie);
+    }
+    if (this.taskCanceled)     return;
+    outerInput.open();
+    LOG.debug("SpillingResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    LOG.debug("BlockResettable iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    stub.open();
+    boolean moreOuterBlocks=false;
+    do {
+      while (!this.taskCanceled && innerInput.hasNext()) {
+        KeyValuePair<Key,Value> innerPair=innerInput.next();
+        while (!this.taskCanceled && outerInput.hasNext()) {
+          KeyValuePair<Key,Value> outerPair=outerInput.next();
+          if (firstInputIsOuter) {
+            stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
+          }
+ else {
+            stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),output);
+          }
+          innerPair=innerInput.repeatLast();
+        }
+        outerInput.reset();
+      }
+      moreOuterBlocks=outerInput.nextBlock();
+      if (moreOuterBlocks) {
+        innerInput.reset();
+      }
+    }
+ while (!this.taskCanceled && moreOuterBlocks);
+    stub.close();
   }
- while (outerInput.nextBlock());
-  stub.close();
-  try {
-    innerInput.close();
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      throw ex;
+    }
   }
- catch (  ServiceException se) {
-    throw new RuntimeException("Unable to close SpillingResettableIterator",se);
-  }
-  try {
-    outerInput.close();
-  }
- catch (  ServiceException se) {
-    throw new RuntimeException("Unable to close BlockResettableIterator",se);
+ finally {
+    Throwable t1=null, t2=null;
+    try {
+      if (innerInput != null) {
+        innerInput.close();
+      }
+    }
+ catch (    Throwable t) {
+      LOG.warn(t);
+      t1=t;
+    }
+    try {
+      if (outerInput != null) {
+        outerInput.close();
+      }
+    }
+ catch (    Throwable t) {
+      LOG.warn(t);
+      t2=t;
+    }
+    if (t1 != null)     throw new RuntimeException("Error closing SpillingResettableIterator.",t1);
+    if (t2 != null)     throw new RuntimeException("Error closung BlockResettableIterator.",t2);
   }
 }

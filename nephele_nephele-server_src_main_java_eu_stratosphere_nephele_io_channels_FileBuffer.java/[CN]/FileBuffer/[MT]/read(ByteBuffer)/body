@@ -3,11 +3,16 @@
     throw new IOException("FileBuffer is still in write mode!");
   }
   if (this.fileChannel == null) {
-    this.fileChannel=this.fileBufferManager.getFileChannelForReading(this.channelID);
-    this.offset=this.fileChannel.position();
-  }
-  if (this.totalBytesRead >= this.bufferSize) {
-    return -1;
+    try {
+      this.fileChannel=this.fileBufferManager.getFileChannelForReading(this.channelID);
+    }
+ catch (    InterruptedException e) {
+      return -1;
+    }
+    if (this.fileChannel.position() != this.offset) {
+      System.out.println("Expected offset " + this.offset + ", but channel position is "+ this.fileChannel.position());
+      this.fileChannel.position(this.offset);
+    }
   }
   if (this.totalBytesRead >= this.bufferSize) {
     return -1;
@@ -22,6 +27,9 @@
   }
  else {
     bytesRead=this.fileChannel.read(dst);
+  }
+  if (bytesRead < 0) {
+    return -1;
   }
   this.totalBytesRead+=bytesRead;
   return bytesRead;
