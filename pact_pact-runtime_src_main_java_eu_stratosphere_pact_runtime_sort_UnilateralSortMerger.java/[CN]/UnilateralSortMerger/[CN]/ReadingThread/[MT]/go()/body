@@ -1,70 +1,119 @@
 {
+  final eu.stratosphere.nephele.io.Reader<KeyValuePair<K,V>> reader=this.reader;
   CircularElement element=null;
-  while (element == null) {
+  KeyValuePair<K,V> leftoverPair=null;
+  long bytesUntilSpilling=this.startSpillingBytes;
+  boolean done=false;
+  if (bytesUntilSpilling < 1) {
+    bytesUntilSpilling=0;
+    this.queues.sort.add(SPILLING_MARKER);
+  }
+  while (!done && isRunning()) {
+    while (element == null) {
+      try {
+        element=this.queues.empty.take();
+      }
+ catch (      InterruptedException iex) {
+        if (isRunning()) {
+          LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+        }
+ else {
+          return;
+        }
+      }
+    }
+    final BufferSortableGuaranteed<K,V> buffer=element.buffer;
+    if (!buffer.isEmpty()) {
+      throw new IOException("New buffer is not empty.");
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Retrieved empty read buffer " + element.id + ".");
+    }
+    if (leftoverPair != null) {
+      if (!buffer.write(leftoverPair)) {
+        throw new IOException("Pair could not be written to empty buffer: Serialized pair exceeds buffer capacity.");
+      }
+      leftoverPair=null;
+    }
+    if (bytesUntilSpilling > 0 && buffer.getCapacity() >= bytesUntilSpilling) {
+      boolean fullBuffer=false;
+      try {
+        KeyValuePair<K,V> currentPair;
+        while (isRunning() && reader.hasNext()) {
+          currentPair=reader.next();
+          if (!buffer.write(currentPair)) {
+            leftoverPair=currentPair;
+            fullBuffer=true;
+            break;
+          }
+          if (bytesUntilSpilling - buffer.getOccupancy() <= 0) {
+            bytesUntilSpilling=0;
+            this.queues.sort.add(SPILLING_MARKER);
+            break;
+          }
+        }
+        if (fullBuffer) {
+          if (bytesUntilSpilling > 0) {
+            bytesUntilSpilling-=buffer.getCapacity();
+            if (bytesUntilSpilling <= 0) {
+              bytesUntilSpilling=0;
+              this.queues.sort.add(SPILLING_MARKER);
+            }
+          }
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
+          }
+          this.queues.sort.add(element);
+          element=null;
+          continue;
+        }
+      }
+ catch (      InterruptedException iex) {
+        throw new IOException("Reader Thread was interrupted while getting record from Nephele reader.",iex);
+      }
+    }
+ else     if (bytesUntilSpilling > 0) {
+      bytesUntilSpilling-=buffer.getCapacity();
+      if (bytesUntilSpilling <= 0) {
+        bytesUntilSpilling=0;
+        this.queues.sort.add(SPILLING_MARKER);
+      }
+    }
     try {
-      element=queues.empty.take();
+      KeyValuePair<K,V> currentPair;
+      while (isRunning() && reader.hasNext()) {
+        currentPair=reader.next();
+        if (!buffer.write(currentPair)) {
+          leftoverPair=currentPair;
+          break;
+        }
+      }
     }
  catch (    InterruptedException iex) {
-      if (!isRunning())       return;
+      throw new IOException("Reader Thread was interrupted while getting record from Nephele reader.",iex);
     }
-  }
-  if (LOG.isDebugEnabled()) {
-    while (isRunning() && reader.hasNext()) {
-      KeyValuePair<K,V> pair=reader.next();
-      if (!element.buffer.write(pair)) {
-        LOG.debug("Emitting full read buffer " + element.id + ".");
-        queues.sort.put(element);
-        element=null;
-        do {
-          try {
-            element=queues.empty.take();
-          }
- catch (          InterruptedException iex) {
-            if (!isRunning()) {
-              return;
-            }
-          }
-        }
- while (element == null);
-        if (!element.buffer.isEmpty()) {
-          LOG.error("New buffer is not empty.");
-        }
-        element.buffer.write(pair);
-        LOG.debug("Retrieved empty read buffer " + element.id + ".");
+    if (reader.hasNext() || leftoverPair != null) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
       }
     }
-  }
  else {
-    while (isRunning() && reader.hasNext()) {
-      KeyValuePair<K,V> pair=reader.next();
-      if (!element.buffer.write(pair)) {
-        queues.sort.put(element);
-        element=null;
-        do {
-          try {
-            element=queues.empty.take();
-          }
- catch (          InterruptedException iex) {
-            if (!isRunning()) {
-              return;
-            }
-          }
-        }
- while (element == null);
-        if (!element.buffer.isEmpty()) {
-          LOG.error("New buffer is not empty.");
-        }
-        element.buffer.write(pair);
+      done=true;
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Emitting final buffer from reader thread: " + element.id + ".");
       }
     }
+    if (!buffer.isEmpty()) {
+      this.queues.sort.add(element);
+    }
+ else {
+      this.queues.empty.add(element);
+    }
+    element=null;
   }
   if (!isRunning()) {
     return;
   }
-  if (!element.buffer.isEmpty()) {
-    LOG.debug("Emitting last read buffer " + element.id + ".");
-    queues.sort.put(element);
-  }
-  queues.sort.put(SENTINEL);
+  this.queues.sort.add(SENTINEL);
   LOG.debug("Reading thread done.");
 }

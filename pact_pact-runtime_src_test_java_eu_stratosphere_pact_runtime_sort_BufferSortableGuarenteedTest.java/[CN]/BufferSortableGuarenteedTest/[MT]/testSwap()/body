@@ -1,0 +1,50 @@
+{
+  AbstractInvokable memOwner=new DummyInvokable();
+  MemorySegment memory=memoryManager.allocate(memOwner,256);
+{
+    BufferSortableGuaranteed<TestData.Key,TestData.Value> buffer=newSortBuffer(memory);
+    for (int i=1; i <= 3; i++) {
+      KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(i),new TestData.Value("" + i));
+      buffer.write(pair);
+    }
+    buffer.swap(0,1);
+{
+      Iterator<KeyValuePair<TestData.Key,TestData.Value>> iter=buffer.getIterator();
+      Assert.assertEquals(2,iter.next().getKey().getKey());
+      Assert.assertEquals(1,iter.next().getKey().getKey());
+      Assert.assertEquals(3,iter.next().getKey().getKey());
+    }
+    buffer.swap(1,2);
+{
+      Iterator<KeyValuePair<TestData.Key,TestData.Value>> iter=buffer.getIterator();
+      Assert.assertEquals(2,iter.next().getKey().getKey());
+      Assert.assertEquals(3,iter.next().getKey().getKey());
+      Assert.assertEquals(1,iter.next().getKey().getKey());
+    }
+{
+      MemorySegment memory2=memoryManager.allocate(memOwner,256);
+{
+        final Buffer.Output buffer2=new Buffer.Output(memory2);
+        Writer writer=new Writer(){
+          @Override public Collection<MemorySegment> close(){
+            return Collections.emptyList();
+          }
+          @Override public boolean write(          IOReadableWritable readable){
+            return buffer2.write(readable);
+          }
+        }
+;
+        buffer.writeToChannel(writer);
+        memory2=buffer2.dispose();
+      }
+{
+        Buffer.Input buffer2=new Buffer.Input(memory2);
+        @SuppressWarnings("unused") KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
+        memory2=buffer2.dispose();
+      }
+      memoryManager.release(memory2);
+    }
+    memory=buffer.unbind();
+  }
+  memoryManager.release(memory);
+}

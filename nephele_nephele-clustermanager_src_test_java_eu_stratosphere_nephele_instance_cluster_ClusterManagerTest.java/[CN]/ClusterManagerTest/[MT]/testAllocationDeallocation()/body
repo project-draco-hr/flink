@@ -1,44 +1,68 @@
 {
-  GlobalConfiguration.loadConfiguration(System.getProperty("user.dir") + "/correct-conf");
-  MyInstanceNotifiable dummyInstanceNotifiable=new MyInstanceNotifiable();
-  ClusterManager cm=new ClusterManager();
-  cm.setInstanceListener(dummyInstanceNotifiable);
-  try {
-    InetAddress inetAddress=null;
-    try {
-      inetAddress=InetAddress.getByName("192.168.198.1");
-    }
- catch (    UnknownHostException e) {
-      e.printStackTrace();
-    }
-    InstanceConnectionInfo instanceConnectionInfo=new InstanceConnectionInfo(inetAddress,1234,1235);
-    cm.reportHeartBeat(instanceConnectionInfo);
-    JobID jobID=new JobID();
-    for (int i=0; i < 4; ++i) {
-      cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
-    }
-    Thread.sleep(500);
-    assertEquals(4,dummyInstanceNotifiable.resourcesOfJobs.get(jobID).size());
-    try {
-      cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
-      assertTrue(false);
-    }
- catch (    InstanceException e) {
-      assertTrue(true);
-    }
-    List<AllocatedResource> resources=new ArrayList<AllocatedResource>(dummyInstanceNotifiable.resourcesOfJobs.get(jobID));
-    for (    AllocatedResource i : resources) {
-      cm.releaseAllocatedResource(jobID,new Configuration(),i);
-    }
-    assertEquals(4,dummyInstanceNotifiable.resourcesOfJobs.get(jobID).size());
-    for (int i=0; i < 4; ++i) {
-      cm.requestInstance(jobID,new Configuration(),cm.getDefaultInstanceType());
-    }
-    Thread.sleep(500);
-    assertEquals(8,dummyInstanceNotifiable.resourcesOfJobs.get(jobID).size());
+  final String configDir=getConfigDir();
+  if (configDir == null) {
+    fail("Cannot find configuration directory for cluster manager test");
   }
- catch (  InterruptedException e) {
-    e.printStackTrace();
+  GlobalConfiguration.loadConfiguration(configDir);
+  final TestInstanceListener testInstanceListener=new TestInstanceListener();
+  final ClusterManager cm=new ClusterManager();
+  cm.setInstanceListener(testInstanceListener);
+  try {
+    final InstanceConnectionInfo instanceConnectionInfo=new InstanceConnectionInfo(InetAddress.getByName("192.168.198.1"),1234,1235);
+    final HardwareDescription hardwareDescription=HardwareDescriptionFactory.construct(8,8L * 1024L * 1024L* 1024L,8L * 1024L * 1024L* 1024L);
+    cm.reportHeartBeat(instanceConnectionInfo,hardwareDescription);
+    final JobID jobID=new JobID();
+    final Configuration conf=new Configuration();
+    try {
+      cm.requestInstance(jobID,conf,cm.getInstanceTypeByName(SMALL_INSTANCE_TYPE_NAME));
+      cm.requestInstance(jobID,conf,cm.getInstanceTypeByName(SMALL_INSTANCE_TYPE_NAME));
+      cm.requestInstance(jobID,conf,cm.getInstanceTypeByName(MEDIUM_INSTANCE_TYPE_NAME));
+    }
+ catch (    InstanceException ie) {
+      fail(ie.getMessage());
+    }
+    ClusterManagerTestUtils.waitForInstances(jobID,testInstanceListener,3,MAX_WAIT_TIME);
+    final List<AllocatedResource> allocatedResources=testInstanceListener.getAllocatedResourcesForJob(jobID);
+    assertEquals(3,allocatedResources.size());
+    Iterator<AllocatedResource> it=allocatedResources.iterator();
+    final Set<AllocationID> allocationIDs=new HashSet<AllocationID>();
+    while (it.hasNext()) {
+      final AllocatedResource allocatedResource=it.next();
+      if (!LARGE_INSTANCE_TYPE_NAME.equals(allocatedResource.getInstance().getType().getIdentifier())) {
+        fail("Allocated unexpected instance of type " + allocatedResource.getInstance().getType().getIdentifier());
+      }
+      if (allocationIDs.contains(allocatedResource.getAllocationID())) {
+        fail("Discovered allocation ID " + allocatedResource.getAllocationID() + " at least twice");
+      }
+ else {
+        allocationIDs.add(allocatedResource.getAllocationID());
+      }
+    }
+    try {
+      cm.requestInstance(jobID,conf,cm.getInstanceTypeByName(MEDIUM_INSTANCE_TYPE_NAME));
+      fail("ClusterManager allowed to request more instances than actually available");
+    }
+ catch (    InstanceException ie) {
+    }
+    it=allocatedResources.iterator();
+    try {
+      while (it.hasNext()) {
+        final AllocatedResource allocatedResource=it.next();
+        cm.releaseAllocatedResource(jobID,conf,allocatedResource);
+      }
+    }
+ catch (    InstanceException ie) {
+      fail(ie.getMessage());
+    }
+    try {
+      cm.requestInstance(jobID,conf,cm.getInstanceTypeByName(LARGE_INSTANCE_TYPE_NAME));
+    }
+ catch (    InstanceException ie) {
+      fail(ie.getMessage());
+    }
+  }
+ catch (  UnknownHostException e) {
+    fail(e.getMessage());
   }
  finally {
     if (cm != null) {

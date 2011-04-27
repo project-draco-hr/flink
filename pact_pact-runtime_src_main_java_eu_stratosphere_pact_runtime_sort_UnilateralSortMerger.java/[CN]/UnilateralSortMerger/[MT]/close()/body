@@ -1,0 +1,72 @@
+{
+synchronized (this) {
+    if (this.closed) {
+      return;
+    }
+    this.closed=true;
+  }
+  try {
+synchronized (this.iteratorLock) {
+      if (this.iterator == null && this.iteratorException == null) {
+        this.iteratorException=new IOException("The sort-merger has been closed.");
+        this.iteratorLock.notifyAll();
+      }
+    }
+    if (readThread != null) {
+      try {
+        readThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down reader thread: " + t.getMessage(),t);
+      }
+    }
+    if (sortThread != null) {
+      try {
+        sortThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down sorter thread: " + t.getMessage(),t);
+      }
+    }
+    if (spillThread != null) {
+      try {
+        spillThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down spilling thread: " + t.getMessage(),t);
+      }
+    }
+    try {
+      if (readThread != null) {
+        readThread.join();
+      }
+      if (sortThread != null) {
+        sortThread.join();
+      }
+      if (spillThread != null) {
+        spillThread.join();
+      }
+    }
+ catch (    InterruptedException iex) {
+      LOG.debug("Closing of sort/merger was interrupted. " + "The reading/sorting/spilling threads may still be working.",iex);
+    }
+  }
+  finally {
+    for (    List<StreamChannelAccess<?>> channels : this.channelsToDeleteAtShutdown) {
+      for (      StreamChannelAccess<?> channel : channels) {
+        try {
+          if (!channel.isClosed()) {
+            channel.close();
+          }
+          channel.deleteChannel();
+        }
+ catch (        Throwable t) {
+        }
+      }
+    }
+    for (    List<MemorySegment> segments : this.memoryToReleaseAtShutdown) {
+      memoryManager.release(segments);
+    }
+    this.memoryToReleaseAtShutdown.clear();
+  }
+}

@@ -1,0 +1,17 @@
+{
+  List<StreamChannelAccess<?>> channelAccesses=new ArrayList<StreamChannelAccess<?>>(channelIDs.size());
+  registerChannelsToBeRemovedAtShudown(channelAccesses);
+  Iterator<KeyValuePair<K,V>> mergeIterator=getMergingIterator(channelIDs,readBuffers,channelAccesses);
+  final Channel.ID mergedChannelID=this.ioManager.createChannel();
+  final ChannelWriter writer=this.ioManager.createChannelWriter(mergedChannelID,writeBuffers);
+  channelAccesses.add(writer);
+  while (mergeIterator.hasNext()) {
+    KeyValuePair<K,V> pair=mergeIterator.next();
+    if (!writer.write(pair)) {
+      throw new IOException("Writing of pair during merging failed");
+    }
+  }
+  writer.close();
+  unregisterChannelsToBeRemovedAtShudown(channelAccesses);
+  return mergedChannelID;
+}

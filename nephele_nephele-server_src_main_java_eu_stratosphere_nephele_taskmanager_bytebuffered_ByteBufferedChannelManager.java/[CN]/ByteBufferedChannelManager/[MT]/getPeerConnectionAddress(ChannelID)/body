@@ -13,30 +13,19 @@ synchronized (this.registeredChannels) {
       }
     }
     InstanceConnectionInfo ici=null;
-    try {
-      while (true) {
-        final ConnectionInfoLookupResponse lookupResponse=this.channelLookupService.lookupConnectionInfo(channelWrapper.getJobID(),channelWrapper.getConnectedChannelID());
-        if (lookupResponse.receiverNotFound()) {
-          throw new IOException("Task with channel ID " + channelWrapper.getConnectedChannelID() + " does not appear to be running");
-        }
-        if (lookupResponse.receiverNotReady()) {
-          try {
-            Thread.sleep(500);
-          }
- catch (          InterruptedException e) {
-            return null;
-          }
-          continue;
-        }
-        if (lookupResponse.receiverReady()) {
-          ici=lookupResponse.getInstanceConnectionInfo();
-          break;
-        }
+    while (!Thread.interrupted()) {
+      final ConnectionInfoLookupResponse lookupResponse=this.channelLookupService.lookupConnectionInfo(channelWrapper.getJobID(),sourceChannelID);
+      if (lookupResponse.receiverNotFound()) {
+        throw new IOException("Task with channel ID " + channelWrapper.getConnectedChannelID() + " does not appear to be running");
       }
-    }
- catch (    IOException e) {
-      LOG.error(StringUtils.stringifyException(e));
-      return null;
+      if (lookupResponse.receiverNotReady()) {
+        Thread.sleep(500);
+        continue;
+      }
+      if (lookupResponse.receiverReady()) {
+        ici=lookupResponse.getInstanceConnectionInfo();
+        break;
+      }
     }
     if (ici != null) {
       connectionAddress=new InetSocketAddress(ici.getAddress(),ici.getDataPort());

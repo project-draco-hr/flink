@@ -1,39 +1,22 @@
 {
   if (LOG.isDebugEnabled()) {
-    LOG.debug("Beginning compilation of PACT program '" + pactPlan.getJobName() + '\'');
+    LOG.debug("Connecting compiler to JobManager to dertermine instance information.");
   }
-  Configuration config=GlobalConfiguration.getConfiguration();
-  int maxMachinesConfig=config.getInteger(PactConfigConstants.MAXIMUM_NUMBER_MACHINES_KEY,PactConfigConstants.DEFAULT_MAX_NUMBER_MACHINES);
-  int maxMachines=pactPlan.getMaxNumberMachines();
-  if (maxMachines < 1) {
-    maxMachines=maxMachinesConfig;
-  }
- else   if (maxMachinesConfig >= 1) {
-    if (maxMachines > maxMachinesConfig && LOG.isWarnEnabled()) {
-      LOG.warn("Maximal number of machines specified in PACT program (" + maxMachines + ") exceeds the maximum number in the global configuration ("+ maxMachinesConfig+ "). Using the value given in the global configuration.");
-    }
-    maxMachines=Math.min(maxMachines,maxMachinesConfig);
-  }
-  if (LOG.isDebugEnabled()) {
-    LOG.debug("Using a default degree of parallelism of " + this.defaultDegreeOfParallelism + ", a default intra-node parallelism of "+ this.defaultIntraNodeParallelism+ '.');
-    if (maxMachines > 0) {
-      LOG.debug("The execution is limited to a maximum number of " + maxMachines + " machines.");
+  Map<InstanceType,InstanceTypeDescription> instances=null;
+  JobManagerConnector jmc=new JobManagerConnector(this.jobManagerAddress);
+  Thread connectorThread=new Thread(jmc,"Compiler - JobManager connector.");
+  connectorThread.setDaemon(true);
+  connectorThread.start();
+  try {
+    jmc.waitForCompletion();
+    instances=jmc.instances;
+    if (instances == null) {
+      throw new NullPointerException("Returned instance map is <null>");
     }
   }
-  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(maxMachines,true);
-  pactPlan.accept(graphCreator);
-  OptimizedPlan plan=new OptimizedPlan(graphCreator.sources,graphCreator.sinks,graphCreator.con2node.values(),pactPlan.getJobName());
-  InterestingPropertyAndBranchesVisitor propsVisitor=new InterestingPropertyAndBranchesVisitor(costEstimator);
-  plan.accept(propsVisitor);
-  if (plan.getDataSinks().size() != 1) {
-    throw new CompilerException("In the current version, plans must have exactly one data sink.");
+ catch (  Throwable t) {
+    throw new CompilerException("Available instances could not be determined from job manager: " + t.getMessage(),t);
   }
-  List<DataSinkNode> bestPlan=plan.getDataSinks().iterator().next().getAlternativePlans(costEstimator);
-  if (bestPlan.size() != 1) {
-    throw new CompilerException("Error in compiler: more than one best plan was created!");
-  }
-  plan=new PlanFinalizer().createFinalPlan(bestPlan,pactPlan.getJobName(),memoryPerInstance);
-  plan.setInstanceTypeName(this.pactInstanceType.getIdentifier());
-  insertTempConnection(plan);
-  return plan;
+  InstanceTypeDescription type=getType(instances);
+  return compile(pactPlan,type);
 }

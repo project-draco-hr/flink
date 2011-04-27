@@ -2,34 +2,39 @@
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   final CoGroupStub<IK,IV1,IV2,OK,OV> coGroup=getCoGroupStub();
   final OutputCollector<OK,OV> collector=getOutputCollector();
-  final CoGroupTaskIterator<IK,IV1,IV2> coGroupIterator=getIterator(ikClass,iv1Class,iv2Class);
-  LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  coGroup.open();
+  CoGroupTaskIterator<IK,IV1,IV2> coGroupIterator=null;
   try {
+    coGroupIterator=getIterator(ikClass,iv1Class,iv2Class);
     coGroupIterator.open();
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     LOG.debug("Start processing: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-    while (coGroupIterator.next()) {
+    coGroup.open();
+    while (coGroupIterator.next() && !taskCanceled) {
       coGroup.coGroup(coGroupIterator.getKey(),coGroupIterator.getValues1(),coGroupIterator.getValues2(),collector);
     }
   }
- catch (  IOException ioe) {
-    throw new RuntimeException("Error occured during processing CoGroupTask",ioe);
-  }
-catch (  InterruptedException ie) {
-    throw new RuntimeException("Error occured during processing CoGroupTask",ie);
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      throw ex;
+    }
   }
  finally {
+    if (coGroupIterator != null) {
+      coGroupIterator.close();
+    }
     try {
       coGroup.close();
     }
  catch (    Throwable t) {
-    }
-    try {
-      coGroupIterator.close();
-    }
- catch (    Throwable t) {
+      LOG.error("Error while closing the CoGroup user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
     }
     collector.close();
   }
-  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  if (!this.taskCanceled) {
+    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+ else {
+    LOG.warn("PACT code cancelled: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
 }

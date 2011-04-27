@@ -1,71 +1,54 @@
 {
-  createInputFile();
-  createOutputDir();
-  createJarFile("GrepTask1Input1Output");
-  createJarFile("GrepTask2Inputs1Output");
-  JobGraph jg=new JobGraph("Job Graph 1");
-  JobID jobID=jg.getJobID();
-  JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
-  i1.setFileInputClass(FileLineReader.class);
-  i1.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  i1.setNumberOfSubtasks(2);
-  JobFileInputVertex i2=new JobFileInputVertex("Input 2",jg);
-  i2.setFileInputClass(FileLineReader.class);
-  i2.setFilePath(new Path("file://" + PATHNAME + INPUTFILENAME));
-  i2.setNumberOfSubtasks(2);
-  JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
-  t1.setTaskClass(GrepTask1Input1Output.class);
-  t1.setNumberOfSubtasks(2);
-  JobTaskVertex t2=new JobTaskVertex("Task 2",jg);
-  t2.setTaskClass(GrepTask1Input1Output.class);
-  t2.setNumberOfSubtasks(2);
-  JobTaskVertex t3=new JobTaskVertex("Task 3",jg);
-  t3.setTaskClass(GrepTask2Inputs1Output.class);
-  t3.setNumberOfSubtasks(2);
-  JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
-  o1.setFileOutputClass(FileLineWriter.class);
-  o1.setFilePath(new Path("file://" + PATHNAME + OUTPUTDIRNAME));
-  o1.setNumberOfSubtasks(2);
-  i1.setVertexToShareInstancesWith(t1);
-  t1.setVertexToShareInstancesWith(t3);
-  i2.setVertexToShareInstancesWith(t2);
-  t2.setVertexToShareInstancesWith(t3);
-  t3.setVertexToShareInstancesWith(o1);
+  File inputFile1=null;
+  File inputFile2=null;
+  JobID jobID=null;
   try {
+    inputFile1=ServerTestUtils.createInputFile(0);
+    inputFile2=ServerTestUtils.createInputFile(0);
+    final JobGraph jg=new JobGraph("Job Graph 1");
+    jobID=jg.getJobID();
+    final JobFileInputVertex i1=new JobFileInputVertex("Input 1",jg);
+    i1.setFileInputClass(FileLineReader.class);
+    i1.setFilePath(new Path("file://" + inputFile1.getAbsolutePath()));
+    i1.setNumberOfSubtasks(2);
+    final JobFileInputVertex i2=new JobFileInputVertex("Input 2",jg);
+    i2.setFileInputClass(FileLineReader.class);
+    i2.setFilePath(new Path("file://" + inputFile2.getAbsolutePath()));
+    i2.setNumberOfSubtasks(2);
+    final JobTaskVertex t1=new JobTaskVertex("Task 1",jg);
+    t1.setTaskClass(ForwardTask1Input1Output.class);
+    t1.setNumberOfSubtasks(2);
+    final JobTaskVertex t2=new JobTaskVertex("Task 2",jg);
+    t2.setTaskClass(ForwardTask1Input1Output.class);
+    t2.setNumberOfSubtasks(2);
+    final JobTaskVertex t3=new JobTaskVertex("Task 3",jg);
+    t3.setTaskClass(ForwardTask2Inputs1Output.class);
+    t3.setNumberOfSubtasks(2);
+    final JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+    o1.setFileOutputClass(FileLineWriter.class);
+    o1.setFilePath(new Path("file://" + ServerTestUtils.getRandomFilename()));
+    o1.setNumberOfSubtasks(2);
+    i1.setVertexToShareInstancesWith(t1);
+    t1.setVertexToShareInstancesWith(t3);
+    i2.setVertexToShareInstancesWith(t2);
+    t2.setVertexToShareInstancesWith(t3);
+    t3.setVertexToShareInstancesWith(o1);
     i1.connectTo(t1);
     i2.connectTo(t2);
     t1.connectTo(t3);
     t2.connectTo(t3);
     t3.connectTo(o1);
-  }
- catch (  JobGraphDefinitionException e) {
-    e.printStackTrace();
-  }
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"));
-  jg.addJar(new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"));
-  Path[] paths={new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar")};
-  try {
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask1Input1Output.jar"),new File(PATHNAME + "GrepTask1Input1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask1Input1Output.jar"))));
-    LibraryCacheManager.addLibrary(jobID,new Path("file://" + PATHNAME + "GrepTask2Inputs1Output.jar"),new File(PATHNAME + "GrepTask2Inputs1Output.jar").length(),new DataInputStream(new FileInputStream(new File(PATHNAME + "GrepTask2Inputs1Output.jar"))));
-    LibraryCacheManager.register(jobID,paths);
-  }
- catch (  IOException e1) {
-    e1.printStackTrace();
-  }
-  final String confDir=System.getProperty("user.dir") + "/correct-conf";
-  GlobalConfiguration.loadConfiguration(confDir);
-  final MyInstanceNotifiable myInstanceNotifiable=new MyInstanceNotifiable();
-  final LocalInstanceManager lim=new LocalInstanceManager(confDir);
-  lim.setInstanceListener(myInstanceNotifiable);
-  try {
-    ExecutionGraph eg=new ExecutionGraph(jg,lim);
+    LibraryCacheManager.register(jobID,new String[0]);
+    final ExecutionGraph eg=new ExecutionGraph(jg,INSTANCE_MANAGER);
     final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
     while (it.hasNext()) {
       it.next().setExecutionState(ExecutionState.SCHEDULED);
     }
-    assertEquals(1,eg.getInstanceTypesRequiredForCurrentStage().size());
-    assertEquals(2,(int)eg.getInstanceTypesRequiredForCurrentStage().get(lim.getDefaultInstanceType()));
-    ExecutionStage es=eg.getStage(0);
+    final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
+    eg.collectInstanceTypesRequiredForCurrentStage(requiredInstances,ExecutionState.SCHEDULED);
+    assertEquals(1,requiredInstances.size());
+    assertEquals(2,(int)requiredInstances.get(INSTANCE_MANAGER.getDefaultInstanceType()));
+    final ExecutionStage es=eg.getStage(0);
     ExecutionGroupVertex egv0=null;
     ExecutionGroupVertex egv1=null;
     ExecutionGroupVertex egv2=null;
@@ -180,18 +163,18 @@
  else {
       egv5=es.getStageMember(5);
     }
-    ExecutionVertex i1_0=egv0.getGroupMember(0);
-    ExecutionVertex i1_1=egv0.getGroupMember(1);
-    ExecutionVertex i2_0=egv1.getGroupMember(0);
-    ExecutionVertex i2_1=egv1.getGroupMember(1);
-    ExecutionVertex t1_0=egv2.getGroupMember(0);
-    ExecutionVertex t1_1=egv2.getGroupMember(1);
-    ExecutionVertex t2_0=egv3.getGroupMember(0);
-    ExecutionVertex t2_1=egv3.getGroupMember(1);
-    ExecutionVertex t3_0=egv4.getGroupMember(0);
-    ExecutionVertex t3_1=egv4.getGroupMember(1);
-    ExecutionVertex o1_0=egv5.getGroupMember(0);
-    ExecutionVertex o1_1=egv5.getGroupMember(1);
+    final ExecutionVertex i1_0=egv0.getGroupMember(0);
+    final ExecutionVertex i1_1=egv0.getGroupMember(1);
+    final ExecutionVertex i2_0=egv1.getGroupMember(0);
+    final ExecutionVertex i2_1=egv1.getGroupMember(1);
+    final ExecutionVertex t1_0=egv2.getGroupMember(0);
+    final ExecutionVertex t1_1=egv2.getGroupMember(1);
+    final ExecutionVertex t2_0=egv3.getGroupMember(0);
+    final ExecutionVertex t2_1=egv3.getGroupMember(1);
+    final ExecutionVertex t3_0=egv4.getGroupMember(0);
+    final ExecutionVertex t3_1=egv4.getGroupMember(1);
+    final ExecutionVertex o1_0=egv5.getGroupMember(0);
+    final ExecutionVertex o1_1=egv5.getGroupMember(1);
     assertTrue((t1_0.getAllocatedResource().equals(i1_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(i1_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(i1_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(i1_1.getAllocatedResource())));
     assertTrue((t1_0.getAllocatedResource().equals(i2_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(i2_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(i2_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(i2_1.getAllocatedResource())));
     assertTrue((t1_0.getAllocatedResource().equals(t2_0.getAllocatedResource()) && !t1_0.getAllocatedResource().equals(t2_1.getAllocatedResource())) || (!t1_0.getAllocatedResource().equals(t2_0.getAllocatedResource()) && t1_0.getAllocatedResource().equals(t2_1.getAllocatedResource())));
@@ -204,15 +187,27 @@
     assertTrue((t1_1.getAllocatedResource().equals(o1_0.getAllocatedResource()) && !t1_1.getAllocatedResource().equals(o1_1.getAllocatedResource())) || (!t1_1.getAllocatedResource().equals(o1_0.getAllocatedResource()) && t1_1.getAllocatedResource().equals(o1_1.getAllocatedResource())));
   }
  catch (  GraphConversionException e) {
-    e.printStackTrace();
+    fail(e.getMessage());
+  }
+catch (  IOException e) {
+    fail(e.getMessage());
+  }
+catch (  JobGraphDefinitionException e) {
+    fail(e.getMessage());
   }
  finally {
-    lim.shutdown();
-    try {
-      Thread.sleep(SLEEPINTERVAL);
+    if (inputFile1 != null) {
+      inputFile1.delete();
     }
- catch (    InterruptedException e) {
-      e.printStackTrace();
+    if (inputFile2 != null) {
+      inputFile2.delete();
+    }
+    if (jobID != null) {
+      try {
+        LibraryCacheManager.unregister(jobID);
+      }
+ catch (      IOException ioe) {
+      }
     }
   }
 }

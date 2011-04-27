@@ -3,7 +3,7 @@ synchronized (this.jobSubmitClient) {
     final JobSubmissionResult submissionResult=this.jobSubmitClient.submitJob(this.jobGraph);
     if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
       LOG.error("ERROR: " + submissionResult.getDescription());
-      return false;
+      throw new JobExecutionException(submissionResult.getDescription(),false);
     }
  else {
       Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
@@ -15,29 +15,24 @@ synchronized (this.jobSubmitClient) {
     sleep=interval.getValue() * 1000;
   }
  catch (  IOException ioe) {
-    LOG.error("ERROR" + StringUtils.stringifyException(ioe));
-    return false;
+    logErrorAndRethrow(StringUtils.stringifyException(ioe));
   }
   try {
     Thread.sleep(sleep / 2);
   }
  catch (  InterruptedException e) {
-    LOG.debug(StringUtils.stringifyException(e));
-    return false;
+    logErrorAndRethrow(StringUtils.stringifyException(e));
   }
   while (true) {
     if (Thread.interrupted()) {
-      LOG.debug("Job client has been interrupted");
-      return false;
+      logErrorAndRethrow("Job client has been interrupted");
     }
     final JobProgressResult jobProgressResult=getJobProgress();
     if (jobProgressResult == null) {
-      LOG.error("Returned job progress is unexpectedly null!");
-      return false;
+      logErrorAndRethrow("Returned job progress is unexpectedly null!");
     }
     if (jobProgressResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
-      LOG.error("Could not retrieve job progress: " + jobProgressResult.getDescription());
-      return false;
+      logErrorAndRethrow("Could not retrieve job progress: " + jobProgressResult.getDescription());
     }
     final Iterator<AbstractEvent> it=jobProgressResult.getEvents();
     while (it.hasNext()) {
@@ -52,11 +47,12 @@ synchronized (this.jobSubmitClient) {
         final JobStatus jobStatus=jobEvent.getCurrentJobStatus();
         if (jobStatus == JobStatus.FINISHED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-          return true;
+          return;
         }
- else         if (jobStatus == JobStatus.CANCELLED || jobStatus == JobStatus.FAILED) {
+ else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-          return false;
+          LOG.info(jobEvent.getOptionalMessage());
+          throw new JobExecutionException(jobEvent.getOptionalMessage(),(jobStatus == JobStatus.CANCELED) ? true : false);
         }
       }
     }
@@ -65,8 +61,7 @@ synchronized (this.jobSubmitClient) {
       Thread.sleep(sleep);
     }
  catch (    InterruptedException e) {
-      LOG.debug(StringUtils.stringifyException(e));
-      return false;
+      logErrorAndRethrow(StringUtils.stringifyException(e));
     }
   }
 }

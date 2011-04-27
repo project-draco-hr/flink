@@ -1,0 +1,38 @@
+{
+  int keyCnt=32768;
+  int valCnt=8;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new RegularlyGeneratedInputGenerator(keyCnt,valCnt,false));
+  super.addOutput(outList);
+  CombineTask testTask=new CombineTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
+  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(2);
+  super.registerTask(testTask,MockCombiningReduceStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  HashMap<PactInteger,PactInteger> aggMap=new HashMap<PactInteger,PactInteger>();
+  for (  KeyValuePair<PactInteger,PactInteger> pair : outList) {
+    PactInteger prevVal=aggMap.get(pair.getKey());
+    if (prevVal != null) {
+      aggMap.put(pair.getKey(),new PactInteger(prevVal.getValue() + pair.getValue().getValue()));
+    }
+ else {
+      aggMap.put(pair.getKey(),pair.getValue());
+    }
+  }
+  Assert.assertTrue("Resultset size was " + aggMap.size() + ". Expected was "+ keyCnt,aggMap.size() == keyCnt);
+  for (  PactInteger integer : aggMap.values()) {
+    Assert.assertTrue("Incorrect result",integer.getValue() == expSum);
+  }
+  outList.clear();
+}

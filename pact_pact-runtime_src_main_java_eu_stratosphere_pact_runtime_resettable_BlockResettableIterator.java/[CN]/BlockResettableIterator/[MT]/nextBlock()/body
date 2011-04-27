@@ -1,11 +1,18 @@
 {
-  if (in != null)   emptySegments.add(in.unbind());
-  try {
-    in=filledBuffers.take();
+  if (this.closed) {
+    throw new IllegalStateException("Iterator has been closed.");
   }
- catch (  InterruptedException e) {
-    throw new RuntimeException("BlockResettableIterator: Unable to fetch the last filled buffer",e);
+  if (this.noMoreBlocks) {
+    return false;
   }
-  if (!in.isBound())   return false;
+  collectAllBuffers(this.emptySegments);
+  this.bufferCurrentlyFilled=new Buffer.Output(this.emptySegments.remove(this.emptySegments.size() - 1));
+  if (this.leftOverElement != null) {
+    if (!this.bufferCurrentlyFilled.write(this.leftOverElement)) {
+      throw new RuntimeException("BlockResettableIterator: " + "Could not serialize element into fresh block buffer - element is too large.");
+    }
+    this.nextElement=this.leftOverElement;
+    this.leftOverElement=null;
+  }
   return true;
 }

@@ -1,10 +1,10 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  Iterator<Pair<Key,Value>> input=new Iterator<Pair<Key,Value>>(){
+  Iterator<KeyValuePair<Key,Value>> input=new Iterator<KeyValuePair<Key,Value>>(){
     public boolean hasNext(){
       return reader.hasNext();
     }
-    @Override public Pair<Key,Value> next(){
+    @Override public KeyValuePair<Key,Value> next(){
       try {
         return reader.next();
       }
@@ -20,8 +20,21 @@ catch (      InterruptedException e) {
   }
 ;
   stub.open();
-  stub.run(input,output);
+  try {
+    callStub(input,output);
+  }
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+      throw ex;
+    }
+  }
   output.close();
   stub.close();
-  LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  if (!this.taskCanceled) {
+    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
+ else {
+    LOG.warn("PACT code cancelled: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  }
 }

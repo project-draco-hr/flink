@@ -1,21 +1,40 @@
 {
   if (!this.checkpointFinished) {
-    throw new IOException("Checkpoint is not finished!");
+    LOG.error("Checkpoint is not finished!");
   }
   if (this.fileChannel.isOpen()) {
-    throw new IOException("File channel is still open!");
+    LOG.error("File channel is still open!");
   }
   final String filename=getFilename();
-  byteBufferedChannelManager.getFileBufferManager().registerExternalDataSourceForChannel(this.sourceChannelID,filename);
-  final FileInputStream fis=new FileInputStream(filename);
+  FileInputStream fis=null;
+  try {
+    fis=new FileInputStream(filename);
+  }
+ catch (  IOException ioe) {
+    LOG.error(ioe);
+    return;
+  }
+  try {
+    byteBufferedChannelManager.getFileBufferManager().registerExternalDataSourceForChannel(this.sourceChannelID,filename);
+  }
+ catch (  IOException ioe) {
+    LOG.error(ioe);
+  }
   this.fileChannel=fis.getChannel();
-  final IncomingConnection incomingConnection=byteBufferedChannelManager.registerIncomingConnectionFromCheckpoint();
+  final IncomingConnection incomingConnection=new IncomingConnection(byteBufferedChannelManager,this.fileChannel);
   try {
     while (true) {
-      incomingConnection.read(this.fileChannel);
+      incomingConnection.read();
     }
   }
  catch (  EOFException e) {
   }
-  this.fileChannel.close();
+catch (  IOException e) {
+    incomingConnection.reportTransmissionProblem(null,e);
+    return;
+  }
+catch (  InterruptedException e) {
+    LOG.info("Caught interrupted exception: " + StringUtils.stringifyException(e));
+  }
+  incomingConnection.closeConnection(null);
 }

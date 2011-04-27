@@ -1,15 +1,57 @@
 {
-synchronized (this.dataSources) {
-    FileBufferManagerEntry fbme=this.dataSources.get(sourceChannelID);
-    if (fbme == null) {
-      LOG.error("Cannot find data source for channel " + sourceChannelID + " to mark buffer as consumed");
-      return;
+  try {
+    final Object groupObject=this.channelGroupMap.get(sourceChannelID);
+    if (groupObject == null) {
+      if (this.canceledChannels.contains(sourceChannelID)) {
+        return;
+      }
+ else {
+        throw new IOException("Cannot find input gate for source channel ID " + sourceChannelID);
+      }
     }
-    try {
-      fbme.checkForEndOfFile();
+    Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+      queue=this.readableSpillingFileMap.get(groupObject);
+      if (queue == null) {
+        if (this.canceledChannels.contains(sourceChannelID)) {
+          return;
+        }
+ else {
+          throw new IOException("Cannot find readable spilling file queue for group object " + groupObject);
+        }
+      }
+      ReadableSpillingFile readableSpillingFile=null;
+synchronized (queue) {
+        readableSpillingFile=queue.peek();
+        if (readableSpillingFile == null) {
+          if (this.canceledChannels.contains(sourceChannelID)) {
+            return;
+          }
+ else {
+            throw new IOException("Cannot find readable spilling file for source channel " + sourceChannelID);
+          }
+        }
+        try {
+          readableSpillingFile.unlockReadableFileChannel();
+          if (readableSpillingFile.checkForEndOfFile()) {
+            queue.poll();
+            if (queue.isEmpty()) {
+              this.readableSpillingFileMap.remove(groupObject);
+            }
+          }
+        }
+ catch (        ClosedChannelException e) {
+          if (this.canceledChannels.contains(sourceChannelID)) {
+            readableSpillingFile.getPhysicalFile().delete();
+          }
+ else {
+            throw e;
+          }
+        }
+      }
     }
- catch (    IOException ioe) {
-      LOG.error(ioe);
-    }
+  }
+ catch (  IOException ioe) {
+    LOG.error(StringUtils.stringifyException(ioe));
   }
 }

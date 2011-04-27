@@ -1,26 +1,24 @@
 {
-  if (args.length != 3) {
-    return null;
-  }
-  int noSubTasks=Integer.parseInt(args[0]);
-  String edgeInput=args[1];
-  String output=args[2];
-  DataSourceContract<N_StringPair,N_List_StringPair> edges=new DataSourceContract<N_StringPair,N_List_StringPair>(EdgeListInFormat.class,edgeInput);
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String edgeInput=(args.length > 1 ? args[1] : "");
+  String output=(args.length > 2 ? args[2] : "");
+  DataSourceContract<Edge,PactNull> edges=new DataSourceContract<Edge,PactNull>(EdgeListInFormat.class,edgeInput);
   edges.setFormatParameter("delimiter","\n");
   edges.setDegreeOfParallelism(noSubTasks);
   edges.setOutputContract(UniqueKey.class);
-  MapContract<N_StringPair,N_List_StringPair,PactString,N_List_StringPair> assignKeys=new MapContract<N_StringPair,N_List_StringPair,PactString,N_List_StringPair>(AssignKeys.class,"Assign Keys");
+  MapContract<Edge,PactNull,PactString,Edge> assignKeys=new MapContract<Edge,PactNull,PactString,Edge>(AssignKeys.class,"Assign Keys");
   assignKeys.setDegreeOfParallelism(noSubTasks);
-  ReduceContract<PactString,N_List_StringPair,N_StringPair,N_List_StringPair> buildTriads=new ReduceContract<PactString,N_List_StringPair,N_StringPair,N_List_StringPair>(BuildTriads.class,"Build Triads");
+  MatchContract<PactString,Edge,Edge,Edge,EdgeList> buildTriads=new MatchContract<PactString,Edge,Edge,Edge,EdgeList>(BuildTriads.class,"Build Triads");
   buildTriads.setDegreeOfParallelism(noSubTasks);
-  MatchContract<N_StringPair,N_List_StringPair,N_List_StringPair,N_StringPair,N_List_StringPair> closeTriads=new MatchContract<N_StringPair,N_List_StringPair,N_List_StringPair,N_StringPair,N_List_StringPair>(CloseTriads.class,"Close Triads");
+  MatchContract<Edge,EdgeList,PactNull,PactNull,EdgeList> closeTriads=new MatchContract<Edge,EdgeList,PactNull,PactNull,EdgeList>(CloseTriads.class,"Close Triads");
   closeTriads.setDegreeOfParallelism(noSubTasks);
-  DataSinkContract<N_StringPair,N_List_StringPair> triangles=new DataSinkContract<N_StringPair,N_List_StringPair>(EdgeListOutFormat.class,output);
+  DataSinkContract<PactNull,EdgeList> triangles=new DataSinkContract<PactNull,EdgeList>(EdgeListOutFormat.class,output);
   triangles.setDegreeOfParallelism(noSubTasks);
   triangles.setInput(closeTriads);
   closeTriads.setSecondInput(edges);
   closeTriads.setFirstInput(buildTriads);
-  buildTriads.setInput(assignKeys);
+  buildTriads.setFirstInput(assignKeys);
+  buildTriads.setSecondInput(assignKeys);
   assignKeys.setInput(edges);
   return new Plan(triangles,"Enumerate Triangles");
 }
