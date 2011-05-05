@@ -1,7 +1,7 @@
 {
   final Map<Operator,PactModule> modules=new IdentityHashMap<Operator,PactModule>();
   final Map<Operator,Contract[]> operatorOutputs=new IdentityHashMap<Operator,Contract[]>();
-  new Traverser<Operator>(new OperatorNavigator(),sinks).traverse(new TraverseListener<Operator>(){
+  new Traverser<Operator>(new OperatorNavigator(),this.sinks).traverse(new TraverseListener<Operator>(){
     @Override public void nodeTraversed(    Operator node){
       PactModule module=node.asPactModule();
       modules.put(node,module);
@@ -19,19 +19,19 @@
     List<DataSourceContract<PactNull,PactJsonObject>> moduleInputs=Arrays.asList(module.getInputStubs());
     Collection<Contract> contracts=module.getAllContracts();
     for (    Contract contract : contracts) {
-      Contract[] inputs=getInputs(contract);
+      Contract[] inputs=this.getInputs(contract);
       for (int index=0; index < inputs.length; index++) {
         int inputIndex=moduleInputs.indexOf(inputs[index]);
-        if (inputIndex != -1) {
+        if (inputIndex != -1 && inputIndex < operator.getInputs().size()) {
           Output input=operator.getInputs().get(inputIndex);
           inputs[index]=operatorOutputs.get(input.getOperator())[input.getIndex()];
         }
       }
-      setInputs(contract,inputs);
+      this.setInputs(contract,inputs);
     }
   }
   List<Contract> pactSinks=new ArrayList<Contract>();
-  for (  Operator sink : sinks) {
+  for (  Operator sink : this.sinks) {
     DataSinkContract<PactNull,PactJsonObject>[] outputs=modules.get(sink).getOutputStubs();
     for (    DataSinkContract<PactNull,PactJsonObject> outputStub : outputs) {
       Contract output=outputStub;

@@ -5,16 +5,21 @@
     final TestPairs<Key,Value> expectedValues=(TestPairs<Key,Value>)this.getExpectedOutput(dataSinkContract);
     final Iterator<KeyValuePair<Key,Value>> actualIterator=actualValues.iterator();
     final Iterator<KeyValuePair<Key,Value>> expectedIterator=expectedValues.iterator();
-    final int index=0;
+    Key currentKey=null;
+    int itemIndex=0;
+    List<KeyValuePair<Key,Value>> expectedPairsWithCurrentKey=new ArrayList<KeyValuePair<Key,Value>>();
     while (actualIterator.hasNext() && expectedIterator.hasNext()) {
-      final Object expected=expectedIterator.next(), actual=actualIterator.next();
-      try {
-        Assert.assertEquals(expected,actual);
+      final KeyValuePair<Key,Value> expected=expectedIterator.next();
+      if (currentKey == null || expected.getKey().compareTo(currentKey) != 0) {
+        KeyValuePair<Key,Value> unmatched=matchAllExpectedItems(actualIterator,expectedPairsWithCurrentKey);
+        if (unmatched != null)         throw new ArrayComparisonFailure(String.format("Data sink %s contains unexpected values: ",dataSinkContract.getName()),new AssertionFailedError(Assert.format(" ",expectedPairsWithCurrentKey,unmatched)),itemIndex + expectedPairsWithCurrentKey.size() - 1);
+        currentKey=expected.getKey();
       }
- catch (      final AssertionFailedError e) {
-        throw new ArrayComparisonFailure(String.format("Data sink %s contains unexpected values: ",dataSinkContract.getName()),e,index);
-      }
+      expectedPairsWithCurrentKey.add(expected);
+      itemIndex++;
     }
+    KeyValuePair<Key,Value> unmatched=matchAllExpectedItems(actualIterator,expectedPairsWithCurrentKey);
+    if (unmatched != null)     throw new ArrayComparisonFailure(String.format("Data sink %s contains unexpected values: ",dataSinkContract.getName()),new AssertionFailedError(Assert.format(" ",expectedPairsWithCurrentKey,unmatched)),itemIndex - expectedPairsWithCurrentKey.size());
     if (expectedIterator.hasNext())     fail("More elements expected: " + toString(expectedIterator),dataSinkContract.getName());
     if (actualIterator.hasNext())     fail("Less elements expected: " + toString(actualIterator),dataSinkContract.getName());
   }
