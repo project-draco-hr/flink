@@ -1,0 +1,19 @@
+{
+  final int bucketsPerSegment=this.bucketsPerSegmentMask + 1;
+  final int numSegs=(numBuckets >>> this.bucketsPerSegmentBits) + 1;
+  final MemorySegment[] table=new MemorySegment[numSegs];
+  for (int i=0, bucket=0; i < numSegs && bucket < numBuckets; i++) {
+    final MemorySegment seg=this.availableMemory.remove(this.availableMemory.size() - 1);
+    for (int k=0; k < bucketsPerSegment && bucket < numBuckets; k++, bucket++) {
+      final int bucketOffset=k * HASH_BUCKET_SIZE;
+      final byte partition=partition(bucket,partitionLevel,numPartitions);
+      seg.put(bucketOffset + HEADER_PARTITION_OFFSET,partition);
+      seg.put(bucketOffset + HEADER_STATUS_OFFSET,BUCKET_STATUS_IN_MEMORY);
+      seg.putShort(bucketOffset + HEADER_COUNT_OFFSET,(short)0);
+      seg.putLong(bucketOffset + HEADER_FORWARD_OFFSET,BUCKET_FORWARD_POINTER_NOT_SET);
+    }
+    table[i]=seg;
+  }
+  this.buckets=table;
+  this.numBuckets=numBuckets;
+}

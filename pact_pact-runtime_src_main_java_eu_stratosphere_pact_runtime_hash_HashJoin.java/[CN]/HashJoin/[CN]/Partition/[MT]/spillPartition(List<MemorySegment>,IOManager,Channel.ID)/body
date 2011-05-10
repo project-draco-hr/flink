@@ -2,15 +2,20 @@
   if (!isInMemory()) {
     throw new RuntimeException("Bug in Hybrid Hash Join: " + "Request to spill a partition that has already been spilled.");
   }
-  if (this.blockCounter < 2) {
+  if (this.blockCounter + this.numOverflowSegments < 2) {
     throw new RuntimeException("Bug in Hybrid Hash Join: " + "Request to spill a partition with less than two buffers.");
   }
-  this.spillingWriter=ioAccess.createBlockChannelWriter(targetChannel,this.writeBehindBuffers);
+  for (int i=0; i < this.numOverflowSegments; i++) {
+    target.add(this.overflowSegments[i]);
+  }
+  this.overflowSegments=null;
+  this.numOverflowSegments=0;
+  this.nextOverflowBucket=0;
+  this.spillingWriter=ioAccess.createBlockChannelWriter(targetChannel,this.bufferReturnQueue);
   int numBlocks=this.partitionBuffers.size();
   for (int i=0; i < numBlocks; i++) {
     spillBuffer(this.partitionBuffers.get(i));
   }
   this.partitionBuffers.clear();
-  addBuffer(getNextWriteBehindBuffer());
-  return numBlocks - 1;
+  return numBlocks;
 }

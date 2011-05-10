@@ -1,24 +1,30 @@
 {
   if (isInMemory()) {
-    final int bufferNum=this.partitionBuffers.size() - 1;
-    final Buffer.Output targetBuffer=this.partitionBuffers.get(bufferNum);
-    final long pointer=(((long)bufferNum) << 32) | targetBuffer.getPosition();
-    if (targetBuffer.write(object)) {
+    final int bufferNum=this.blockCounter - 1;
+    final MemorySegment targetBuffer=this.currentPartitionBuffer;
+    final long pointer=(((long)bufferNum) << 32) | targetBuffer.outputView.getPosition();
+    try {
+      object.write(targetBuffer.outputView);
       this.recordCounter++;
       return pointer;
     }
- else {
+ catch (    IOException ioex) {
       return -1;
     }
   }
  else {
-    final Buffer.Output targetBuffer=this.partitionBuffers.get(0);
-    if (!targetBuffer.write(object)) {
-      this.partitionBuffers.clear();
-      spillBuffer(targetBuffer);
+    try {
+      object.write(this.currentPartitionBuffer.outputView);
+    }
+ catch (    IOException ioex) {
+      final MemorySegment toSpill=this.currentPartitionBuffer;
+      this.currentPartitionBuffer=null;
+      spillBuffer(toSpill);
       addBuffer(getNextWriteBehindBuffer());
-      final Buffer.Output newBuffer=this.partitionBuffers.get(0);
-      if (!newBuffer.write(object)) {
+      try {
+        object.write(this.currentPartitionBuffer.outputView);
+      }
+ catch (      IOException iioex) {
         throw new IOException("Record could not be added to fresh buffer. " + "Probably cause: Record length exceeds buffer size limit.");
       }
     }
