@@ -4,7 +4,6 @@
   final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
   final MemorySegment bucket=this.buckets[bucketArrayPos];
   final int partitionNumber=bucket.get(bucketInSegmentPos + HEADER_PARTITION_OFFSET);
-  final int bucketStatus=bucket.get(bucketInSegmentPos + HEADER_STATUS_OFFSET);
   if (partitionNumber < 0 || partitionNumber >= this.partitionsBeingBuilt.size()) {
     throw new RuntimeException("Error: Hash structures in Hash-Join are corrupt. Invalid partition number for bucket.");
   }
@@ -26,7 +25,7 @@
     }
   }
   if (p.isInMemory()) {
-    final short count=bucket.getShort(bucketInSegmentPos + HEADER_COUNT_OFFSET);
+    final int count=bucket.getShort(bucketInSegmentPos + HEADER_COUNT_OFFSET);
     if (count < NUM_ENTRIES_PER_BUCKET) {
       bucket.putInt(bucketInSegmentPos + BUCKET_HEADER_LENGTH + (count * HASH_CODE_LEN),hashCode);
       bucket.putLong(bucketInSegmentPos + BUCKET_POINTER_START_OFFSET + (count * POINTER_LEN),pointer);
@@ -36,9 +35,9 @@
       final long originalForwardPointer=bucket.getLong(bucketInSegmentPos + HEADER_FORWARD_OFFSET);
       final long forwardForNewBucket;
       if (originalForwardPointer != BUCKET_FORWARD_POINTER_NOT_SET) {
-        final int overflowSegNum=(int)((originalForwardPointer >>> 32) & 0xffffffff);
-        final MemorySegment seg=p.overflowSegments[overflowSegNum];
+        final int overflowSegNum=(int)(originalForwardPointer >>> 32);
         final int segOffset=(int)(originalForwardPointer & 0xffffffff);
+        final MemorySegment seg=p.overflowSegments[overflowSegNum];
         final short obCount=seg.getShort(segOffset + HEADER_COUNT_OFFSET);
         if (obCount < NUM_ENTRIES_PER_BUCKET) {
           seg.putInt(segOffset + BUCKET_HEADER_LENGTH + (obCount * HASH_CODE_LEN),hashCode);
