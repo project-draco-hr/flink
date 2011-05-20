@@ -1,13 +1,15 @@
 {
   this.handler=(Handler)handler;
   Class<?> handlerClass=handler.getClass();
-  Method[] methods=handlerClass.getMethods();
-  for (  Method method : methods)   if (method.getDeclaringClass() == handler.getClass()) {
-    method.setAccessible(true);
-    this.callback=method;
-    break;
+  BoundType bindings=ReflectUtil.getBindingOfSuperclass(handler.getClass(),TypeHandler.class);
+  Method callback;
+  try {
+    callback=handlerClass.getDeclaredMethod("convert",new Class[]{bindings.getParameters()[0].getType(),List.class});
   }
-  AppendChildren annotation=this.getAnnotation(handlerClass,this.callback,AppendChildren.class);
+ catch (  NoSuchMethodException e) {
+    throw new IllegalStateException("class should have implemented the given method");
+  }
+  AppendChildren annotation=this.getAnnotation(handlerClass,callback,AppendChildren.class);
   if (annotation != null)   this.appendIndex=annotation.fromIndex();
-  this.stopRecursion=this.getAnnotation(handlerClass,this.callback,Leaf.class) != null;
+  this.stopRecursion=this.getAnnotation(handlerClass,callback,Leaf.class) != null;
 }
