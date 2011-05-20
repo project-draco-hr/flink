@@ -1,13 +1,30 @@
 {
   for (int i=this.partitionsBeingBuilt.size() - 1; i >= 0; --i) {
     Partition p=this.partitionsBeingBuilt.get(i);
-    this.availableMemory.add(p.currentPartitionBuffer);
-    p.currentPartitionBuffer=null;
-    for (int k=0; k < p.numOverflowSegments; k++) {
-      this.availableMemory.add(p.overflowSegments[k]);
+    if (p.currentPartitionBuffer != null) {
+      this.availableMemory.add(p.currentPartitionBuffer);
+      p.currentPartitionBuffer=null;
     }
-    for (int k=p.partitionBuffers.size() - 1; k >= 0; --k) {
-      this.availableMemory.add(p.partitionBuffers.get(k));
+    if (p.overflowSegments != null) {
+      for (int k=0; k < p.numOverflowSegments; k++) {
+        this.availableMemory.add(p.overflowSegments[k]);
+      }
+    }
+    for (int k=p.inMemoryBuffers.size() - 1; k >= 0; --k) {
+      this.availableMemory.add(p.inMemoryBuffers.get(k));
+    }
+    try {
+      if (p.buildSideChannel != null) {
+        p.buildSideChannel.close();
+        p.buildSideChannel.deleteChannel();
+      }
+      if (p.probeSideChannel != null) {
+        p.probeSideChannel.close();
+        p.probeSideChannel.deleteChannel();
+      }
+    }
+ catch (    IOException ioex) {
+      throw new RuntimeException("Error deleting the partition files. Some temporary files might not be removed.");
     }
   }
   this.partitionsBeingBuilt.clear();

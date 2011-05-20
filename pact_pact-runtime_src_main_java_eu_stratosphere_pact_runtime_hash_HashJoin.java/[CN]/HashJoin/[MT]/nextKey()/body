@@ -1,6 +1,7 @@
 {
-  if (this.probeIterator.nextKey()) {
-    final K currKey=this.probeIterator.getCurrentKey();
+  final ProbeSideIterator<K,V> probeIter=this.probeIterator;
+  while (probeIter.nextKey()) {
+    final K currKey=probeIter.getCurrentKey();
     final int hash=hash(currKey.hashCode(),this.currentRecursionDepth);
     final int posHashCode=hash % this.numBuckets;
     final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
@@ -8,8 +9,22 @@
     final MemorySegment bucket=this.buckets[bucketArrayPos];
     final int partitionNumber=bucket.get(bucketInSegmentOffset + HEADER_PARTITION_OFFSET);
     final Partition p=this.partitionsBeingBuilt.get(partitionNumber);
-    this.bucketIterator.set(bucket,p.overflowSegments,p.partitionBuffers,currKey,hash,bucketInSegmentOffset);
-    return true;
+    if (p.isInMemory()) {
+      this.bucketIterator.set(bucket,p.overflowSegments,p.inMemoryBuffers,currKey,hash,bucketInSegmentOffset);
+      return true;
+    }
+ else {
+      while (probeIter.hasNext()) {
+        final KeyValuePair<K,V> nextPair=probeIter.nextPair();
+        p.insertIntoProbeBuffer(nextPair);
+      }
+    }
   }
+  for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+    Partition p=this.partitionsBeingBuilt.get(i);
+    p.finalizeProbePhase(this.availableMemory,this.partitionsPending);
+  }
+  this.partitionsBeingBuilt.clear();
+  releaseTable();
   return false;
 }
