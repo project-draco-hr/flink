@@ -1,0 +1,48 @@
+{
+  if (this.currentSegment != null) {
+    try {
+      target.read(this.currentSegment.inputView);
+    }
+ catch (    IOException ioex) {
+      throw new RuntimeException("Deserialization error while reading record from spilled partition.",ioex);
+    }
+    int pos=this.currentSegment.inputView.getPosition();
+    if (pos < this.currentEndPos) {
+      return true;
+    }
+ else     if (pos == this.currentEndPos) {
+      if (this.numRequestsRemaining > 0) {
+        try {
+          this.reader.readBlock(this.currentSegment);
+          this.numRequestsRemaining--;
+        }
+ catch (        IOException ioex) {
+          throw new RuntimeException("Error reading a block from the spilled partition.",ioex);
+        }
+      }
+ else {
+        this.freeMemTarget.add(this.currentSegment);
+      }
+      if (this.numReturnsRemaining > 0) {
+        try {
+          this.currentSegment=this.returnQueue.take();
+          this.currentSegment.inputView.setPosition(PARTITION_BLOCK_HEADER_LEN);
+          this.currentEndPos=this.currentSegment.getInt(PARTITION_BLOCK_SIZE_OFFSET);
+        }
+ catch (        InterruptedException iex) {
+          throw new RuntimeException(iex);
+        }
+      }
+ else {
+        this.currentSegment=null;
+      }
+      return true;
+    }
+ else {
+      throw new RuntimeException("Deserialization error while reading record from spilled partition. " + "Deserialization consumed more bytes than serialization produced.");
+    }
+  }
+ else {
+    return false;
+  }
+}
