@@ -1,25 +1,17 @@
 {
-  System.out.println(getExpectedOutput());
-  System.out.println(getActualOutput());
   for (  final DataSinkContract<?,?> dataSinkContract : this.getDataSinks())   if (dataSinkContract.getStubClass() == SequentialOutputFormat.class && this.getExpectedOutput(dataSinkContract).isInitialized()) {
     final TestPairs<Key,Value> actualValues=new TestPairs<Key,Value>();
     actualValues.fromFile(SequentialInputFormat.class,dataSinkContract.getFilePath());
     final TestPairs<Key,Value> expectedValues=(TestPairs<Key,Value>)this.getExpectedOutput(dataSinkContract);
-    final Iterator<KeyValuePair<Key,Value>> actualIterator=actualValues.iterator();
-    final Iterator<KeyValuePair<Key,Value>> expectedIterator=expectedValues.iterator();
-    Key currentKey=null;
-    int itemIndex=0;
-    List<Value> expectedValuesWithCurrentKey=new ArrayList<Value>();
-    List<Value> actualValuesWithCurrentKey=new ArrayList<Value>();
-    while (actualIterator.hasNext() && expectedIterator.hasNext()) {
-      final KeyValuePair<Key,Value> expected=expectedIterator.next();
-      if (currentKey == null)       currentKey=expected.getKey();
- else       if (expected.getKey().compareTo(currentKey) != 0)       this.matchValues(dataSinkContract,actualIterator,currentKey,itemIndex,expectedValuesWithCurrentKey,actualValuesWithCurrentKey);
-      expectedValuesWithCurrentKey.add(expected.getValue());
-      itemIndex++;
+    FuzzyTestValueMatcher<Value> fuzzyMatcher=this.getFuzzyMatcher(dataSinkContract);
+    FuzzyTestValueSimilarity<Value> fuzzySimilarity=this.getFuzzySimilarity(dataSinkContract);
+    try {
+      actualValues.assertEquals(expectedValues,fuzzyMatcher,fuzzySimilarity);
     }
-    if (!expectedValuesWithCurrentKey.isEmpty())     this.matchValues(dataSinkContract,actualIterator,currentKey,itemIndex,expectedValuesWithCurrentKey,actualValuesWithCurrentKey);
-    if (!expectedValuesWithCurrentKey.isEmpty() || expectedIterator.hasNext())     fail("More elements expected: " + expectedValuesWithCurrentKey + this.toString(expectedIterator),dataSinkContract.getName());
-    if (!actualValuesWithCurrentKey.isEmpty() || actualIterator.hasNext())     fail("Less elements expected: " + actualValuesWithCurrentKey + this.toString(actualIterator),dataSinkContract.getName());
+ catch (    AssertionError e) {
+      AssertionError assertionError=new AssertionError(dataSinkContract.getName() + ": " + e.getMessage());
+      assertionError.initCause(e.getCause());
+      throw assertionError;
+    }
   }
 }
