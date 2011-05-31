@@ -31,11 +31,15 @@
   if (!this.partitionsPending.isEmpty()) {
     final Partition p=this.partitionsPending.get(0);
     buildTableFromSpilledPartition(p);
-    MemorySegment seg1=getNextBuffer();
-    MemorySegment seg2=getNextBuffer();
     LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
     this.currentSpilledProbeSide=this.ioManager.createBlockChannelReader(p.probeSideChannel.getChannelID(),returnQueue);
+    List<MemorySegment> memory=new ArrayList<MemorySegment>();
+    memory.add(getNextBuffer());
+    memory.add(getNextBuffer());
+    Iterator<KeyValuePair<K,V>> probeReader=new BlockReaderUtilIterator<K,V>(this.currentSpilledProbeSide,returnQueue,memory,this.availableMemory,p.probeBlockCounter,this.keySerialization,this.valueSerialization);
+    this.probeIterator.set(probeReader);
     this.partitionsPending.remove(0);
+    this.currentRecursionDepth=p.recursionLevel + 1;
     return nextKey();
   }
  else {

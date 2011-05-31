@@ -1,2 +1,31 @@
 {
+  final int nextRecursionLevel=p.recursionLevel + 1;
+  final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
+  if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
+    throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
+  }
+  long numBuckets=(p.buildSideRecordCounter * RECORD_TABLE_BYTES) / (HASH_BUCKET_SIZE - BUCKET_HEADER_LENGTH) + 1;
+  final long totalBuffersNeeded=(numBuckets * 2) / (this.bucketsPerSegmentMask + 1) + p.buildSideBlockCounter + 1;
+  if (totalBuffersNeeded < totalBuffersAvailable) {
+    ensureNumBuffersReturned(p.buildSideBlockCounter);
+    final BulkBlockChannelReader reader=this.ioManager.createBulkBlockChannelReader(p.buildSideChannel.getChannelID(),this.availableMemory,p.buildSideBlockCounter);
+    reader.closeAndDelete();
+    final List<MemorySegment> partitionBuffers=reader.getFullSegments();
+    final Partition newPart=new Partition(0,nextRecursionLevel,partitionBuffers,p.buildSideRecordCounter);
+    this.partitionsBeingBuilt.add(newPart);
+    initTable((int)numBuckets,(byte)1);
+    PartitionIterator<K,V> pIter=newPart.getPartitionIterator(this.keySerialization.newInstance(),this.valueSerialization.newInstance());
+    while (pIter.next()) {
+      final int hashCode=hash(pIter.getHashCode(),nextRecursionLevel);
+      final long pointer=pIter.getPointer();
+      final int posHashCode=hashCode % this.numBuckets;
+      final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+      final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+      final MemorySegment bucket=this.buckets[bucketArrayPos];
+      insertBucketEntry(newPart,bucket,bucketInSegmentPos,hashCode,pointer);
+    }
+  }
+ else {
+    throw new RuntimeException("Unsupported!");
+  }
 }
