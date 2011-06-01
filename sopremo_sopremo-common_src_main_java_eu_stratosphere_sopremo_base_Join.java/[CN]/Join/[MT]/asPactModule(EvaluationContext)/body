@@ -1,14 +1,19 @@
 {
-  if (this.getInputOperators().size() != 2)   throw new UnsupportedOperationException();
   PactModule module=new PactModule(this.getInputOperators().size(),1);
   Condition condition=this.getCondition();
   if (condition.getCombination() != Combination.AND)   throw new UnsupportedOperationException();
-  for (  BooleanExpression expression : condition.getExpressions()) {
-    DualInputContract<PactJsonObject.Key,PactJsonObject,PactJsonObject.Key,PactJsonObject,Key,PactJsonObject> join;
-    if (expression instanceof Comparison)     join=this.joinFromComparison(module,(Comparison)expression,context);
- else     if (expression instanceof ElementInSetExpression)     join=this.joinFromElementExpression(module,(ElementInSetExpression)expression,context);
- else     throw new UnsupportedOperationException();
-    SopremoUtil.setTransformationAndContext(join.getStubParameters(),this.getTransformation(),context);
+  List<TwoSourceJoin> joinOrder=this.getInitialJoinOrder(condition);
+  ArrayList<Contract> inputs=this.wrapInputsWithArray(context,module);
+  DualInputContract<PactJsonObject.Key,PactJsonObject,PactJsonObject.Key,PactJsonObject,Key,PactJsonObject> join=null;
+  for (  TwoSourceJoin twoSourceJoin : joinOrder) {
+    join=twoSourceJoin.createJoinContract(module,context,inputs.get(twoSourceJoin.leftIndex),inputs.get(twoSourceJoin.rightIndex));
+    inputs.set(twoSourceJoin.leftIndex,join);
+    inputs.set(twoSourceJoin.rightIndex,join);
+    SopremoUtil.setTransformationAndContext(join.getStubParameters(),new ArrayMerger(),context);
   }
+  MapContract<PactNull,PactJsonObject,Key,PactJsonObject> projectionMap=new MapContract<PactNull,PactJsonObject,Key,PactJsonObject>(Projection.ProjectionStub.class);
+  module.getOutput(0).setInput(projectionMap);
+  projectionMap.setInput(join);
+  SopremoUtil.setTransformationAndContext(projectionMap.getStubParameters(),this.getTransformation(),context);
   return module;
 }
