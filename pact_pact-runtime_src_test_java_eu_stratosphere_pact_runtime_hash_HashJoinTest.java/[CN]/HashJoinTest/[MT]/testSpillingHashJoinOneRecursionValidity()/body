@@ -18,27 +18,48 @@
   }
   IOManager ioManager=new IOManager();
   final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
+  HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
   HashJoin<PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger>(buildInput,probeInput,keySerialization,valueSerialization,memSegments,ioManager);
   join.open();
-  int numKeys=0;
+  int numKeyCalls=0;
   while (join.nextKey()) {
-    numKeys++;
+    numKeyCalls++;
     int numBuildValues=0;
     int numProbeValues=0;
-    Iterator<PactInteger> probeIter=join.getProbeSideIterator();
-    while (probeIter.hasNext()) {
-      numProbeValues++;
-      probeIter.next();
-    }
-    Assert.assertEquals("Wrong number of values from probe-side for a key",PROBE_VALS_PER_KEY,numProbeValues);
+    int key=0;
     HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
+    if (buildSide.next(pair)) {
+      numBuildValues=1;
+      key=pair.getKey().getValue();
+    }
+ else {
+      fail("No build side values found for a probe key.");
+    }
     while (buildSide.next(pair)) {
       numBuildValues++;
     }
-    Assert.assertEquals("Wrong number of values from build-side for a key",BUILD_VALS_PER_KEY,numBuildValues);
+    Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
+    while (probeIter.hasNext()) {
+      KeyValuePair<PactInteger,PactInteger> nextPair=probeIter.next();
+      Assert.assertEquals("Probe-side key was different than build-side key.",key,nextPair.getKey().getValue());
+      numProbeValues++;
+    }
+    Long contained=map.get(key);
+    if (contained == null) {
+      contained=new Long(numBuildValues * numProbeValues);
+    }
+ else {
+      contained=new Long(contained.longValue() + (numBuildValues * numProbeValues));
+    }
+    map.put(key,contained);
   }
-  Assert.assertEquals("Wrong number of keys",NUM_KEYS,numKeys);
   join.close();
+  Assert.assertEquals("Wrong number of keys",NUM_KEYS,map.size());
+  for (  Map.Entry<Integer,Long> entry : map.entrySet()) {
+    long val=entry.getValue();
+    int key=entry.getKey();
+    Assert.assertEquals("Wrong number of values in per-key cross product for key " + key,PROBE_VALS_PER_KEY * BUILD_VALS_PER_KEY,val);
+  }
   memMan.release(memSegments);
   ioManager.shutdown();
   if (!ioManager.isProperlyShutDown()) {

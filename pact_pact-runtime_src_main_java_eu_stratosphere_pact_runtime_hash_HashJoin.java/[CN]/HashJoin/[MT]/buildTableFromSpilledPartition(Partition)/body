@@ -1,5 +1,7 @@
 {
   final int nextRecursionLevel=p.recursionLevel + 1;
+  if (nextRecursionLevel > MAX_RECURSION_DEPTH) {
+  }
   final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
   if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
     throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
@@ -26,6 +28,23 @@
     }
   }
  else {
-    throw new RuntimeException("Unsupported!");
+    final int splits=(int)(totalBuffersNeeded / totalBuffersAvailable) + 1;
+    final int partitionFanOut=Math.min(10 * splits,MAX_NUM_PARTITIONS);
+    final int bucketCount=432;
+    createPartitions(partitionFanOut,nextRecursionLevel);
+    initTable(bucketCount,(byte)partitionFanOut);
+    final List<MemorySegment> segments=new ArrayList<MemorySegment>(2);
+    segments.add(getNextBuffer());
+    segments.add(getNextBuffer());
+    final BlockReaderIterator<K,V> reader=new BlockReaderIterator<K,V>(this.ioManager,p.buildSideChannel.getChannelID(),segments,this.availableMemory,p.buildSideBlockCounter);
+    final KeyValuePair<K,V> pair=new KeyValuePair<K,V>(this.keySerialization.newInstance(),this.valueSerialization.newInstance());
+    while (reader.next(pair)) {
+      final int hashCode=hash(pair.getKey().hashCode(),nextRecursionLevel);
+      insertIntoTable(pair,hashCode);
+    }
+    for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+      Partition part=this.partitionsBeingBuilt.get(i);
+      part.finalizeBuildPhase(this.ioManager,this.currentEnumerator);
+    }
   }
 }

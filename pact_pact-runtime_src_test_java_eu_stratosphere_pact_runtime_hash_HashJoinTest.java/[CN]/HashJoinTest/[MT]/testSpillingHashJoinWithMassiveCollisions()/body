@@ -1,0 +1,89 @@
+{
+  final int REPEATED_VALUE_1=40559;
+  final int REPEATED_VALUE_2=92882;
+  final int REPEATED_VALUE_COUNT=200000;
+  final int NUM_KEYS=1000000;
+  final int BUILD_VALS_PER_KEY=3;
+  final int PROBE_VALS_PER_KEY=10;
+  Iterator<KeyValuePair<PactInteger,PactInteger>> build1=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> build2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> build3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<Iterator<KeyValuePair<PactInteger,PactInteger>>> builds=new ArrayList<Iterator<KeyValuePair<PactInteger,PactInteger>>>();
+  builds.add(build1);
+  builds.add(build2);
+  builds.add(build3);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> buildInput=new UnionIterator<KeyValuePair<PactInteger,PactInteger>>(builds);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> probe1=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> probe2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> probe3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<Iterator<KeyValuePair<PactInteger,PactInteger>>> probes=new ArrayList<Iterator<KeyValuePair<PactInteger,PactInteger>>>();
+  probes.add(probe1);
+  probes.add(probe2);
+  probes.add(probe3);
+  Iterator<KeyValuePair<PactInteger,PactInteger>> probeInput=new UnionIterator<KeyValuePair<PactInteger,PactInteger>>(probes);
+  final SerializationFactory<PactInteger> keySerialization=new WritableSerializationFactory<PactInteger>(PactInteger.class);
+  final SerializationFactory<PactInteger> valueSerialization=new WritableSerializationFactory<PactInteger>(PactInteger.class);
+  MemoryManager memMan;
+  List<MemorySegment> memSegments;
+  try {
+    memMan=new DefaultMemoryManager(32 * 1024 * 1024);
+    memSegments=memMan.allocate(MEM_OWNER,28 * 1024 * 1024,896,32 * 1024);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  IOManager ioManager=new IOManager();
+  final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
+  HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
+  HashJoin<PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger>(buildInput,probeInput,keySerialization,valueSerialization,memSegments,ioManager);
+  join.open();
+  int numKeyCalls=0;
+  while (join.nextKey()) {
+    numKeyCalls++;
+    int numBuildValues=0;
+    int numProbeValues=0;
+    int key=0;
+    Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
+    while (probeIter.hasNext()) {
+      KeyValuePair<PactInteger,PactInteger> nextPair=probeIter.next();
+      key=nextPair.getKey().getValue();
+      numProbeValues++;
+    }
+    HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
+    if (buildSide.next(pair)) {
+      numBuildValues=1;
+      Assert.assertEquals("Probe-side key was different than build-side key.",key,pair.getKey().getValue());
+    }
+ else {
+      fail("No build side values found for a probe key.");
+    }
+    while (buildSide.next(pair)) {
+      numBuildValues++;
+      Assert.assertEquals("Probe-side key was different than build-side key.",key,pair.getKey().getValue());
+    }
+    Long contained=map.get(key);
+    if (contained == null) {
+      contained=new Long(numBuildValues * numProbeValues);
+    }
+ else {
+      contained=new Long(contained.longValue() + (numBuildValues * numProbeValues));
+    }
+    map.put(key,contained);
+  }
+  join.close();
+  Assert.assertEquals("Wrong number of keys",NUM_KEYS,map.size());
+  for (  Map.Entry<Integer,Long> entry : map.entrySet()) {
+    long val=entry.getValue();
+    int key=entry.getKey();
+    Assert.assertEquals("Wrong number of values in per-key cross product for key " + key,(key == REPEATED_VALUE_1 || key == REPEATED_VALUE_2) ? (PROBE_VALS_PER_KEY + REPEATED_VALUE_COUNT) * (BUILD_VALS_PER_KEY + REPEATED_VALUE_COUNT) : PROBE_VALS_PER_KEY * BUILD_VALS_PER_KEY,val);
+  }
+  memMan.release(memSegments);
+  ioManager.shutdown();
+  if (!ioManager.isProperlyShutDown()) {
+    fail("I/O manager was not property shut down.");
+  }
+  if (!memMan.verifyEmpty()) {
+    fail("Not all memory was properly released to the memory manager --> Memory Leak.");
+  }
+}
