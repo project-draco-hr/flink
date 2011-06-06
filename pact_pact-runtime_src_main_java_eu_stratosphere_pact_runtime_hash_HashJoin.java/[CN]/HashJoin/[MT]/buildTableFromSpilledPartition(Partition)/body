@@ -1,6 +1,7 @@
 {
   final int nextRecursionLevel=p.recursionLevel + 1;
   if (nextRecursionLevel > MAX_RECURSION_DEPTH) {
+    throw new RuntimeException("Hash join exceeded maximum number of recursions, without reducing " + "partitions enough to be memory resident. Probably cause: Too many duplicate keys.");
   }
   final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
   if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
@@ -28,9 +29,10 @@
     }
   }
  else {
+    final int avgRecordLenPartition=(int)(((long)p.buildSideBlockCounter) * (this.segmentSize - PARTITION_BLOCK_HEADER_LEN) / p.buildSideRecordCounter);
+    final int bucketCount=(int)(((long)totalBuffersAvailable) * RECORD_TABLE_BYTES / (avgRecordLenPartition + RECORD_OVERHEAD_BYTES));
     final int splits=(int)(totalBuffersNeeded / totalBuffersAvailable) + 1;
     final int partitionFanOut=Math.min(10 * splits,MAX_NUM_PARTITIONS);
-    final int bucketCount=432;
     createPartitions(partitionFanOut,nextRecursionLevel);
     initTable(bucketCount,(byte)partitionFanOut);
     final List<MemorySegment> segments=new ArrayList<MemorySegment>(2);
