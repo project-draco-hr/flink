@@ -1,12 +1,15 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
   final Path path=getFileOutputPath();
-  final RecordReader<KeyValuePair<Key,Value>> reader=this.reader;
   final OutputFormat format=this.format;
   OutputPathOpenThread opot=new OutputPathOpenThread(path,this.getEnvironment().getIndexInSubtaskGroup() + 1,10000);
   opot.start();
   FSDataOutputStream fdos=null;
+  CloseableInputProvider<KeyValuePair<Key,Value>> sortedInputProvider=null;
   try {
+    sortedInputProvider=obtainInput();
+    Iterator<KeyValuePair<Key,Value>> iter=sortedInputProvider.getIterator();
+    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     fdos=opot.getFSDataOutputStream();
     if (this.taskCanceled) {
       return;
@@ -14,8 +17,8 @@
     LOG.debug("Start writing output to " + path.toString() + " : "+ this.getEnvironment().getTaskName()+ " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
     format.setOutput(fdos);
     format.open();
-    while (!this.taskCanceled && reader.hasNext()) {
-      KeyValuePair pair=reader.next();
+    while (!this.taskCanceled && iter.hasNext()) {
+      KeyValuePair pair=iter.next();
       format.writePair(pair);
     }
   }
@@ -26,6 +29,9 @@
     }
   }
  finally {
+    if (sortedInputProvider != null) {
+      sortedInputProvider.close();
+    }
     if (this.format != null) {
       try {
         this.format.close();
