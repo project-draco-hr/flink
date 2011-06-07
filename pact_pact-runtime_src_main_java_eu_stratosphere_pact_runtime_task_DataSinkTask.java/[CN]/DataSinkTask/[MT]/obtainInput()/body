@@ -5,6 +5,7 @@
   final Class<Value> valueClass=format.getOutValueType();
   final SerializationFactory<Key> keySerialization=new WritableSerializationFactory<Key>(keyClass);
   final SerializationFactory<Value> valSerialization=new WritableSerializationFactory<Value>(valueClass);
+  final Order sortOrder=Order.valueOf(config.getStubParameters().getString(SORT_ORDER,""));
 switch (config.getLocalStrategy()) {
 case NONE:
 {
@@ -28,14 +29,24 @@ case NONE:
     }
 case SORT:
 {
-    final Comparator<Key> keyComparator=new Comparator<Key>(){
-      @Override public int compare(      Key k1,      Key k2){
-        return k1.compareTo(k2);
+    final Comparator<Key> keyComparator;
+    if (sortOrder == Order.ASCENDING || sortOrder == Order.ANY) {
+      keyComparator=new Comparator<Key>(){
+        @Override public int compare(        Key k1,        Key k2){
+          return k1.compareTo(k2);
+        }
       }
-    }
 ;
+    }
+ else {
+      keyComparator=new Comparator<Key>(){
+        @Override public int compare(        Key k1,        Key k2){
+          return k2.compareTo(k1);
+        }
+      }
+;
+    }
     try {
-      this.availableMemory=64 * 1024 * 1024;
       SortMerger<Key,Value> sortMerger=new UnilateralSortMerger<Key,Value>(memoryManager,ioManager,this.availableMemory,this.maxFileHandles,keySerialization,valSerialization,keyComparator,reader,this,this.spillThreshold);
       return sortMerger;
     }
