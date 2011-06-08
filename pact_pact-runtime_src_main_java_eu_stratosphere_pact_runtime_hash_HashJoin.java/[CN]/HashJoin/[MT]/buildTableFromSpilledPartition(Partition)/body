@@ -3,6 +3,21 @@
   if (nextRecursionLevel > MAX_RECURSION_DEPTH) {
     throw new RuntimeException("Hash join exceeded maximum number of recursions, without reducing " + "partitions enough to be memory resident. Probably cause: Too many duplicate keys.");
   }
+  final K tempKey;
+  final BV tempValue;
+  try {
+    tempKey=this.keyClass.newInstance();
+    tempValue=this.buildSideValueClass.newInstance();
+  }
+ catch (  IllegalAccessException ex) {
+    throw new RuntimeException("Cannot create instance of data type. Class or nullary constructor not public.");
+  }
+catch (  InstantiationException iex) {
+    throw new RuntimeException("Cannot create instance of data type. No public nullary constructor.");
+  }
+catch (  Exception ex) {
+    throw new RuntimeException(ex);
+  }
   final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
   if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
     throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
@@ -17,7 +32,7 @@
     final Partition newPart=new Partition(0,nextRecursionLevel,partitionBuffers,p.buildSideRecordCounter);
     this.partitionsBeingBuilt.add(newPart);
     initTable((int)numBuckets,(byte)1);
-    PartitionIterator<K,V> pIter=newPart.getPartitionIterator(this.keySerialization.newInstance(),this.valueSerialization.newInstance());
+    PartitionIterator<K,BV> pIter=newPart.getPartitionIterator(tempKey,tempValue);
     while (pIter.next()) {
       final int hashCode=hash(pIter.getHashCode(),nextRecursionLevel);
       final long pointer=pIter.getPointer();
@@ -38,8 +53,8 @@
     final List<MemorySegment> segments=new ArrayList<MemorySegment>(2);
     segments.add(getNextBuffer());
     segments.add(getNextBuffer());
-    final BlockReaderIterator<K,V> reader=new BlockReaderIterator<K,V>(this.ioManager,p.buildSideChannel.getChannelID(),segments,this.availableMemory,p.buildSideBlockCounter);
-    final KeyValuePair<K,V> pair=new KeyValuePair<K,V>(this.keySerialization.newInstance(),this.valueSerialization.newInstance());
+    final BlockReaderIterator<K,BV> reader=new BlockReaderIterator<K,BV>(this.ioManager,p.buildSideChannel.getChannelID(),segments,this.availableMemory,p.buildSideBlockCounter);
+    final KeyValuePair<K,BV> pair=new KeyValuePair<K,BV>(tempKey,tempValue);
     while (reader.next(pair)) {
       final int hashCode=hash(pair.getKey().hashCode(),nextRecursionLevel);
       insertIntoTable(pair,hashCode);
