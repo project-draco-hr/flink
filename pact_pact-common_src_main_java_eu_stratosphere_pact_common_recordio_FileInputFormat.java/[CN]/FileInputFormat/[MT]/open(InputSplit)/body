@@ -1,0 +1,39 @@
+{
+  if (!(split instanceof FileInputSplit)) {
+    throw new IllegalArgumentException("File Input Formats can only be used with FileInputSplits.");
+  }
+  final FileInputSplit fileSplit=(FileInputSplit)split;
+  this.start=fileSplit.getStart();
+  this.length=fileSplit.getLength();
+  if (LOG.isDebugEnabled())   LOG.debug("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "]");
+  final InputSplitOpenThread isot=new InputSplitOpenThread(fileSplit);
+  isot.start();
+  long openStartTime=System.currentTimeMillis();
+  long remaining=OPEN_TIMEOUT_MILLIES;
+  try {
+    do {
+      isot.join(remaining);
+    }
+ while ((remaining=System.currentTimeMillis() - openStartTime) > 0);
+    if (isot.getFSDataInputStream() == null) {
+      throw new IOException("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "] timed out.");
+    }
+  }
+ catch (  InterruptedException ie) {
+    if (isot.getFSDataInputStream() != null) {
+      isot.getFSDataInputStream().close();
+    }
+    throw new IOException("Opening the Input Split was interrupted.");
+  }
+  if (!isot.fsDataInputStreamSuccessfullyObtained()) {
+    Exception e=isot.getException();
+    if (e != null && e instanceof IOException) {
+      throw (IOException)e;
+    }
+ else {
+      throw new IOException("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "] caused an error"+ (e != null ? (": " + e.getMessage()) : "."),e);
+    }
+  }
+  this.stream=isot.getFSDataInputStream();
+  this.bufferSize=DEFAULT_READ_BUFFER_SIZE;
+}
