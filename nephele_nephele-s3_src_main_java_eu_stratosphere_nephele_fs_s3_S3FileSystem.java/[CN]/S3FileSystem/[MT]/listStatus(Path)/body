@@ -1,22 +1,51 @@
 {
-  System.out.println("Got here");
-  final URI uri=f.toUri();
-  HttpURLConnection conn=null;
+  final S3BucketObjectPair bop=this.directoryStructure.toBucketObjectPair(f);
   try {
-    conn=openHttpURLConnection("HEAD",uri.getPath());
-    int responseCode=conn.getResponseCode();
-    if (responseCode == HTTP_BAD_REQUEST) {
-      modifyHttpURLConnection(conn,"GET");
-      responseCode=conn.getReadTimeout();
+    if (!bop.hasBucket()) {
+      final List<Bucket> list=this.s3Client.listBuckets();
+      final S3FileStatus[] array=new S3FileStatus[list.size()];
+      final Iterator<Bucket> it=list.iterator();
+      int i=0;
+      while (it.hasNext()) {
+        final Bucket bucket=it.next();
+        final S3FileStatus status=new S3FileStatus(extendPath(f,bucket.getName()),0,true);
+        array[i++]=status;
+      }
+      return array;
+    }
+    if (bop.hasBucket() && !bop.hasObject()) {
+      ObjectListing listing=null;
+      final List<S3FileStatus> resultList=new ArrayList<S3FileStatus>();
+      while (true) {
+        if (listing == null) {
+          listing=this.s3Client.listObjects(bop.getBucket());
+        }
+ else {
+          listing=this.s3Client.listNextBatchOfObjects(listing);
+        }
+        final List<S3ObjectSummary> list=listing.getObjectSummaries();
+        final Iterator<S3ObjectSummary> it=list.iterator();
+        while (it.hasNext()) {
+          final S3ObjectSummary os=it.next();
+          if (objectRepresentsDirectory(os)) {
+            resultList.add(new S3FileStatus(extendPath(f,os.getKey()),0,true));
+          }
+ else {
+            resultList.add(new S3FileStatus(extendPath(f,os.getKey()),os.getSize(),false));
+          }
+        }
+        if (!listing.isTruncated()) {
+          break;
+        }
+      }
+      return resultList.toArray(new FileStatus[0]);
     }
  else {
+      final ObjectMetadata omd=this.s3Client.getObjectMetadata(bop.getBucket(),bop.getObject());
     }
-    System.out.println("Response code: " + responseCode);
   }
-  finally {
-    if (conn != null) {
-      conn.disconnect();
-    }
+ catch (  AmazonClientException e) {
+    throw new IOException(StringUtils.stringifyException(e));
   }
   return null;
 }

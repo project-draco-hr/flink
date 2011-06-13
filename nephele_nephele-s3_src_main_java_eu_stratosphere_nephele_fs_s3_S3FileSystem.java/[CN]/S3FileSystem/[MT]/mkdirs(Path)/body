@@ -1,16 +1,40 @@
 {
-  final URI uri=f.toUri();
-  HttpURLConnection conn=null;
+  final S3BucketObjectPair bop=this.directoryStructure.toBucketObjectPair(f);
+  if (!bop.hasBucket() && !bop.hasObject()) {
+    return false;
+  }
+  boolean retCode=false;
   try {
-    conn=openHttpURLConnection("PUT",uri.getPath());
-    if (conn.getResponseCode() != HTTP_SUCCESS_CODE) {
-      throw new IOException(conn.getResponseMessage());
+    if (bop.hasBucket()) {
+      if (this.s3Client.doesBucketExist(bop.getBucket())) {
+      }
+ else {
+        this.s3Client.createBucket(bop.getBucket());
+        retCode=true;
+      }
+    }
+    if (bop.hasObject()) {
+      String object=bop.getObject();
+      if (!object.isEmpty()) {
+        if (object.charAt(object.length() - 1) != S3_DIRECTORY_SEPARATOR) {
+          object=object.concat(Character.toString(S3_DIRECTORY_SEPARATOR));
+        }
+      }
+      try {
+        this.s3Client.getObjectMetadata(bop.getBucket(),object);
+      }
+ catch (      AmazonServiceException e) {
+        if (e.getStatusCode() == HTTP_RESOURCE_NOT_FOUND_CODE) {
+          createEmptyObject(bop.getBucket(),object);
+        }
+ else {
+          throw e;
+        }
+      }
     }
   }
-  finally {
-    if (conn != null) {
-      conn.disconnect();
-    }
+ catch (  AmazonClientException e) {
+    throw new IOException(StringUtils.stringifyException(e));
   }
-  return true;
+  return retCode;
 }

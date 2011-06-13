@@ -10,7 +10,6 @@
     LOG.debug("Provided URI does not provide a port to connect to, using configuration...");
     this.port=GlobalConfiguration.getInteger(S3_PORT_KEY,DEFAULT_S3_PORT);
   }
-  LOG.debug("Amazon S3 REST requsts will be sent to host " + this.host + ", port "+ this.port);
   final String userInfo=name.getUserInfo();
   String awsAccessKey=null;
   String awsSecretKey=null;
@@ -35,17 +34,7 @@
       throw new IOException("Cannot determine secret key to Amazon S3");
     }
   }
-  this.authorizationPrefix="AWS " + awsAccessKey + ":";
-  try {
-    this.mac=Mac.getInstance(MESSAGE_AUTHENTICATION_CODE);
-    final byte[] keyBytes=awsSecretKey.getBytes("UTF8");
-    this.signingKey=new SecretKeySpec(keyBytes,MESSAGE_AUTHENTICATION_CODE);
-    this.mac.init(this.signingKey);
-  }
- catch (  NoSuchAlgorithmException nsae) {
-    throw new IOException(nsae.getMessage());
-  }
-catch (  InvalidKeyException ike) {
-    throw new IOException(ike.getMessage());
-  }
+  final AWSCredentials credentials=new BasicAWSCredentials(awsAccessKey,awsSecretKey);
+  this.s3Client=new AmazonS3Client(credentials);
+  initializeDirectoryStructure(name);
 }
