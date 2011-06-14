@@ -1,4 +1,34 @@
 {
   final S3BucketObjectPair bop=this.directoryStructure.toBucketObjectPair(f);
-  return null;
+  if (!bop.hasBucket() && !bop.hasObject()) {
+    return new S3FileStatus(f,0L,true);
+  }
+  try {
+    if (bop.hasBucket() && !bop.hasObject()) {
+      if (!this.s3Client.doesBucketExist(bop.getBucket())) {
+        throw new FileNotFoundException("Cannot find " + f.toUri());
+      }
+      return new S3FileStatus(f,0L,true);
+    }
+    try {
+      final ObjectMetadata om=this.s3Client.getObjectMetadata(bop.getBucket(),bop.getObject());
+      if (objectRepresentsDirectory(bop.getObject(),om.getContentLength())) {
+        return new S3FileStatus(f,0L,true);
+      }
+ else {
+        return new S3FileStatus(f,om.getContentLength(),false);
+      }
+    }
+ catch (    AmazonServiceException e) {
+      if (e.getStatusCode() == HTTP_RESOURCE_NOT_FOUND_CODE) {
+        throw new FileNotFoundException("Cannot find " + f.toUri());
+      }
+ else {
+        throw e;
+      }
+    }
+  }
+ catch (  AmazonClientException e) {
+    throw new IOException(StringUtils.stringifyException(e));
+  }
 }
