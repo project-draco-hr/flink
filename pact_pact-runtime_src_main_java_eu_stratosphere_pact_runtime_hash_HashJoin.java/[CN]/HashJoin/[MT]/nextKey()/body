@@ -1,0 +1,48 @@
+{
+  final ProbeSideIterator<K,PV> probeIter=this.probeIterator;
+  while (probeIter.nextKey()) {
+    final K currKey=probeIter.getCurrentKey();
+    final int hash=hash(currKey.hashCode(),this.currentRecursionDepth);
+    final int posHashCode=hash % this.numBuckets;
+    final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+    final int bucketInSegmentOffset=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+    final MemorySegment bucket=this.buckets[bucketArrayPos];
+    final int partitionNumber=bucket.get(bucketInSegmentOffset + HEADER_PARTITION_OFFSET);
+    final Partition p=this.partitionsBeingBuilt.get(partitionNumber);
+    if (p.isInMemory()) {
+      this.bucketIterator.set(bucket,p.overflowSegments,p.inMemoryBuffers,currKey,hash,bucketInSegmentOffset);
+      return true;
+    }
+ else {
+      while (probeIter.hasNext()) {
+        final KeyValuePair<K,PV> nextPair=probeIter.next();
+        p.insertIntoProbeBuffer(nextPair);
+      }
+    }
+  }
+  int buffersAvailable=0;
+  for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+    Partition p=this.partitionsBeingBuilt.get(i);
+    buffersAvailable+=p.finalizeProbePhase(this.availableMemory,this.partitionsPending);
+  }
+  this.partitionsBeingBuilt.clear();
+  this.writeBehindBuffersAvailable+=buffersAvailable;
+  releaseTable();
+  if (!this.partitionsPending.isEmpty()) {
+    final Partition p=this.partitionsPending.get(0);
+    buildTableFromSpilledPartition(p);
+    LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+    this.currentSpilledProbeSide=this.ioManager.createBlockChannelReader(p.probeSideChannel.getChannelID(),returnQueue);
+    List<MemorySegment> memory=new ArrayList<MemorySegment>();
+    memory.add(getNextBuffer());
+    memory.add(getNextBuffer());
+    Iterator<KeyValuePair<K,PV>> probeReader=new BlockReaderUtilIterator<K,PV>(this.currentSpilledProbeSide,returnQueue,memory,this.availableMemory,p.probeBlockCounter,this.keyClass,this.probeSideValueClass);
+    this.probeIterator.set(probeReader);
+    this.partitionsPending.remove(0);
+    this.currentRecursionDepth=p.recursionLevel + 1;
+    return nextKey();
+  }
+ else {
+    return false;
+  }
+}
