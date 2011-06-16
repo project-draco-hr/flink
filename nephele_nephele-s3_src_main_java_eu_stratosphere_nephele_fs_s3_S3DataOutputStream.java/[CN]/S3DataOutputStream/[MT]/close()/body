@@ -1,0 +1,37 @@
+{
+  System.out.println("Finishing upload " + this.bytesWritten);
+  if (this.uploadId == null) {
+    if (this.bytesWritten == 0) {
+      return;
+    }
+    final InputStream is=new InternalUploadInputStream(this.buf,this.bytesWritten);
+    final ObjectMetadata om=new ObjectMetadata();
+    om.setContentLength(this.bytesWritten);
+    try {
+      this.s3Client.putObject(this.bucket,this.object,is,om);
+    }
+ catch (    AmazonServiceException e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+    this.bytesWritten=0;
+  }
+ else {
+    if (this.bytesWritten > 0) {
+      uploadPartAndFlushBuffer();
+    }
+    boolean operationSuccessful=false;
+    try {
+      final CompleteMultipartUploadRequest request=new CompleteMultipartUploadRequest(this.bucket,this.object,this.uploadId,this.partETags);
+      this.s3Client.completeMultipartUpload(request);
+      operationSuccessful=true;
+    }
+ catch (    AmazonServiceException e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+ finally {
+      if (!operationSuccessful) {
+        abortUpload();
+      }
+    }
+  }
+}
