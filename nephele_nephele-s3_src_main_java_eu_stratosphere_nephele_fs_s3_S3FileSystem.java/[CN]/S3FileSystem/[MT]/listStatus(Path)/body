@@ -8,47 +8,30 @@
       int i=0;
       while (it.hasNext()) {
         final Bucket bucket=it.next();
-        final S3FileStatus status=new S3FileStatus(extendPath(f,bucket.getName()),0,true);
+        final long creationDate=dateToLong(bucket.getCreationDate());
+        final S3FileStatus status=new S3FileStatus(extendPath(f,bucket.getName() + S3_DIRECTORY_SEPARATOR),0,true,creationDate,0L);
         array[i++]=status;
       }
       return array;
     }
     if (bop.hasBucket() && !bop.hasObject()) {
-      ObjectListing listing=null;
-      final List<S3FileStatus> resultList=new ArrayList<S3FileStatus>();
       if (!this.s3Client.doesBucketExist(bop.getBucket())) {
         throw new FileNotFoundException("Cannot find " + f.toUri());
       }
-      while (true) {
-        if (listing == null) {
-          listing=this.s3Client.listObjects(bop.getBucket());
-        }
- else {
-          listing=this.s3Client.listNextBatchOfObjects(listing);
-        }
-        final List<S3ObjectSummary> list=listing.getObjectSummaries();
-        final Iterator<S3ObjectSummary> it=list.iterator();
-        while (it.hasNext()) {
-          final S3ObjectSummary os=it.next();
-          if (objectRepresentsDirectory(os)) {
-            resultList.add(new S3FileStatus(extendPath(f,os.getKey()),0,true));
-          }
- else {
-            resultList.add(new S3FileStatus(extendPath(f,os.getKey()),os.getSize(),false));
-          }
-        }
-        if (!listing.isTruncated()) {
-          break;
-        }
-      }
-      return resultList.toArray(new FileStatus[0]);
+      return listBucketContent(f,bop);
     }
  else {
       final ObjectMetadata omd=this.s3Client.getObjectMetadata(bop.getBucket(),bop.getObject());
+      if (objectRepresentsDirectory(bop.getObject(),omd.getContentLength())) {
+        return listBucketContent(f,bop);
+      }
+ else {
+        final S3FileStatus fileStatus=new S3FileStatus(f,omd.getContentLength(),false,dateToLong(omd.getLastModified()),0L);
+        return new FileStatus[]{fileStatus};
+      }
     }
   }
  catch (  AmazonClientException e) {
     throw new IOException(StringUtils.stringifyException(e));
   }
-  return null;
 }

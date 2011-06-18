@@ -1,22 +1,29 @@
 {
   final S3BucketObjectPair bop=this.directoryStructure.toBucketObjectPair(f);
   if (!bop.hasBucket() && !bop.hasObject()) {
-    return new S3FileStatus(f,0L,true);
+    return new S3FileStatus(f,0L,true,0L,0L);
   }
   try {
     if (bop.hasBucket() && !bop.hasObject()) {
-      if (!this.s3Client.doesBucketExist(bop.getBucket())) {
-        throw new FileNotFoundException("Cannot find " + f.toUri());
+      final List<Bucket> buckets=this.s3Client.listBuckets();
+      final Iterator<Bucket> it=buckets.iterator();
+      while (it.hasNext()) {
+        final Bucket bucket=it.next();
+        if (bop.getBucket().equals(bucket.getName())) {
+          final long creationDate=dateToLong(bucket.getCreationDate());
+          return new S3FileStatus(f,0L,true,creationDate,0L);
+        }
       }
-      return new S3FileStatus(f,0L,true);
+      throw new FileNotFoundException("Cannot find " + f.toUri());
     }
     try {
       final ObjectMetadata om=this.s3Client.getObjectMetadata(bop.getBucket(),bop.getObject());
+      final long modificationDate=dateToLong(om.getLastModified());
       if (objectRepresentsDirectory(bop.getObject(),om.getContentLength())) {
-        return new S3FileStatus(f,0L,true);
+        return new S3FileStatus(f,0L,true,modificationDate,0L);
       }
  else {
-        return new S3FileStatus(f,om.getContentLength(),false);
+        return new S3FileStatus(f,om.getContentLength(),false,modificationDate,0L);
       }
     }
  catch (    AmazonServiceException e) {
