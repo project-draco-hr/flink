@@ -4,20 +4,17 @@
   int largestPartNum=-1;
   for (int i=0; i < partitions.size(); i++) {
     Partition p=partitions.get(i);
-    if (p.isInMemory() && p.blockCounter > largestNumBlocks) {
-      largestNumBlocks=p.blockCounter;
+    if (p.isInMemory() && p.buildSideBlockCounter > largestNumBlocks) {
+      largestNumBlocks=p.buildSideBlockCounter;
       largestPartNum=i;
     }
   }
-  Partition p=partitions.get(largestPartNum);
-  if (this.currentEnumerator == null) {
-    this.currentEnumerator=this.ioManager.createChannelEnumerator();
-  }
-  int numBuffersFreed=p.spillPartition(this.ioManager,this.currentEnumerator.next());
+  final Partition p=partitions.get(largestPartNum);
+  int numBuffersFreed=p.spillPartition(this.availableMemory,this.ioManager,this.currentEnumerator.next());
   this.writeBehindBuffersAvailable+=numBuffersFreed;
-  MemorySegment currSeg=null;
-  while (this.writeBehindBuffersAvailable > 0 && (currSeg=this.writeBehindBuffers.poll()) != null) {
-    this.availableMemory.add(currSeg);
+  MemorySegment currBuff=null;
+  while (this.writeBehindBuffersAvailable > 0 && (currBuff=this.writeBehindBuffers.poll()) != null) {
+    this.availableMemory.add(currBuff);
     this.writeBehindBuffersAvailable--;
   }
   return largestPartNum;

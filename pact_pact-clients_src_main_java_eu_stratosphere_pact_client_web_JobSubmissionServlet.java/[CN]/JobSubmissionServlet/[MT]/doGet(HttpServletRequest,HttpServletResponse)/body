@@ -51,15 +51,15 @@
 catch (    ErrorInPlanAssemblerException eipe) {
       StringWriter sw=new StringWriter();
       PrintWriter w=new PrintWriter(sw);
-      eipe.getCause().printStackTrace(w);
-      showErrorPage(resp,"An error occurred in the pact assembler class:<br/><br/>" + eipe.getCause().getMessage() + "<br/><br/><pre>"+ sw.toString()+ "</pre>");
+      eipe.printStackTrace(w);
+      showErrorPage(resp,"An error occurred in the pact assembler class:<br/><br/>" + eipe.getMessage() + "<br/>"+ "<br/><br/><pre>"+ sw.toString()+ "</pre>");
       return;
     }
 catch (    CompilerException cex) {
       StringWriter sw=new StringWriter();
       PrintWriter w=new PrintWriter(sw);
-      cex.getCause().printStackTrace(w);
-      showErrorPage(resp,"An error occurred in the compiler:<br/><br/>" + cex.getCause().getMessage() + "<br/><br/><pre>"+ sw.toString()+ "</pre>");
+      cex.printStackTrace(w);
+      showErrorPage(resp,"An error occurred in the compiler:<br/><br/>" + cex.getMessage() + "<br/>"+ (cex.getCause() != null ? "Caused by: " + cex.getCause().getMessage() : "")+ "<br/><br/><pre>"+ sw.toString()+ "</pre>");
       return;
     }
 catch (    Throwable t) {
@@ -89,7 +89,19 @@ catch (    Throwable t) {
         }
       }
  else {
-        submittedJobs.put(uid,client.getJobGraph(pactProgram,optPlan));
+        try {
+          submittedJobs.put(uid,new ProgramJobGraphPair(pactProgram,client.getJobGraph(pactProgram,optPlan)));
+        }
+ catch (        ProgramInvocationException piex) {
+          LOG.error("Error creating JobGraph from optimized plan.",piex);
+          showErrorPage(resp,piex.getMessage());
+          return;
+        }
+catch (        Throwable t) {
+          LOG.error("Error creating JobGraph from optimized plan.",t);
+          showErrorPage(resp,t.getMessage());
+          return;
+        }
       }
       resp.sendRedirect("showPlan?id=" + uid + "&suspended="+ (suspend ? "true" : "false"));
     }
@@ -119,13 +131,13 @@ catch (    Throwable t) {
       showErrorPage(resp,"An invalid id for the job was provided.");
       return;
     }
-    JobGraph job=submittedJobs.remove(uid);
+    ProgramJobGraphPair job=submittedJobs.remove(uid);
     if (job == null) {
       resp.sendError(HttpServletResponse.SC_BAD_REQUEST,"No job with the given uid was retained for later submission.");
       return;
     }
     try {
-      client.run(job);
+      client.run(job.getProgram(),job.getJobGraph());
     }
  catch (    Exception ex) {
       LOG.error("Error submitting job to the job-manager.",ex);
