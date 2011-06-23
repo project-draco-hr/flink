@@ -1,0 +1,25 @@
+{
+  final List<Contract> inputs=new ArrayList<Contract>();
+  OneTimeTraverser.INSTANCE.traverse(sinks,ContractNavigator.INSTANCE,new GraphTraverseListener<Contract>(){
+    @Override public void nodeTraversed(    Contract node){
+      Contract[] contractInputs=ContractUtil.getInputs(node);
+      if (contractInputs.length == 0)       inputs.add(node);
+ else       for (      Contract input : contractInputs)       if (input == null)       inputs.add(node);
+    }
+  }
+);
+  PactModule module=new PactModule(name,inputs.size(),sinks.size());
+  int sinkIndex=0;
+  for (  Contract sink : sinks) {
+    if (sink instanceof DataSinkContract<?,?>)     module.outputNodes[sinkIndex]=(DataSinkContract<?,?>)sink;
+ else     module.getOutput(sinkIndex).setInput(sink);
+    sinkIndex++;
+  }
+  for (int index=0; index < inputs.size(); ) {
+    Contract node=inputs.get(index);
+    Contract[] contractInputs=ContractUtil.getInputs(node);
+    if (contractInputs.length == 0)     module.inputNodes[index++]=(DataSourceContract<?,?>)node;
+ else     for (    Contract input : contractInputs)     if (input == null)     inputs.add(module.getInput(index++));
+  }
+  return module;
+}

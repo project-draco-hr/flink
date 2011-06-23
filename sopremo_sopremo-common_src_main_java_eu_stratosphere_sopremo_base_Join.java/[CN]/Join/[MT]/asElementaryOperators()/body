@@ -1,0 +1,28 @@
+{
+  if (this.condition.getCombination() != Combination.AND)   throw new UnsupportedOperationException();
+  int numInputs=this.getInputs().size();
+  SopremoModule module=new SopremoModule(this.toString(),numInputs,1);
+  List<Operator> inputs=new ArrayList<Operator>();
+  for (int index=0; index < numInputs; index++) {
+    EvaluableExpression[] elements=new EvaluableExpression[this.getInputs().size()];
+    Arrays.fill(elements,EvaluableExpression.NULL);
+    elements[index]=EvaluableExpression.SAME_VALUE;
+    inputs.add(new Projection(new ArrayCreation(elements),module.getInput(index)));
+  }
+  List<TwoSourceJoin> joins=this.getInitialJoinOrder(this.condition);
+  for (  TwoSourceJoin twoSourceJoin : joins) {
+    List<Output> operatorInputs=twoSourceJoin.getInputs();
+    Output[] actualInputs=new Output[2];
+    for (int index=0; index < operatorInputs.size(); index++) {
+      int inputIndex=this.getInputs().indexOf(operatorInputs.get(index));
+      actualInputs[index]=inputs.get(inputIndex).getSource();
+    }
+    for (int index=0; index < operatorInputs.size(); index++) {
+      int inputIndex=this.getInputs().indexOf(operatorInputs.get(index));
+      inputs.set(inputIndex,twoSourceJoin);
+    }
+    twoSourceJoin.setInputs(actualInputs);
+  }
+  module.getOutput(0).setInput(0,new Projection(EvaluableExpression.NULL,this.expression,joins.get(joins.size() - 1)));
+  return module;
+}
