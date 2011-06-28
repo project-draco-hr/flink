@@ -1,9 +1,12 @@
 {
+  List<ExecutionExceptionHandler> errorHandlers=new ArrayList<TestPlan.ExecutionExceptionHandler>();
   while (!eg.isExecutionFinished() && eg.getJobStatus() != InternalJobStatus.FAILED) {
     final Set<ExecutionVertex> verticesReadyToBeExecuted=localScheduler.getVerticesReadyToBeExecuted();
     for (    final ExecutionVertex executionVertex : verticesReadyToBeExecuted) {
       if (executionVertex.isInputVertex())       InputSplitAssigner.assignInputSplits(executionVertex);
-      executionVertex.getEnvironment().registerExecutionListener(new ExecutionExceptionHandler(executionVertex));
+      ExecutionExceptionHandler executionListener=new ExecutionExceptionHandler(executionVertex);
+      executionVertex.getEnvironment().registerExecutionListener(executionListener);
+      errorHandlers.add(executionListener);
       final TaskSubmissionResult submissionResult=executionVertex.startTask();
       if (submissionResult.getReturnCode() == AbstractTaskResult.ReturnCode.ERROR)       Assert.fail(submissionResult.getDescription());
     }
@@ -13,5 +16,5 @@
  catch (    final InterruptedException e) {
     }
   }
-  if (this.executionError != null)   Assert.fail(String.format("Error @ %s: %s",this.erroneousVertex.getName(),this.executionError));
+  for (  ExecutionExceptionHandler errorHandler : errorHandlers)   if (errorHandler.executionError != null)   Assert.fail(String.format("Error @ %s: %s",errorHandler.executionVertex.getName(),errorHandler.executionError));
 }
