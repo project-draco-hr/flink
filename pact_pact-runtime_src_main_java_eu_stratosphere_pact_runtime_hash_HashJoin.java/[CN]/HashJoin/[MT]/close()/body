@@ -1,0 +1,34 @@
+{
+synchronized (this.closeLock) {
+    if (this.closed) {
+      return new ArrayList<MemorySegment>();
+    }
+    this.closed=true;
+  }
+  this.bucketIterator=null;
+  this.probeIterator=null;
+  releaseTable();
+  clearPartitions();
+  if (this.currentSpilledProbeSide != null) {
+    try {
+      this.currentSpilledProbeSide.closeAndDelete();
+    }
+ catch (    Throwable t) {
+      LOG.warn("Could not close and delete the temp file for the current spilled partition probe side.",t);
+    }
+  }
+  for (int i=0; i < this.partitionsPending.size(); i++) {
+    final Partition p=this.partitionsPending.get(i);
+    p.buildSideChannel.deleteChannel();
+    p.probeSideChannel.deleteChannel();
+  }
+  for (int i=0; i < this.numWriteBehindBuffers + this.writeBehindBuffersAvailable; i++) {
+    try {
+      this.availableMemory.add(this.writeBehindBuffers.take());
+    }
+ catch (    InterruptedException iex) {
+      throw new RuntimeException("Hashtable closing was interrupted");
+    }
+  }
+  return this.availableMemory;
+}
