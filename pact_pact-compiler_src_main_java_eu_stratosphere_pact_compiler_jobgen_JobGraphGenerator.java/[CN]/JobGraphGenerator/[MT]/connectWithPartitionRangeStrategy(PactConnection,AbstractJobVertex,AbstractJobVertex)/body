@@ -58,9 +58,15 @@
   histogramVertex.connectTo(partitionVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
   partitionConfig.addInputShipStrategy(ShipStrategy.BROADCAST);
   histogramConfig.addOutputShipStrategy(ShipStrategy.BROADCAST);
-  outputVertex.connectTo(partitionVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
-  partitionConfig.addInputShipStrategy(ShipStrategy.FORWARD);
+  JobTaskVertex tempVertex=generateTempVertex((Class<? extends Stub<?,?>>)connection.getSourcePact().getPactContract().getStubClass(),sourceDOP);
+  tempVertex.setVertexToShareInstancesWith(outputVertex);
+  TaskConfig tempConfig=new TaskConfig(tempVertex.getConfiguration());
+  outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  tempConfig.addInputShipStrategy(ShipStrategy.FORWARD);
   outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
+  tempVertex.connectTo(partitionVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  partitionConfig.addInputShipStrategy(ShipStrategy.FORWARD);
+  tempConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
   partitionVertex.connectTo(inputVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
   inputConfig.addInputShipStrategy(ShipStrategy.PARTITION_RANGE);
   partitionConfig.addOutputShipStrategy(ShipStrategy.PARTITION_RANGE);
