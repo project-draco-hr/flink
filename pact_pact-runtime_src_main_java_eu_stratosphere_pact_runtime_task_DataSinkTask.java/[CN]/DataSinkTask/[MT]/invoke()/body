@@ -1,27 +1,25 @@
 {
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
-  final Path path=getFileOutputPath();
   final RecordReader<KeyValuePair<Key,Value>> reader=this.reader;
   final OutputFormat format=this.format;
-  OutputPathOpenThread opot=new OutputPathOpenThread(path,this.getEnvironment().getIndexInSubtaskGroup() + 1,10000);
-  opot.start();
-  FSDataOutputStream fdos=null;
   try {
-    fdos=opot.getFSDataOutputStream();
     if (this.taskCanceled) {
       return;
     }
-    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Start writing output to " + path.toString()));
-    format.setOutput(fdos);
-    format.open();
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Starting to produce output"));
+    format.open(this.getEnvironment().getIndexInSubtaskGroup() + 1);
     while (!this.taskCanceled && reader.hasNext()) {
       KeyValuePair pair=reader.next();
-      format.writePair(pair);
+      format.writeRecord(pair);
+    }
+    if (!this.taskCanceled) {
+      this.format.close();
+      this.format=null;
     }
   }
  catch (  Exception ex) {
     if (!this.taskCanceled) {
-      if (LOG.isErrorEnabled())       LOG.error(getLogString("Unexpected ERROR in PACT code"));
+      if (LOG.isErrorEnabled())       LOG.error(getLogString("Error in Pact user code: " + ex.getMessage()),ex);
       throw ex;
     }
   }
@@ -31,18 +29,12 @@
         this.format.close();
       }
  catch (      Throwable t) {
-      }
-    }
-    if (fdos != null) {
-      try {
-        fdos.close();
-      }
- catch (      Throwable t) {
+        if (LOG.isWarnEnabled())         LOG.warn(getLogString("Error closing the ouput format."),t);
       }
     }
   }
   if (!this.taskCanceled) {
-    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Finished writing output to " + path.toString()));
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Finished producing output"));
     if (LOG.isInfoEnabled())     LOG.info(getLogString("Finished PACT code"));
   }
  else {
