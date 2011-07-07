@@ -1,24 +1,27 @@
 {
   LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  readerPartition.hasNext();
-  ArrayList<Key> borders=new ArrayList<Key>();
-  while (readerPartition.hasNext()) {
-    borders.add(readerPartition.next().getKey());
+  if (usesSample) {
+    readerPartition.hasNext();
+    ArrayList<Key> borders=new ArrayList<Key>();
+    while (readerPartition.hasNext()) {
+      borders.add(readerPartition.next().getKey());
+    }
+    splitBorders=borders.toArray(new Key[borders.size()]);
   }
+  func=new HistogramPartitionFunction(splitBorders,order);
   for (  RecordWriter<KeyValuePair<Key,Value>> recWriter : output.getWriters()) {
     ChannelSelector<KeyValuePair<Key,Value>> selector=recWriter.getOutputGate().getChannelSelector();
     if (selector instanceof OutputEmitter) {
-      ((OutputEmitter)selector).setPartitionBorders(borders.toArray(new Key[0]));
-      ((OutputEmitter)selector).setPartitionOrder(Order.valueOf(config.getStubParameters().getString(GLOBAL_PARTITIONING_ORDER,"")));
+      ((OutputEmitter)selector).setPartitionFunction(func);
     }
   }
   Iterator<KeyValuePair<Key,Value>> input=new Iterator<KeyValuePair<Key,Value>>(){
     public boolean hasNext(){
-      return readerStub.hasNext();
+      return readerData.hasNext();
     }
     @Override public KeyValuePair<Key,Value> next(){
       try {
-        return readerStub.next();
+        return readerData.next();
       }
  catch (      IOException e) {
         throw new RuntimeException(e);
