@@ -23,13 +23,22 @@ synchronized (this.jobToInstancesMap) {
       this.jobToInstancesMap.put(jobID,jobToInstanceMapping);
     }
   }
-  final CloudInstance instance=anyFloatingInstanceAvailable(owner,awsAccessId,awsSecretKey,instanceType);
-  if (instance != null) {
-    jobToInstanceMapping.assignInstanceToJob(instance);
-    this.instanceListener.resourceAllocated(jobID,instance.asAllocatedResource());
+  final LinkedList<CloudInstance> floatinginstances=anyFloatingInstanceAvailable(owner,awsAccessId,awsSecretKey,instanceType,count);
+  if (floatinginstances.size() >= count) {
+    for (    CloudInstance ci : floatinginstances) {
+      jobToInstanceMapping.assignInstanceToJob(ci);
+      this.instanceListener.resourceAllocated(jobID,ci.asAllocatedResource());
+    }
   }
  else {
-    final String instanceID=allocateCloudInstance(awsAccessId,awsSecretKey,instanceType);
-    this.reservedInstances.put(instanceID,jobID);
+    for (    CloudInstance ci : floatinginstances) {
+      jobToInstanceMapping.assignInstanceToJob(ci);
+      this.instanceListener.resourceAllocated(jobID,ci.asAllocatedResource());
+    }
+    int neededInstances=count - floatinginstances.size();
+    LinkedList<String> instanceIDs=allocateCloudInstance(awsAccessId,awsSecretKey,instanceType,neededInstances);
+    for (    String i : instanceIDs) {
+      this.reservedInstances.put(i,jobID);
+    }
   }
 }

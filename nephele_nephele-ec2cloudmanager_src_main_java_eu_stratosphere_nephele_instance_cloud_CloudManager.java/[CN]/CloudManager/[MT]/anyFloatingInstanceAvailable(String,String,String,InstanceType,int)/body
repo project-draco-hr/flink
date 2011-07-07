@@ -1,0 +1,35 @@
+{
+  final LinkedList<CloudInstance> floatinginstances=new LinkedList<CloudInstance>();
+synchronized (this.floatingInstances) {
+    if (this.floatingInstances.size() == 0) {
+      return floatinginstances;
+    }
+    AmazonEC2Client ec2client=EC2ClientFactory.getEC2Client(awsAccessId,awsSecretKey);
+    DescribeInstancesRequest request=new DescribeInstancesRequest();
+    DescribeInstancesResult result=ec2client.describeInstances(request);
+    for (    Reservation r : result.getReservations()) {
+      for (      Instance t : r.getInstances()) {
+        if (!t.getInstanceType().equals(type.getIdentifier())) {
+          continue;
+        }
+        InetAddress inetAddress=null;
+        try {
+          inetAddress=InetAddress.getByName(t.getPrivateIpAddress());
+        }
+ catch (        UnknownHostException e) {
+          LOG.error("Cannot resolve " + t.getPrivateIpAddress() + " into an IP address: "+ StringUtils.stringifyException(e));
+          continue;
+        }
+        if (this.floatingInstances.containsKey(inetAddress)) {
+          final FloatingInstance floatingInstance=this.floatingInstances.remove(inetAddress);
+          this.floatingInstanceIDs.remove(floatingInstance.getInstanceID());
+          floatinginstances.add(convertIntoCloudInstance(t,floatingInstance.getInstanceConnectionInfo(),owner));
+          if (floatinginstances.size() >= count) {
+            return floatinginstances;
+          }
+        }
+      }
+    }
+  }
+  return floatinginstances;
+}
