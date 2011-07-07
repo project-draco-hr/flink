@@ -17,32 +17,6 @@
     inputConfig.addInputShipStrategy(ShipStrategy.FORWARD);
     return;
   }
-  JobTaskVertex sampleVertex=new JobTaskVertex("Range partition - sampling",this.jobGraph);
-  auxVertices.add(sampleVertex);
-  sampleVertex.setTaskClass(SampleTask.class);
-  TaskConfig sampleConfig=new TaskConfig(sampleVertex.getConfiguration());
-  sampleVertex.setNumberOfSubtasks(sourceDOP);
-  if (sourceIPM >= 1) {
-    sampleVertex.setNumberOfSubtasksPerInstance(sourceIPM);
-  }
-  sampleConfig.setStubClass(sourceStub);
-  outputVertex.connectTo(sampleVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
-  outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-  sampleConfig.addInputShipStrategy(ShipStrategy.FORWARD);
-  JobTaskVertex histogramVertex=new JobTaskVertex("Range partition - histograming",this.jobGraph);
-  auxVertices.add(histogramVertex);
-  histogramVertex.setTaskClass(HistogramTask.class);
-  histogramVertex.setNumberOfSubtasks(1);
-  TaskConfig histogramConfig=new TaskConfig(histogramVertex.getConfiguration());
-  histogramConfig.setStubClass(sourceStub);
-  histogramConfig.setLocalStrategy(LocalStrategy.SORT);
-  Configuration histogramStubConfig=new Configuration();
-  histogramStubConfig.setInteger(HistogramTask.NUMBER_OF_BUCKETS,targetDOP);
-  histogramConfig.setStubParameters(histogramStubConfig);
-  assignMemory(histogramConfig,outputConfig.getStubParameters().getInteger(HistogramTask.HISTOGRAM_MEMORY,-1));
-  histogramConfig.addInputShipStrategy(ShipStrategy.FORWARD);
-  sampleConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-  sampleVertex.connectTo(histogramVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
   JobTaskVertex partitionVertex=new JobTaskVertex("Range partition - partitioning",this.jobGraph);
   auxVertices.add(partitionVertex);
   partitionVertex.setTaskClass(PartitionTask.class);
@@ -54,10 +28,10 @@
   partitionConfig.setStubClass(sourceStub);
   Configuration partitionStubConfig=new Configuration();
   partitionStubConfig.setString(PartitionTask.GLOBAL_PARTITIONING_ORDER,connection.getTargetPact().getGlobalProperties().getKeyOrder().name());
+  partitionStubConfig.setBoolean(PartitionTask.PARTITION_BY_SAMPLING,false);
+  partitionStubConfig.setInteger(PartitionTask.NUMBER_OF_PARTITIONS,targetDOP);
+  partitionStubConfig.setClass(PartitionTask.DATA_DISTRIBUTION_CLASS,connection.getTargetPact().getPactContract().getCompilerHints().getInputDistributionClass());
   partitionConfig.setStubParameters(partitionStubConfig);
-  histogramVertex.connectTo(partitionVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
-  partitionConfig.addInputShipStrategy(ShipStrategy.BROADCAST);
-  histogramConfig.addOutputShipStrategy(ShipStrategy.BROADCAST);
   outputVertex.connectTo(partitionVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
   partitionConfig.addInputShipStrategy(ShipStrategy.FORWARD);
   outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
