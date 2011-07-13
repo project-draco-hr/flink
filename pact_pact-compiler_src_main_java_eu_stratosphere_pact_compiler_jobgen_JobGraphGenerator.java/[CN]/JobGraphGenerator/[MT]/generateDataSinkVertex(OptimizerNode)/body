@@ -1,10 +1,12 @@
 {
-  JobFileOutputVertex sinkVertex=new JobFileOutputVertex(sinkNode.getPactContract().getName(),this.jobGraph);
-  sinkVertex.setFileOutputClass(DataSinkTask.class);
-  sinkVertex.setFilePath(new Path(((DataSinkContract<?,?>)sinkNode.getPactContract()).getFilePath()));
-  DataSinkTask.DataSinkConfig sinkConfig=new DataSinkTask.DataSinkConfig(sinkVertex.getConfiguration());
-  sinkConfig.setStubClass(((DataSinkContract<?,?>)sinkNode.getPactContract()).getStubClass());
-  sinkConfig.setStubParameters((((DataSinkContract<?,?>)sinkNode.getPactContract()).getFormatParameters()));
+  DataSinkNode sNode=(DataSinkNode)sinkNode;
+  GenericDataSink<?,?> sinkContract=sNode.getPactContract();
+  JobGenericOutputVertex sinkVertex=new JobGenericOutputVertex(sinkNode.getPactContract().getName(),this.jobGraph);
+  sinkVertex.setOutputClass(DataSinkTask.class);
+  sinkVertex.getConfiguration().setInteger(DataSinkTask.DEGREE_OF_PARALLELISM_KEY,sinkNode.getDegreeOfParallelism());
+  TaskConfig sinkConfig=new TaskConfig(sinkVertex.getConfiguration());
+  sinkConfig.setStubClass(sinkContract.getUserCodeClass());
+  sinkConfig.setStubParameters(sinkContract.getParameters());
 switch (sinkNode.getLocalStrategy()) {
 case NONE:
     sinkConfig.setLocalStrategy(LocalStrategy.NONE);
@@ -12,6 +14,5 @@ case NONE:
 default :
 throw new CompilerException("Invalid local strategy for 'DataSink' (" + sinkNode.getName() + "): "+ sinkNode.getLocalStrategy());
 }
-sinkConfig.setStubParameters(sinkNode.getPactContract().getStubParameters());
 return sinkVertex;
 }
