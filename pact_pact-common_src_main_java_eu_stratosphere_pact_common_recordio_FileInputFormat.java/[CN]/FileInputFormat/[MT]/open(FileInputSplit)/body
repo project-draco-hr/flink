@@ -6,34 +6,14 @@
   this.start=fileSplit.getStart();
   this.length=fileSplit.getLength();
   if (LOG.isDebugEnabled())   LOG.debug("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "]");
-  final InputSplitOpenThread isot=new InputSplitOpenThread(fileSplit);
+  final InputSplitOpenThread isot=new InputSplitOpenThread(fileSplit,OPEN_TIMEOUT_MILLIES);
   isot.start();
-  long openStartTime=System.currentTimeMillis();
-  long remaining=OPEN_TIMEOUT_MILLIES;
   try {
-    do {
-      isot.join(remaining);
-    }
- while ((remaining=System.currentTimeMillis() - openStartTime) > 0);
-    if (isot.getFSDataInputStream() == null) {
-      throw new IOException("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "] timed out.");
-    }
+    isot.waitForCompletion();
   }
- catch (  InterruptedException ie) {
-    if (isot.getFSDataInputStream() != null) {
-      isot.getFSDataInputStream().close();
-    }
-    throw new IOException("Opening the Input Split was interrupted.");
-  }
-  if (!isot.fsDataInputStreamSuccessfullyObtained()) {
-    Exception e=isot.getException();
-    if (e != null && e instanceof IOException) {
-      throw (IOException)e;
-    }
- else {
-      throw new IOException("Opening input split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "] caused an error"+ (e != null ? (": " + e.getMessage()) : "."),e);
-    }
+ catch (  Throwable t) {
+    throw new IOException("Error opening the Input Split " + fileSplit.getPath() + " ["+ start+ ","+ length+ "]: "+ t.getMessage(),t);
   }
   this.stream=isot.getFSDataInputStream();
-  this.bufferSize=DEFAULT_READ_BUFFER_SIZE;
+  this.stream.seek(this.start);
 }
