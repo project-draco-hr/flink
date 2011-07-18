@@ -1,0 +1,41 @@
+{
+  config=new TaskConfig(getRuntimeConfiguration());
+  order=Order.valueOf(config.getStubParameters().getString(GLOBAL_PARTITIONING_ORDER,""));
+  usesSample=config.getStubParameters().getBoolean(PARTITION_BY_SAMPLING,true);
+  if (!usesSample) {
+    Class<DataDistribution> clsDstr=null;
+    DataDistribution distr=null;
+    try {
+      ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+      String clsName=config.getStubParameters().getString(DATA_DISTRIBUTION_CLASS,null);
+      clsDstr=(Class<DataDistribution>)cl.loadClass(clsName);
+      distr=clsDstr.newInstance();
+    }
+ catch (    Exception e) {
+      throw new RuntimeException("DataDistribution could not be instantiated.",e);
+    }
+    int numPartitions=config.getStubParameters().getInteger(NUMBER_OF_PARTITIONS,-1);
+    int numSplits=numPartitions - 1;
+    splitBorders=new Key[numSplits];
+    for (int i=0; i < numSplits; i++) {
+      splitBorders[i]=distr.getSplit(i,numSplits);
+    }
+  }
+  try {
+    ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    Class<? extends Stub> mapClass=config.getStubClass(Stub.class,cl);
+    stub=mapClass.newInstance();
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+  }
+catch (  ClassNotFoundException cnfe) {
+    throw new RuntimeException("Stub implementation class was not found.",cnfe);
+  }
+catch (  InstantiationException ie) {
+    throw new RuntimeException("Stub implementation could not be instanciated.",ie);
+  }
+catch (  IllegalAccessException iae) {
+    throw new RuntimeException("Stub implementations nullary constructor is not accessible.",iae);
+  }
+}
