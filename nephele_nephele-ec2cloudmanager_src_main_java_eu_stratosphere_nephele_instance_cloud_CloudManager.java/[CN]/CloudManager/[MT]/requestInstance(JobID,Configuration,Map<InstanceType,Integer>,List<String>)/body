@@ -2,18 +2,9 @@
   if (conf == null) {
     throw new InstanceException("No job configuration provided, unable to acquire credentials");
   }
-  final String owner=conf.getString("job.cloud.username",null);
-  if (owner == null) {
-    throw new InstanceException("Unable to allocate cloud instance: Cannot find username");
-  }
-  final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
-  if (awsAccessId == null) {
-    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS access ID");
-  }
-  final String awsSecretKey=conf.getString("job.cloud.awssecretkey",null);
-  if (awsSecretKey == null) {
-    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS secret key");
-  }
+  final String awsAccessId="AKIAJYQJNI7QH227NDQA";
+  final String awsSecretKey="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";
+  final String owner="nobody";
   final String sshKeyPair=conf.getString("job.cloud.sshkeypair",null);
   JobToInstancesMapping jobToInstanceMapping=null;
 synchronized (this.jobToInstancesMap) {
@@ -30,18 +21,20 @@ synchronized (this.jobToInstancesMap) {
     final Map.Entry<InstanceType,Integer> entry=it.next();
     final InstanceType actualInstanceType=entry.getKey();
     final int neededinstancecount=entry.getValue();
+    LOG.info("Request for " + neededinstancecount + " instances of type "+ actualInstanceType.getIdentifier());
     final LinkedList<CloudInstance> floatinginstances=anyFloatingInstanceAvailable(owner,awsAccessId,awsSecretKey,actualInstanceType,neededinstancecount);
-    if (floatinginstances.size() >= neededinstancecount) {
-      for (      CloudInstance ci : floatinginstances) {
-        jobToInstanceMapping.assignInstanceToJob(ci);
-        this.instanceListener.resourceAllocated(jobID,ci.asAllocatedResource());
-      }
+    final JobToInstancesMapping mapping=this.jobToInstancesMap.get(jobID);
+    if (mapping == null) {
+      LOG.error("Cannot find mapping for job ID " + jobID);
+      return;
     }
- else {
-      for (      CloudInstance ci : floatinginstances) {
-        jobToInstanceMapping.assignInstanceToJob(ci);
-        this.instanceListener.resourceAllocated(jobID,ci.asAllocatedResource());
-      }
+    LOG.info("Found " + floatinginstances.size() + " suitable floating instances.");
+    for (    CloudInstance ci : floatinginstances) {
+      mapping.assignInstanceToJob(ci);
+      CloudInstanceNotifier notifier=new CloudInstanceNotifier(this.instanceListener,jobID,ci);
+      notifier.start();
+    }
+    if (floatinginstances.size() < neededinstancecount) {
       final int instancerequestcount=neededinstancecount - floatinginstances.size();
       instancesToBeRequested.put(actualInstanceType,instancerequestcount);
     }

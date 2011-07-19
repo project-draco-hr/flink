@@ -1,4 +1,8 @@
 {
+  LOG.info("Check for floating instance of type" + type.getIdentifier() + " requested count: "+ count+ ".");
+  for (  InstanceConnectionInfo i : this.floatingInstances.keySet()) {
+    LOG.info("Floating instance available: " + i.getAddress() + " "+ i.getHostName()+ " hash: "+ i.hashCode());
+  }
   final LinkedList<CloudInstance> floatinginstances=new LinkedList<CloudInstance>();
 synchronized (this.floatingInstances) {
     if (this.floatingInstances.size() == 0) {
@@ -17,15 +21,18 @@ synchronized (this.floatingInstances) {
           inetAddress=InetAddress.getByName(t.getPrivateIpAddress());
         }
  catch (        UnknownHostException e) {
-          LOG.error("Cannot resolve " + t.getPrivateIpAddress() + " into an IP address: "+ StringUtils.stringifyException(e));
+          LOG.error("Cannot resolve " + t.getPrivateDnsName() + " into an IP address: "+ StringUtils.stringifyException(e));
           continue;
         }
-        if (this.floatingInstances.containsKey(inetAddress)) {
-          final FloatingInstance floatingInstance=this.floatingInstances.remove(inetAddress);
-          this.floatingInstanceIDs.remove(floatingInstance.getInstanceID());
-          floatinginstances.add(convertIntoCloudInstance(t,floatingInstance.getInstanceConnectionInfo(),owner));
-          if (floatinginstances.size() >= count) {
-            return floatinginstances;
+        for (        Entry<InstanceConnectionInfo,FloatingInstance> e : this.floatingInstances.entrySet()) {
+          if (e.getKey().getAddress().equals(inetAddress)) {
+            LOG.info("Suitable floating instance found.");
+            final FloatingInstance floatingInstance=this.floatingInstances.remove(e.getKey());
+            this.floatingInstanceIDs.remove(floatingInstance.getInstanceID());
+            floatinginstances.add(convertIntoCloudInstance(t,floatingInstance.getInstanceConnectionInfo(),owner));
+            if (floatinginstances.size() >= count) {
+              return floatinginstances;
+            }
           }
         }
       }
