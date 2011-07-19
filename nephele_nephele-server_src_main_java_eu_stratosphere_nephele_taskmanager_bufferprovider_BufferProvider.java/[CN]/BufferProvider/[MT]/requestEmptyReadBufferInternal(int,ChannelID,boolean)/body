@@ -1,0 +1,27 @@
+{
+  if (minimumSizeOfBuffer > this.bufferSizeInBytes) {
+    throw new IOException("Requested buffer size is " + minimumSizeOfBuffer + ", system can offer at most "+ this.bufferSizeInBytes);
+  }
+synchronized (this.emptyReadBuffers) {
+    if (wait) {
+      while ((this.emptyReadBuffers.size() - 2) <= 0) {
+        if (this.isSpillingAllowed) {
+          return BufferFactory.createFromFile(minimumSizeOfBuffer,targetChannelID,this.fileBufferManager);
+        }
+ else {
+          this.emptyReadBuffers.wait();
+        }
+      }
+      return BufferFactory.createFromMemory(minimumSizeOfBuffer,this.emptyReadBuffers.poll(),this.emptyReadBuffers,true);
+    }
+ else {
+      if ((this.emptyReadBuffers.size() - 2) > 0) {
+        return BufferFactory.createFromMemory(minimumSizeOfBuffer,this.emptyReadBuffers.poll(),this.emptyReadBuffers,true);
+      }
+      if (this.isSpillingAllowed) {
+        return BufferFactory.createFromFile(minimumSizeOfBuffer,targetChannelID,this.fileBufferManager);
+      }
+    }
+  }
+  return null;
+}

@@ -1,0 +1,58 @@
+{
+  String jobManagerAddress=null;
+  if (args.length > 0) {
+    jobManagerAddress=args[0];
+  }
+  final JobGraph jobGraph=new JobGraph("Broadcast Job");
+  final JobFileInputVertex producer=new JobFileInputVertex("Broadcast Producer",jobGraph);
+  producer.setFileInputClass(BroadcastProducer.class);
+  producer.setFilePath(new Path("file:///tmp/dummy/"));
+  final JobFileOutputVertex consumer=new JobFileOutputVertex("Broadcast Consumer",jobGraph);
+  consumer.setFileOutputClass(BroadcastConsumer.class);
+  consumer.setFilePath(new Path("file:///tmp/dummy"));
+  consumer.setNumberOfSubtasks(8);
+  consumer.setVertexToShareInstancesWith(producer);
+  try {
+    producer.connectTo(consumer,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    LOG.error(e);
+    return;
+  }
+  final File jarFile=new File("/tmp/broadcastJob.jar");
+  final JarFileCreator jarFileCreator=new JarFileCreator(jarFile);
+  jarFileCreator.addClass(BroadcastProducer.class);
+  jarFileCreator.addClass(BroadcastConsumer.class);
+  jarFileCreator.addClass(BroadcastRecord.class);
+  try {
+    jarFileCreator.createJarFile();
+    System.out.println("done creating!!");
+  }
+ catch (  IOException ioe) {
+    if (jarFile.exists()) {
+      jarFile.delete();
+    }
+    System.out.println("ERROR creating jar");
+    LOG.error(ioe);
+    return;
+  }
+  jobGraph.addJar(new Path("file://" + jarFile.getAbsolutePath()));
+  Configuration conf=new Configuration();
+  conf.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,"127.0.0.1");
+  conf.setString(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,"6123");
+  try {
+    final JobClient jobClient=new JobClient(jobGraph,conf);
+    System.out.println("submitting");
+    jobClient.submitJobAndWait();
+    System.out.println("done.");
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+catch (  JobExecutionException e) {
+    LOG.error(e);
+  }
+  if (jarFile.exists()) {
+    jarFile.delete();
+  }
+}
