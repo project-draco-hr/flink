@@ -1,70 +1,37 @@
 {
   KeyValuePair<Key,Value> pair=null;
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
-  final Iterator<FileInputSplit> splitIterator=getFileInputSplits();
-  boolean immutable=config.getMutability() == DataSourceConfig.Mutability.IMMUTABLE;
+  final Iterator<InputSplit> splitIterator=getInputSplits();
   while (!this.taskCanceled && splitIterator.hasNext()) {
-    final FileInputSplit split=splitIterator.next();
-    final long start=split.getStart();
-    final long length=split.getLength();
-    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Opening input split " + split.getPath()));
-    FSDataInputStream fdis=null;
-    InputSplitOpenThread isot=new InputSplitOpenThread(split);
-    isot.start();
+    final InputSplit split=splitIterator.next();
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Opening input split " + split.toString()));
+    if (this.taskCanceled) {
+      return;
+    }
+    final InputFormat format=this.format;
     try {
-      isot.join();
-    }
- catch (    InterruptedException ie) {
-      if (isot.getFSDataInputStream() != null) {
-        isot.getFSDataInputStream().close();
+      format.open(split);
+      if (LOG.isDebugEnabled())       LOG.debug(getLogString("Starting to read input from split " + split.toString()));
+      while (!this.taskCanceled && !format.reachedEnd()) {
+        pair=format.createPair();
+        if (format.nextRecord(pair)) {
+          this.output.collect(pair.getKey(),pair.getValue());
+        }
+      }
+      if (!this.taskCanceled) {
+        if (LOG.isDebugEnabled())         LOG.debug(getLogString("Closing input split " + split.toString()));
+        format.close();
       }
     }
-    if (!this.taskCanceled) {
+ catch (    Exception ex) {
       try {
-        if (!isot.fsDataInputStreamSuccessfullyObtained()) {
-          throw isot.getException();
-        }
-        fdis=isot.getFSDataInputStream();
-        format.setInput(fdis,start,length,(1024 * 1024));
-        format.open();
-        if (LOG.isDebugEnabled())         LOG.debug(getLogString("Starting reader on file " + split.getPath()));
-        if (!immutable) {
-          pair=format.createPair();
-        }
-        while (!this.taskCanceled && !format.reachedEnd()) {
-          if (immutable) {
-            pair=format.createPair();
-          }
-          boolean valid=format.nextPair(pair);
-          if (valid) {
-            output.collect(pair.getKey(),pair.getValue());
-          }
-        }
-        if (LOG.isDebugEnabled())         LOG.debug(getLogString("Closing input split " + split.getPath()));
+        format.close();
       }
- catch (      Exception ex) {
-        if (!this.taskCanceled) {
-          if (LOG.isErrorEnabled())           LOG.error(getLogString("Unexpected ERROR in PACT code"));
-          throw ex;
-        }
+ catch (      Throwable t) {
       }
- finally {
-        if (format != null) {
-          try {
-            format.closeInput();
-          }
- catch (          IOException ioe) {
-            LOG.error("Exception caught while closing input of InputFormat");
-            throw ioe;
-          }
-          try {
-            format.close();
-          }
- catch (          IOException ioe) {
-            LOG.error("Exception caught while closing InputFormat");
-            throw ioe;
-          }
-        }
+      if (!this.taskCanceled) {
+        if (LOG.isErrorEnabled())         LOG.error(getLogString("Unexpected ERROR in PACT code"));
+        throw ex;
       }
     }
   }
