@@ -27,33 +27,19 @@ synchronized (this.runningTasks) {
   }
   final EnvironmentWrapper wrapper=new EnvironmentWrapper(this,id,ee);
   ee.registerExecutionListener(wrapper);
+  this.byteBufferedChannelManager.register(id,ee);
   boolean enableProfiling=false;
   if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
     enableProfiling=true;
   }
   if (enableProfiling) {
     this.profiler.registerExecutionListener(id,jobConfiguration,ee);
-  }
-  try {
     for (int i=0; i < ee.getNumberOfInputGates(); i++) {
-      registerInputChannels(ee.getInputGate(i));
-      if (enableProfiling) {
-        this.profiler.registerInputGateListener(id,jobConfiguration,ee.getInputGate(i));
-      }
+      this.profiler.registerInputGateListener(id,jobConfiguration,ee.getInputGate(i));
     }
-    final ChannelType commonChannelType=hasCommonOutputChannelType(ee);
-    final ByteBufferedOutputChannelGroup channelGroup=new ByteBufferedOutputChannelGroup(this.byteBufferedChannelManager,this.byteBufferedChannelManager.getBufferProvider(),this.checkpointManager,commonChannelType,id);
     for (int i=0; i < ee.getNumberOfOutputGates(); i++) {
-      registerOutputChannels(ee.getOutputGate(i),channelGroup);
-      if (enableProfiling) {
-        this.profiler.registerOutputGateListener(id,jobConfiguration,ee.getOutputGate(i));
-      }
+      this.profiler.registerOutputGateListener(id,jobConfiguration,ee.getOutputGate(i));
     }
-  }
- catch (  ChannelSetupException e) {
-    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
-    result.setDescription(e.getMessage());
-    return result;
   }
   return null;
 }

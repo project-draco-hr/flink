@@ -1,0 +1,35 @@
+{
+  if (minimumSizeOfBuffer > this.maximumBufferSize) {
+    throw new IllegalArgumentException("Buffer of " + minimumSizeOfBuffer + " bytes is requested, but maximum buffer size is "+ this.maximumBufferSize);
+  }
+synchronized (this.buffers) {
+    if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+      while (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+        final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
+        if (buffer == null) {
+          break;
+        }
+        this.buffers.add(buffer);
+      }
+    }
+ else     if (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
+      while (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+        final ByteBuffer buffer=this.buffers.poll();
+        if (buffer == null) {
+          break;
+        }
+        this.globalBufferPool.releaseGlobalBuffer(buffer);
+      }
+    }
+    while (this.buffers.isEmpty()) {
+      if (block) {
+        this.buffers.wait();
+      }
+ else {
+        return null;
+      }
+    }
+    final ByteBuffer byteBuffer=this.buffers.poll();
+    return BufferFactory.createFromMemory(minimumSizeOfBuffer,byteBuffer,this.buffers);
+  }
+}

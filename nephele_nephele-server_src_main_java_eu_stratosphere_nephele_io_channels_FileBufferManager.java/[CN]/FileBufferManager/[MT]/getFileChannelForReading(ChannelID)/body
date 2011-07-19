@@ -1,0 +1,35 @@
+{
+  final Object groupObject=this.channelGroupMap.get(sourceChannelID);
+  if (groupObject == null) {
+    throw new IOException("Cannot find input gate for source channel ID " + sourceChannelID);
+  }
+  Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+    queue=this.readableSpillingFileMap.get(groupObject);
+    if (queue == null) {
+      queue=new ArrayDeque<ReadableSpillingFile>(1);
+      this.readableSpillingFileMap.put(groupObject,queue);
+    }
+  }
+  ReadableSpillingFile readableSpillingFile=null;
+synchronized (queue) {
+    while (queue.isEmpty()) {
+synchronized (this.writableSpillingFileMap) {
+        WritableSpillingFile writableSpillingFile=this.writableSpillingFileMap.get(groupObject);
+        if (writableSpillingFile != null) {
+          writableSpillingFile.requestReadAccess();
+          if (writableSpillingFile.isSafeToClose()) {
+            writableSpillingFile.close();
+            this.writableSpillingFileMap.remove(groupObject);
+            queue.add(new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+          }
+        }
+      }
+      if (queue.isEmpty()) {
+        queue.wait(WritableSpillingFile.MAXIMUM_TIME_WITHOUT_WRITE_ACCESS);
+      }
+    }
+    readableSpillingFile=queue.peek();
+  }
+  return readableSpillingFile.lockReadableFileChannel();
+}

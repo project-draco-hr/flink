@@ -11,7 +11,14 @@
     LOG.error(ioe);
     return;
   }
-  final InetSocketAddress remoteAddress=(InetSocketAddress)clientSocket.socket().getRemoteSocketAddress();
-  final IncomingConnectionID incomingConnectionID=new IncomingConnectionID(remoteAddress.getAddress());
-  this.networkConnectionManager.registerIncomingConnection(incomingConnectionID,clientSocket);
+  final IncomingConnection incomingConnection=new IncomingConnection(this.byteBufferedChannelManager,clientSocket);
+  SelectionKey clientKey=null;
+  try {
+    clientSocket.configureBlocking(false);
+    clientKey=clientSocket.register(this.selector,SelectionKey.OP_READ);
+    clientKey.attach(incomingConnection);
+  }
+ catch (  IOException ioe) {
+    incomingConnection.reportTransmissionProblem(clientKey,ioe);
+  }
 }
