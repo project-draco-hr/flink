@@ -2,27 +2,33 @@
   if (conf == null) {
     throw new InstanceException("No job configuration provided, unable to acquire credentials");
   }
-  final String awsAccessId="AKIAJYQJNI7QH227NDQA";
-  final String awsSecretKey="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";
-  final String owner="nobody";
+  final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
+  LOG.info("found AWS access ID from Job Conf: " + awsAccessId);
+  if (awsAccessId == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS access ID");
+  }
+  final String awsSecretKey=conf.getString("job.cloud.awssecretkey",null);
+  if (awsSecretKey == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS secret key");
+  }
   final String sshKeyPair=conf.getString("job.cloud.sshkeypair",null);
   JobToInstancesMapping jobToInstanceMapping=null;
 synchronized (this.jobToInstancesMap) {
     jobToInstanceMapping=this.jobToInstancesMap.get(jobID);
     if (jobToInstanceMapping == null) {
       LOG.debug("Creating new mapping for job " + jobID);
-      jobToInstanceMapping=new JobToInstancesMapping(owner,awsAccessId,awsSecretKey);
+      jobToInstanceMapping=new JobToInstancesMapping(awsAccessId,awsSecretKey);
       this.jobToInstancesMap.put(jobID,jobToInstanceMapping);
     }
   }
-  Map<InstanceType,Integer> instancesToBeRequested=new HashMap<InstanceType,Integer>();
+  final Map<InstanceType,Integer> instancesToBeRequested=new HashMap<InstanceType,Integer>();
   final Iterator<Map.Entry<InstanceType,Integer>> it=instanceMap.entrySet().iterator();
   while (it.hasNext()) {
     final Map.Entry<InstanceType,Integer> entry=it.next();
     final InstanceType actualInstanceType=entry.getKey();
     final int neededinstancecount=entry.getValue();
     LOG.info("Request for " + neededinstancecount + " instances of type "+ actualInstanceType.getIdentifier());
-    final LinkedList<CloudInstance> floatinginstances=anyFloatingInstanceAvailable(owner,awsAccessId,awsSecretKey,actualInstanceType,neededinstancecount);
+    final LinkedList<CloudInstance> floatinginstances=anyFloatingInstanceAvailable(awsAccessId,awsSecretKey,actualInstanceType,neededinstancecount);
     final JobToInstancesMapping mapping=this.jobToInstancesMap.get(jobID);
     if (mapping == null) {
       LOG.error("Cannot find mapping for job ID " + jobID);
@@ -39,7 +45,7 @@ synchronized (this.jobToInstancesMap) {
       instancesToBeRequested.put(actualInstanceType,instancerequestcount);
     }
   }
-  LinkedList<String> instanceIDs=allocateCloudInstance(awsAccessId,awsSecretKey,instancesToBeRequested,sshKeyPair);
+  final LinkedList<String> instanceIDs=allocateCloudInstance(conf,awsAccessId,awsSecretKey,instancesToBeRequested,sshKeyPair);
   for (  String i : instanceIDs) {
     this.reservedInstances.put(i,jobID);
   }
