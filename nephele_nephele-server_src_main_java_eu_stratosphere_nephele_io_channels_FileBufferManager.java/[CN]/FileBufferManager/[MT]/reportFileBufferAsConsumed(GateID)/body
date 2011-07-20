@@ -1,0 +1,48 @@
+{
+  try {
+    Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+      queue=this.readableSpillingFileMap.get(gateID);
+      if (queue == null) {
+        if (this.canceledChannels.contains(gateID)) {
+          return;
+        }
+ else {
+          throw new IOException("Cannot find readable spilling file queue for gate ID " + gateID);
+        }
+      }
+      ReadableSpillingFile readableSpillingFile=null;
+synchronized (queue) {
+        readableSpillingFile=queue.peek();
+        if (readableSpillingFile == null) {
+          if (this.canceledChannels.contains(gateID)) {
+            return;
+          }
+ else {
+            throw new IOException("Cannot find readable spilling file for gate ID " + gateID);
+          }
+        }
+        try {
+          readableSpillingFile.unlockReadableFileChannel();
+          if (readableSpillingFile.checkForEndOfFile()) {
+            queue.poll();
+            if (queue.isEmpty()) {
+              this.readableSpillingFileMap.remove(gateID);
+            }
+          }
+        }
+ catch (        ClosedChannelException e) {
+          if (this.canceledChannels.contains(gateID)) {
+            readableSpillingFile.getPhysicalFile().delete();
+          }
+ else {
+            throw e;
+          }
+        }
+      }
+    }
+  }
+ catch (  IOException ioe) {
+    LOG.error(StringUtils.stringifyException(ioe));
+  }
+}

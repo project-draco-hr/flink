@@ -13,6 +13,14 @@
  catch (  final IOException ioe) {
     this.byteBufferedOutputChannel.reportIOException(ioe);
   }
-  this.outputGateContext.processEnvelope(this.outgoingTransferEnvelope);
+  if (this.byteBufferedOutputChannel.followsPushModel()) {
+    final Buffer memBuffer=this.outgoingTransferEnvelope.getBuffer();
+    final Buffer fileBuffer=this.outputGateContext.getFileBuffer(memBuffer.size());
+    memBuffer.copyToBuffer(fileBuffer);
+    this.outgoingTransferEnvelope.setBuffer(fileBuffer);
+    this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
+    memBuffer.recycleBuffer();
+  }
+  this.outputGateContext.processEnvelope(this.outgoingTransferEnvelope,this.byteBufferedOutputChannel.followsPushModel());
   this.outgoingTransferEnvelope=null;
 }

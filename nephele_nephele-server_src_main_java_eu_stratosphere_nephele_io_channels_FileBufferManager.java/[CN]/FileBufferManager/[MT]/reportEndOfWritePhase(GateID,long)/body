@@ -1,0 +1,30 @@
+{
+  WritableSpillingFile writableSpillingFile=null;
+  boolean removed=false;
+synchronized (this.writableSpillingFileMap) {
+    writableSpillingFile=this.writableSpillingFileMap.get(gateID);
+    if (writableSpillingFile == null) {
+      throw new IOException("Cannot find writable spilling file for gate ID " + gateID);
+    }
+    writableSpillingFile.unlockWritableFileChannel(currentFileSize);
+    if (writableSpillingFile.isReadRequested() && writableSpillingFile.isSafeToClose()) {
+      this.writableSpillingFileMap.remove(gateID);
+      removed=true;
+    }
+  }
+  if (removed) {
+    writableSpillingFile.close();
+    Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+      queue=this.readableSpillingFileMap.get(gateID);
+      if (queue == null) {
+        queue=new ArrayDeque<ReadableSpillingFile>(1);
+        this.readableSpillingFileMap.put(gateID,queue);
+      }
+    }
+synchronized (queue) {
+      queue.add(new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+      queue.notify();
+    }
+  }
+}

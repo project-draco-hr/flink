@@ -1,0 +1,31 @@
+{
+  Queue<ReadableSpillingFile> queue=null;
+synchronized (this.readableSpillingFileMap) {
+    queue=this.readableSpillingFileMap.get(gateID);
+    if (queue == null) {
+      queue=new ArrayDeque<ReadableSpillingFile>(1);
+      this.readableSpillingFileMap.put(gateID,queue);
+    }
+  }
+  ReadableSpillingFile readableSpillingFile=null;
+synchronized (queue) {
+    while (queue.isEmpty()) {
+synchronized (this.writableSpillingFileMap) {
+        WritableSpillingFile writableSpillingFile=this.writableSpillingFileMap.get(gateID);
+        if (writableSpillingFile != null) {
+          writableSpillingFile.requestReadAccess();
+          if (writableSpillingFile.isSafeToClose()) {
+            writableSpillingFile.close();
+            this.writableSpillingFileMap.remove(gateID);
+            queue.add(new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+          }
+        }
+      }
+      if (queue.isEmpty()) {
+        queue.wait(WritableSpillingFile.MAXIMUM_TIME_WITHOUT_WRITE_ACCESS);
+      }
+    }
+    readableSpillingFile=queue.peek();
+  }
+  return readableSpillingFile.lockReadableFileChannel();
+}
