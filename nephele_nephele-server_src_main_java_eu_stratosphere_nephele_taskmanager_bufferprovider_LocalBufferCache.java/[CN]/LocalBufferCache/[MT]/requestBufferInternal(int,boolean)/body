@@ -3,17 +3,7 @@
     throw new IllegalArgumentException("Buffer of " + minimumSizeOfBuffer + " bytes is requested, but maximum buffer size is "+ this.maximumBufferSize);
   }
 synchronized (this.buffers) {
-    if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
-      while (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
-        final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
-        if (buffer == null) {
-          break;
-        }
-        this.buffers.add(buffer);
-        this.requestedNumberOfBuffers++;
-      }
-    }
- else     if (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
+    if (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
       while (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
         final ByteBuffer buffer=this.buffers.poll();
         if (buffer == null) {
@@ -24,6 +14,14 @@ synchronized (this.buffers) {
       }
     }
     while (this.buffers.isEmpty()) {
+      if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+        final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
+        if (buffer != null) {
+          this.buffers.add(buffer);
+          this.requestedNumberOfBuffers++;
+          continue;
+        }
+      }
       if (block) {
         this.buffers.wait();
       }
