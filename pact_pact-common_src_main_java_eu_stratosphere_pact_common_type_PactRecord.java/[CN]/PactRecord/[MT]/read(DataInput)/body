@@ -1,22 +1,12 @@
 {
-  int len=in.readUnsignedByte();
-  if (len >= MAX_BIT) {
-    int shift=7;
-    int curr;
-    len=len & 0x7f;
-    while ((curr=in.readUnsignedByte()) >= MAX_BIT) {
-      len|=(curr & 0x7f) << shift;
-      shift+=7;
-    }
-    len|=curr << shift;
-  }
+  final int len=readValLengthInt(in);
   this.binaryLen=len;
   byte[] data=this.binaryData;
   if (data == null || data.length < len) {
     data=new byte[len];
     this.binaryData=data;
   }
-  in.readFully(this.binaryData,0,len);
+  in.readFully(data,0,len);
   int offset=1;
   int numFields=data[0];
   if (numFields >= MAX_BIT) {
@@ -24,10 +14,42 @@
     int curr;
     numFields=numFields & 0x7f;
     while ((curr=data[offset++]) >= MAX_BIT) {
-      numFields|=(numFields & 0x7f) << shift;
+      numFields|=(curr & 0x7f) << shift;
       shift+=7;
     }
     numFields|=curr << shift;
   }
   this.numFields=numFields;
+  if (this.offsets == null || this.offsets.length < numFields) {
+    this.offsets=new int[numFields];
+  }
+  if (this.fields == null || this.fields.length < numFields) {
+    this.fields=new Value[numFields];
+  }
+  final int beginMasks=offset;
+  final int fieldsBy8=numFields >> 3;
+  offset=beginMasks + fieldsBy8;
+  for (int field=0, chunk=0; chunk < fieldsBy8; chunk++) {
+    int mask=data[beginMasks + chunk];
+    for (int i=0; i < 8 && field < numFields; i++, field++) {
+      if ((mask & 0x1) == 0x1) {
+        int start=data[offset];
+        if (start >= MAX_BIT) {
+          int shift=7;
+          int curr;
+          start=start & 0x7f;
+          while ((curr=data[offset++]) >= MAX_BIT) {
+            start|=(curr & 0x7f) << shift;
+            shift+=7;
+          }
+          start|=curr << shift;
+        }
+        this.offsets[field]=start;
+      }
+ else {
+        this.offsets[field]=NULL_INDICATOR_OFFSET;
+      }
+      mask>>=1;
+    }
+  }
 }

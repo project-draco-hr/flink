@@ -1,0 +1,34 @@
+{
+  final int firstModified=this.firstModifiedPos;
+  if (firstModified < 0) {
+    return;
+  }
+  final int numFields=this.numFields;
+  final int[] offsets=this.offsets;
+  if (this.serializer == null) {
+    this.serializer=new InternalSerializer();
+  }
+  final InternalSerializer serializer=this.serializer;
+  if (this.lastUnmodifiedPos < firstModified) {
+    int offset=this.offsets[this.lastUnmodifiedPos] + this.lengths[this.lastUnmodifiedPos];
+    serializer.memory=this.binaryData;
+    serializer.position=this.offsets[this.lastUnmodifiedPos] + this.lengths[this.lastUnmodifiedPos];
+    try {
+      for (int i=firstModified; i < numFields; i++) {
+        offsets[i]=offset;
+        this.fields[i].write(serializer);
+        int newOffset=serializer.position;
+        this.lengths[i]=newOffset - offset;
+        offset=newOffset;
+      }
+    }
+ catch (    Exception e) {
+      throw new RuntimeException("Error in data type serialization: " + e.getMessage());
+    }
+  }
+ else {
+    throw new UnsupportedOperationException();
+  }
+  this.firstModifiedPos=-1;
+  this.lastUnmodifiedPos=numFields - 1;
+}
