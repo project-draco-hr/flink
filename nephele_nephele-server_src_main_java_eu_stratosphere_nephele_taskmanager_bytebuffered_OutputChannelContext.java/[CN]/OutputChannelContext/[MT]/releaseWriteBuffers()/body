@@ -13,14 +13,18 @@
  catch (  final IOException ioe) {
     this.byteBufferedOutputChannel.reportIOException(ioe);
   }
-  if (!this.byteBufferedOutputChannel.followsPushModel()) {
+  if (!this.isReceiverRunning) {
     final Buffer memBuffer=this.outgoingTransferEnvelope.getBuffer();
     final Buffer fileBuffer=this.outputGateContext.getFileBuffer(memBuffer.size());
     memBuffer.copyToBuffer(fileBuffer);
     this.outgoingTransferEnvelope.setBuffer(fileBuffer);
     this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
     memBuffer.recycleBuffer();
+    return;
   }
-  this.outputGateContext.processEnvelope(this.outgoingTransferEnvelope,this.byteBufferedOutputChannel.followsPushModel());
+  while (!this.queuedOutgoingEnvelopes.isEmpty()) {
+    this.outputGateContext.processEnvelope(this.queuedOutgoingEnvelopes.poll());
+  }
+  this.outputGateContext.processEnvelope(this.outgoingTransferEnvelope);
   this.outgoingTransferEnvelope=null;
 }
