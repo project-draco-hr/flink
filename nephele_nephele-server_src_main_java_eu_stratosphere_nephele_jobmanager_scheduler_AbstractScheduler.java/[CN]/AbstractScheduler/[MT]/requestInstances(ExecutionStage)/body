@@ -1,11 +1,17 @@
 {
   final ExecutionGraph executionGraph=executionStage.getExecutionGraph();
-  final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
-  executionStage.collectRequiredInstanceTypes(requiredInstances,ExecutionState.SCHEDULED);
-  if (requiredInstances.isEmpty()) {
+  final InstanceRequestMap instanceRequestMap=new InstanceRequestMap();
+  executionStage.collectRequiredInstanceTypes(instanceRequestMap,ExecutionState.SCHEDULED);
+  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMinimumIterator();
+  LOG.info("Requesting the following instances for job " + executionGraph.getJobID());
+  while (it.hasNext()) {
+    final Map.Entry<InstanceType,Integer> entry=it.next();
+    LOG.info(" " + entry.getKey() + " ["+ entry.getValue().intValue()+ ", "+ instanceRequestMap.getMaximumNumberOfInstances(entry.getKey())+ "]");
+  }
+  if (instanceRequestMap.isEmpty()) {
     return;
   }
-  this.instanceManager.requestInstance(executionGraph.getJobID(),executionGraph.getJobConfiguration(),requiredInstances,null);
+  this.instanceManager.requestInstance(executionGraph.getJobID(),executionGraph.getJobConfiguration(),instanceRequestMap,null);
   final ExecutionGraphIterator it2=new ExecutionGraphIterator(executionGraph,executionGraph.getIndexOfCurrentExecutionStage(),true,true);
   while (it2.hasNext()) {
     final ExecutionVertex vertex=it2.next();

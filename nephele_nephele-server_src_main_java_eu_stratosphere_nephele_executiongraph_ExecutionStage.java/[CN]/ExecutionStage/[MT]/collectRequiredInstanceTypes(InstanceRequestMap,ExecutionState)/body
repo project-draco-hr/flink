@@ -13,14 +13,27 @@
           collectedInstances.add(instance);
         }
         if (instance instanceof DummyInstance) {
-          Integer num=instanceTypeMap.get(instance.getType());
-          num=(num == null) ? Integer.valueOf(1) : Integer.valueOf(num.intValue() + 1);
-          instanceTypeMap.put(instance.getType(),num);
+          final InstanceType instanceType=instance.getType();
+          int num=instanceRequestMap.getMaximumNumberOfInstances(instanceType);
+          ++num;
+          instanceRequestMap.setMaximumNumberOfInstances(instanceType,num);
+          if (groupVertex.isInputVertex()) {
+            num=instanceRequestMap.getMinimumNumberOfInstances(instanceType);
+            ++num;
+            instanceRequestMap.setMinimumNumberOfInstances(instanceType,num);
+          }
         }
  else {
           LOG.debug("Execution Vertex " + vertex.getName() + " ("+ vertex.getID()+ ") is already assigned to non-dummy instance, skipping...");
         }
       }
+    }
+  }
+  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
+  while (it.hasNext()) {
+    final Map.Entry<InstanceType,Integer> entry=it.next();
+    if (instanceRequestMap.getMinimumNumberOfInstances(entry.getKey()) == 0) {
+      instanceRequestMap.setMinimumNumberOfInstances(entry.getKey(),entry.getValue());
     }
   }
 }
