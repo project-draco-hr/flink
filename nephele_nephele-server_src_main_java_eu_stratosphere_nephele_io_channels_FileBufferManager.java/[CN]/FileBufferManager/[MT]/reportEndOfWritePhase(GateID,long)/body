@@ -14,17 +14,18 @@ synchronized (this.writableSpillingFileMap) {
   }
   if (removed) {
     writableSpillingFile.close();
-    Queue<ReadableSpillingFile> queue=null;
+    Map<FileID,ReadableSpillingFile> map=null;
 synchronized (this.readableSpillingFileMap) {
-      queue=this.readableSpillingFileMap.get(gateID);
-      if (queue == null) {
-        queue=new ArrayDeque<ReadableSpillingFile>(1);
-        this.readableSpillingFileMap.put(gateID,queue);
+      map=this.readableSpillingFileMap.get(gateID);
+      if (map == null) {
+        map=new HashMap<FileID,ReadableSpillingFile>();
+        this.readableSpillingFileMap.put(gateID,map);
       }
     }
-synchronized (queue) {
-      queue.add(new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
-      queue.notify();
+synchronized (map) {
+      map.put(writableSpillingFile.getFileID(),new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+      map.notify();
     }
   }
+  return writableSpillingFile.getFileID();
 }

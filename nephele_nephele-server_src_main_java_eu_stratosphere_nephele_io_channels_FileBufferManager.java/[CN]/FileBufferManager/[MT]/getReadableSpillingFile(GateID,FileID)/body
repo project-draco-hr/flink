@@ -1,0 +1,35 @@
+{
+  if (gateID == null) {
+    throw new IllegalStateException("gateID is null");
+  }
+  if (fileID == null) {
+    throw new IllegalStateException("fileID is null");
+  }
+  Map<FileID,ReadableSpillingFile> map=null;
+synchronized (this.readableSpillingFileMap) {
+    map=this.readableSpillingFileMap.get(gateID);
+    if (map == null) {
+      map=new HashMap<FileID,ReadableSpillingFile>();
+      this.readableSpillingFileMap.put(gateID,map);
+    }
+  }
+synchronized (map) {
+    while (!map.containsKey(fileID)) {
+synchronized (this.writableSpillingFileMap) {
+        WritableSpillingFile writableSpillingFile=this.writableSpillingFileMap.get(gateID);
+        if (writableSpillingFile != null) {
+          writableSpillingFile.requestReadAccess();
+          if (writableSpillingFile.isSafeToClose()) {
+            writableSpillingFile.close();
+            this.writableSpillingFileMap.remove(gateID);
+            map.put(writableSpillingFile.getFileID(),new ReadableSpillingFile(writableSpillingFile.getPhysicalFile()));
+          }
+        }
+      }
+      if (!map.containsKey(fileID)) {
+        map.wait(WritableSpillingFile.MAXIMUM_TIME_WITHOUT_WRITE_ACCESS);
+      }
+    }
+    return map.get(fileID);
+  }
+}

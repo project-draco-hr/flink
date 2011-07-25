@@ -1,9 +1,9 @@
 {
   try {
-    Queue<ReadableSpillingFile> queue=null;
+    Map<FileID,ReadableSpillingFile> map=null;
 synchronized (this.readableSpillingFileMap) {
-      queue=this.readableSpillingFileMap.get(gateID);
-      if (queue == null) {
+      map=this.readableSpillingFileMap.get(gateID);
+      if (map == null) {
         if (this.canceledChannels.contains(gateID)) {
           return;
         }
@@ -12,8 +12,8 @@ synchronized (this.readableSpillingFileMap) {
         }
       }
       ReadableSpillingFile readableSpillingFile=null;
-synchronized (queue) {
-        readableSpillingFile=queue.peek();
+synchronized (map) {
+        readableSpillingFile=map.get(fileID);
         if (readableSpillingFile == null) {
           if (this.canceledChannels.contains(gateID)) {
             return;
@@ -25,8 +25,8 @@ synchronized (queue) {
         try {
           readableSpillingFile.unlockReadableFileChannel();
           if (readableSpillingFile.checkForEndOfFile()) {
-            queue.poll();
-            if (queue.isEmpty()) {
+            map.remove(fileID);
+            if (map.isEmpty()) {
               this.readableSpillingFileMap.remove(gateID);
             }
           }
