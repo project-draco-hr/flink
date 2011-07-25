@@ -3,6 +3,12 @@
     LOG.error("Method 'deploy' called but list of vertices to be deployed is empty");
     return;
   }
+  for (  final ExecutionVertex vertex : verticesToBeDeployed) {
+    if (vertex.getExecutionState() != ExecutionState.READY) {
+      LOG.error("Expected vertex " + vertex + " to be in state READY but it is in state "+ vertex.getExecutionState());
+    }
+    vertex.setExecutionState(ExecutionState.STARTING);
+  }
   final Runnable deploymentRunnable=new Runnable(){
     /** 
  * {@inheritDoc}
@@ -16,10 +22,6 @@
       }
       final List<TaskSubmissionWrapper> submissionList=new SerializableArrayList<TaskSubmissionWrapper>();
       for (      final ExecutionVertex vertex : verticesToBeDeployed) {
-        if (vertex.getExecutionState() != ExecutionState.READY) {
-          LOG.error("Expected vertex " + vertex + " to be in state READY but it is in state "+ vertex.getExecutionState());
-        }
-        vertex.setExecutionState(ExecutionState.STARTING);
         submissionList.add(new TaskSubmissionWrapper(vertex.getID(),vertex.getEnvironment(),vertex.getExecutionGraph().getJobConfiguration(),vertex.constructInitialActiveOutputChannelsSet()));
         LOG.info("Starting task " + vertex + " on "+ vertex.getAllocatedResource().getInstance());
       }
