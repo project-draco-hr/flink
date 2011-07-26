@@ -7,13 +7,13 @@
     this.binaryData=data;
   }
   in.readFully(data,0,len);
-  int offset=1;
-  int numFields=data[0];
+  int pos=len - 2;
+  int numFields=data[len - 1];
   if (numFields >= MAX_BIT) {
     int shift=7;
     int curr;
     numFields=numFields & 0x7f;
-    while ((curr=data[offset++]) >= MAX_BIT) {
+    while ((curr=data[pos--]) >= MAX_BIT) {
       numFields|=(curr & 0x7f) << shift;
       shift+=7;
     }
@@ -26,25 +26,36 @@
   if (this.fields == null || this.fields.length < numFields) {
     this.fields=new Value[numFields];
   }
-  final int beginMasks=offset;
-  final int fieldsBy8=numFields >> 3;
-  offset=beginMasks + fieldsBy8;
+  if (this.lengths == null || this.lengths.length < numFields) {
+    this.lengths=new int[numFields];
+  }
+  final int beginMasks=pos;
+  final int fieldsBy8=(numFields >>> 3) + ((numFields & 0x7) == 0 ? 0 : 1);
+  pos=beginMasks - fieldsBy8;
+  int lastNonNullField=-1;
   for (int field=0, chunk=0; chunk < fieldsBy8; chunk++) {
-    int mask=data[beginMasks + chunk];
+    int mask=data[beginMasks - chunk];
     for (int i=0; i < 8 && field < numFields; i++, field++) {
       if ((mask & 0x1) == 0x1) {
-        int start=data[offset];
-        if (start >= MAX_BIT) {
-          int shift=7;
-          int curr;
-          start=start & 0x7f;
-          while ((curr=data[offset++]) >= MAX_BIT) {
-            start|=(curr & 0x7f) << shift;
-            shift+=7;
+        if (lastNonNullField >= 0) {
+          int start=data[pos--];
+          if (start >= MAX_BIT) {
+            int shift=7;
+            int curr;
+            start=start & 0x7f;
+            while ((curr=data[pos--]) >= MAX_BIT) {
+              start|=(curr & 0x7f) << shift;
+              shift+=7;
+            }
+            start|=curr << shift;
           }
-          start|=curr << shift;
+          this.offsets[field]=start;
+          this.lengths[lastNonNullField]=start - this.offsets[lastNonNullField];
         }
-        this.offsets[field]=start;
+ else {
+          this.offsets[field]=0;
+        }
+        lastNonNullField=field;
       }
  else {
         this.offsets[field]=NULL_INDICATOR_OFFSET;
@@ -52,4 +63,9 @@
       mask>>=1;
     }
   }
+  if (lastNonNullField >= 0) {
+    this.lengths[lastNonNullField]=pos - this.offsets[lastNonNullField] + 1;
+  }
+  this.firstModifiedPos=Integer.MAX_VALUE;
+  this.lastUnmodifiedPos=numFields - 1;
 }
