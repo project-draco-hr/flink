@@ -24,6 +24,7 @@ synchronized (this.jobToInstancesMap) {
   }
   final Map<InstanceType,Integer> instancesToBeRequested=new HashMap<InstanceType,Integer>();
   final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
+  final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
   while (it.hasNext()) {
     final Map.Entry<InstanceType,Integer> entry=it.next();
     final InstanceType actualInstanceType=entry.getKey();
@@ -38,8 +39,7 @@ synchronized (this.jobToInstancesMap) {
     LOG.info("Found " + floatinginstances.size() + " suitable floating instances.");
     for (    CloudInstance ci : floatinginstances) {
       mapping.assignInstanceToJob(ci);
-      CloudInstanceNotifier notifier=new CloudInstanceNotifier(this.instanceListener,jobID,ci);
-      notifier.start();
+      allocatedResources.add(ci.asAllocatedResource());
     }
     if (floatinginstances.size() < neededinstancecount) {
       final int instancerequestcount=neededinstancecount - floatinginstances.size();
@@ -50,4 +50,6 @@ synchronized (this.jobToInstancesMap) {
   for (  String i : instanceIDs) {
     this.reservedInstances.put(i,jobID);
   }
+  final CloudInstanceNotifier notifier=new CloudInstanceNotifier(this.instanceListener,jobID,allocatedResources);
+  notifier.start();
 }
