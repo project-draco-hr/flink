@@ -1,0 +1,34 @@
+{
+  if (this.orphanedTMs.size() == 0) {
+    return;
+  }
+  final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
+  final String awsSecretKey=conf.getString("job.cloud.awssecretkey",null);
+  LOG.debug("Checking orphaned Instances... " + this.orphanedTMs.size() + " orphaned instances listed.");
+  AmazonEC2Client ec2client=EC2ClientFactory.getEC2Client(awsAccessId,awsSecretKey);
+  DescribeInstancesRequest request=new DescribeInstancesRequest();
+  DescribeInstancesResult result=ec2client.describeInstances(request);
+  for (  Reservation r : result.getReservations()) {
+    for (    Instance t : r.getInstances()) {
+      InetAddress inetAddress=null;
+      try {
+        inetAddress=InetAddress.getByName(t.getPrivateIpAddress());
+      }
+ catch (      UnknownHostException e) {
+        LOG.error("Cannot resolve " + t.getPrivateDnsName() + " into an IP address: "+ StringUtils.stringifyException(e));
+        continue;
+      }
+      final Iterator<InstanceConnectionInfo> it=this.orphanedTMs.iterator();
+      while (it.hasNext()) {
+        InstanceConnectionInfo oi=it.next();
+        if (oi.getAddress().equals(inetAddress)) {
+          LOG.info("Orphaned Instance " + oi + " converted into floating instance.");
+          FloatingInstance floatinginstance=new FloatingInstance(t.getInstanceId(),oi,t.getLaunchTime().getTime());
+          this.floatingInstances.put(oi,floatinginstance);
+          this.floatingInstanceIDs.put(t.getInstanceId(),conf);
+          break;
+        }
+      }
+    }
+  }
+}
