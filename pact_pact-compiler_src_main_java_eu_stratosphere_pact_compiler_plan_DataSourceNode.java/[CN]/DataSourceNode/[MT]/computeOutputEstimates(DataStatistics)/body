@@ -54,16 +54,19 @@
   if (this.estimatedNumRecords == -1 && hints.getAvgBytesPerRecord() >= 1.0f && this.estimatedOutputSize > 0) {
     this.estimatedNumRecords=(long)(this.estimatedOutputSize / hints.getAvgBytesPerRecord()) + 1;
   }
-  if (hints.getKeyCardinality() < 1) {
-    this.estimatedKeyCardinality=this.estimatedNumRecords;
+  if (hints.getKeyCardinality() != -1) {
+    this.estimatedKeyCardinality=hints.getKeyCardinality();
+  }
+ else   if (this.estimatedNumRecords != -1 && hints.getAvgNumValuesPerKey() != -1) {
+    this.estimatedKeyCardinality=(this.estimatedNumRecords / hints.getAvgNumValuesPerKey()) >= 1 ? (long)(this.estimatedNumRecords / hints.getAvgNumValuesPerKey()) : 1;
   }
  else {
-    this.estimatedKeyCardinality=hints.getKeyCardinality();
-    if (this.estimatedNumRecords == -1 && hints.getAvgNumValuesPerKey() >= 1.0f) {
-      this.estimatedNumRecords=(long)(this.estimatedKeyCardinality * hints.getAvgNumValuesPerKey()) + 1;
-      if (this.estimatedOutputSize == -1 && hints.getAvgBytesPerRecord() >= 1.0f) {
-        this.estimatedOutputSize=(long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) + 1;
-      }
-    }
+    this.estimatedKeyCardinality=this.estimatedNumRecords;
+  }
+  if (this.estimatedNumRecords == -1 && this.estimatedKeyCardinality != -1 && hints.getAvgNumValuesPerKey() >= 1.0f) {
+    this.estimatedNumRecords=(this.estimatedKeyCardinality * hints.getAvgNumValuesPerKey()) >= 1 ? (long)(this.estimatedKeyCardinality * hints.getAvgNumValuesPerKey()) : 1;
+  }
+  if (this.estimatedOutputSize == -1 && this.estimatedNumRecords != -1 && hints.getAvgBytesPerRecord() >= 1.0f) {
+    this.estimatedOutputSize=(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) >= 1 ? (long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) : 1;
   }
 }
