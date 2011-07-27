@@ -10,6 +10,13 @@
   DescribeInstancesResult result=ec2client.describeInstances(request);
   for (  Reservation r : result.getReservations()) {
     for (    Instance t : r.getInstances()) {
+      InstanceType type=null;
+      for (int i=0; i < this.availableInstanceTypes.length; i++) {
+        if (this.availableInstanceTypes[i].getIdentifier().equals(t.getInstanceType())) {
+          type=this.availableInstanceTypes[i];
+          break;
+        }
+      }
       InetAddress inetAddress=null;
       try {
         inetAddress=InetAddress.getByName(t.getPrivateIpAddress());
@@ -21,11 +28,11 @@
       final Iterator<InstanceConnectionInfo> it=this.orphanedTMs.iterator();
       while (it.hasNext()) {
         InstanceConnectionInfo oi=it.next();
-        if (oi.getAddress().equals(inetAddress)) {
+        if (oi.getAddress().equals(inetAddress) && type != null) {
           LOG.info("Orphaned Instance " + oi + " converted into floating instance.");
-          FloatingInstance floatinginstance=new FloatingInstance(t.getInstanceId(),oi,t.getLaunchTime().getTime());
+          FloatingInstance floatinginstance=new FloatingInstance(t.getInstanceId(),oi,t.getLaunchTime().getTime(),type,awsAccessId,awsSecretKey);
           this.floatingInstances.put(oi,floatinginstance);
-          this.floatingInstanceIDs.put(t.getInstanceId(),conf);
+          it.remove();
           break;
         }
       }

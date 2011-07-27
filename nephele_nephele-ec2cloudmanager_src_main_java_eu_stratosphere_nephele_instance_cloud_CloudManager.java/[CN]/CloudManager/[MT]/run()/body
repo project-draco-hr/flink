@@ -1,23 +1,11 @@
 {
-  final long currentTime=System.currentTimeMillis();
 synchronized (this.floatingInstances) {
-synchronized (this.floatingInstanceIDs) {
-      final Set<Map.Entry<InstanceConnectionInfo,FloatingInstance>> entries=this.floatingInstances.entrySet();
-      final Iterator<Map.Entry<InstanceConnectionInfo,FloatingInstance>> it=entries.iterator();
-      while (it.hasNext()) {
-        final Map.Entry<InstanceConnectionInfo,FloatingInstance> entry=it.next();
-        long msremaining=TIMEUNIT - ((currentTime - entry.getValue().getLaunchTime()) % TIMEUNIT);
-        if (msremaining < TIMETHRESHOLD) {
-          try {
-            destroyCloudInstance(this.floatingInstanceIDs.get(entry.getValue().getInstanceID()),entry.getValue().getInstanceID());
-          }
- catch (          InstanceException e) {
-            e.printStackTrace();
-          }
-          this.floatingInstances.remove(entry.getKey());
-          this.floatingInstanceIDs.remove(entry.getValue().getInstanceID());
-          LOG.info("Instance " + entry.getValue().getInstanceID() + " terminated");
-        }
+    Iterator<Map.Entry<InstanceConnectionInfo,FloatingInstance>> it=this.floatingInstances.entrySet().iterator();
+    while (it.hasNext()) {
+      final Map.Entry<InstanceConnectionInfo,FloatingInstance> entry=it.next();
+      if (entry.getValue().checkIfLifeCycleEnded()) {
+        it.remove();
+        LOG.info("Floating Instance " + entry.getValue().getInstanceID() + " ended its lifecycle. Terminated");
       }
     }
   }
