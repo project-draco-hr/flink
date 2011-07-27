@@ -1,15 +1,17 @@
 {
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
-  final RecordReader<KeyValuePair<Key,Value>> reader=this.reader;
   final OutputFormat format=this.format;
+  CloseableInputProvider<KeyValuePair<Key,Value>> sortedInputProvider=null;
   try {
+    sortedInputProvider=obtainInput();
+    Iterator<KeyValuePair<Key,Value>> iter=sortedInputProvider.getIterator();
     if (this.taskCanceled) {
       return;
     }
     if (LOG.isDebugEnabled())     LOG.debug(getLogString("Starting to produce output"));
     format.open(this.getEnvironment().getIndexInSubtaskGroup() + 1);
-    while (!this.taskCanceled && reader.hasNext()) {
-      KeyValuePair pair=reader.next();
+    while (!this.taskCanceled && iter.hasNext()) {
+      KeyValuePair pair=iter.next();
       format.writeRecord(pair);
     }
     if (!this.taskCanceled) {
@@ -24,6 +26,9 @@
     }
   }
  finally {
+    if (sortedInputProvider != null) {
+      sortedInputProvider.close();
+    }
     if (this.format != null) {
       try {
         this.format.close();
