@@ -1,0 +1,38 @@
+{
+  final int NUM_KEYS=1000000;
+  final int BUILD_VALS_PER_KEY=3;
+  final int PROBE_VALS_PER_KEY=10;
+  ReadingIterator<PactRecord> buildInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  ReadingIterator<PactRecord> probeInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MemoryManager memMan;
+  List<MemorySegment> memSegments;
+  try {
+    memMan=new DefaultMemoryManager(32 * 1024 * 1024);
+    memSegments=memMan.allocate(MEM_OWNER,28 * 1024 * 1024,896,32 * 1024);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  IOManager ioManager=new IOManager();
+  @SuppressWarnings("unchecked") final HashJoin join=new HashJoin(buildInput,probeInput,new int[]{0},new Class[]{PactInteger.class},memSegments,ioManager);
+  join.open();
+  final PactRecord record=new PactRecord();
+  int numRecordsInJoinResult=0;
+  while (join.nextRecord()) {
+    HashBucketIterator buildSide=join.getBuildSideIterator();
+    while (buildSide.next(record)) {
+      numRecordsInJoinResult++;
+    }
+  }
+  Assert.assertEquals("Wrong number of records in join result.",NUM_KEYS * BUILD_VALS_PER_KEY * PROBE_VALS_PER_KEY,numRecordsInJoinResult);
+  join.close();
+  memMan.release(memSegments);
+  ioManager.shutdown();
+  if (!ioManager.isProperlyShutDown()) {
+    fail("I/O manager was not property shut down.");
+  }
+  if (!memMan.verifyEmpty()) {
+    fail("Not all memory was properly released to the memory manager --> Memory Leak.");
+  }
+}

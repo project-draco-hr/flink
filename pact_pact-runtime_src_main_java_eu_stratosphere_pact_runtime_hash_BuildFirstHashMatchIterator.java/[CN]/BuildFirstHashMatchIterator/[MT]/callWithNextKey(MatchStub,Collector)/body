@@ -1,36 +1,28 @@
 {
-  if (this.hashJoin.nextKey()) {
-    final HashJoin.HashBucketIterator<K,V1> buildSideIterator=this.hashJoin.getBuildSideIterator();
-    final HashJoin.KeyGroupIterator<K,V2> probeIterator=this.hashJoin.getProbeSideIterator();
-    boolean notFirst=false;
-    while (probeIterator.hasNext()) {
-      V2 probeValue=probeIterator.nextValue();
-      if (notFirst) {
-        buildSideIterator.reset();
+  if (this.hashJoin.nextRecord()) {
+    final HashJoin.HashBucketIterator buildSideIterator=this.hashJoin.getBuildSideIterator();
+    PactRecord probeRecord=this.hashJoin.getCurrentProbeRecord();
+    PactRecord nextBuildSidePair=this.nextBuildSideObject;
+    if (buildSideIterator.next(nextBuildSidePair)) {
+      PactRecord tmpPair=new PactRecord();
+      if (buildSideIterator.next(tmpPair)) {
+        probeRecord.copyTo(this.probeCopy);
+        matchFunction.match(nextBuildSidePair,probeRecord,collector);
+        probeRecord=new PactRecord();
+        this.probeCopy.copyTo(probeRecord);
+        matchFunction.match(tmpPair,probeRecord,collector);
+        tmpPair=new PactRecord();
+        while (this.running && buildSideIterator.next(tmpPair)) {
+          probeRecord=new PactRecord();
+          this.probeCopy.copyTo(probeRecord);
+          matchFunction.match(tmpPair,probeRecord,collector);
+          tmpPair=new PactRecord();
+        }
+        this.nextBuildSideObject=tmpPair;
       }
-      notFirst=true;
-      KeyValuePair<K,V1> nextBuildSidePair=this.nextBuildSideObject;
-      if (buildSideIterator.next(nextBuildSidePair)) {
-        KeyValuePair<K,V1> tmpPair=newBuildSidePair();
-        if (buildSideIterator.next(tmpPair)) {
-          this.probeSideCopier.setCopy(probeValue);
-          matchFunction.match(nextBuildSidePair.getKey(),nextBuildSidePair.getValue(),probeValue,collector);
-          probeValue=newProbeValue();
-          this.probeSideCopier.getCopy(probeValue);
-          matchFunction.match(tmpPair.getKey(),tmpPair.getValue(),probeValue,collector);
-          tmpPair=newBuildSidePair();
-          while (this.running && buildSideIterator.next(tmpPair)) {
-            probeValue=newProbeValue();
-            this.probeSideCopier.getCopy(probeValue);
-            matchFunction.match(tmpPair.getKey(),tmpPair.getValue(),probeValue,collector);
-            tmpPair=newBuildSidePair();
-          }
-          this.nextBuildSideObject=tmpPair;
-        }
  else {
-          this.nextBuildSideObject=tmpPair;
-          matchFunction.match(nextBuildSidePair.getKey(),nextBuildSidePair.getValue(),probeValue,collector);
-        }
+        this.nextBuildSideObject=tmpPair;
+        matchFunction.match(nextBuildSidePair,probeRecord,collector);
       }
     }
     return true;
