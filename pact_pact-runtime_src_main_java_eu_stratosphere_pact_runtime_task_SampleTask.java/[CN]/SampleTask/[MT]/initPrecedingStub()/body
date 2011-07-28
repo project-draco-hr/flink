@@ -1,0 +1,33 @@
+{
+  config=new TaskConfig(getRuntimeConfiguration());
+  try {
+    ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    Class<?> userClass=config.getStubClass(Object.class,cl);
+    if (Stub.class.isAssignableFrom(userClass)) {
+      Stub stub=(Stub)userClass.newInstance();
+      keyType=stub.getOutKeyType();
+      valueType=stub.getOutValueType();
+    }
+ else     if (InputFormat.class.isAssignableFrom(userClass)) {
+      InputFormat format=(InputFormat)userClass.newInstance();
+      KeyValuePair pair=format.createPair();
+      keyType=(Class<Key>)pair.getKey().getClass();
+      valueType=(Class<Value>)pair.getValue().getClass();
+    }
+ else {
+      throw new RuntimeException("Unsupported task type " + userClass);
+    }
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+  }
+catch (  ClassNotFoundException cnfe) {
+    throw new RuntimeException("Stub implementation class was not found.",cnfe);
+  }
+catch (  InstantiationException ie) {
+    throw new RuntimeException("Stub implementation could not be instanciated.",ie);
+  }
+catch (  IllegalAccessException iae) {
+    throw new RuntimeException("Stub implementations nullary constructor is not accessible.",iae);
+  }
+}
