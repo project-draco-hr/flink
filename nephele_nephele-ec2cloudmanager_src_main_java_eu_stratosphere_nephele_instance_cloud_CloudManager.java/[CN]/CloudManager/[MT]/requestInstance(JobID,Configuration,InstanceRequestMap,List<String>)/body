@@ -1,6 +1,6 @@
 {
   if (conf == null) {
-    throw new InstanceException("No job configuration provided, unable to acquire credentials");
+    throw new IllegalArgumentException("No job configuration provided, unable to acquire credentials");
   }
   final String awsAccessId=conf.getString("job.cloud.awsaccessid",null);
   LOG.info("found AWS access ID from Job Conf: " + awsAccessId);
@@ -21,43 +21,43 @@ synchronized (this.jobToInstancesAssignmentMap) {
       this.jobToInstancesAssignmentMap.put(jobID,jobToInstanceMapping);
     }
   }
-  final LinkedList<FloatingInstance> floatinginstances=new LinkedList<FloatingInstance>();
-  final LinkedList<String> requestedinstances=new LinkedList<String>();
+  final LinkedList<FloatingInstance> floatingInstances=new LinkedList<FloatingInstance>();
+  final LinkedList<String> requestedInstances=new LinkedList<String>();
   final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
   while (it.hasNext()) {
-    Map.Entry<InstanceType,Integer> e=it.next();
+    final Map.Entry<InstanceType,Integer> e=it.next();
     final InstanceType actualtype=e.getKey();
     final int maxcount=e.getValue();
     final int mincount=instanceRequestMap.getMinimumNumberOfInstances(actualtype);
-    LinkedList<FloatingInstance> actualfloatinginstances=new LinkedList<FloatingInstance>();
-    LinkedList<String> actualrequestedinstances=new LinkedList<String>();
-    actualfloatinginstances=anyFloatingInstancesAvailable(awsAccessId,awsSecretKey,actualtype,maxcount);
-    if (actualfloatinginstances.size() < maxcount) {
-      int minimumrequestcount=Math.max(mincount - actualfloatinginstances.size(),1);
-      int maximumrequestcount=maxcount - actualfloatinginstances.size();
-      actualrequestedinstances=allocateCloudInstance(conf,actualtype,minimumrequestcount,maximumrequestcount);
+    LinkedList<FloatingInstance> actualFloatingInstances=new LinkedList<FloatingInstance>();
+    LinkedList<String> actualRequestedInstances=new LinkedList<String>();
+    actualFloatingInstances=anyFloatingInstancesAvailable(awsAccessId,awsSecretKey,actualtype,maxcount);
+    if (actualFloatingInstances.size() < maxcount) {
+      int minimumrequestcount=Math.max(mincount - actualFloatingInstances.size(),1);
+      int maximumrequestcount=maxcount - actualFloatingInstances.size();
+      actualRequestedInstances=allocateCloudInstance(conf,actualtype,minimumrequestcount,maximumrequestcount);
     }
-    floatinginstances.addAll(actualfloatinginstances);
-    requestedinstances.addAll(actualrequestedinstances);
-    if (actualrequestedinstances.size() + actualfloatinginstances.size() < mincount) {
-      LOG.error("Requested: " + mincount + " to "+ maxcount+ " instanes of type "+ actualtype.getIdentifier()+ ". Could only provide "+ (actualrequestedinstances.size() + actualfloatinginstances.size())+ ".");
+    floatingInstances.addAll(actualFloatingInstances);
+    requestedInstances.addAll(actualRequestedInstances);
+    if (actualRequestedInstances.size() + actualFloatingInstances.size() < mincount) {
+      LOG.error("Requested: " + mincount + " to "+ maxcount+ " instanes of type "+ actualtype.getIdentifier()+ ". Could only provide "+ (actualRequestedInstances.size() + actualFloatingInstances.size())+ ".");
 synchronized (this.floatingInstances) {
-        for (        FloatingInstance i : floatinginstances) {
+        for (        FloatingInstance i : floatingInstances) {
           this.floatingInstances.put(i.getInstanceConnectionInfo(),i);
         }
       }
-      throw new InstanceException("Cloud not allocate enough cloud instances");
+      throw new InstanceException("Could not allocate enough cloud instances");
     }
   }
   final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
-  for (  FloatingInstance fi : floatinginstances) {
-    CloudInstance ci=fi.asCloudInstance();
+  for (  final FloatingInstance fi : floatingInstances) {
+    final CloudInstance ci=fi.asCloudInstance();
     jobToInstanceMapping.assignInstanceToJob(ci);
     allocatedResources.add(ci.asAllocatedResource());
   }
   final CloudInstanceNotifier notifier=new CloudInstanceNotifier(this.instanceListener,jobID,allocatedResources);
   notifier.start();
-  for (  String i : requestedinstances) {
+  for (  final String i : requestedInstances) {
     this.reservedInstancesToJobMapping.put(i,jobID);
   }
 }
