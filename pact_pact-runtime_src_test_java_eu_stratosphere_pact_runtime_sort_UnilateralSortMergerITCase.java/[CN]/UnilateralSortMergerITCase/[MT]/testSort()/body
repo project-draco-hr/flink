@@ -1,27 +1,30 @@
 {
-  final SerializationFactory<TestData.Key> keySerialization=new WritableSerializationFactory<TestData.Key>(TestData.Key.class);
-  final SerializationFactory<TestData.Value> valSerialization=new WritableSerializationFactory<TestData.Value>(TestData.Value.class);
   final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
-  MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>> reader=new MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>>();
+  MockRecordReader<PactRecord> reader=new MockRecordReader<PactRecord>();
   LOG.debug("Initializing sortmerger...");
-  SortMerger<TestData.Key,TestData.Value> merger=new UnilateralSortMerger<TestData.Key,TestData.Value>(memoryManager,ioManager,16 * 1024 * 1024,1024 * 1024 * 4,1,2,keySerialization,valSerialization,keyComparator,reader,parentTask,0.7f);
+  @SuppressWarnings("unchecked") SortMerger merger=new UnilateralSortMerger(memoryManager,ioManager,16 * 1024 * 1024,1024 * 1024 * 4,1,2,new Comparator[]{keyComparator},new int[0],new Class[]{TestData.Key.class},reader,parentTask,0.7f);
   LOG.debug("Emitting data...");
   TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
   for (int i=0; i < NUM_PAIRS; i++) {
     reader.emit(generator.next());
   }
   reader.close();
-  Iterator<KeyValuePair<TestData.Key,TestData.Value>> iterator=merger.getIterator();
+  ReadingIterator<PactRecord> iterator=merger.getIterator();
   LOG.debug("Checking results...");
   int pairsEmitted=0;
-  KeyValuePair<TestData.Key,TestData.Value> pair1=null;
-  while (iterator.hasNext()) {
+  PactRecord rec1=new PactRecord();
+  PactRecord rec2=new PactRecord();
+  final Key k1=new Key();
+  final Key k2=new Key();
+  rec1=iterator.next(rec1);
+  while ((rec2=iterator.next(rec2)) != null) {
     pairsEmitted++;
-    KeyValuePair<TestData.Key,TestData.Value> pair2=iterator.next();
-    if (pair1 != null && pair2 != null) {
-      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
-    }
-    pair1=pair2;
+    k1.setKey(rec1.getField(0,TestData.Key.class).getKey());
+    k2.setKey(rec2.getField(0,TestData.Key.class).getKey());
+    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+    PactRecord tmp=rec1;
+    rec1=rec2;
+    rec2=tmp;
   }
   Assert.assertTrue(NUM_PAIRS == pairsEmitted);
   merger.close();
