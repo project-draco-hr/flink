@@ -1,21 +1,24 @@
 {
-  final SerializationFactory<TestData.Key> keySerialization=new WritableSerializationFactory<TestData.Key>(TestData.Key.class);
-  final SerializationFactory<PactInteger> valSerialization=new WritableSerializationFactory<PactInteger>(PactInteger.class);
   int noKeys=100;
   int noKeyCnt=10000;
   final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
-  MockRecordReader<KeyValuePair<TestData.Key,PactInteger>> reader=new MockRecordReader<KeyValuePair<TestData.Key,PactInteger>>();
+  MockRecordReader reader=new MockRecordReader();
   LOG.debug("initializing sortmerger");
-  SortMerger<TestData.Key,PactInteger> merger=new CombiningUnilateralSortMerger<TestData.Key,PactInteger>(new TestCountCombiner(),memoryManager,ioManager,64L * 1024 * 1024,64,keySerialization,valSerialization,keyComparator,reader,parentTask,0.7f,true);
+  @SuppressWarnings("unchecked") SortMerger merger=new CombiningUnilateralSortMerger(new TestCountCombiner(),memoryManager,ioManager,64L * 1024 * 1024,64,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},reader,parentTask,0.7f,true);
+  final PactRecord rec=new PactRecord();
+  rec.setField(1,new PactInteger(1));
+  final TestData.Key key=new TestData.Key();
   for (int i=0; i < noKeyCnt; i++) {
     for (int j=0; j < noKeys; j++) {
-      KeyValuePair<TestData.Key,PactInteger> pair=new KeyValuePair<Key,PactInteger>(new TestData.Key(j),new PactInteger(1));
-      reader.emit(pair);
+      key.setKey(j);
+      rec.setField(0,key);
+      reader.emit(rec);
     }
   }
   reader.close();
-  Iterator<KeyValuePair<TestData.Key,PactInteger>> iterator=merger.getIterator();
-  while (iterator.hasNext()) {
-    Assert.assertEquals(noKeyCnt,iterator.next().getValue().getValue());
+  ReadingIterator<PactRecord> iterator=merger.getIterator();
+  PactRecord target=new PactRecord();
+  while ((target=iterator.next(target)) != null) {
+    Assert.assertEquals(noKeyCnt,target.getField(1,PactInteger.class).getValue());
   }
 }

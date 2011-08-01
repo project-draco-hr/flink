@@ -1,0 +1,42 @@
+{
+  final Hashtable<TestData.Key,Integer> countTable=new Hashtable<TestData.Key,Integer>(KEY_MAX);
+  for (int i=1; i <= KEY_MAX; i++) {
+    countTable.put(new TestData.Key(i),new Integer(0));
+  }
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  MockRecordReader reader=new MockRecordReader();
+  LOG.debug("initializing sortmerger");
+  @SuppressWarnings("unchecked") SortMerger merger=new CombiningUnilateralSortMerger(new TestCountCombiner2(),memoryManager,ioManager,64L * 1024 * 1024,2,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},reader,parentTask,0.7f,true);
+  LOG.debug("emitting data");
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  PactRecord rec=new PactRecord();
+  final TestData.Value value=new TestData.Value("1");
+  for (int i=0; i < NUM_PAIRS; i++) {
+    rec=generator.next(rec);
+    final TestData.Key key=rec.getField(0,TestData.Key.class);
+    rec.setField(1,value);
+    reader.emit(rec);
+    countTable.put(new TestData.Key(key.getKey()),countTable.get(key) + 1);
+  }
+  reader.close();
+  rec=null;
+  ReadingIterator<PactRecord> iterator=merger.getIterator();
+  LOG.debug("checking results");
+  PactRecord rec1=new PactRecord();
+  PactRecord rec2=new PactRecord();
+  rec1=iterator.next(rec1);
+  countTable.put(new TestData.Key(rec1.getField(0,TestData.Key.class).getKey()),countTable.get(rec1.getField(0,TestData.Key.class)) - (Integer.parseInt(rec1.getField(1,TestData.Value.class).toString())));
+  while ((rec2=iterator.next(rec2)) != null) {
+    final Key k1=rec1.getField(0,TestData.Key.class);
+    final Key k2=rec2.getField(0,TestData.Key.class);
+    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+    countTable.put(new TestData.Key(k2.getKey()),countTable.get(k2) - (Integer.parseInt(rec2.getField(1,TestData.Value.class).toString())));
+    PactRecord tmp=rec1;
+    rec1=rec2;
+    k1.setKey(k2.getKey());
+    rec2=tmp;
+  }
+  for (  Integer cnt : countTable.values()) {
+    Assert.assertTrue(cnt == 0);
+  }
+}
