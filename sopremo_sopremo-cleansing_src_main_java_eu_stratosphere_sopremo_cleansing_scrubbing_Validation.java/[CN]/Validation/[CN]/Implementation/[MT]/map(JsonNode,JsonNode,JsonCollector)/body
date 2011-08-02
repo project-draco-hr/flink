@@ -1,6 +1,21 @@
 {
   try {
-    out.collect(key,projection.evaluate(value,getContext()));
+    JsonNode resultingNode=contextNode;
+    EvaluationContext context=this.getContext();
+    for (    ValidationRule rule : this.rules) {
+      ObjectAccess[] targetPath=rule.getTargetPath();
+      if (targetPath.length == 0) {
+        if (!rule.validate(resultingNode,contextNode,context))         resultingNode=rule.fix(resultingNode,contextNode,context);
+      }
+ else {
+        JsonNode parent=resultingNode;
+        for (int index=0; index < targetPath.length - 1; index++)         parent=targetPath[index].evaluate(parent,context);
+        ObjectAccess lastSegment=targetPath[targetPath.length - 1];
+        JsonNode validationValue=lastSegment.evaluate(parent,context);
+        if (!rule.validate(key,validationValue,context))         lastSegment.set(parent,rule.fix(key,validationValue,context),context);
+      }
+    }
+    out.collect(key,resultingNode);
   }
  catch (  UnresolvableEvalatuationException e) {
   }
