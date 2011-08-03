@@ -1,3 +1,42 @@
 {
-  throw new UnsupportedOperationException();
+  firstV1.copyTo(this.copy1);
+  firstV2.copyTo(this.copy2);
+  matchFunction.match(firstV1,firstV2,collector);
+  BlockResettableIterator blockIt=null;
+  try {
+    blockIt=new BlockResettableIterator(this.memoryManager,blockVals,this.memoryForBlockNestedLoops - SpillingResettableIterator.MIN_TOTAL_MEMORY,1,this.parentTask);
+    blockIt.open();
+    PactRecord nextBlockRec;
+    while ((nextBlockRec=blockIt.next(firstV2)) != null) {
+      this.copy1.copyTo(firstV1);
+      matchFunction.match(firstV1,nextBlockRec,collector);
+    }
+    blockIt.reset();
+    final LastRepeatableIterator<PactRecord> repeatableIter;
+    boolean spillingRequired=blockIt.hasFurtherInput();
+    if (spillingRequired) {
+      throw new UnsupportedOperationException();
+    }
+ else {
+      repeatableIter=new PactRecordRepeatableIterator(spillVals);
+    }
+    PactRecord nextSpillVal;
+    while ((nextSpillVal=repeatableIter.next(firstV1)) != null) {
+      this.copy2.copyTo(firstV2);
+      matchFunction.match(nextSpillVal,firstV2,collector);
+      while ((nextBlockRec=blockIt.next(firstV2)) != null) {
+        nextSpillVal=repeatableIter.repeatLast(firstV1);
+        matchFunction.match(nextSpillVal,nextBlockRec,collector);
+      }
+      blockIt.reset();
+    }
+    if (!spillingRequired) {
+      return;
+    }
+  }
+  finally {
+    if (blockIt != null) {
+      blockIt.close();
+    }
+  }
 }
