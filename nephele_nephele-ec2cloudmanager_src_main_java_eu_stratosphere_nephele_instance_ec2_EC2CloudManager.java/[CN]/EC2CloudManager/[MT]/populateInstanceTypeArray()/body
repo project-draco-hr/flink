@@ -1,20 +1,26 @@
 {
   final List<InstanceType> instanceTypes=new ArrayList<InstanceType>();
-  final int num=GlobalConfiguration.getInteger("cloudmgr.nrtypes",-1);
-  if (num <= 0) {
-    throw new RuntimeException("Illegal configuration, cloudmgr.nrtypes is not configured");
-  }
-  LOG.info("Trying to read " + num + " instance types from the configuration");
-  for (int i=0; i < num; ++i) {
-    final String key="cloudmgr.instancetype." + (i + 1);
+  int count=1;
+  while (true) {
+    final String key="instancemanager.ec2.type." + count;
     final String type=GlobalConfiguration.getString(key,null);
     if (type == null) {
-      throw new RuntimeException("Illegal configuration for " + key);
+      break;
     }
     final InstanceType instanceType=InstanceTypeFactory.constructFromDescription(type);
-    LOG.info("Found instance type " + i + ": "+ instanceType);
+    LOG.info("Found instance type " + count + ": "+ instanceType);
     instanceTypes.add(instanceType);
   }
+  if (instanceTypes.isEmpty()) {
+    LOG.error("No instance types found in configuration");
+    return new InstanceType[0];
+  }
+  int defaultIndex=GlobalConfiguration.getInteger("instancemanager.ec2.defaulttype",-1);
+  if (defaultIndex < 1 || defaultIndex >= (instanceTypes.size() + 1)) {
+    LOG.warn("Invalid index to default instance " + defaultIndex + ", making "+ instanceTypes.get(0)+ " the new default instance");
+    defaultIndex=1;
+  }
+  this.defaultInstanceType=instanceTypes.get(defaultIndex - 1);
   Collections.sort(instanceTypes,new Comparator<InstanceType>(){
     @Override public int compare(    InstanceType o1,    InstanceType o2){
       return o1.getPricePerHour() - o2.getPricePerHour();
