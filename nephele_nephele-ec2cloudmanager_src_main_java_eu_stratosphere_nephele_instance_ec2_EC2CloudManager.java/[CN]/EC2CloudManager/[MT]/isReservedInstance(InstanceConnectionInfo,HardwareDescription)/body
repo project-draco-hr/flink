@@ -11,13 +11,13 @@ synchronized (this.reservedInstancesToJobMapping) {
     for (    JobID id : this.reservedInstancesToJobMapping.values()) {
       jobsWithReservedInstances.add(id);
     }
-    for (    JobID id : jobsWithReservedInstances) {
+    for (    final JobID jobID : jobsWithReservedInstances) {
       JobToInstancesMapping mapping=null;
 synchronized (this.jobToInstancesAssignmentMap) {
-        mapping=this.jobToInstancesAssignmentMap.get(id);
+        mapping=this.jobToInstancesAssignmentMap.get(jobID);
       }
       if (mapping == null) {
-        LOG.error("Unknown mapping for job ID " + id);
+        LOG.error("Unknown mapping for job ID " + jobID);
         continue;
       }
       AmazonEC2Client ec2client=EC2ClientFactory.getEC2Client(mapping.getAwsAccessId(),mapping.getAwsSecretKey());
@@ -34,7 +34,14 @@ synchronized (this.jobToInstancesAssignmentMap) {
             continue;
           }
           if (instanceConnectionInfo.getAddress().equals(candidateAddress)) {
-            return convertIntoCloudInstance(t,instanceConnectionInfo,mapping.getAwsAccessId(),mapping.getAwsSecretKey());
+            NetworkTopology networkTopology;
+synchronized (this.networkTopologies) {
+              networkTopology=this.networkTopologies.get(jobID);
+            }
+            if (networkTopology == null) {
+              throw new InstanceException("Cannot find network topology for job " + jobID);
+            }
+            return convertIntoCloudInstance(t,instanceConnectionInfo,mapping.getAwsAccessId(),mapping.getAwsSecretKey(),networkTopology.getRootNode(),hardwareDescription);
           }
         }
       }

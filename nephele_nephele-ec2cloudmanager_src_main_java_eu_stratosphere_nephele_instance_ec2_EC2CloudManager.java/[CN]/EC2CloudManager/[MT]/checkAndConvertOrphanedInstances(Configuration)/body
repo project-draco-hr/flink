@@ -1,11 +1,11 @@
 {
-  if (this.orphanedTMs.size() == 0) {
+  if (this.orphanedInstances.size() == 0) {
     return;
   }
   final String awsAccessId=conf.getString(AWS_ACCESS_ID_KEY,null);
   final String awsSecretKey=conf.getString(AWS_SECRET_KEY_KEY,null);
   if (LOG.isDebugEnabled()) {
-    LOG.debug("Checking orphaned instances: " + this.orphanedTMs.size() + " orphaned instances listed.");
+    LOG.debug("Checking orphaned instances, " + this.orphanedInstances.size() + " orphaned instances listed.");
   }
   final AmazonEC2Client ec2client=EC2ClientFactory.getEC2Client(awsAccessId,awsSecretKey);
   DescribeInstancesResult result=null;
@@ -33,12 +33,14 @@
         LOG.error("Cannot resolve " + t.getPrivateDnsName() + " into an IP address: "+ StringUtils.stringifyException(e));
         continue;
       }
-      final Iterator<InstanceConnectionInfo> it=this.orphanedTMs.iterator();
+      final Iterator<Map.Entry<InstanceConnectionInfo,HardwareDescription>> it=this.orphanedInstances.entrySet().iterator();
       while (it.hasNext()) {
-        final InstanceConnectionInfo oi=it.next();
+        final Map.Entry<InstanceConnectionInfo,HardwareDescription> entry=it.next();
+        final InstanceConnectionInfo oi=entry.getKey();
+        final HardwareDescription hd=entry.getValue();
         if (oi.getAddress().equals(inetAddress) && type != null) {
-          LOG.info("Orphaned Instance " + oi + " converted into floating instance.");
-          FloatingInstance floatinginstance=new FloatingInstance(t.getInstanceId(),oi,t.getLaunchTime().getTime(),type,awsAccessId,awsSecretKey);
+          LOG.info("Orphaned instance " + oi + " converted into floating instance.");
+          final FloatingInstance floatinginstance=new FloatingInstance(t.getInstanceId(),oi,t.getLaunchTime().getTime(),type,hd,awsAccessId,awsSecretKey);
           this.floatingInstances.put(oi,floatinginstance);
           it.remove();
           break;

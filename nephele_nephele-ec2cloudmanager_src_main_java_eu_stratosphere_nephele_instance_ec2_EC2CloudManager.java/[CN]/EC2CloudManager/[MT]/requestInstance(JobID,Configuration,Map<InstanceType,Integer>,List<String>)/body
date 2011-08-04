@@ -23,6 +23,14 @@ synchronized (this.jobToInstancesAssignmentMap) {
       this.jobToInstancesAssignmentMap.put(jobID,jobToInstanceMapping);
     }
   }
+  NetworkTopology networkTopology=null;
+synchronized (this.networkTopologies) {
+    networkTopology=this.networkTopologies.get(jobID);
+    if (networkTopology == null) {
+      networkTopology=NetworkTopology.createEmptyTopology();
+      this.networkTopologies.put(jobID,networkTopology);
+    }
+  }
   final LinkedList<FloatingInstance> floatingInstances=new LinkedList<FloatingInstance>();
   final LinkedList<String> requestedInstances=new LinkedList<String>();
   final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.entrySet().iterator();
@@ -56,7 +64,7 @@ synchronized (this.floatingInstances) {
     }
   }
   for (  final FloatingInstance fi : floatingInstances) {
-    final EC2CloudInstance ci=fi.asCloudInstance();
+    final EC2CloudInstance ci=fi.asCloudInstance(networkTopology.getRootNode());
     jobToInstanceMapping.assignInstanceToJob(ci);
     final EC2CloudInstanceNotifier notifier=new EC2CloudInstanceNotifier(this.instanceListener,jobID,ci.asAllocatedResource());
     notifier.start();
