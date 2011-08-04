@@ -2,30 +2,32 @@
   firstV1.copyTo(this.copy1);
   firstV2.copyTo(this.copy2);
   matchFunction.match(firstV1,firstV2,collector);
-  BlockResettableIterator blockIt=null;
+  SpillingResettableIterator<PactRecord> spillIt=null;
   try {
-    blockIt=new BlockResettableIterator(this.memoryManager,blockVals,this.memoryForBlockNestedLoops - SpillingResettableIterator.MIN_TOTAL_MEMORY,1,this.parentTask);
-    blockIt.open();
-    PactRecord nextBlockRec;
-    while ((nextBlockRec=blockIt.next(firstV2)) != null) {
-      this.copy1.copyTo(firstV1);
-      matchFunction.match(firstV1,nextBlockRec,collector);
+    this.blockIt.reopen(blockVals);
+    while (blockIt.hasNext()) {
+      PactRecord nextBlockRec=blockIt.next();
+      this.copy1.copyTo(this.instance);
+      matchFunction.match(this.instance,nextBlockRec,collector);
     }
     blockIt.reset();
     final LastRepeatableIterator<PactRecord> repeatableIter;
     boolean spillingRequired=blockIt.hasFurtherInput();
     if (spillingRequired) {
-      throw new UnsupportedOperationException();
+      spillIt=new SpillingResettableIterator<PactRecord>(this.memoryManager,this.ioManager,spillVals,new PactRecord(),SpillingResettableIterator.MIN_TOTAL_MEMORY,this.parentTask);
+      repeatableIter=spillIt;
+      spillIt.open();
     }
  else {
       repeatableIter=new PactRecordRepeatableIterator(spillVals);
     }
-    PactRecord nextSpillVal;
-    while ((nextSpillVal=repeatableIter.next(firstV1)) != null) {
-      this.copy2.copyTo(firstV2);
-      matchFunction.match(nextSpillVal,firstV2,collector);
-      while ((nextBlockRec=blockIt.next(firstV2)) != null) {
-        nextSpillVal=repeatableIter.repeatLast(firstV1);
+    while (repeatableIter.hasNext()) {
+      PactRecord nextSpillVal=repeatableIter.next();
+      this.copy2.copyTo(this.instance);
+      matchFunction.match(nextSpillVal,this.instance,collector);
+      while (blockIt.hasNext()) {
+        PactRecord nextBlockRec=blockIt.next();
+        nextSpillVal=repeatableIter.repeatLast();
         matchFunction.match(nextSpillVal,nextBlockRec,collector);
       }
       blockIt.reset();
@@ -33,10 +35,29 @@
     if (!spillingRequired) {
       return;
     }
+    while (blockIt.nextBlock()) {
+      spillIt.reset();
+      while (blockIt.hasNext()) {
+        this.copy1.copyTo(this.instance);
+        final PactRecord nextBlockVal=blockIt.next();
+        matchFunction.match(this.instance,nextBlockVal,collector);
+      }
+      blockIt.reset();
+      while (spillIt.hasNext()) {
+        PactRecord nextSpillVal=spillIt.next();
+        while (blockIt.hasNext()) {
+          final PactRecord nextBlockVal=blockIt.next();
+          matchFunction.match(nextSpillVal,nextBlockVal,collector);
+          if (blockIt.hasNext())           nextSpillVal=spillIt.repeatLast();
+        }
+        blockIt.reset();
+      }
+      spillIt.reset();
+    }
   }
   finally {
-    if (blockIt != null) {
-      blockIt.close();
+    if (spillIt != null) {
+      spillIt.close();
     }
   }
 }
