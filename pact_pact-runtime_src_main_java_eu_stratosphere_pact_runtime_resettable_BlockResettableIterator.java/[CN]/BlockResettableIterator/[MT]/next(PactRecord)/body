@@ -2,18 +2,18 @@
   if (this.next == null) {
     if (this.bufferCurrentlyRead != null) {
       if (this.bufferCurrentlyRead.read(target)) {
-        return target;
+        return true;
       }
  else {
         this.consumedBuffers.add(this.bufferCurrentlyRead);
         if (this.fullBuffers.isEmpty()) {
           this.bufferCurrentlyRead=null;
-          return null;
+          return false;
         }
  else {
           this.bufferCurrentlyRead=this.fullBuffers.remove(0);
           if (this.bufferCurrentlyRead.read(target)) {
-            return target;
+            return true;
           }
  else {
             throw new IOException("BlockResettableIterator: " + "BUG - Could not de-serialize element newly obtaint input block buffer.");
@@ -22,10 +22,9 @@
       }
     }
  else     if (this.bufferCurrentlyFilled != null) {
-      target=this.input.next(target);
-      if (target != null) {
+      if (this.input.next(target)) {
         if (this.bufferCurrentlyFilled.write(target)) {
-          return target;
+          return true;
         }
  else {
           final int fillPosition=this.bufferCurrentlyFilled.getPosition();
@@ -37,12 +36,12 @@
           if (this.emptySegments.isEmpty()) {
             target.copyTo(this.leftOverRecord);
             this.leftOver=true;
-            return null;
+            return false;
           }
  else {
             this.bufferCurrentlyFilled=new Buffer.Output(this.emptySegments.remove(this.emptySegments.size() - 1));
             if (this.bufferCurrentlyFilled.write(target)) {
-              return target;
+              return true;
             }
  else {
               throw new IOException("BlockResettableIterator: " + "Could not serialize element into fresh block buffer - element is too large.");
@@ -52,19 +51,19 @@
       }
  else {
         this.noMoreBlocks=true;
-        return null;
+        return false;
       }
     }
  else {
       if (this.closed) {
         throw new IllegalStateException("Iterator was closed.");
       }
-      return null;
+      return false;
     }
   }
  else {
-    PactRecord tmp=this.next;
+    this.next.copyTo(target);
     this.next=null;
-    return tmp;
+    return true;
   }
 }
