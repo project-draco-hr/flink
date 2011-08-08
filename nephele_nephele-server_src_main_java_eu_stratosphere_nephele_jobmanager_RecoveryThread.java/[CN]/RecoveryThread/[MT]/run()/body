@@ -1,0 +1,54 @@
+{
+  LOG.info("recovery running");
+  if (this.failedVertices.isEmpty()) {
+    LOG.error("No failed vertices to recover");
+  }
+  Iterator<ExecutionVertex> vertexIter=failedVertices.iterator();
+  while (vertexIter.hasNext()) {
+    ArrayList<AbstractInputChannel> channels=new ArrayList<AbstractInputChannel>();
+    ExecutionVertex failed=vertexIter.next();
+    List<ExecutionVertex> restart=findRestarts(failed);
+    for (int j=0; j < failed.getEnvironment().getNumberOfInputGates(); j++) {
+      InputGate<? extends Record> ingate=failed.getEnvironment().getInputGate(j);
+      for (int k=0; k < ingate.getNumberOfInputChannels(); k++) {
+        AbstractInputChannel<? extends Record> channel=ingate.getInputChannel(k);
+        channel.releaseResources();
+        channels.add(channel);
+      }
+    }
+    for (int i=0; i < failed.getNumberOfPredecessors(); i++) {
+      ExecutionVertex predecessor=failed.getPredecessor(i);
+      if (this.globalConsistentCheckpoint.contains(predecessor)) {
+        for (int j=0; j < predecessor.getEnvironment().getNumberOfOutputGates(); j++) {
+          OutputGate<? extends Record> outgate=predecessor.getEnvironment().getOutputGate(j);
+          for (int k=0; k < outgate.getNumberOfOutputChannels(); k++) {
+            AbstractOutputChannel<? extends Record> channel=outgate.getOutputChannel(k);
+            if (channels.contains(channel.getConnectedChannelID())) {
+              predecessor.getAllocatedResource().getInstance().recover(channel.getID());
+            }
+          }
+        }
+      }
+    }
+    Iterator<ExecutionVertex> restartIterator=restart.iterator();
+    LOG.info("Checkpoints are");
+    for (int k=0; k < this.globalConsistentCheckpoint.size(); k++) {
+      LOG.info(this.globalConsistentCheckpoint.get(k).getName());
+    }
+    Iterator<ExecutionVertex> checkpointIterator=this.globalConsistentCheckpoint.iterator();
+    while (checkpointIterator.hasNext()) {
+      ExecutionVertex checkpoint=checkpointIterator.next();
+      AbstractInstance instance=checkpoint.getAllocatedResource().getInstance();
+      instance.recoverAll(checkpoint.getEnvironment().getOutputGate(0).getOutputChannel(0).getID());
+    }
+    while (restartIterator.hasNext()) {
+      ExecutionVertex vertex=restartIterator.next();
+      LOG.info("'Test Restarting " + vertex.getName());
+      if (!vertex.equals(failed)) {
+        LOG.info("Restarting " + vertex.getName());
+        vertex.getEnvironment().restartExecution();
+      }
+    }
+  }
+  this.job.executionStateChanged(null,ExecutionState.RERUNNING,null);
+}

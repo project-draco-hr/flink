@@ -7,5 +7,28 @@ synchronized (this.registeredChannels) {
     LOG.error("Cannot find network output channel with ID " + sourceChannelID);
     return;
   }
+  if (ioe instanceof java.net.ConnectException) {
+    try {
+      InstanceConnectionInfo response=this.channelLookupService.lookupConnectionInfo(channelWrapper.getJobID(),sourceChannelID).getInstanceConnectionInfo();
+      InetSocketAddress connectionAddress=new InetSocketAddress(response.getAddress(),response.getDataPort());
+      if (this.connectionAddresses.get(sourceChannelID) != null && !response.getAddress().equals(this.connectionAddresses.get(sourceChannelID).getAddress())) {
+        LOG.info("Adress changed from " + this.connectionAddresses.get(sourceChannelID).getHostName() + "to "+ connectionAddress.getHostName());
+        this.connectionAddresses.put(sourceChannelID,connectionAddress);
+        return;
+      }
+    }
+ catch (    IOException e) {
+      e.printStackTrace();
+    }
+  }
+  InetSocketAddress address=this.connectionAddresses.remove(sourceChannelID);
+  this.outgoingConnections.remove(address);
+  if (!channelWrapper.isInputChannel()) {
+    ByteBufferedOutputChannelWrapper outputChannelWrapper=(ByteBufferedOutputChannelWrapper)channelWrapper;
+    ByteBufferedOutputChannelGroup channelGroup=outputChannelWrapper.getChannelGroup();
+    if (channelGroup.isCheckpoint()) {
+      channelGroup.finishCheckpoint();
+    }
+  }
   if (channelWrapper.isInputChannel())   channelWrapper.reportIOException(ioe);
 }

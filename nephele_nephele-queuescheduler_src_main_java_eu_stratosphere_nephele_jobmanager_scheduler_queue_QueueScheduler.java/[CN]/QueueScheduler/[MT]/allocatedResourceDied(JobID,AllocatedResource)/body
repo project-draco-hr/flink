@@ -1,2 +1,34 @@
 {
+  LOG.info("Resource on " + allocatedResource.getInstance().getName() + " for Job "+ jobID+ " died.");
+  ExecutionGraph job=this.jobQueue.getFirst();
+  Iterator<ExecutionGraph> iterator=this.jobQueue.descendingIterator();
+  while (job.getJobID() != jobID) {
+    if (iterator.hasNext()) {
+      job=iterator.next();
+    }
+ else {
+      LOG.error("No Job with ID " + jobID + " in Queue");
+      return;
+    }
+  }
+  List<ExecutionVertex> vertices=job.getVerticesAssignedToResource(allocatedResource);
+  Iterator<ExecutionVertex> vertexIter=vertices.iterator();
+  while (vertexIter.hasNext()) {
+    ExecutionVertex vertex=vertexIter.next();
+    vertex.getEnvironment().changeExecutionState(ExecutionState.FAILED,"The Resource " + allocatedResource.getInstance().getName() + " the Vertex "+ vertex.getEnvironment().getTaskName()+ " was assigned to, died");
+    if (vertex.getExecutionState() == ExecutionState.FAILED) {
+      job.executionStateChanged(vertex.getEnvironment(),ExecutionState.FAILED,"The Resource " + allocatedResource.getInstance().getName() + " the Vertex "+ vertex.getEnvironment().getTaskName()+ " was assigned to, died");
+      return;
+    }
+    vertex.setAllocatedResource(new AllocatedResource(DummyInstance.createDummyInstance(allocatedResource.getInstanceType()),allocatedResource.getInstanceType(),null));
+    vertex.getEnvironment().changeExecutionState(ExecutionState.ASSIGNING,null);
+  }
+  try {
+    LOG.info("Trying to allocate instance of type " + allocatedResource.getInstanceType().getIdentifier());
+    this.instanceManager.requestInstance(jobID,job.getJobConfiguration(),allocatedResource.getInstanceType());
+  }
+ catch (  InstanceException e) {
+    e.printStackTrace();
+  }
+  job.executionStateChanged(vertices.get(0).getEnvironment(),ExecutionState.RECOVERING,null);
 }

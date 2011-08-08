@@ -11,6 +11,7 @@
     fis=new FileInputStream(filename);
   }
  catch (  IOException ioe) {
+    LOG.info("IO in new FileInputstream");
     LOG.error(ioe);
     return;
   }
@@ -20,21 +21,28 @@
  catch (  IOException ioe) {
     LOG.error(ioe);
   }
-  this.fileChannel=fis.getChannel();
-  final IncomingConnection incomingConnection=new IncomingConnection(byteBufferedChannelManager,this.fileChannel);
+  this.fileInputChannel=fis.getChannel();
+  if (this.fileInputChannel == null) {
+    LOG.error("FileChannel is null");
+  }
+  System.out.println("Recovering from " + filename);
+  final CheckpointOutgoingConnection outgoingConnection=byteBufferedChannelManager.createOutgoingCheckpointConnection(byteBufferedChannelManager,this.fileInputChannel,this.sourceChannelID);
   try {
     while (true) {
-      incomingConnection.read();
+      outgoingConnection.write();
     }
   }
  catch (  EOFException e) {
   }
 catch (  IOException e) {
-    incomingConnection.reportTransmissionProblem(null,e);
+    e.printStackTrace();
+    outgoingConnection.reportTransmissionProblem(e);
     return;
   }
-catch (  InterruptedException e) {
-    LOG.info("Caught interrupted exception: " + StringUtils.stringifyException(e));
+  try {
+    outgoingConnection.closeConnection();
   }
-  incomingConnection.closeConnection(null);
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
 }
