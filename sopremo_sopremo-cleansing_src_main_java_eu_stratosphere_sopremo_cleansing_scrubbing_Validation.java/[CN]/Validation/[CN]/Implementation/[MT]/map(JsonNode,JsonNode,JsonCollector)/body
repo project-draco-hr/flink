@@ -1,22 +1,28 @@
 {
   try {
-    JsonNode resultingNode=contextNode;
-    EvaluationContext context=this.getContext();
-    for (    ValidationRule rule : this.rules) {
-      ObjectAccess[] targetPath=rule.getTargetPath();
-      if (targetPath.length == 0) {
-        if (!rule.validate(resultingNode,contextNode,context))         resultingNode=rule.fix(resultingNode,contextNode,context);
+    this.context.setContextNode(value);
+    for (    final ValidationRule rule : this.rules) {
+      final List<String> targetPath=rule.getTargetPath();
+      if (targetPath.isEmpty()) {
+        if (!rule.validate(value,this.context)) {
+          this.context.setViolatedRule(rule);
+          value=rule.fix(value,this.context);
+        }
       }
  else {
-        JsonNode parent=resultingNode;
-        for (int index=0; index < targetPath.length - 1; index++)         parent=targetPath[index].evaluate(parent,context);
-        ObjectAccess lastSegment=targetPath[targetPath.length - 1];
-        JsonNode validationValue=lastSegment.evaluate(parent,context);
-        if (!rule.validate(key,validationValue,context))         lastSegment.set(parent,rule.fix(key,validationValue,context),context);
+        JsonNode parent=value;
+        final int lastIndex=targetPath.size() - 1;
+        for (int index=0; index < lastIndex; index++)         parent=parent.get(targetPath.get(index));
+        final String lastSegment=targetPath.get(lastIndex);
+        final JsonNode validationValue=parent.get(lastSegment);
+        if (!rule.validate(validationValue,this.context)) {
+          this.context.setViolatedRule(rule);
+          ((ObjectNode)parent).put(lastSegment,rule.fix(validationValue,this.context));
+        }
       }
     }
-    out.collect(key,resultingNode);
+    out.collect(key,value);
   }
- catch (  UnresolvableEvalatuationException e) {
+ catch (  final UnresolvableEvaluationException e) {
   }
 }
