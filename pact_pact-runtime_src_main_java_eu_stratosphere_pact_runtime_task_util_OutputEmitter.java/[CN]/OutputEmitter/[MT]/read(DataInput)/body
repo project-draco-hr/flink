@@ -1,3 +1,25 @@
 {
-  strategy=ShipStrategy.valueOf(in.readUTF());
+  this.strategy=ShipStrategy.valueOf(in.readUTF());
+  final boolean keyParameterized=in.readBoolean();
+  if (keyParameterized) {
+    this.jobId=new JobID();
+    this.jobId.read(in);
+    final ClassLoader loader=LibraryCacheManager.getClassLoader(this.jobId);
+    int numKeys=in.readInt();
+    this.keyPositions=new int[numKeys];
+    for (int i=0; i < numKeys; i++) {
+      this.keyPositions[i]=in.readInt();
+    }
+    @SuppressWarnings("unchecked") Class<? extends Key>[] classes=(Class<? extends Key>[])new Class[numKeys];
+    try {
+      for (int i=0; i < numKeys; i++) {
+        String className=in.readUTF();
+        classes[i]=Class.forName(className,true,loader).asSubclass(Key.class);
+      }
+    }
+ catch (    Exception e) {
+      throw new RuntimeException("Output Emmitter is unable to load the classes that describe the key types: " + e.getMessage(),e);
+    }
+    this.keyClasses=classes;
+  }
 }

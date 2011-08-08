@@ -4,18 +4,18 @@
   int writtenPairs=0, readPairs=0;
 {
     TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.SORTED,ValueMode.FIX_LENGTH);
-    BufferSortableGuaranteed<TestData.Key,TestData.Value> buffer=newSortBuffer(memory);
+    BufferSortableGuaranteed buffer=newSortBuffer(memory);
     int writtenBytes=0;
-    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
-    while (buffer.write(pair)) {
-      writtenBytes+=generator.sizeOf(pair) + Integer.SIZE / 8;
+    PactRecord rec=new PactRecord();
+    Assert.assertTrue(generator.next(rec));
+    while (buffer.write(rec)) {
+      writtenBytes+=generator.sizeOf(rec) + Integer.SIZE / 8;
       writtenPairs++;
-      pair=generator.next();
+      Assert.assertTrue(generator.next(rec));
     }
     LOG.debug("Written " + writtenPairs + " pairs to buffer which occupied "+ writtenBytes+ " of "+ MEMORY_SIZE+ " bytes.");
-    Iterator<KeyValuePair<TestData.Key,TestData.Value>> iter=buffer.getIterator();
-    while (iter.hasNext()) {
-      iter.next();
+    final MutableObjectIterator<PactRecord> iter=buffer.getIterator();
+    while (iter.next(rec)) {
       readPairs++;
     }
     memory=buffer.unbind();

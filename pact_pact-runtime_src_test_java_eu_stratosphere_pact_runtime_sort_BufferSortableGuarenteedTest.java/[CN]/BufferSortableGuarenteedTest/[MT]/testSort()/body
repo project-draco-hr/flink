@@ -2,11 +2,14 @@
   AbstractInvokable memOwner=new DummyInvokable();
   int writtenPairs=0, readPairs=0;
   MemorySegment unsortedMemory=memoryManager.allocate(memOwner,MEMORY_SIZE >> 1);
-  final BufferSortableGuaranteed<TestData.Key,TestData.Value> unsortedBuffer=newSortBuffer(unsortedMemory);
+  final BufferSortableGuaranteed unsortedBuffer=newSortBuffer(unsortedMemory);
 {
     TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    while (unsortedBuffer.write(generator.next())) {
+    PactRecord rec=new PactRecord();
+    generator.next(rec);
+    while (unsortedBuffer.write(rec)) {
       writtenPairs++;
+      generator.next(rec);
     }
     LOG.debug("Written " + writtenPairs + " pairs.");
   }
@@ -32,16 +35,21 @@
     Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
     Buffer.Input buffer=new Buffer.Input(sortedMemory);
     buffer.reset(sortedPos);
-    KeyValuePair<TestData.Key,TestData.Value> pair1=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
-    KeyValuePair<TestData.Key,TestData.Value> pair2=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
-    buffer.read(pair1);
+    PactRecord rec1=new PactRecord();
+    PactRecord rec2=new PactRecord();
+    Key k1=new Key();
+    Key k2=new Key();
+    buffer.read(rec1);
+    rec1.getFieldInto(0,k1);
     readPairs++;
-    while (buffer.read(pair2)) {
+    while (buffer.read(rec2)) {
+      rec2.getFieldInto(0,k2);
       readPairs++;
-      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
-      KeyValuePair<TestData.Key,TestData.Value> tmp=pair1;
-      pair1=pair2;
-      pair2=tmp;
+      Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+      PactRecord tmp=rec1;
+      rec1=rec2;
+      k1.setKey(k2.getKey());
+      rec2=tmp;
     }
   }
   Assert.assertEquals(writtenPairs,readPairs);

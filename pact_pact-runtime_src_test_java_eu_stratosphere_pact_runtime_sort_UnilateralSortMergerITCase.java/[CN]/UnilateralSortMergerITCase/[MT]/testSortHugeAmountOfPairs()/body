@@ -1,45 +1,52 @@
 {
   final int PAIRS=10000000;
-  final SerializationFactory<TestData.Key> keySerialization=new WritableSerializationFactory<TestData.Key>(TestData.Key.class);
-  final SerializationFactory<TestData.Value> valSerialization=new WritableSerializationFactory<TestData.Value>(TestData.Value.class);
   final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
-  MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>> reader=new MockRecordReader<KeyValuePair<TestData.Key,TestData.Value>>();
-  LOG.debug("initializing sortmerger");
-  SortMerger<TestData.Key,TestData.Value> merger=new UnilateralSortMerger<TestData.Key,TestData.Value>(memoryManager,ioManager,1024 * 1024 * 64,16,keySerialization,valSerialization,keyComparator,reader,parentTask,0.7f);
+  MockRecordReader reader=new MockRecordReader();
+  LOG.debug("Initializing sortmerger...");
+  @SuppressWarnings("unchecked") SortMerger merger=new UnilateralSortMerger(memoryManager,ioManager,1024 * 1024 * 64,16,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},reader,parentTask,0.7f);
+  LOG.debug("Emitting data...");
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  PactRecord rec=new PactRecord();
+  System.out.println("Starting large sort test...");
   long start=System.currentTimeMillis();
-  LOG.debug("emitting data");
-  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH,CreationMode.MUTABLE);
-  long bytesWritten=0;
-  for (int i=1; i <= PAIRS; i++) {
-    if (i % (PAIRS / 20) == 0 || i == PAIRS) {
-      long mb=bytesWritten / 1024 / 1024;
-      LOG.debug("emitted " + (int)(100.0 * i / PAIRS) + "% ("+ i+ " pairs, "+ mb+ " mb)");
+  for (int i=0, percent=0, nextPercent=PAIRS / 20; i < PAIRS; i++) {
+    generator.next(rec);
+    reader.emit(rec);
+    if (i == nextPercent) {
+      percent+=5;
+      nextPercent+=PAIRS / 20;
+      System.out.println(percent + "% records emitted...");
     }
-    KeyValuePair<TestData.Key,TestData.Value> pair=generator.next();
-    bytesWritten+=generator.sizeOf(pair);
-    reader.emit(pair);
   }
   reader.close();
-  Iterator<KeyValuePair<TestData.Key,TestData.Value>> iterator=merger.getIterator();
-  LOG.debug("checking results");
-  int pairsEmitted=0;
-  KeyValuePair<TestData.Key,TestData.Value> pair1=null;
-  while (iterator.hasNext()) {
-    pairsEmitted++;
-    KeyValuePair<TestData.Key,TestData.Value> pair2=iterator.next();
-    if (pair1 != null && pair2 != null) {
-      Assert.assertTrue(keyComparator.compare(pair1.getKey(),pair2.getKey()) <= 0);
-    }
-    pair2=pair1;
-    if (pairsEmitted % (PAIRS / 20) == 0 || pairsEmitted == PAIRS - 1) {
-      LOG.debug("checked " + (int)(100.0 * pairsEmitted / PAIRS) + "% ("+ pairsEmitted+ " pairs)");
+  System.out.println("100% records emitted...");
+  System.out.println("Final merge phase starting...");
+  MutableObjectIterator<PactRecord> iterator=merger.getIterator();
+  LOG.debug("Checking results...");
+  int pairsRead=1;
+  int nextStep=PAIRS / 20;
+  PactRecord rec1=new PactRecord();
+  PactRecord rec2=new PactRecord();
+  Assert.assertTrue(iterator.next(rec1));
+  while (iterator.next(rec2)) {
+    final Key k1=rec1.getField(0,TestData.Key.class);
+    final Key k2=rec2.getField(0,TestData.Key.class);
+    pairsRead++;
+    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+    PactRecord tmp=rec1;
+    rec1=rec2;
+    k1.setKey(k2.getKey());
+    rec2=tmp;
+    if (pairsRead == nextStep) {
+      nextStep+=PAIRS / 20;
+      System.out.println((pairsRead * 100 / PAIRS) + "% pairs merged and read.");
     }
   }
-  Assert.assertTrue(PAIRS == pairsEmitted);
+  System.out.println("...Done");
+  Assert.assertEquals("Not all pairs were read back in.",PAIRS,pairsRead);
   merger.close();
   long end=System.currentTimeMillis();
   long diff=end - start;
   long secs=diff / 1000;
-  long mb=bytesWritten / 1024 / 1024;
-  LOG.debug("sorting a workload of " + PAIRS + " pairs ("+ mb+ "mb)  took "+ secs+ " seconds -> "+ (1.0 * mb) / secs + "mb/s");
+  LOG.debug("sorting a workload of " + PAIRS + " pairs took "+ secs+ " seconds.");
 }

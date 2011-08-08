@@ -2,24 +2,32 @@
   AbstractInvokable memOwner=new DummyInvokable();
   MemorySegment memory=memoryManager.allocate(memOwner,256);
 {
-    BufferSortableGuaranteed<TestData.Key,TestData.Value> buffer=newSortBuffer(memory);
+    BufferSortableGuaranteed buffer=newSortBuffer(memory);
     for (int i=1; i <= 3; i++) {
-      KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(i),new TestData.Value("" + i));
-      buffer.write(pair);
+      PactRecord rec=new PactRecord(new TestData.Key(i),new TestData.Value("" + i));
+      buffer.write(rec);
     }
     buffer.swap(0,1);
 {
-      Iterator<KeyValuePair<TestData.Key,TestData.Value>> iter=buffer.getIterator();
-      Assert.assertEquals(2,iter.next().getKey().getKey());
-      Assert.assertEquals(1,iter.next().getKey().getKey());
-      Assert.assertEquals(3,iter.next().getKey().getKey());
+      final MutableObjectIterator<PactRecord> iter=buffer.getIterator();
+      final PactRecord rec=new PactRecord();
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(2,rec.getField(0,TestData.Key.class).getKey());
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(1,rec.getField(0,TestData.Key.class).getKey());
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(3,rec.getField(0,TestData.Key.class).getKey());
     }
     buffer.swap(1,2);
 {
-      Iterator<KeyValuePair<TestData.Key,TestData.Value>> iter=buffer.getIterator();
-      Assert.assertEquals(2,iter.next().getKey().getKey());
-      Assert.assertEquals(3,iter.next().getKey().getKey());
-      Assert.assertEquals(1,iter.next().getKey().getKey());
+      MutableObjectIterator<PactRecord> iter=buffer.getIterator();
+      final PactRecord rec=new PactRecord();
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(2,rec.getField(0,TestData.Key.class).getKey());
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(3,rec.getField(0,TestData.Key.class).getKey());
+      Assert.assertTrue(iter.next(rec));
+      Assert.assertEquals(1,rec.getField(0,TestData.Key.class).getKey());
     }
 {
       MemorySegment memory2=memoryManager.allocate(memOwner,256);
@@ -39,7 +47,7 @@
       }
 {
         Buffer.Input buffer2=new Buffer.Input(memory2);
-        @SuppressWarnings("unused") KeyValuePair<TestData.Key,TestData.Value> pair=new KeyValuePair<TestData.Key,TestData.Value>(new TestData.Key(),new TestData.Value());
+        @SuppressWarnings("unused") PactRecord rec=new PactRecord(new TestData.Key(),new TestData.Value());
         memory2=buffer2.dispose();
       }
       memoryManager.release(memory2);

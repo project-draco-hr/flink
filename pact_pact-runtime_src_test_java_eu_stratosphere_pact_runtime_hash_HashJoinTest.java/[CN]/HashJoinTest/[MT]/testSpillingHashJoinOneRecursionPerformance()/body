@@ -2,8 +2,8 @@
   final int NUM_KEYS=1000000;
   final int BUILD_VALS_PER_KEY=3;
   final int PROBE_VALS_PER_KEY=10;
-  Iterator<KeyValuePair<PactInteger,PactInteger>> buildInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probeInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<PactRecord> buildInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<PactRecord> probeInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
   MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
@@ -15,21 +15,18 @@
     return;
   }
   IOManager ioManager=new IOManager();
-  final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
-  HashJoin<PactInteger,PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger,PactInteger>(buildInput,probeInput,PactInteger.class,PactInteger.class,PactInteger.class,memSegments,ioManager);
+  @SuppressWarnings("unchecked") final HashJoin join=new HashJoin(buildInput,probeInput,new int[]{0},new int[]{0},new Class[]{PactInteger.class},memSegments,ioManager);
   join.open();
-  int numKeys=0;
-  while (join.nextKey()) {
-    numKeys++;
-    Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
-    while (probeIter.hasNext()) {
-      probeIter.next();
+  final PactRecord record=new PactRecord();
+  int numRecordsInJoinResult=0;
+  while (join.nextRecord()) {
+    HashBucketIterator buildSide=join.getBuildSideIterator();
+    while (buildSide.next(record)) {
+      numRecordsInJoinResult++;
     }
-    HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
-    while (buildSide.next(pair))     ;
   }
+  Assert.assertEquals("Wrong number of records in join result.",NUM_KEYS * BUILD_VALS_PER_KEY * PROBE_VALS_PER_KEY,numRecordsInJoinResult);
   join.close();
-  Assert.assertEquals("Wrong number of keys",NUM_KEYS,numKeys);
   memMan.release(memSegments);
   ioManager.shutdown();
   if (!ioManager.isProperlyShutDown()) {

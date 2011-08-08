@@ -1,0 +1,28 @@
+{
+  final int numOutputs=config.getNumOutputs();
+  boolean fwdCopyFlag=false;
+  this.output=new OutputCollector();
+  final JobID jobId=getEnvironment().getJobID();
+  final ClassLoader cl;
+  try {
+    cl=LibraryCacheManager.getClassLoader(jobId);
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+  }
+  for (int i=0; i < numOutputs; i++) {
+    final ShipStrategy strategy=config.getOutputShipStrategy(i);
+    final int[] keyPositions=this.config.getOutputShipKeyPositions(i);
+    final Class<? extends Key>[] keyClasses;
+    try {
+      keyClasses=this.config.getOutputShipKeyTypes(i,cl);
+    }
+ catch (    ClassNotFoundException cnfex) {
+      throw new RuntimeException("The classes for the keys after which output " + i + " ships the records could not be loaded.");
+    }
+    OutputEmitter oe=(keyPositions == null || keyClasses == null) ? new OutputEmitter(strategy) : new OutputEmitter(strategy,jobId,keyPositions,keyClasses);
+    RecordWriter<PactRecord> writer=new RecordWriter<PactRecord>(this,PactRecord.class,oe);
+    output.addWriter(writer,fwdCopyFlag);
+    fwdCopyFlag=true;
+  }
+}

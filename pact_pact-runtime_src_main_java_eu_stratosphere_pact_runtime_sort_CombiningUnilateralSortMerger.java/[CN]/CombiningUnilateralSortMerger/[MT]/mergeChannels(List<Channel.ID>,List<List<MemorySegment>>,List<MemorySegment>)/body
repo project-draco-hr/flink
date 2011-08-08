@@ -1,15 +1,20 @@
 {
   final List<StreamChannelAccess<?,?>> channelAccesses=new ArrayList<StreamChannelAccess<?,?>>(channelIDs.size());
   registerChannelsToBeRemovedAtShudown(channelAccesses);
-  final Iterator<KeyValuePair<K,V>> mergeIterator=getMergingIterator(channelIDs,readBuffers,channelAccesses);
-  final KeyGroupedIterator<K,V> groupedIter=new KeyGroupedIterator<K,V>(mergeIterator);
+  final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,channelAccesses);
+  final KeyGroupedIterator groupedIter=new KeyGroupedIterator(mergeIterator,this.keyPositions,this.keyClasses);
   final Channel.ID mergedChannelID=this.ioManager.createChannel();
   final ChannelWriter writer=this.ioManager.createChannelWriter(mergedChannelID,writeBuffers);
   channelAccesses.add(writer);
-  final WriterCollector<K,V> collector=new WriterCollector<K,V>(writer);
-  final ReduceStub<K,V,?,?> combineStub=this.combineStub;
-  while (groupedIter.nextKey()) {
-    combineStub.combine(groupedIter.getKey(),groupedIter.getValues(),collector);
+  final WriterCollector collector=new WriterCollector(writer);
+  final ReduceStub combineStub=this.combineStub;
+  try {
+    while (groupedIter.nextKey()) {
+      combineStub.combine(groupedIter.getValues(),collector);
+    }
+  }
+ catch (  Exception e) {
+    throw new IOException("An error occurred in the combiner user code.");
   }
   writer.close();
   unregisterChannelsToBeRemovedAtShudown(channelAccesses);

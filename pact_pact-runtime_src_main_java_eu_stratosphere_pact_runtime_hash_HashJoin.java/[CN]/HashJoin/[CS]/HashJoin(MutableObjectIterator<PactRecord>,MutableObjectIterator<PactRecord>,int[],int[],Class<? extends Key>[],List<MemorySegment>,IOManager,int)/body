@@ -1,0 +1,44 @@
+{
+  if (buildSideInput == null || probeSideInput == null || memorySegments == null) {
+    throw new NullPointerException();
+  }
+  if (memorySegments.size() < MIN_NUM_MEMORY_SEGMENTS) {
+    throw new IllegalArgumentException("Too few memory segments provided. Hash Join needs at least " + MIN_NUM_MEMORY_SEGMENTS + " memory segments.");
+  }
+  if (buildSideKeyPositions.length != probeSideKeyPositions.length || buildSideKeyPositions.length != keyClasses.length) {
+    throw new IllegalArgumentException("Insonsistent definition of key fields: " + "The index arrays for both inputs and the type arrays must be of equal length.");
+  }
+  this.buildSideInput=buildSideInput;
+  this.probeSideInput=probeSideInput;
+  this.availableMemory=memorySegments;
+  this.ioManager=ioManager;
+  this.buildSideKeyFields=buildSideKeyPositions;
+  this.probeSideKeyFields=probeSideKeyPositions;
+  this.keyClasses=keyClasses;
+  this.keyHolders=new Key[keyClasses.length];
+  for (int i=0; i < keyClasses.length; i++) {
+    if (keyClasses[i] == null) {
+      throw new NullPointerException("Key type " + i + " is null.");
+    }
+    this.keyHolders[i]=InstantiationUtil.instantiate(keyClasses[i],Key.class);
+  }
+  this.avgRecordLen=avgRecordLen < 1 ? DEFAULT_RECORD_LEN : avgRecordLen;
+  this.totalNumBuffers=memorySegments.size();
+  this.segmentSize=memorySegments.get(0).size();
+  if ((this.segmentSize & this.segmentSize - 1) != 0) {
+    throw new IllegalArgumentException("Hash Table requires buffers whose size is a power of 2.");
+  }
+  int bucketsPerSegment=this.segmentSize >> NUM_INTRA_BUCKET_BITS;
+  if (bucketsPerSegment == 0) {
+    throw new IllegalArgumentException("Hash Table requires buffers of at least " + HASH_BUCKET_SIZE + " bytes.");
+  }
+  this.bucketsPerSegmentMask=bucketsPerSegment - 1;
+  this.bucketsPerSegmentBits=log2floor(bucketsPerSegment);
+  this.writeBehindBuffers=new LinkedBlockingQueue<MemorySegment>();
+  this.numWriteBehindBuffers=getNumWriteBehindBuffers(memorySegments.size());
+  for (int i=this.numWriteBehindBuffers; i > 0; --i) {
+    this.writeBehindBuffers.add(memorySegments.remove(memorySegments.size() - 1));
+  }
+  this.partitionsBeingBuilt=new ArrayList<HashJoin.Partition>();
+  this.partitionsPending=new ArrayList<HashJoin.Partition>();
+}
