@@ -1,0 +1,36 @@
+{
+  availableMemory=this.config.getMemorySize();
+  maxFileHandles=this.config.getNumFilehandles();
+  spillThreshold=this.config.getSortSpillingTreshold();
+  final LocalStrategy ls=this.config.getLocalStrategy();
+  long strategyMinMem=0;
+switch (ls) {
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+    strategyMinMem=MIN_REQUIRED_MEMORY;
+  break;
+}
+if (availableMemory < strategyMinMem) {
+throw new RuntimeException("The Cross task was initialized with too little memory for local strategy " + config.getLocalStrategy() + " : "+ availableMemory+ " bytes."+ "Required is at least "+ strategyMinMem+ " bytes.");
+}
+if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_FIRST || config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
+MutableObjectIterator<PactRecord> tempInput=inputs[0];
+inputs[0]=inputs[1];
+inputs[1]=tempInput;
+}
+ else if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND || config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+}
+ else {
+throw new RuntimeException("Invalid local strategy for CROSS: " + config.getLocalStrategy());
+}
+switch (ls) {
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+runBlocked=true;
+default :
+runBlocked=false;
+}
+if (LOG.isDebugEnabled()) LOG.debug(getLogString("Match task iterator ready."));
+}
