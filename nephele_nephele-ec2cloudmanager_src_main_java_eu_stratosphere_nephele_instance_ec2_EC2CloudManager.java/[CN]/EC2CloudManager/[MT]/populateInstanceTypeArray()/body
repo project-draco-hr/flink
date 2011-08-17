@@ -1,0 +1,33 @@
+{
+  final List<InstanceType> instanceTypes=new ArrayList<InstanceType>();
+  int count=1;
+  while (true) {
+    final String key="instancemanager.ec2.type." + count;
+    final String type=GlobalConfiguration.getString(key,null);
+    if (type == null) {
+      break;
+    }
+    final InstanceType instanceType=InstanceTypeFactory.constructFromDescription(type);
+    LOG.info("Found instance type " + count + ": "+ instanceType);
+    instanceTypes.add(instanceType);
+    ++count;
+  }
+  if (instanceTypes.isEmpty()) {
+    LOG.error("No instance types found in configuration");
+    return new InstanceType[0];
+  }
+  int defaultIndex=GlobalConfiguration.getInteger("instancemanager.ec2.defaulttype",-1);
+  if (defaultIndex < 1 || defaultIndex >= (instanceTypes.size() + 1)) {
+    LOG.warn("Invalid index to default instance " + defaultIndex);
+    defaultIndex=1;
+  }
+  this.defaultInstanceType=instanceTypes.get(defaultIndex - 1);
+  LOG.info("Default instance type is " + this.defaultInstanceType);
+  Collections.sort(instanceTypes,new Comparator<InstanceType>(){
+    @Override public int compare(    InstanceType o1,    InstanceType o2){
+      return o1.getPricePerHour() - o2.getPricePerHour();
+    }
+  }
+);
+  return instanceTypes.toArray(new InstanceType[0]);
+}

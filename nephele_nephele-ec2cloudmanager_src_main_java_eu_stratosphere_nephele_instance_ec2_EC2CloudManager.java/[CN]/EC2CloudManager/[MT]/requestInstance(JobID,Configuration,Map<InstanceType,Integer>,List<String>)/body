@@ -1,0 +1,75 @@
+{
+  if (conf == null) {
+    throw new IllegalArgumentException("No job configuration provided, unable to acquire credentials");
+  }
+  final String awsAccessId=conf.getString(AWS_ACCESS_ID_KEY,null);
+  if (awsAccessId == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS access ID");
+  }
+  final String awsSecretKey=conf.getString(AWS_SECRET_KEY_KEY,null);
+  if (awsSecretKey == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AWS secret key");
+  }
+  if (conf.getString(AWS_AMI_KEY,null) == null) {
+    throw new InstanceException("Unable to allocate cloud instance: Cannot find AMI image ID");
+  }
+  checkAndConvertOrphanedInstances(conf);
+  JobToInstancesMapping jobToInstanceMapping=null;
+synchronized (this.jobToInstancesAssignmentMap) {
+    jobToInstanceMapping=this.jobToInstancesAssignmentMap.get(jobID);
+    if (jobToInstanceMapping == null) {
+      LOG.debug("Creating new mapping for job " + jobID);
+      jobToInstanceMapping=new JobToInstancesMapping(awsAccessId,awsSecretKey);
+      this.jobToInstancesAssignmentMap.put(jobID,jobToInstanceMapping);
+    }
+  }
+  NetworkTopology networkTopology=null;
+synchronized (this.networkTopologies) {
+    networkTopology=this.networkTopologies.get(jobID);
+    if (networkTopology == null) {
+      networkTopology=NetworkTopology.createEmptyTopology();
+      this.networkTopologies.put(jobID,networkTopology);
+    }
+  }
+  final LinkedList<FloatingInstance> floatingInstances=new LinkedList<FloatingInstance>();
+  final LinkedList<String> requestedInstances=new LinkedList<String>();
+  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.entrySet().iterator();
+  while (it.hasNext()) {
+    final Map.Entry<InstanceType,Integer> e=it.next();
+    final InstanceType actualtype=e.getKey();
+    final int maxcount=e.getValue();
+    final int mincount=maxcount;
+    LOG.info("Requesting " + maxcount + " instances of type "+ actualtype+ " for job "+ jobID);
+    LinkedList<FloatingInstance> actualFloatingInstances=null;
+    LinkedList<String> actualRequestedInstances=null;
+    actualFloatingInstances=anyFloatingInstancesAvailable(awsAccessId,awsSecretKey,actualtype,maxcount);
+    if (actualFloatingInstances.size() < maxcount) {
+      int minimumrequestcount=Math.max(mincount - actualFloatingInstances.size(),1);
+      int maximumrequestcount=maxcount - actualFloatingInstances.size();
+      actualRequestedInstances=allocateCloudInstance(conf,actualtype,minimumrequestcount,maximumrequestcount);
+    }
+ else {
+      actualRequestedInstances=new LinkedList<String>();
+    }
+    floatingInstances.addAll(actualFloatingInstances);
+    requestedInstances.addAll(actualRequestedInstances);
+    if (actualRequestedInstances.size() + actualFloatingInstances.size() < mincount) {
+      LOG.error("Requested: " + mincount + " to "+ maxcount+ " instances of type "+ actualtype.getIdentifier()+ ", but could only provide "+ (actualRequestedInstances.size() + actualFloatingInstances.size())+ ".");
+synchronized (this.floatingInstances) {
+        for (        FloatingInstance i : floatingInstances) {
+          this.floatingInstances.put(i.getInstanceConnectionInfo(),i);
+        }
+      }
+      throw new InstanceException("Could not allocate enough cloud instances. See logs for details.");
+    }
+  }
+  for (  final FloatingInstance fi : floatingInstances) {
+    final EC2CloudInstance ci=fi.asCloudInstance(networkTopology.getRootNode());
+    jobToInstanceMapping.assignInstanceToJob(ci);
+    final EC2CloudInstanceNotifier notifier=new EC2CloudInstanceNotifier(this.instanceListener,jobID,ci.asAllocatedResource());
+    notifier.start();
+  }
+  for (  final String i : requestedInstances) {
+    this.reservedInstancesToJobMapping.put(i,jobID);
+  }
+}
