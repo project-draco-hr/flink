@@ -1,18 +1,29 @@
 {
   JsonStream input=this.getInput(0);
-  JsonStream backLookup;
+  Operator backLookup1, backLookup2;
   if (this.idProjection == DEFAULT_PROJECTION) {
     final JsonStream entityExtractor=new RemoveDuplicateEntities(new FlattenPairs(input));
     final GlobalEnumeration globalEnumeration=new GlobalEnumeration(entityExtractor);
     globalEnumeration.setIdGeneration(GlobalEnumeration.LONG_COMBINATION);
-    input=new SubstituteWithKeyValueList(input,globalEnumeration);
-    backLookup=globalEnumeration;
+    input=new Lookup(input,globalEnumeration).withInputKeyExtractor(new ArrayAccess(0));
+    input=new Lookup(input,globalEnumeration).withInputKeyExtractor(new ArrayAccess(1));
+    backLookup1=backLookup2=globalEnumeration;
   }
  else {
-    backLookup=new Projection(this.idProjection,EvaluationExpression.SAME_VALUE,input);
+    if (this.emitClusters) {
+      backLookup1=new Grouping(new ArrayAccess(0),input).withResetKey(false).withKeyProjection(new PathExpression(new ArrayAccess(0),this.idProjection)).withValueProjection(new ArrayAccess(0));
+      backLookup2=new Grouping(new ArrayAccess(0),input).withResetKey(false).withKeyProjection(new PathExpression(new ArrayAccess(1),this.idProjection)).withValueProjection(new ArrayAccess(1));
+    }
+ else {
+      final ValueSplitter valueSplitter=new ValueSplitter(input).addProjection(new ArrayAccess(0),new ArrayAccess(1));
+      final Projection idExtraction=new Projection(this.idProjection,EvaluationExpression.SAME_VALUE,valueSplitter);
+      backLookup1=backLookup2=new Grouping(new ArrayAccess(0),idExtraction).withKeyProjection(EvaluationExpression.SAME_KEY).withResetKey(false);
+    }
     input=new Projection(new ArrayCreation(new PathExpression(new ArrayAccess(0),this.idProjection),new PathExpression(new ArrayAccess(1),this.idProjection)),input);
   }
   final Grouping groupAll=new Grouping(EvaluationExpression.SAME_VALUE,input);
   final UnparallelClosure pairs=new UnparallelClosure(this.emitClusters,groupAll);
-  return SopremoModule.valueOf(this.getName(),new SubstituteWithKeyValueList(pairs,backLookup));
+  final Lookup lookupLeft=new Lookup(pairs,backLookup1).withInputKeyExtractor(new ArrayAccess(0)).withDictionaryKeyExtraction(EvaluationExpression.SAME_KEY);
+  final Lookup lookupRight=new Lookup(lookupLeft,backLookup2).withInputKeyExtractor(new ArrayAccess(1)).withDictionaryKeyExtraction(EvaluationExpression.SAME_KEY);
+  return SopremoModule.valueOf(this.getName(),lookupRight);
 }
