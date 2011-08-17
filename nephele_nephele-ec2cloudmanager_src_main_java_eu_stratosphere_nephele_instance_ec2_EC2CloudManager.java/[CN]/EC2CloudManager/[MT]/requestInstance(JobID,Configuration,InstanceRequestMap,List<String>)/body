@@ -33,7 +33,7 @@ synchronized (this.networkTopologies) {
   }
   final LinkedList<FloatingInstance> floatingInstances=new LinkedList<FloatingInstance>();
   final LinkedList<String> requestedInstances=new LinkedList<String>();
-  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.entrySet().iterator();
+  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
   while (it.hasNext()) {
     final Map.Entry<InstanceType,Integer> e=it.next();
     final InstanceType actualtype=e.getKey();
@@ -63,10 +63,14 @@ synchronized (this.floatingInstances) {
       throw new InstanceException("Could not allocate enough cloud instances. See logs for details.");
     }
   }
+  final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
   for (  final FloatingInstance fi : floatingInstances) {
     final EC2CloudInstance ci=fi.asCloudInstance(networkTopology.getRootNode());
     jobToInstanceMapping.assignInstanceToJob(ci);
-    final EC2CloudInstanceNotifier notifier=new EC2CloudInstanceNotifier(this.instanceListener,jobID,ci.asAllocatedResource());
+    allocatedResources.add(ci.asAllocatedResource());
+  }
+  if (!allocatedResources.isEmpty()) {
+    final EC2CloudInstanceNotifier notifier=new EC2CloudInstanceNotifier(this.instanceListener,jobID,allocatedResources);
     notifier.start();
   }
   for (  final String i : requestedInstances) {
