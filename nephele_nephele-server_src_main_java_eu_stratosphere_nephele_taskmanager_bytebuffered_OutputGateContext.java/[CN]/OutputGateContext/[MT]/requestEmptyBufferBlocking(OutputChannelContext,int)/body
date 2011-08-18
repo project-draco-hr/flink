@@ -1,11 +1,23 @@
 {
-  Buffer buffer=this.taskContext.requestEmptyBuffer(minimumSizeOfBuffer,0);
-  if (buffer == null) {
-    if (!this.ephemeralCheckpoint.isDecided()) {
-      this.ephemeralCheckpoint.destroy();
+  Buffer buffer;
+  final ChannelType channelType=this.outputGate.getChannelType();
+  if (channelType == ChannelType.FILE) {
+    buffer=getFileBuffer(minimumSizeOfBuffer);
+  }
+ else {
+    buffer=this.taskContext.requestEmptyBuffer(minimumSizeOfBuffer,0);
+    if (buffer == null) {
+      if (channelType == ChannelType.NETWORK && this.allowSenderSideSpilling) {
+        buffer=getFileBuffer(minimumSizeOfBuffer);
+      }
+ else {
+        if (!this.ephemeralCheckpoint.isDecided()) {
+          this.ephemeralCheckpoint.destroy();
+        }
+        flushFullestBuffer();
+        buffer=this.taskContext.requestEmptyBufferBlocking(minimumSizeOfBuffer,0);
+      }
     }
-    flushFullestBuffer();
-    buffer=this.taskContext.requestEmptyBufferBlocking(minimumSizeOfBuffer,0);
   }
   if (buffer.isBackedByMemory()) {
     this.channelWithMemoryBuffers.add(caller);

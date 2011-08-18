@@ -14,13 +14,15 @@
     this.byteBufferedOutputChannel.reportIOException(ioe);
   }
   if (!this.isReceiverRunning) {
-    final Buffer memBuffer=this.outgoingTransferEnvelope.getBuffer();
-    final Buffer fileBuffer=this.outputGateContext.getFileBuffer(memBuffer.size());
-    memBuffer.copyToBuffer(fileBuffer);
-    this.outgoingTransferEnvelope.setBuffer(fileBuffer);
+    final Buffer buffer=this.outgoingTransferEnvelope.getBuffer();
+    if (buffer.isBackedByMemory()) {
+      final Buffer fileBuffer=this.outputGateContext.getFileBuffer(buffer.size());
+      buffer.copyToBuffer(fileBuffer);
+      this.outgoingTransferEnvelope.setBuffer(fileBuffer);
+      buffer.recycleBuffer();
+    }
     this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
     this.outgoingTransferEnvelope=null;
-    memBuffer.recycleBuffer();
     return;
   }
   while (!this.queuedOutgoingEnvelopes.isEmpty()) {
