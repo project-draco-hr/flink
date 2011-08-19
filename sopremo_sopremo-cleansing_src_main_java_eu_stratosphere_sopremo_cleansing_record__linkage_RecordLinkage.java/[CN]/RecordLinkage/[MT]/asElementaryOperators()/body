@@ -1,9 +1,45 @@
 {
   final List<RecordLinkageInput> inputs=new ArrayList<RecordLinkageInput>();
   for (int index=0, size=this.getInputs().size(); index < size; index++)   inputs.add(this.getRecordLinkageInput(index));
-  boolean substituteWithId=retainNonDuplicates || transitive;
-  if (substituteWithId) {
+  Int2ObjectMap<EvaluationExpression> resubstituteExpressions=new Int2ObjectOpenHashMap<EvaluationExpression>();
+  if (clusterMode) {
+    for (int index=0, size=inputs.size(); index < size; index++) {
+      RecordLinkageInput input=inputs.get(index);
+      if (input.getIdProjection() != EvaluationExpression.SAME_VALUE && !input.getResultProjection().equals(input.getIdProjection())) {
+        resubstituteExpressions.put(index,input.getResultProjection());
+        input=input.clone();
+        input.setResultProjection(input.getIdProjection());
+        inputs.set(index,input);
+      }
+    }
   }
   Operator duplicatePairs=this.algorithm.getDuplicatePairStream(this.similarityCondition,inputs);
-  return SopremoModule.valueOf(getName(),duplicatePairs);
+  if (!clusterMode)   return SopremoModule.valueOf(getName(),duplicatePairs);
+  if (inputs.size() == 1) {
+    Operator clusters=new TransitiveClosure(duplicatePairs);
+    Operator singleRecords=new Difference(this.getInputs().get(0),new Projection(new ArrayAccess(0),clusters),new Projection(new ArrayAccess(1),clusters)).withKeyProjection(0,inputs.get(0).getIdProjection());
+    if (!resubstituteExpressions.isEmpty()) {
+      Operator id2ResultList=new Projection(inputs.get(0).getIdProjection(),resubstituteExpressions.get(0),inputs.get(0));
+      clusters=new Lookup(clusters,id2ResultList).withInputKeyExtractor(new ArrayAccess());
+      singleRecords=new Lookup(singleRecords,id2ResultList).withInputKeyExtractor(new ArrayAccess(0));
+    }
+    return SopremoModule.valueOf(getName(),new Union(singleRecords,clusters));
+  }
+  Operator closure=new TransitiveClosure(duplicatePairs);
+  List<Operator> singleExtractors=new ArrayList<Operator>();
+  for (int index=0; index < inputs.size(); index++) {
+    EvaluationExpression[] singleArray=new EvaluationExpression[inputs.size()];
+    Arrays.fill(singleArray,EvaluationExpression.NULL);
+    singleArray[index]=inputs.get(index).getResultProjection();
+    Difference singles=new Difference(this.getInputs().get(0),new Projection(new ArrayAccess(index),closure)).withKeyProjection(0,inputs.get(0).getIdProjection()).withValueProjection(new ArrayCreation(singleArray));
+    singleExtractors.add(singles);
+  }
+  Operator clusters=closure;
+  for (  Entry<Integer,EvaluationExpression> resubstituteExpression : resubstituteExpressions.entrySet()) {
+    Integer inputIndex=resubstituteExpression.getKey();
+    Operator id2ResultList=new Projection(inputs.get(inputIndex).getIdProjection(),resubstituteExpression.getValue(),inputs.get(inputIndex));
+    clusters=new Lookup(clusters,id2ResultList).withInputKeyExtractor(new PathExpression.Writable(new ArrayAccess(inputIndex),new ArrayAccess()));
+  }
+  singleExtractors.add(clusters);
+  return SopremoModule.valueOf(getName(),new Union(singleExtractors));
 }
