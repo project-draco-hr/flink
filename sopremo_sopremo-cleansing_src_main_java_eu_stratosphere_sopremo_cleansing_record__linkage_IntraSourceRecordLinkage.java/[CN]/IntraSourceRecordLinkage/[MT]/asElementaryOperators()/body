@@ -1,0 +1,22 @@
+{
+  RecordLinkageInput recordLinkageInput=this.recordLinkageInput;
+  if (linkageMode.ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal())   recordLinkageInput=recordLinkageInput.minimizeResultOverhead();
+  Operator duplicatePairs;
+  if (algorithm instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.algorithm).getIntraSource(this.similarityCondition,recordLinkageInput);
+ else   duplicatePairs=simulateIntraSource();
+  if (linkageMode == LinkageMode.LINKS_ONLY)   return SopremoModule.valueOf(getName(),duplicatePairs);
+  Operator output;
+  final TransitiveClosure closure=new TransitiveClosure(duplicatePairs);
+  final boolean cluster=linkageMode != LinkageMode.TRANSITIVE_LINKS;
+  closure.setCluster(cluster);
+  output=closure;
+  if (recordLinkageInput != this.recordLinkageInput) {
+    Lookup reverseLookup=new Lookup(closure,recordLinkageInput.getLookupDictionary());
+    reverseLookup.setArrayElementsReplacement(cluster);
+    output=reverseLookup;
+  }
+  if (linkageMode != LinkageMode.ALL_CLUSTERS)   return SopremoModule.valueOf(getName(),output);
+  Operator singleRecords=new Difference(this.recordLinkageInput,new ValueSplitter(closure).withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(this.recordLinkageInput.getResultProjection()));
+  final Projection wrappedInArray=new Projection(new ArrayCreation(EvaluationExpression.VALUE),singleRecords);
+  return SopremoModule.valueOf(getName(),new Union(wrappedInArray,output));
+}

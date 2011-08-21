@@ -1,7 +1,21 @@
 {
   final SopremoModule sopremoModule=new SopremoModule(this.getName(),2,1);
-  final Projection left=new Projection(this.inputKeyExtractor.asExpression(),EvaluationExpression.SAME_VALUE,sopremoModule.getInput(0));
   final Projection right=new Projection(this.dictionaryKeyExtraction,this.dictionaryValueExtraction,sopremoModule.getInput(1));
-  sopremoModule.getOutput(0).setInput(0,new ReplaceWithRightInput(this.inputKeyExtractor,left,right));
+  if (arrayElementsReplacement) {
+    final ValueSplitter arraySplit=new ValueSplitter(sopremoModule.getInput(0));
+    arraySplit.withArrayProjection(this.inputKeyExtractor.asExpression());
+    arraySplit.withKeyProjection(new ArrayAccess(0));
+    arraySplit.withValueProjection(new ArrayAccess(1,2));
+    final Operator replacedElements=defaultExpression == FILTER_RECORDS ? new ElementStrictReplace(arraySplit,right) : new ElementReplaceWithDefault(defaultExpression,arraySplit,right);
+    final Operator arrayDictionary=new UnionAll(new AssembleArray(replacedElements),new Projection(EvaluationExpression.VALUE,EvaluationExpression.VALUE,new Source(new ArrayCreation(new ArrayCreation()))));
+    final Lookup arrayLookup=new Lookup(sopremoModule.getInput(0),arrayDictionary);
+    arrayLookup.setInputKeyExtractor(inputKeyExtractor);
+    sopremoModule.getOutput(0).setInput(0,arrayLookup);
+  }
+ else {
+    final Projection left=new Projection(this.inputKeyExtractor.asExpression(),EvaluationExpression.VALUE,sopremoModule.getInput(0));
+    if (defaultExpression == FILTER_RECORDS)     sopremoModule.getOutput(0).setInput(0,new StrictReplace(this.inputKeyExtractor,left,right));
+ else     sopremoModule.getOutput(0).setInput(0,new ReplaceWithDefaultValue(this.inputKeyExtractor,this.defaultExpression,left,right));
+  }
   return sopremoModule;
 }
