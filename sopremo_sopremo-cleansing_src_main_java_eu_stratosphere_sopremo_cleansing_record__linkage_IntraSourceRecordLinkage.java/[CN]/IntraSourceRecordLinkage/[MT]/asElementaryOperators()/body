@@ -1,0 +1,27 @@
+{
+  RecordLinkageInput recordLinkageInput=this.recordLinkageInput.clone();
+  EvaluationExpression resultProjection=this.recordLinkageInput.getResultProjection();
+  if (this.linkageMode.ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal() && !recordLinkageInput.getResultProjection().equals(recordLinkageInput.getIdProjection()))   recordLinkageInput.setResultProjection(recordLinkageInput.getIdProjection());
+  Operator duplicatePairs;
+  if (this.algorithm instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.algorithm).getIntraSource(this.similarityCondition,recordLinkageInput);
+ else   duplicatePairs=this.simulateIntraSource();
+  if (this.linkageMode == LinkageMode.LINKS_ONLY)   return SopremoModule.valueOf(this.getName(),duplicatePairs);
+  Operator output;
+  final TransitiveClosure closure=new TransitiveClosure(duplicatePairs);
+  ClosureMode closureMode=this.linkageMode.getClosureMode();
+  if (closureMode.isCluster())   closureMode=ClosureMode.CLUSTER;
+  closure.setClosureMode(closureMode);
+  output=closure;
+  if (recordLinkageInput.getResultProjection() != resultProjection) {
+    Lookup reverseLookup=new Lookup(closure,this.recordLinkageInput.getLookupDictionary());
+    reverseLookup.setArrayElementsReplacement(true);
+    output=reverseLookup;
+  }
+  if (!this.linkageMode.isWithSingles())   return SopremoModule.valueOf(this.getName(),output);
+  ValueSplitter allTuples=new ValueSplitter(closure).withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL);
+  allTuples.setName("all tuples");
+  Operator singleRecords=new Difference(this.recordLinkageInput,allTuples).withKeyProjection(0,this.recordLinkageInput.getIdProjection()).withValueProjection(0,this.recordLinkageInput.getResultProjection()).withKeyProjection(1,EvaluationExpression.KEY);
+  singleRecords.setName("singleRecords");
+  final Projection wrappedInArray=new Projection(new ArrayCreation(EvaluationExpression.VALUE),singleRecords);
+  return SopremoModule.valueOf(this.getName(),new UnionAll(wrappedInArray,output));
+}

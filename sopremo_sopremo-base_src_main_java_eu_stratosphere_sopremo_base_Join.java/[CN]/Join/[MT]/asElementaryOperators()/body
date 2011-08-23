@@ -1,0 +1,29 @@
+{
+  List<TwoSourceJoin> joins;
+  if (this.condition instanceof AndExpression)   joins=this.getInitialJoinOrder((AndExpression)this.condition);
+ else   joins=Arrays.asList(this.getTwoSourceJoinForExpression(this.condition));
+  final int numInputs=this.getInputs().size();
+  final SopremoModule module=new SopremoModule(this.toString(),numInputs,1);
+  final List<Operator> inputs=new ArrayList<Operator>();
+  for (int index=0; index < numInputs; index++) {
+    final EvaluationExpression[] elements=new EvaluationExpression[this.getInputs().size()];
+    Arrays.fill(elements,EvaluationExpression.NULL);
+    elements[index]=EvaluationExpression.VALUE;
+    inputs.add(new Projection(new ArrayCreation(elements),module.getInput(index)));
+  }
+  for (  final TwoSourceJoin twoSourceJoin : joins) {
+    final List<Output> operatorInputs=twoSourceJoin.getInputs();
+    final Output[] actualInputs=new Output[2];
+    for (int index=0; index < operatorInputs.size(); index++) {
+      final int inputIndex=this.getInputs().indexOf(operatorInputs.get(index));
+      actualInputs[index]=inputs.get(inputIndex).getSource();
+    }
+    for (int index=0; index < operatorInputs.size(); index++) {
+      final int inputIndex=this.getInputs().indexOf(operatorInputs.get(index));
+      inputs.set(inputIndex,twoSourceJoin);
+    }
+    twoSourceJoin.setInputs(actualInputs);
+  }
+  module.getOutput(0).setInput(0,new Projection(EvaluationExpression.NULL,this.expression,joins.get(joins.size() - 1)));
+  return module;
+}
