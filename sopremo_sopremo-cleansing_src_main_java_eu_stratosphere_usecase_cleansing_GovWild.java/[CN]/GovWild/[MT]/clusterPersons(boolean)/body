@@ -1,0 +1,18 @@
+{
+  if (simulate) {
+    this.personCluster=new Source(PersistenceType.HDFS,String.format("%s/PersonClusters.json",this.outputDir));
+    return;
+  }
+  EvaluationExpression firstName=new FunctionCall("format",new ConstantExpression("%s %s"),new ObjectAccess("firstName"),new TernaryExpression(new ObjectAccess("middleName"),new ObjectAccess("middleName"),new ConstantExpression("")));
+  FunctionCall simmFunction=new FunctionCall("average",new SimmetricFunction(new JaccardSimilarity(),new PathExpression(new InputSelection(0),firstName),new PathExpression(new InputSelection(1),firstName)),new SimmetricFunction(new JaroWinkler(),new PathExpression(new InputSelection(0),new ObjectAccess("lastName")),new PathExpression(new InputSelection(1),new ObjectAccess("lastName"))));
+  DisjunctPartitioning partitioning=new DisjunctPartitioning(new ObjectAccess("lastName"));
+  InterSourceRecordLinkage recordLinkage=new InterSourceRecordLinkage(partitioning,simmFunction,0.6,this.persons);
+  recordLinkage.setLinkageMode(LinkageMode.ALL_CLUSTERS_PROVENANCE);
+  ObjectCreation projection=new ObjectCreation();
+  projection.addMapping("firstName",new ObjectAccess("firstName"));
+  projection.addMapping("middleName",new ObjectAccess("middleName"));
+  projection.addMapping("state",new PathExpression(new ObjectAccess("employment"),new ArrayAccess(-1),new ObjectAccess("legalEntity")));
+  recordLinkage.getRecordLinkageInput(1).setIdProjection(projection);
+  this.personCluster=recordLinkage;
+  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/PersonClusters.json",this.outputDir),recordLinkage));
+}

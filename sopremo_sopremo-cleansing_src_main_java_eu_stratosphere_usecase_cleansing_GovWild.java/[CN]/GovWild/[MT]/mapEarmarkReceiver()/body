@@ -1,0 +1,24 @@
+{
+  ObjectCreation projection=new ObjectCreation();
+  final BatchAggregationExpression batch=new BatchAggregationExpression();
+  projection.addMapping("name",new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("recipient")));
+  ObjectCreation funds=new ObjectCreation();
+  funds.addMapping("id",new GenerateExpression("earmarkReceiver%s"));
+  funds.addMapping("fund",new FunctionCall("format",new ConstantExpression("earmark%s"),new ObjectAccess("earmarkId")));
+  funds.addMapping("amount",new ObjectAccess("amount"));
+  funds.addMapping("currency",new ConstantExpression("dollar"));
+  projection.addMapping("receivedFunds",batch.add(CleansFunctions.ALL,funds));
+  ObjectCreation address=new ObjectCreation();
+  address.addMapping("street",new FunctionCall("trim",new FunctionCall("format",new ConstantExpression("%s %s"),new ObjectAccess("recipientStreet1"),new ObjectAccess("recipientStreet2"))));
+  address.addMapping("city",new ObjectAccess("recipientCity"));
+  address.addMapping("zipCode",new ObjectAccess("recipientZipcode"));
+  address.addMapping("state",new FunctionCall("camelCase",new ObjectAccess("sponsorStateCode")));
+  address.addMapping("country",new ObjectAccess("recipientCountry"));
+  projection.addMapping("addresses",new FunctionCall("distinct",batch.add(CleansFunctions.ALL,address)));
+  projection.addMapping("phones",new FunctionCall("distinct",batch.add(CleansFunctions.ALL,new ObjectAccess("phone"))));
+  ComparativeExpression recipientCondition=new ComparativeExpression(new ObjectAccess("recordType"),BinaryOperator.EQUAL,new ConstantExpression("R"));
+  Selection sponsors=new Selection(recipientCondition,this.scrubbedEarmarks);
+  Grouping grouping=new Grouping(projection,sponsors);
+  grouping.withKeyProjection(new ObjectAccess("recipient"));
+  return grouping;
+}
