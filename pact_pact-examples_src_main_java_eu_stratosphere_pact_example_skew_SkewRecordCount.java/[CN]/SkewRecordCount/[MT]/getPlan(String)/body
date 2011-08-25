@@ -1,0 +1,74 @@
+{
+  int curArgIndex=0;
+  GenericDataSourceContract<PactInteger,PactString> input;
+  String inputStr=(args.length > curArgIndex ? args[curArgIndex++] : "");
+  if (inputStr.equals("myriad")) {
+    input=new GenericDataSourceContract<PactInteger,PactString>(MyriadIntInputFormat.class,"Myriad Input");
+    float scale=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (scale <= 0.0f)     throw new IllegalArgumentException("Myriad Arguments: scale binPath payLoad");
+    input.getParameters().setFloat(MyriadGeneratorFixedLengthInputFormat.GENERATOR_SCALEFACTOR_PARAMETER_KEY,scale);
+    String binPath=(args.length > curArgIndex ? args[curArgIndex++] : "");
+    if (binPath.equals(""))     throw new IllegalArgumentException("Myriad Arguments: scale binPath payLoad");
+    input.getParameters().setString(MyriadGeneratorFixedLengthInputFormat.GENERATOR_PATH_PARAMETER_KEY,binPath);
+    int payLoad=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : -1);
+    if (payLoad < 0)     throw new IllegalArgumentException("Myriad Arguments: scale binPath payLoad");
+    input.getParameters().setInteger(MyriadIntInputFormat.PAYLOAD_SIZE_PARAMETER_KEY,payLoad);
+  }
+ else   if (inputStr.equals("nativeZipf")) {
+    input=new GenericDataSourceContract<PactInteger,PactString>(NativeGenIntInputFormat.class,"Native Zipf Input");
+    input.getParameters().setString(NativeGenIntInputFormat.DISTFUNC_PARAMETER_KEY,NativeGenIntInputFormat.ZIPF_DISTFUNC);
+    float scale=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (scale <= 0.0f)     throw new IllegalArgumentException("Native Zipf Arguments: scale skew maxVal payLoad");
+    input.getParameters().setFloat(NativeGenIntInputFormat.SCALEFACTOR_PARAMETER_KEY,scale);
+    float skew=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (skew <= 0.0f)     throw new IllegalArgumentException("Native Zipf Arguments: scale skew maxVal payLoad");
+    input.getParameters().setFloat(ZipfIntGenerator.SKEWFACTOR_PARAMETER_KEY,skew);
+    int maxVal=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : 0);
+    if (maxVal <= 0)     throw new IllegalArgumentException("Native Zipf Arguments: scale skew maxVal payLoad");
+    input.getParameters().setInteger(ZipfIntGenerator.MAXVAL_PARAMETER_KEY,maxVal);
+    int payLoad=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : -1);
+    if (payLoad < 0)     throw new IllegalArgumentException("Native Zipf Arguments: scale skew maxVal payLoad");
+    input.getParameters().setInteger(NativeGenIntInputFormat.PAYLOAD_SIZE_PARAMETER_KEY,payLoad);
+  }
+ else   if (inputStr.equals("nativePareto")) {
+    input=new GenericDataSourceContract<PactInteger,PactString>(NativeGenIntInputFormat.class,"Native Pareto Input");
+    input.getParameters().setString(NativeGenIntInputFormat.DISTFUNC_PARAMETER_KEY,NativeGenIntInputFormat.PARETO_DISTFUNC);
+    float scale=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (scale <= 0.0f)     throw new IllegalArgumentException("Native Pareto Arguments: scale alpha x payLoad");
+    input.getParameters().setFloat(NativeGenIntInputFormat.SCALEFACTOR_PARAMETER_KEY,scale);
+    float alpha=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (alpha <= 0.0f)     throw new IllegalArgumentException("Native Pareto Arguments: scale alpha x payLoad");
+    input.getParameters().setFloat(ParetoIntGenerator.ALPHA_PARAMETER_KEY,alpha);
+    float x=(args.length > curArgIndex ? Float.parseFloat(args[curArgIndex++]) : 0.0f);
+    if (x <= 0)     throw new IllegalArgumentException("Native Pareto Arguments: scale alpha x payLoad");
+    input.getParameters().setFloat(ParetoIntGenerator.X_PARAMETER_KEY,x);
+    int payLoad=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : -1);
+    if (payLoad < 0)     throw new IllegalArgumentException("Native Pareto Arguments: scale alpha x payLoad");
+    input.getParameters().setInteger(NativeGenIntInputFormat.PAYLOAD_SIZE_PARAMETER_KEY,payLoad);
+  }
+ else   if (inputStr.equals("file")) {
+    String path=(args.length > curArgIndex ? args[curArgIndex++] : "");
+    if (path.equals(""))     throw new IllegalArgumentException("Binary File Arguments: path payLoad");
+    input=new FileDataSourceContract<PactInteger,PactString>(BinaryFileIntInputFormat.class,path,"Binary File Input");
+    int payLoad=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : -1);
+    if (payLoad < 0)     throw new IllegalArgumentException("Binary File Arguments: path payLoad");
+    input.getParameters().setInteger(BinaryFileIntInputFormat.PAYLOAD_SIZE_PARAMETER_KEY,payLoad);
+  }
+ else {
+    throw new IllegalArgumentException("Specify input type!");
+  }
+  int numSendingTasks=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : 1);
+  int numReceivingTasks=(args.length > curArgIndex ? Integer.parseInt(args[curArgIndex++]) : 1);
+  String outPath=(args.length > curArgIndex ? args[curArgIndex++] : "");
+  input.setDegreeOfParallelism(numSendingTasks);
+  MapContract<PactInteger,PactString,PactInteger,PactString> mapper=new MapContract<PactInteger,PactString,PactInteger,PactString>(Identity.class,"Identity Map");
+  mapper.setDegreeOfParallelism(numSendingTasks);
+  ReduceContract<PactInteger,PactString,PactInteger,PactInteger> reducer=new ReduceContract<PactInteger,PactString,PactInteger,PactInteger>(CountRecords.class,"Count Records");
+  reducer.setDegreeOfParallelism(numReceivingTasks);
+  FileDataSinkContract<PactInteger,PactInteger> out=new FileDataSinkContract<PactInteger,PactInteger>(FrequencyOutFormat.class,outPath,"Frequency Output");
+  out.setDegreeOfParallelism(numReceivingTasks);
+  out.setInput(reducer);
+  reducer.setInput(mapper);
+  mapper.setInput(input);
+  return new Plan(out,"Skew Record Count");
+}
