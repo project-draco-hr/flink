@@ -1,0 +1,35 @@
+{
+  if (simulate) {
+    this.persons.add(new Source(PersistenceType.HDFS,String.format("%s/ScrubbedCongress.json",this.outputDir)));
+    return;
+  }
+  ObjectCreation projection=new ObjectCreation();
+  projection.addMapping("id",new GenerateExpression("congressPerson%s"));
+  projection.addMapping("firstName",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression(", ([^ ]+)")));
+  projection.addMapping("middleName",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression(", [^ ]+ (.*)")));
+  projection.addMapping("lastName",new FunctionCall("camelCase",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression("(.*),"))));
+  ObjectCreation birthDate=new ObjectCreation();
+  birthDate.addMapping("year",new FunctionCall("extract",new ObjectAccess("birthDeath"),new ConstantExpression("([0-9]{0,4})-")));
+  projection.addMapping("birthDate",birthDate);
+  ObjectCreation deathDate=new ObjectCreation();
+  deathDate.addMapping("year",new FunctionCall("extract",new ObjectAccess("birthDeath"),new ConstantExpression("-([0-9]{0,4})")));
+  projection.addMapping("deathDate",deathDate);
+  ObjectCreation partyProjection=new ObjectCreation();
+  partyProjection.addMapping("legalEntity",new FunctionCall("format",new ConstantExpression("congressLegalEntity%s"),new ObjectAccess("party")));
+  partyProjection.addMapping("startYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MIN,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("\\(([0-9]{0,4})-")))));
+  partyProjection.addMapping("endYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MAX,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("-([0-9]{0,4})")))));
+  partyProjection.addMapping("congresses",new ArrayProjection(this.coerce(IntNode.class,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("([0-9]+)\\(")))));
+  AggExpression parties=new AggExpression(new ObjectAccess("party"),partyProjection);
+  ObjectCreation stateProjections=new ObjectCreation();
+  stateProjections.addMapping("legalEntity",new FunctionCall("format",new ConstantExpression("congressLegalEntity%s"),new ObjectAccess("state")));
+  stateProjections.addMapping("positions",new FunctionCall("distinct",new AggregationExpression(CleansFunctions.ALL,new ObjectAccess("position"))));
+  stateProjections.addMapping("startYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MIN,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("\\(([0-9]{0,4})-")))));
+  stateProjections.addMapping("endYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MAX,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("-([0-9]{0,4})")))));
+  stateProjections.addMapping("congresses",new AggregationExpression(CleansFunctions.ALL,this.coerce(IntNode.class,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("([0-9]+)\\(")))));
+  AggExpression congresses=new AggExpression(new ObjectAccess("state"),stateProjections);
+  projection.addMapping("employment",new PathExpression(new ObjectAccess("congresses"),new FunctionCall("unionAll",parties,congresses)));
+  if (this.scrubbedCongress == null)   this.scrubCongress(true);
+  SchemaMapping congressMapping=new SchemaMapping(projection,this.scrubbedCongress);
+  this.persons.add(congressMapping);
+  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/ScrubbedCongress.json",this.outputDir),congressMapping));
+}
