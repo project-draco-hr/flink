@@ -1,0 +1,71 @@
+{
+  for (  final AllocatedResource allocatedResource : allocatedResources) {
+    if (allocatedResources == null) {
+      LOG.error("Resource to lock is null!");
+      return;
+    }
+    if (allocatedResource.getInstance() instanceof DummyInstance) {
+      LOG.debug("Available instance is of type DummyInstance!");
+      return;
+    }
+    try {
+      allocatedResource.getInstance().checkLibraryAvailability(jobID);
+    }
+ catch (    IOException ioe) {
+      LOG.error("Cannot check library availability: " + StringUtils.stringifyException(ioe));
+    }
+  }
+  final ExecutionGraph eg=getExecutionGraphByID(jobID);
+  if (eg == null) {
+    try {
+      for (      final AllocatedResource allocatedResource : allocatedResources) {
+        getInstanceManager().releaseAllocatedResource(jobID,null,allocatedResource);
+      }
+    }
+ catch (    InstanceException e) {
+      LOG.error(e);
+    }
+    return;
+  }
+synchronized (eg) {
+    final int indexOfCurrentStage=eg.getIndexOfCurrentExecutionStage();
+    for (    final AllocatedResource allocatedResource : allocatedResources) {
+      AllocatedResource resourceToBeReplaced=null;
+      final Iterator<ExecutionGroupVertex> groupIterator=new ExecutionGroupVertexIterator(eg,true,indexOfCurrentStage);
+      while (groupIterator.hasNext()) {
+        final ExecutionGroupVertex groupVertex=groupIterator.next();
+        for (int i=0; i < groupVertex.getCurrentNumberOfGroupMembers(); ++i) {
+          final ExecutionVertex vertex=groupVertex.getGroupMember(i);
+          if (vertex.getExecutionState() == ExecutionState.SCHEDULED && vertex.getAllocatedResource() != null) {
+            if (vertex.getAllocatedResource().getInstanceType().equals(allocatedResource.getInstanceType())) {
+              resourceToBeReplaced=vertex.getAllocatedResource();
+              break;
+            }
+          }
+        }
+        if (resourceToBeReplaced != null) {
+          break;
+        }
+      }
+      if (resourceToBeReplaced == null) {
+        LOG.error("Instance " + allocatedResource.getInstance() + " is not required for job"+ eg.getJobID());
+        try {
+          getInstanceManager().releaseAllocatedResource(jobID,eg.getJobConfiguration(),allocatedResource);
+        }
+ catch (        InstanceException e) {
+          LOG.error(e);
+        }
+        return;
+      }
+      final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
+      while (it.hasNext()) {
+        final ExecutionVertex vertex=it.next();
+        if (vertex.getAllocatedResource().equals(resourceToBeReplaced)) {
+          vertex.setAllocatedResource(allocatedResource);
+          vertex.setExecutionState(ExecutionState.ASSIGNED);
+        }
+      }
+    }
+    deployAssignedVertices(eg);
+  }
+}
