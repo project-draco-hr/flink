@@ -2,42 +2,49 @@
   if (minimumSizeOfBuffer > this.maximumBufferSize) {
     throw new IllegalArgumentException("Buffer of " + minimumSizeOfBuffer + " bytes is requested, but maximum buffer size is "+ this.maximumBufferSize);
   }
+  while (true) {
+    boolean async=false;
 synchronized (this.buffers) {
-    while (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
-      final ByteBuffer buffer=this.buffers.poll();
-      if (buffer == null) {
-        break;
-      }
-      this.globalBufferPool.releaseGlobalBuffer(buffer);
-      this.requestedNumberOfBuffers--;
-    }
-    if (minimumReserve > this.designatedNumberOfBuffers) {
-      LOG.warn("Minimum reserve " + minimumReserve + " is larger than number of designated buffers "+ this.designatedNumberOfBuffers+ ", reducing reserve...");
-      minimumReserve=this.designatedNumberOfBuffers;
-    }
-    while (this.buffers.size() <= minimumReserve) {
-      if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
-        final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
-        if (buffer != null) {
-          this.buffers.add(buffer);
-          this.requestedNumberOfBuffers++;
-          continue;
+      while (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
+        final ByteBuffer buffer=this.buffers.poll();
+        if (buffer == null) {
+          break;
         }
+        this.globalBufferPool.releaseGlobalBuffer(buffer);
+        this.requestedNumberOfBuffers--;
       }
-      if (this.asynchronousEventOccurred) {
-        if (this.eventListener != null) {
-          this.eventListener.asynchronousEventOccurred();
+      if (minimumReserve > this.designatedNumberOfBuffers) {
+        LOG.warn("Minimum reserve " + minimumReserve + " is larger than number of designated buffers "+ this.designatedNumberOfBuffers+ ", reducing reserve...");
+        minimumReserve=this.designatedNumberOfBuffers;
+      }
+      while (this.buffers.size() <= minimumReserve) {
+        if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+          final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
+          if (buffer != null) {
+            this.buffers.add(buffer);
+            this.requestedNumberOfBuffers++;
+            continue;
+          }
         }
-        this.asynchronousEventOccurred=false;
-      }
-      if (block) {
-        this.buffers.wait();
-      }
+        if (this.asynchronousEventOccurred) {
+          this.asynchronousEventOccurred=false;
+          async=true;
+          break;
+        }
+        if (block) {
+          this.buffers.wait();
+        }
  else {
-        return null;
+          return null;
+        }
+      }
+      if (!async) {
+        final ByteBuffer byteBuffer=this.buffers.poll();
+        return BufferFactory.createFromMemory(minimumSizeOfBuffer,byteBuffer,this.buffers);
       }
     }
-    final ByteBuffer byteBuffer=this.buffers.poll();
-    return BufferFactory.createFromMemory(minimumSizeOfBuffer,byteBuffer,this.buffers);
+    if (this.eventListener != null) {
+      this.eventListener.asynchronousEventOccurred();
+    }
   }
 }

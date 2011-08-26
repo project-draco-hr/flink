@@ -7,27 +7,14 @@
     LOG.error("Channel " + this.byteBufferedOutputChannel.getID() + " has no buffer attached");
     return;
   }
-  try {
-    this.outgoingTransferEnvelope.getBuffer().finishWritePhase();
-  }
- catch (  final IOException ioe) {
-    this.byteBufferedOutputChannel.reportIOException(ioe);
-  }
+  final Buffer buffer=this.outgoingTransferEnvelope.getBuffer();
+  buffer.finishWritePhase();
   if (!this.isReceiverRunning) {
-    final Buffer buffer=this.outgoingTransferEnvelope.getBuffer();
-    if (buffer.isBackedByMemory()) {
-      final Buffer fileBuffer=this.outputGateContext.getFileBuffer(buffer.size());
-      buffer.copyToBuffer(fileBuffer);
-      this.outgoingTransferEnvelope.setBuffer(fileBuffer);
-      buffer.recycleBuffer();
-    }
     this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
     this.outgoingTransferEnvelope=null;
     return;
   }
-  while (!this.queuedOutgoingEnvelopes.isEmpty()) {
-    this.outputGateContext.processEnvelope(this,this.queuedOutgoingEnvelopes.poll());
-  }
+  flushQueuedOutgoingEnvelopes();
   this.outputGateContext.processEnvelope(this,this.outgoingTransferEnvelope);
   this.outgoingTransferEnvelope=null;
 }
