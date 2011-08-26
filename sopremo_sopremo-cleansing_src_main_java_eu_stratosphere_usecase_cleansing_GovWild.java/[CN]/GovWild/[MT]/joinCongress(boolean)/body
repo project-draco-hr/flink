@@ -1,0 +1,21 @@
+{
+  if (simulate) {
+    joinedCongress=new Source(PersistenceType.HDFS,String.format("%s/JoinedCongress.json",this.outputDir));
+    return;
+  }
+  ObjectCreation congressProjection=new ObjectCreation();
+  congressProjection.addMapping("number",new ObjectAccess("congress"));
+  congressProjection.addMapping("state",new ObjectAccess("state"));
+  congressProjection.addMapping("position",new ObjectAccess("position"));
+  congressProjection.addMapping("party",new ObjectAccess("party"));
+  ObjectCreation resultProjection=new ObjectCreation();
+  resultProjection.addMapping("memberName",new PathExpression(new InputSelection(0),new ArrayAccess(0),new ObjectAccess("memberName")));
+  resultProjection.addMapping("birthDeath",new PathExpression(new InputSelection(0),new ArrayAccess(0),new ObjectAccess("birthDeath")));
+  resultProjection.addMapping("congresses",new FunctionCall("sort",new FunctionCall("distinct",new PathExpression(new InputSelection(0),new ArrayProjection(congressProjection)))));
+  resultProjection.addMapping("biography",new PathExpression(new InputSelection(1),new ArrayAccess(0),new ObjectAccess("biography",true)));
+  Grouping congress=new Grouping(resultProjection,new Source(PersistenceType.HDFS,String.format("%s/OriginalUsCongress.json",this.inputDir)),new Source(PersistenceType.HDFS,String.format("%s/OriginalUsCongressBiography.json",this.inputDir)));
+  congress.withKeyProjection(0,new ObjectAccess("biography"));
+  congress.withKeyProjection(1,new ObjectAccess("id"));
+  joinedCongress=new Selection(new UnaryExpression(new ObjectAccess("biography")),congress);
+  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/JoinedCongress.json",this.outputDir),congress));
+}

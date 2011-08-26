@@ -1,6 +1,6 @@
 {
   if (simulate) {
-    this.persons.add(new Source(PersistenceType.HDFS,String.format("%s/EarmarkPersons.json",this.outputDir)));
+    this.persons.add(new Source(PersistenceType.HDFS,String.format("%s/EarmarkPerson.json",this.outputDir)));
     return;
   }
   ObjectCreation projection=new ObjectCreation();
@@ -17,12 +17,13 @@
   employment.addMapping("legalEntity",new FunctionCall("format",new ConstantExpression("congressLegalEntity%s"),new ObjectAccess("sponsorStateCode")));
   employment.addMapping("startYear",new ConstantExpression(2008));
   employment.addMapping("endYear",new ConstantExpression(2008));
-  projection.addMapping("position",new ObjectAccess("sponsorHonorific"));
+  employment.addMapping("position",new ObjectAccess("sponsorHonorific"));
   if (this.scrubbedEarmarks == null)   this.scrubEarmark(true);
   ComparativeExpression sponsorCondition=new ComparativeExpression(new ObjectAccess("recordType"),BinaryOperator.EQUAL,new ConstantExpression("C"));
   Selection sponsors=new Selection(sponsorCondition,this.scrubbedEarmarks);
   Grouping grouping=new Grouping(projection,sponsors);
   grouping.withKeyProjection(new ArrayCreation(new ObjectAccess("sponsorFirstName"),new ObjectAccess("sponsorMiddleName"),new ObjectAccess("sponsorLastName")));
-  this.persons.add(grouping);
-  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/EarmarkPerson.json",this.outputDir),grouping));
+  Operator persons=grouping;
+  this.persons.add(persons);
+  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/EarmarkPerson.json",this.outputDir),persons));
 }
