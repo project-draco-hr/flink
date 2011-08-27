@@ -1,12 +1,11 @@
 {
   if (simulate) {
-    this.persons.add(new Source(String.format("%s/CongressPersons.json",this.outputDir)));
+    this.inputs[CONGRESS][PERSON]=new Source(String.format("%s/CongressPersons.json",this.outputDir));
     return;
   }
   ObjectCreation projection=new ObjectCreation();
   projection.addMapping("id",new GenerateExpression("congressPerson%s"));
-  projection.addMapping("firstName",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression(", ([^ ]+)")));
-  projection.addMapping("middleName",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression(", [^ ]+ (.*)")));
+  projection.addMapping("firstName",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression(", (.+)")));
   projection.addMapping("lastName",new FunctionCall("camelCase",new FunctionCall("extract",new ObjectAccess("memberName"),new ConstantExpression("(.*),"))));
   ObjectCreation birthDate=new ObjectCreation();
   birthDate.addMapping("year",new FunctionCall("extract",new ObjectAccess("birthDeath"),new ConstantExpression("([0-9]{0,4})-")));
@@ -37,10 +36,8 @@
   FunctionCall commaSplit=new FunctionCall("split",relativeWithoutAnd,new ConstantExpression("(?:,|;) "));
   EvaluationExpression trimmedSplit=new PathExpression(commaSplit,new ArrayProjection(new FunctionCall("trim",EvaluationExpression.VALUE)));
   projection.addMapping("relatives",new PathExpression(new FunctionCall("filter",trimmedSplit,new ConstantExpression("")),new ArrayProjection(relative)));
-  if (this.scrubbedCongress == null)   this.scrubCongress(true);
-  SchemaMapping congressMapping=new SchemaMapping(projection,this.scrubbedCongress);
-  ValueSplitter titles=new ValueSplitter(congressMapping).withArrayProjection(new ObjectAccess("relatives"));
-  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/Titles.json",this.outputDir),titles));
-  this.persons.add(congressMapping);
-  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/CongressPersons.json",this.outputDir),congressMapping));
+  if (this.scrubbed[CONGRESS] == null)   this.scrubCongress(true);
+  SchemaMapping congressMapping=new SchemaMapping(projection,this.scrubbed[CONGRESS]);
+  this.inputs[CONGRESS][PERSON]=congressMapping;
+  this.sinks.add(new Sink(getInternalOutputFormat(),String.format("%s/CongressPersons.json",this.outputDir),congressMapping));
 }

@@ -1,13 +1,14 @@
 {
   if (simulate) {
-    this.persons.add(new Source(PersistenceType.HDFS,String.format("%s/EarmarkPerson.json",this.outputDir)));
+    this.inputs[EARMARK][PERSON]=new Source(getInternalInputFormat(),String.format("%s/EarmarkPerson.json",this.outputDir));
     return;
   }
   ObjectCreation projection=new ObjectCreation();
   final BatchAggregationExpression batch=new BatchAggregationExpression();
   projection.addMapping("id",new GenerateExpression("earmarkPerson%s"));
-  projection.addMapping("firstName",new PathExpression(batch.add(CleansFunctions.FIRST),new TernaryExpression(new ObjectAccess("sponsorLastName"),new ObjectAccess("sponsorFirstName"),new ConstantExpression(""))));
-  projection.addMapping("middleName",new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("sponsorMiddleName"),new TernaryExpression(EvaluationExpression.VALUE,EvaluationExpression.VALUE)));
+  PathExpression first=new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("sponsorFirstName"));
+  PathExpression middle=new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("sponsorMiddleName"));
+  projection.addMapping("firstName",new TernaryExpression(middle,new FunctionCall("format",new ConstantExpression("%s %s"),first,middle),first));
   projection.addMapping("lastName",new PathExpression(batch.add(CleansFunctions.FIRST),new TernaryExpression(new ObjectAccess("sponsorLastName"),new ObjectAccess("sponsorLastName"),new ObjectAccess("sponsorFirstName"))));
   projection.addMapping("enactedFunds",batch.add(CleansFunctions.SORT,new FunctionCall("format",new ConstantExpression("earmark%s"),new ObjectAccess("earmarkId"))));
   ObjectCreation address=new ObjectCreation();
@@ -18,12 +19,12 @@
   employment.addMapping("startYear",new ConstantExpression(2008));
   employment.addMapping("endYear",new ConstantExpression(2008));
   employment.addMapping("position",new ObjectAccess("sponsorHonorific"));
-  if (this.scrubbedEarmarks == null)   this.scrubEarmark(true);
+  if (this.scrubbed[EARMARK] == null)   this.scrubEarmark(true);
   ComparativeExpression sponsorCondition=new ComparativeExpression(new ObjectAccess("recordType"),BinaryOperator.EQUAL,new ConstantExpression("C"));
-  Selection sponsors=new Selection(sponsorCondition,this.scrubbedEarmarks);
+  Selection sponsors=new Selection(sponsorCondition,this.scrubbed[EARMARK]);
   Grouping grouping=new Grouping(projection,sponsors);
   grouping.withKeyProjection(new ArrayCreation(new ObjectAccess("sponsorFirstName"),new ObjectAccess("sponsorMiddleName"),new ObjectAccess("sponsorLastName")));
   Operator persons=grouping;
-  this.persons.add(persons);
-  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/EarmarkPerson.json",this.outputDir),persons));
+  this.inputs[EARMARK][PERSON]=persons;
+  this.sinks.add(new Sink(getInternalOutputFormat(),String.format("%s/EarmarkPerson.json",this.outputDir),persons));
 }

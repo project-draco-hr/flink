@@ -1,0 +1,16 @@
+{
+  if (simulate) {
+    this.fused[EARMARK][LEGAL_ENTITY]=new Source(getInternalInputFormat(),String.format("%s/LegalEntity1.json",this.outputDir));
+    return;
+  }
+  Selection links=new Selection(new ComparativeExpression(new FunctionCall("count",EvaluationExpression.VALUE),BinaryOperator.GREATER,new ConstantExpression(1)),this.cluster[EARMARK][LEGAL_ENTITY]);
+  Selection earmarksOnly=new Selection(new ComparativeExpression(new FunctionCall("count",EvaluationExpression.VALUE),BinaryOperator.EQUAL,new ConstantExpression(1)),this.cluster[EARMARK][LEGAL_ENTITY]);
+  ObjectCreation merge=new ObjectCreation();
+  merge.addMapping(new ObjectCreation.CopyFields(new InputSelection(1)));
+  merge.addMapping("names",new FunctionCall("distict",new FunctionCall("unionAll",new PathExpression(new InputSelection(0),new ObjectAccess("names")),new PathExpression(new InputSelection(1),new ObjectAccess("names")))));
+  merge.addMapping("addresses",new FunctionCall("distict",new FunctionCall("unionAll",new PathExpression(new InputSelection(0),new ObjectAccess("addresses")),new PathExpression(new InputSelection(1),new ObjectAccess("addresses")))));
+  Projection linksProjection=new Projection(merge,links);
+  Projection earmarkProjection=new Projection(new InputSelection(0),earmarksOnly);
+  this.fused[EARMARK][LEGAL_ENTITY]=new UnionAll(linksProjection,earmarkProjection);
+  this.sinks.add(new Sink(getInternalOutputFormat(),String.format("%s/LegalEntity1.json",this.outputDir),this.fused[EARMARK][LEGAL_ENTITY]));
+}

@@ -1,20 +1,20 @@
 {
   if (simulate) {
-    this.funds.add(new Source(PersistenceType.HDFS,String.format("%s/EarmarkFunds.json",this.outputDir)));
+    this.inputs[EARMARK][FUND]=new Source(getInternalInputFormat(),String.format("%s/EarmarkFunds.json",this.outputDir));
     return;
   }
   ObjectCreation fundProjection=new ObjectCreation();
   final BatchAggregationExpression batch=new BatchAggregationExpression();
   fundProjection.addMapping("id",new FunctionCall("format",new ConstantExpression("earmark%s"),new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("earmarkId"))));
   fundProjection.addMapping("amount",batch.add(CleansFunctions.SUM,new TernaryExpression(new ObjectAccess("amount"),new ObjectAccess("amount"),new ConstantExpression(0))));
-  fundProjection.addMapping("currency",new ConstantExpression("dollar"));
+  fundProjection.addMapping("currency",new ConstantExpression("USD"));
   ObjectCreation date=new ObjectCreation();
   date.addMapping("year",batch.add(CleansFunctions.FIRST,new ObjectAccess("enactedYear")));
   fundProjection.addMapping("date",date);
   fundProjection.addMapping("subject",new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("shortDescription")));
-  if (this.scrubbedEarmarks == null)   this.scrubEarmark(true);
-  Grouping grouping=new Grouping(fundProjection,this.scrubbedEarmarks);
+  if (this.scrubbed[EARMARK] == null)   this.scrubEarmark(true);
+  Grouping grouping=new Grouping(fundProjection,this.scrubbed[EARMARK]);
   grouping.withKeyProjection(new ObjectAccess("earmarkId"));
-  this.funds.add(grouping);
-  this.sinks.add(new Sink(PersistenceType.HDFS,String.format("%s/EarmarkFunds.json",this.outputDir),grouping));
+  this.inputs[EARMARK][FUND]=grouping;
+  this.sinks.add(new Sink(getInternalOutputFormat(),String.format("%s/EarmarkFunds.json",this.outputDir),grouping));
 }
