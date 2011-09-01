@@ -43,36 +43,10 @@
       return true;
     }
   }
-  if (this.buffer == null) {
-    try {
-      if (!this.deserializedJobID.equals(this.lastDeserializedJobID) || !this.deserializedSourceID.equals(this.lastDeserializedSourceID)) {
-        this.bufferProvider=this.bufferProviderBroker.getBufferProvider(this.deserializedJobID,this.deserializedSourceID);
-        this.lastDeserializedJobID=this.deserializedJobID;
-        this.lastDeserializedSourceID=this.deserializedSourceID;
-      }
-      this.buffer=this.bufferProvider.requestEmptyBufferBlocking(this.sizeOfBuffer);
-      if (this.buffer == null) {
-        Thread.sleep(100);
-        return true;
-      }
-    }
- catch (    InterruptedException e) {
-      return true;
-    }
+  if (!reconstructBufferFromStream(readableByteChannel)) {
+    return true;
   }
- else {
-    final int bytesWritten=this.buffer.write(readableByteChannel);
-    if (!this.buffer.hasRemaining()) {
-      this.buffer.finishWritePhase();
-      this.transferEnvelope.setBuffer(this.buffer);
-      this.deserializationState=DeserializationState.FULLYDESERIALIZED;
-      return false;
-    }
- else {
-      if (bytesWritten == -1) {
-        throw new IOException("Deserialization error: Expected at least " + this.buffer.remaining() + " more bytes to follow");
-      }
-    }
-  }
-  return true;
+  this.transferEnvelope.setBuffer(this.buffer);
+  this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+  return false;
 }
