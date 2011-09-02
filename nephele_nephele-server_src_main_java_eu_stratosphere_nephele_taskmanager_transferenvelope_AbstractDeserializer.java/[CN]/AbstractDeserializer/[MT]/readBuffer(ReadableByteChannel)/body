@@ -1,12 +1,14 @@
 {
   if (!this.bufferExistanceDeserialized) {
-    final int bytesRead=readableByteChannel.read(this.existanceBuffer);
+    this.tempBuffer.position(0);
+    this.tempBuffer.limit(1);
+    final int bytesRead=readableByteChannel.read(this.tempBuffer);
     if (bytesRead == -1) {
-      if (this.existanceBuffer.get(0) == 0 && this.existanceBuffer.position() == 1) {
+      if (this.tempBuffer.get(0) == 0 && this.tempBuffer.position() == 1) {
         throw new EOFException();
       }
  else {
-        throw new IOException("Deserialization error: Expected at least " + this.existanceBuffer.remaining() + " more bytes to follow");
+        throw new IOException("Deserialization error: Expected at least " + this.tempBuffer.remaining() + " more bytes to follow");
       }
     }
  else     if (bytesRead == 0) {
@@ -16,9 +18,11 @@
  catch (      InterruptedException e) {
       }
     }
-    if (!this.existanceBuffer.hasRemaining()) {
+    if (!this.tempBuffer.hasRemaining()) {
       this.bufferExistanceDeserialized=true;
-      if (this.existanceBuffer.get(0) == 0) {
+      this.tempBuffer.position(0);
+      this.tempBuffer.limit(SIZEOFINT);
+      if (this.tempBuffer.get(0) == 0) {
         this.transferEnvelope.setBuffer(null);
         this.deserializationState=DeserializationState.FULLYDESERIALIZED;
         return false;
@@ -29,12 +33,12 @@
     }
   }
   if (this.sizeOfBuffer < 0) {
-    final int bytesRead=readableByteChannel.read(this.lengthBuffer);
+    final int bytesRead=readableByteChannel.read(this.tempBuffer);
     if (bytesRead == -1) {
-      throw new IOException("Deserialization error: Expected at least " + this.existanceBuffer.remaining() + " more bytes to follow");
+      throw new IOException("Deserialization error: Expected at least " + this.tempBuffer.remaining() + " more bytes to follow");
     }
-    if (!this.lengthBuffer.hasRemaining()) {
-      this.sizeOfBuffer=byteBufferToInteger(this.lengthBuffer,0);
+    if (!this.tempBuffer.hasRemaining()) {
+      this.sizeOfBuffer=byteBufferToInteger(this.tempBuffer,0);
       if (this.sizeOfBuffer <= 0) {
         throw new IOException("Invalid buffer size: " + this.sizeOfBuffer);
       }
@@ -43,7 +47,7 @@
       return true;
     }
   }
-  if (!reconstructBufferFromStream(readableByteChannel)) {
+  if (readBufferData(readableByteChannel)) {
     return true;
   }
   this.transferEnvelope.setBuffer(this.buffer);
