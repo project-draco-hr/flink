@@ -2,7 +2,10 @@
   if (this.executionState == ExecutionState.CANCELED || this.executionState == ExecutionState.FINISHED) {
     return;
   }
-  LOG.info("ExecutionState set from " + executionState + " to "+ newExecutionState+ " for task "+ this.getTaskName()+ " ("+ (this.getIndexInSubtaskGroup() + 1)+ "/"+ this.getCurrentNumberOfSubtasks()+ ")");
+  if (this.executionState == ExecutionState.RESTARTING && newExecutionState == ExecutionState.CANCELED) {
+    return;
+  }
+  LOG.info("ExecutionState set from " + this.executionState + " to "+ newExecutionState+ " for task "+ this.getTaskName()+ " ("+ (this.getIndexInSubtaskGroup() + 1)+ "/"+ this.getCurrentNumberOfSubtasks()+ ")");
   boolean unexpectedStateChange=true;
   if (this.executionState == ExecutionState.CREATED && newExecutionState == ExecutionState.SCHEDULED) {
     unexpectedStateChange=false;
@@ -55,20 +58,21 @@
   if (this.executionState == ExecutionState.CANCELING && newExecutionState == ExecutionState.CANCELED) {
     unexpectedStateChange=false;
   }
+  if (this.executionState == ExecutionState.RUNNING && newExecutionState == ExecutionState.RESTARTING) {
+    unexpectedStateChange=false;
+  }
   if (unexpectedStateChange) {
     LOG.error("Unexpected state change: " + this.executionState + " -> "+ newExecutionState);
   }
-  if (this.restarting && this.executionState == ExecutionState.RUNNING) {
-    this.executionState=ExecutionState.RERUNNING;
+  if (this.restarting && newExecutionState == ExecutionState.RUNNING) {
     this.restarting=false;
   }
- else {
-    this.executionState=newExecutionState;
-  }
+  this.executionState=newExecutionState;
 synchronized (this.executionListeners) {
     final Iterator<ExecutionListener> it=this.executionListeners.iterator();
     while (it.hasNext()) {
-      it.next().executionStateChanged(this,newExecutionState,optionalMessage);
+      ExecutionListener lis=it.next();
+      lis.executionStateChanged(this,newExecutionState,optionalMessage);
     }
   }
 }

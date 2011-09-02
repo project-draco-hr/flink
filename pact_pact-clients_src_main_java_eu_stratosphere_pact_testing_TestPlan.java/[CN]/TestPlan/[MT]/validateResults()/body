@@ -1,5 +1,5 @@
 {
-  for (  final DataSinkContract<?,?> dataSinkContract : this.getDataSinks())   if (dataSinkContract.getStubClass() == SequentialOutputFormat.class && this.getExpectedOutput(dataSinkContract).isInitialized()) {
+  for (  final FileDataSinkContract<?,?> dataSinkContract : this.getDataSinks())   if (!dataSinkContract.getFormatClass().equals(SequentialOutputFormat.class) && this.getExpectedOutput(dataSinkContract).isInitialized()) {
     final TestPairs<Key,Value> actualValues=new TestPairs<Key,Value>();
     actualValues.fromFile(SequentialInputFormat.class,dataSinkContract.getFilePath());
     final TestPairs<Key,Value> expectedValues=(TestPairs<Key,Value>)this.getExpectedOutput(dataSinkContract);
@@ -7,9 +7,29 @@
     final Iterator<KeyValuePair<Key,Value>> expectedIterator=expectedValues.iterator();
     final int index=0;
     while (actualIterator.hasNext() && expectedIterator.hasNext()) {
-      final Object expected=expectedIterator.next(), actual=actualIterator.next();
+      final KeyValuePair<Key,Value> expected=expectedIterator.next();
+      final KeyValuePair<Key,Value> actual=actualIterator.next();
       try {
-        Assert.assertEquals(expected,actual);
+        Key actualKey=actual.getKey();
+        Value actualValue=actual.getValue();
+        Key expectedKey=expected.getKey();
+        Value expectedValue=expected.getValue();
+        if (actualKey instanceof PactDouble && expectedKey instanceof PactDouble) {
+          PactDouble actualDouble=(PactDouble)actualKey;
+          PactDouble expectedDouble=(PactDouble)expectedKey;
+          Assert.assertEquals(expectedDouble.getValue(),actualDouble.getValue(),doubleDelta);
+        }
+ else {
+          Assert.assertEquals(expectedKey,actualKey);
+        }
+        if (actualValue instanceof PactDouble && expectedValue instanceof PactDouble) {
+          PactDouble actualDouble=(PactDouble)actualValue;
+          PactDouble expectedDouble=(PactDouble)expectedValue;
+          Assert.assertEquals(expectedDouble.getValue(),actualDouble.getValue(),doubleDelta);
+        }
+ else {
+          Assert.assertEquals(expectedValue,actualValue);
+        }
       }
  catch (      final AssertionFailedError e) {
         throw new ArrayComparisonFailure(String.format("Data sink %s contains unexpected values: ",dataSinkContract.getName()),e,index);

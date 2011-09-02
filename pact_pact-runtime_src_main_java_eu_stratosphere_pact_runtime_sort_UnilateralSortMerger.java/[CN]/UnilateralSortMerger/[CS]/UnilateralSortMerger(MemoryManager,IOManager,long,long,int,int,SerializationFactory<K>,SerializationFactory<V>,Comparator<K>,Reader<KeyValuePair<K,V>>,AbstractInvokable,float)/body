@@ -1,0 +1,75 @@
+{
+  if (memoryManager == null) {
+    throw new NullPointerException("Memory manager must not be null.");
+  }
+  if (ioManager == null) {
+    throw new NullPointerException("IO-Manager must not be null.");
+  }
+  if (parentTask == null) {
+    throw new NullPointerException("Parent Task must not be null.");
+  }
+  if (maxNumFileHandles < 2) {
+    throw new IllegalArgumentException("Merger cannot work with less than two file handles.");
+  }
+  if (totalMemory < maxNumFileHandles * MIN_IO_BUFFER_SIZE) {
+    throw new IOException("Too little memory for merging operations.");
+  }
+  this.maxNumFileHandles=maxNumFileHandles;
+  this.memoryManager=memoryManager;
+  this.ioManager=ioManager;
+  this.keyComparator=keyComparator;
+  this.keySerialization=keySerialization;
+  this.valueSerialization=valueSerialization;
+  this.parent=parentTask;
+  this.memoryToReleaseAtShutdown=new ArrayList<List<MemorySegment>>();
+  this.channelsToDeleteAtShutdown=new ArrayList<List<StreamChannelAccess<?,?>>>();
+  final CircularQueues circularQueues=new CircularQueues();
+  long sortMem;
+  if (ioMemory < 0) {
+    ioMemory=totalMemory / 64;
+    ioMemory=Math.max(Math.min(ioMemory,NUM_WRITE_BUFFERS * MAX_IO_BUFFER_SIZE),NUM_WRITE_BUFFERS * MIN_IO_BUFFER_SIZE);
+    ioMemory&=BUFFER_ALIGNMENT_MASK << 1;
+  }
+  sortMem=totalMemory - ioMemory;
+  if (sortMem < MIN_SORT_BUFFER_SIZE) {
+    throw new IOException("Too little memory provided to Sort-Merger to perform task.");
+  }
+  if (numSortBuffers < 1) {
+    if (sortMem > 96 * 1024 * 1024) {
+      numSortBuffers=3;
+    }
+ else     if (sortMem >= 2 * MIN_SORT_BUFFER_SIZE) {
+      numSortBuffers=2;
+    }
+ else {
+      numSortBuffers=1;
+    }
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Instantiating unilateral sort-merger with " + ioMemory + " bytes of write cache and "+ sortMem+ " bytes of sorting/merging memory. Dividing sort memory over "+ numSortBuffers+ " buffers, merging maximally "+ maxNumFileHandles+ " streams at once.");
+  }
+  final List<MemorySegment> sortSegments=this.memoryManager.allocate(parentTask,sortMem,numSortBuffers,MIN_SORT_BUFFER_SIZE);
+  registerSegmentsToBeFreedAtShutdown(sortSegments);
+  this.sortSegments=sortSegments;
+  for (int i=0; i < sortSegments.size(); i++) {
+    MemorySegment mseg=sortSegments.get(i);
+    Deserializer<K> keyDeserializer=keySerialization.getDeserializer();
+    RawComparator comparator=new DeserializerComparator<K>(keyDeserializer,keyComparator);
+    BufferSortableGuaranteed<K,V> buffer=new BufferSortableGuaranteed<K,V>(mseg,comparator,keySerialization,valueSerialization);
+    CircularElement element=new CircularElement(i,buffer);
+    circularQueues.empty.add(element);
+  }
+  ExceptionHandler<IOException> exceptionHandler=new ExceptionHandler<IOException>(){
+    public void handleException(    IOException exception){
+      if (!closed) {
+        setResultIteratorException(exception);
+        close();
+      }
+    }
+  }
+;
+  this.readThread=getReadingThread(exceptionHandler,reader,circularQueues,parentTask,((long)(startSpillingFraction * sortMem)));
+  this.sortThread=getSortingThread(exceptionHandler,circularQueues,parentTask);
+  this.spillThread=getSpillingThread(exceptionHandler,circularQueues,memoryManager,ioManager,ioMemory,sortMem,parentTask);
+  startThreads();
+}

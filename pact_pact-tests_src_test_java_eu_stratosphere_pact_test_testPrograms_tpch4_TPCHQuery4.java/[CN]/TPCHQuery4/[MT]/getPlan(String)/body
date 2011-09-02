@@ -1,0 +1,33 @@
+{
+  if (args == null || args.length != 4) {
+    LOGGER.warn("number of arguments do not match!");
+    this.ordersInputPath="";
+    this.lineItemInputPath="";
+    this.outputPath="";
+  }
+ else {
+    setArgs(args);
+  }
+  FileDataSourceContract<PactInteger,Tuple> orders=new FileDataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,this.ordersInputPath,"Orders");
+  orders.setDegreeOfParallelism(this.degreeOfParallelism);
+  orders.setOutputContract(UniqueKey.class);
+  FileDataSourceContract<PactInteger,Tuple> lineItems=new FileDataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,this.lineItemInputPath,"LineItems");
+  lineItems.setDegreeOfParallelism(this.degreeOfParallelism);
+  MatchContract<PactInteger,Tuple,Tuple,PactString,Tuple> join=new MatchContract<PactInteger,Tuple,Tuple,PactString,Tuple>(JoinLiO.class,"OrdersLineitemsJoin");
+  join.setDegreeOfParallelism(degreeOfParallelism);
+  FileDataSinkContract<PactString,Tuple> result=new FileDataSinkContract<PactString,Tuple>(StringTupleDataOutFormat.class,this.outputPath,"Output");
+  result.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract<PactInteger,Tuple,PactInteger,Tuple> lineFilter=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(LiFilter.class,"LineItemFilter");
+  lineFilter.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract<PactInteger,Tuple,PactInteger,Tuple> ordersFilter=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(OFilter.class,"OrdersFilter");
+  ordersFilter.setDegreeOfParallelism(degreeOfParallelism);
+  ReduceContract<PactString,Tuple,PactString,Tuple> aggregation=new ReduceContract<PactString,Tuple,PactString,Tuple>(CountAgg.class,"AggregateGroupBy");
+  aggregation.setDegreeOfParallelism(this.degreeOfParallelism);
+  lineFilter.setInput(lineItems);
+  ordersFilter.setInput(orders);
+  join.setFirstInput(ordersFilter);
+  join.setSecondInput(lineFilter);
+  aggregation.setInput(join);
+  result.setInput(aggregation);
+  return new Plan(result,"TPC-H 4");
+}

@@ -25,10 +25,30 @@
   }
   try {
     LOG.info("Trying to allocate instance of type " + allocatedResource.getInstanceType().getIdentifier());
-    this.instanceManager.requestInstance(jobID,job.getJobConfiguration(),allocatedResource.getInstanceType());
+    Map<InstanceType,Integer> instanceMap=new HashMap<InstanceType,Integer>();
+    instanceMap.put(allocatedResource.getInstanceType(),1);
+    this.instanceManager.requestInstance(jobID,job.getJobConfiguration(),instanceMap,null);
   }
  catch (  InstanceException e) {
     e.printStackTrace();
+  }
+  super.deployAssignedVertices(job);
+  boolean notAssigend=true;
+  while (notAssigend) {
+    try {
+      Thread.sleep(200);
+    }
+ catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
+    notAssigend=false;
+    for (int i=0; i < vertices.size(); i++) {
+      if (vertices.get(i).getExecutionState() == ExecutionState.ASSIGNING) {
+        notAssigend=true;
+        super.deployAssignedVertices(job);
+        break;
+      }
+    }
   }
   job.executionStateChanged(vertices.get(0).getEnvironment(),ExecutionState.RECOVERING,null);
 }

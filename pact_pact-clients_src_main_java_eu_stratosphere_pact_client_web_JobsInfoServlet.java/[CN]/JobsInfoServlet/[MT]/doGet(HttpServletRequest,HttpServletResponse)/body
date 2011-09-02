@@ -1,0 +1,41 @@
+{
+  ExtendedManagementProtocol jmConn=null;
+  try {
+    jmConn=getJMConnection();
+    List<RecentJobEvent> recentJobs=jmConn.getRecentJobs();
+    ArrayList<RecentJobEvent> jobs=new ArrayList<RecentJobEvent>(recentJobs);
+    resp.setStatus(HttpServletResponse.SC_OK);
+    PrintWriter wrt=resp.getWriter();
+    wrt.write("[");
+    for (int i=0; i < jobs.size(); i++) {
+      RecentJobEvent jobEvent=jobs.get(i);
+      wrt.write("{");
+      wrt.write("\"jobid\": \"" + jobEvent.getJobID() + "\",");
+      if (jobEvent.getJobName() != null) {
+        wrt.write("\"jobname\": \"" + jobEvent.getJobName() + "\",");
+      }
+      wrt.write("\"status\": \"" + jobEvent.getJobStatus() + "\",");
+      wrt.write("\"time\": " + jobEvent.getTimestamp());
+      wrt.write("}");
+      if (i != jobs.size() - 1) {
+        wrt.write(",");
+      }
+    }
+    wrt.write("]");
+  }
+ catch (  Throwable t) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    resp.getWriter().print(t.getMessage());
+  }
+ finally {
+    if (jmConn != null) {
+      try {
+        RPC.stopProxy(jmConn);
+      }
+ catch (      Throwable t) {
+        System.err.println("Could not cleanly shut down connection from compiler to job manager");
+      }
+    }
+    jmConn=null;
+  }
+}

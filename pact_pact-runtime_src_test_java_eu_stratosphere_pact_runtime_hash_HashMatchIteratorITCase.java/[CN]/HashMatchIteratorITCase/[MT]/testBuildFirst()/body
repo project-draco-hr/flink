@@ -1,0 +1,27 @@
+{
+  try {
+    Generator generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    Generator generator2=new Generator(SEED2,500,2048,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.GeneratorIterator input1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
+    final TestData.GeneratorIterator input2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
+    final Map<Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(input1),collectData(input2));
+    final MatchStub<TestData.Key,TestData.Value,TestData.Value,TestData.Key,TestData.Value> matcher=new MatchRemovingMatcher(expectedMatchesMap);
+    final Collector<TestData.Key,TestData.Value> collector=new DiscardingOutputCollector<TestData.Key,TestData.Value>();
+    generator1.reset();
+    generator2.reset();
+    input1.reset();
+    input2.reset();
+    BuildFirstHashMatchIterator<TestData.Key,TestData.Value,TestData.Value> iterator=new BuildFirstHashMatchIterator<TestData.Key,TestData.Value,TestData.Value>(input1,input2,TestData.Key.class,TestData.Value.class,TestData.Value.class,this.memoryManager,ioManager,this.parentTask,MEMORY_SIZE);
+    iterator.open();
+    while (iterator.callWithNextKey(matcher,collector))     ;
+    iterator.close();
+    ;
+    for (    Entry<Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
+      if (!entry.getValue().isEmpty())       Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("An exception occurred during the test: " + e.getMessage());
+  }
+}

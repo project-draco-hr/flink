@@ -1,17 +1,14 @@
 {
-  if (this.closed) {
-    return;
+synchronized (this) {
+    if (this.closed) {
+      return;
+    }
+    this.closed=true;
   }
-  this.closed=true;
-  if (this.blockFetcherThread != null) {
-    this.blockFetcher.shutdown();
-    this.blockFetcherThread.interrupt();
-    this.blockFetcherThread=null;
-  }
-  this.in=null;
+  List<MemorySegment> toReturn=new ArrayList<MemorySegment>(this.emptySegments.size() + this.fullBuffers.size() + this.consumedBuffers.size()+ 2);
+  toReturn.addAll(this.emptySegments);
   this.emptySegments.clear();
-  this.filledBuffers.clear();
-  this.memoryManager.release(this.buffers);
-  this.buffers.clear();
-  LOG.debug("Iterator closed.");
+  collectAllBuffers(toReturn);
+  this.memoryManager.release(toReturn);
+  if (LOG.isDebugEnabled())   LOG.debug("Iterator closed.");
 }
