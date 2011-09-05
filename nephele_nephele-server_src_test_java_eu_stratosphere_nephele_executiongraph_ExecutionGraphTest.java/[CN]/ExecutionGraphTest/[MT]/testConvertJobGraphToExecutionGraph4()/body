@@ -53,31 +53,26 @@
     t4.connectTo(o2,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
     LibraryCacheManager.register(jobID,new String[0]);
     final ExecutionGraph eg=new ExecutionGraph(jg,INSTANCE_MANAGER);
-    Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,true);
-    while (it.hasNext()) {
-      it.next().setExecutionState(ExecutionState.SCHEDULED);
-    }
-    final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
+    final InstanceRequestMap instanceRequestMap=new InstanceRequestMap();
     ExecutionStage executionStage=eg.getCurrentExecutionStage();
-    executionStage.collectRequiredInstanceTypes(requiredInstances,ExecutionState.SCHEDULED);
-    assertEquals(1,requiredInstances.size());
-    assertEquals(4,(int)requiredInstances.get(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
-    it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
+    executionStage.collectRequiredInstanceTypes(instanceRequestMap,ExecutionState.CREATED);
+    assertEquals(1,instanceRequestMap.size());
+    assertEquals(4,(int)instanceRequestMap.getMaximumNumberOfInstances(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
+    final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
     while (it.hasNext()) {
       final ExecutionVertex ev=it.next();
       ev.setExecutionState(ExecutionState.SCHEDULED);
-      ev.setExecutionState(ExecutionState.ASSIGNING);
-      ev.setExecutionState(ExecutionState.ASSIGNED);
       ev.setExecutionState(ExecutionState.READY);
+      ev.setExecutionState(ExecutionState.STARTING);
       ev.setExecutionState(ExecutionState.RUNNING);
       ev.setExecutionState(ExecutionState.FINISHING);
       ev.setExecutionState(ExecutionState.FINISHED);
     }
-    requiredInstances.clear();
+    instanceRequestMap.clear();
     executionStage=eg.getCurrentExecutionStage();
-    executionStage.collectRequiredInstanceTypes(requiredInstances,ExecutionState.SCHEDULED);
-    assertEquals(1,requiredInstances.size());
-    assertEquals(8,(int)requiredInstances.get(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
+    executionStage.collectRequiredInstanceTypes(instanceRequestMap,ExecutionState.SCHEDULED);
+    assertEquals(1,instanceRequestMap.size());
+    assertEquals(8,(int)instanceRequestMap.getMaximumNumberOfInstances(INSTANCE_MANAGER.getInstanceTypeByName(DEFAULT_INSTANCE_TYPE_NAME)));
   }
  catch (  GraphConversionException e) {
     fail(e.getMessage());

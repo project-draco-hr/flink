@@ -1,0 +1,24 @@
+{
+  final MutableObjectIterator<PactRecord> input=this.inputs[0];
+  final MutableObjectIterator<PactRecord> histogramInput=this.inputs[1];
+  final OutputCollector output=this.output;
+  final PactRecord record=new PactRecord();
+  final PactRecord histogramRecord=new PactRecord();
+  if (usesSample) {
+    ArrayList<PactRecord> borders=new ArrayList<PactRecord>();
+    while (histogramInput.next(histogramRecord)) {
+      borders.add(histogramRecord.createCopy());
+    }
+    splitBorders=borders.toArray(new PactRecord[borders.size()]);
+  }
+  func=new HistogramPartitionFunction(splitBorders,order);
+  for (  RecordWriter<PactRecord> recWriter : output.getWriters()) {
+    ChannelSelector<PactRecord> selector=recWriter.getOutputGate().getChannelSelector();
+    if (selector instanceof OutputEmitter) {
+      ((OutputEmitter)selector).setPartitionFunction(func);
+    }
+  }
+  while (this.running && input.next(record)) {
+    output.collect(record);
+  }
+}

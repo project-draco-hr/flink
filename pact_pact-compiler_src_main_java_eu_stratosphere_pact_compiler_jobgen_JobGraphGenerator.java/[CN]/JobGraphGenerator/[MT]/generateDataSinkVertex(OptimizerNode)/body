@@ -1,9 +1,10 @@
 {
   DataSinkNode sNode=(DataSinkNode)sinkNode;
   GenericDataSink sinkContract=sNode.getPactContract();
-  JobGenericOutputVertex sinkVertex=new JobGenericOutputVertex(sinkNode.getPactContract().getName(),this.jobGraph);
+  JobOutputVertex sinkVertex=new JobOutputVertex(sinkNode.getPactContract().getName(),this.jobGraph);
   sinkVertex.setOutputClass(DataSinkTask.class);
   sinkVertex.getConfiguration().setInteger(DataSinkTask.DEGREE_OF_PARALLELISM_KEY,sinkNode.getDegreeOfParallelism());
+  sinkVertex.getConfiguration().setString(DataSinkTask.SORT_ORDER,sinkNode.getLocalProperties().getKeyOrder().name());
   TaskConfig sinkConfig=new TaskConfig(sinkVertex.getConfiguration());
   sinkConfig.setStubClass(sinkContract.getUserCodeClass());
   sinkConfig.setStubParameters(sinkContract.getParameters());
@@ -11,8 +12,12 @@ switch (sinkNode.getLocalStrategy()) {
 case NONE:
     sinkConfig.setLocalStrategy(LocalStrategy.NONE);
   break;
+case SORT:
+sinkConfig.setLocalStrategy(LocalStrategy.SORT);
+break;
 default :
 throw new CompilerException("Invalid local strategy for 'DataSink' (" + sinkNode.getName() + "): "+ sinkNode.getLocalStrategy());
 }
+assignMemory(sinkConfig,sinkNode.getMemoryPerTask());
 return sinkVertex;
 }

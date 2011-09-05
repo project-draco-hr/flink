@@ -1,10 +1,10 @@
 {
   final Map<InstanceType,InstanceTypeDescription> availableInstances=getInstanceManager().getMapOfAvailableInstanceTypes();
   for (int i=0; i < executionGraph.getNumberOfStages(); i++) {
-    final Map<InstanceType,Integer> requiredInstanceTypes=new HashMap<InstanceType,Integer>();
+    final InstanceRequestMap instanceRequestMap=new InstanceRequestMap();
     final ExecutionStage stage=executionGraph.getStage(i);
-    stage.collectRequiredInstanceTypes(requiredInstanceTypes,ExecutionState.CREATED);
-    final Iterator<Map.Entry<InstanceType,Integer>> it=requiredInstanceTypes.entrySet().iterator();
+    stage.collectRequiredInstanceTypes(instanceRequestMap,ExecutionState.CREATED);
+    final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMinimumIterator();
     while (it.hasNext()) {
       final Map.Entry<InstanceType,Integer> entry=it.next();
       final InstanceTypeDescription descr=availableInstances.get(entry.getKey());
@@ -20,11 +20,7 @@
   final ExecutionGraphIterator it2=new ExecutionGraphIterator(executionGraph,true);
   while (it2.hasNext()) {
     final ExecutionVertex vertex=it2.next();
-    if (vertex.getExecutionState() != ExecutionState.CREATED) {
-      LOG.error("Execution vertex " + vertex + " has state "+ vertex.getExecutionState()+ ", expected "+ ExecutionState.CREATED);
-    }
     vertex.getEnvironment().registerExecutionListener(new LocalExecutionListener(this,vertex));
-    vertex.setExecutionState(ExecutionState.SCHEDULED);
   }
   executionGraph.registerExecutionStageListener(this);
 synchronized (this.jobQueue) {
@@ -34,7 +30,10 @@ synchronized (this.jobQueue) {
       requestInstances(executionStage);
     }
  catch (    InstanceException e) {
-      LOG.error(StringUtils.stringifyException(e));
+      final String exceptionMessage=StringUtils.stringifyException(e);
+      LOG.error(exceptionMessage);
+      this.jobQueue.remove(executionGraph);
+      throw new SchedulingException(exceptionMessage);
     }
   }
 }

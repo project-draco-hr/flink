@@ -1,26 +1,14 @@
 {
-  try {
-switch (this.checkpointingDecision) {
-case NO_CHECKPOINTING:
-      transferEnvelope.getProcessingLog().setWrittenToCheckpoint();
+  if (this.checkpointingDecision == CheckpointingDecisionState.NO_CHECKPOINTING) {
+    final Buffer buffer=transferEnvelope.getBuffer();
+    if (buffer != null) {
+      buffer.recycleBuffer();
+    }
     return;
-case UNDECIDED:
-case CHECKPOINTING:
-  final ChannelCheckpoint channelCheckpoint=this.channelCheckpoints.get(transferEnvelope.getSource());
-if (channelCheckpoint == null) {
-  LOG.error("Cannot find output channel with ID " + transferEnvelope.getSource());
-  return;
-}
-if (transferEnvelope.getProcessingLog().mustBeSentViaNetwork()) {
-transferEnvelope=transferEnvelope.duplicate();
-}
-channelCheckpoint.addToCheckpoint(transferEnvelope);
-break;
-}
-}
- catch (IOException ioe) {
-ioe.printStackTrace();
-LOG.error(ioe);
-discardCheckpoint();
-}
+  }
+  if (this.checkpointingDecision == CheckpointingDecisionState.UNDECIDED) {
+    this.queuedEnvelopes.add(transferEnvelope);
+    return;
+  }
+  writeTransferEnvelope(transferEnvelope);
 }

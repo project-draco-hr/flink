@@ -1,31 +1,24 @@
 {
   System.out.println("Buffer utilization for at " + System.currentTimeMillis());
-synchronized (this.emptyWriteBuffers) {
-    System.out.println("\tEmpty write buffers: " + this.emptyWriteBuffers.size());
-  }
-synchronized (this.emptyReadBuffers) {
-    System.out.println("\tEmpty read buffers: " + this.emptyReadBuffers.size());
-  }
-synchronized (this.outgoingConnections) {
-    System.out.println("\tOutgoing connections:");
-    final Iterator<Map.Entry<InetSocketAddress,OutgoingConnection>> it=this.outgoingConnections.entrySet().iterator();
+  System.out.println("\tUnused global buffers: " + GlobalBufferPool.getInstance().getCurrentNumberOfBuffers());
+  System.out.println("\tTask buffer pool status:");
+synchronized (this.taskMap) {
+    final Iterator<TaskContext> it=this.taskMap.values().iterator();
     while (it.hasNext()) {
-      final Map.Entry<InetSocketAddress,OutgoingConnection> entry=it.next();
-      System.out.println("\t\tOC " + entry.getKey() + ": "+ entry.getValue().getNumberOfQueuedWriteBuffers());
+      it.next().logBufferUtilization();
     }
   }
-synchronized (this.registeredChannels) {
-    System.out.println("\tIncoming connections:");
-    final Iterator<Map.Entry<ChannelID,ByteBufferedChannelWrapper>> it=this.registeredChannels.entrySet().iterator();
-    while (it.hasNext()) {
-      final Map.Entry<ChannelID,ByteBufferedChannelWrapper> entry=it.next();
-      final ByteBufferedChannelWrapper wrapper=entry.getValue();
-      if (wrapper.isInputChannel()) {
-        final ByteBufferedInputChannelWrapper inputChannelWrapper=(ByteBufferedInputChannelWrapper)wrapper;
-        final int numberOfQueuedEnvelopes=inputChannelWrapper.getNumberOfQueuedEnvelopes();
-        final int numberOfQueuedMemoryBuffers=inputChannelWrapper.getNumberOfQueuedMemoryBuffers();
-        System.out.println("\t\t" + entry.getKey() + ": "+ numberOfQueuedMemoryBuffers+ " ("+ numberOfQueuedEnvelopes+ ")");
-      }
+  this.networkConnectionManager.logBufferUtilization();
+  System.out.println("\tIncoming connections:");
+  final Iterator<Map.Entry<ChannelID,ChannelContext>> it=this.registeredChannels.entrySet().iterator();
+  while (it.hasNext()) {
+    final Map.Entry<ChannelID,ChannelContext> entry=it.next();
+    final ChannelContext context=entry.getValue();
+    if (context.isInputChannel()) {
+      final InputChannelContext inputChannelContext=(InputChannelContext)context;
+      final int numberOfQueuedEnvelopes=inputChannelContext.getNumberOfQueuedEnvelopes();
+      final int numberOfQueuedMemoryBuffers=inputChannelContext.getNumberOfQueuedMemoryBuffers();
+      System.out.println("\t\t" + entry.getKey() + ": "+ numberOfQueuedMemoryBuffers+ " ("+ numberOfQueuedEnvelopes+ ")");
     }
   }
 }
