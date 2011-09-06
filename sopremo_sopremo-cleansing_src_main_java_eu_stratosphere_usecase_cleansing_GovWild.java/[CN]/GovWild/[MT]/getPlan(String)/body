@@ -2,17 +2,35 @@
   this.noSubTasks=args.length > 0 ? Integer.parseInt(args[0]) : 1;
   this.inputDir=args.length > 1 ? args[1] : "";
   this.outputDir=args.length > 2 ? args[2] : "";
-  boolean simulate=false;
-  this.scrubCongress(simulate);
-  this.scrubEarmark(simulate);
-  this.mapCongressLegalEntity(simulate);
-  this.mapCongressPerson(simulate);
-  this.mapEarmarkFund(simulate);
-  this.mapEarmarkPerson(simulate);
-  this.mapEarmarkLegalEntity(simulate);
-  clusterPersons(simulate);
+  int startLevel=args.length > 3 ? Integer.parseInt(args[3]) : 0, stopLevel=args.length > 4 ? Integer.parseInt(args[4]) : Integer.MAX_VALUE;
+  this.joinCongress(!(startLevel <= 0 && 0 < stopLevel));
+  this.scrubCongress(!(startLevel <= 1 && 1 < stopLevel));
+  this.scrubEarmark(!(startLevel <= 1 && 1 < stopLevel));
+  this.mapCongressLegalEntity(!(startLevel <= 2 && 2 < stopLevel));
+  this.mapCongressPerson(!(startLevel <= 2 && 2 < stopLevel));
+  this.mapEarmarkFund(!(startLevel <= 3 && 3 < stopLevel));
+  this.mapEarmarkPerson(!(startLevel <= 3 && 3 < stopLevel));
+  this.mapEarmarkLegalEntity(!(startLevel <= 3 && 3 < stopLevel));
+  clusterPersons1(!(startLevel <= 10 && 10 < stopLevel));
+  fusePersons1(!(startLevel <= 11 && 11 < stopLevel));
+  clusterLegalEntity1(!(startLevel <= 12 && 12 < stopLevel));
+  fuseLegalEntity1(!(startLevel <= 13 && 13 < stopLevel));
+  this.scrubSpending(!(startLevel <= 21 && 21 < stopLevel));
+  this.mapSpendingFund(!(startLevel <= 22 && 22 < stopLevel));
+  this.mapSpendingLegalEntity(!(startLevel <= 22 && 22 < stopLevel));
+  clusterLegalEntity2(!(startLevel <= 31 && 31 < stopLevel));
+  fuseLegalEntity2(!(startLevel <= 32 && 32 < stopLevel));
+  if (stopLevel == 1337) {
+    sinks.clear();
+    sinks.add((Sink)this.fused[SPENDING][LEGAL_ENTITY]);
+    sinks.add((Sink)this.fused[EARMARK][PERSON]);
+    sinks.add((Sink)this.inputs[SPENDING][FUND]);
+    sinks.add((Sink)this.inputs[EARMARK][FUND]);
+  }
   SopremoPlan sopremoPlan=new SopremoPlan(this.sinks);
   sopremoPlan.getContext().getFunctionRegistry().register(BuiltinFunctions.class);
   sopremoPlan.getContext().getFunctionRegistry().register(eu.stratosphere.usecase.cleansing.CleansFunctions.class);
-  return sopremoPlan.asPactPlan();
+  Plan pactPlan=sopremoPlan.asPactPlan();
+  pactPlan.setMaxNumberMachines(noSubTasks);
+  return pactPlan;
 }

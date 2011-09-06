@@ -1,11 +1,16 @@
 {
+  SopremoModule module=new SopremoModule(getName(),1,1);
   RecordLinkageInput recordLinkageInput=this.recordLinkageInput.clone();
+  recordLinkageInput.setSource(module.getInput(0).getSource());
   EvaluationExpression resultProjection=this.recordLinkageInput.getResultProjection();
   if (this.linkageMode.ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal() && !recordLinkageInput.getResultProjection().equals(recordLinkageInput.getIdProjection()))   recordLinkageInput.setResultProjection(recordLinkageInput.getIdProjection());
   Operator duplicatePairs;
   if (this.algorithm instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.algorithm).getIntraSource(this.similarityCondition,recordLinkageInput);
  else   duplicatePairs=this.simulateIntraSource();
-  if (this.linkageMode == LinkageMode.LINKS_ONLY)   return SopremoModule.valueOf(this.getName(),duplicatePairs);
+  if (this.linkageMode == LinkageMode.LINKS_ONLY) {
+    module.getOutput(0).setInput(0,duplicatePairs);
+    return module;
+  }
   Operator output;
   final TransitiveClosure closure=new TransitiveClosure(duplicatePairs);
   ClosureMode closureMode=this.linkageMode.getClosureMode();
@@ -13,15 +18,21 @@
   closure.setClosureMode(closureMode);
   output=closure;
   if (recordLinkageInput.getResultProjection() != resultProjection) {
-    Lookup reverseLookup=new Lookup(closure,this.recordLinkageInput.getLookupDictionary());
+    Lookup reverseLookup=new Lookup(closure,module.getInput(0));
+    reverseLookup.withDictionaryKeyExtraction(this.recordLinkageInput.getIdProjection());
+    reverseLookup.withDictionaryValueExtraction(this.recordLinkageInput.getResultProjection());
     reverseLookup.setArrayElementsReplacement(true);
     output=reverseLookup;
   }
-  if (!this.linkageMode.isWithSingles())   return SopremoModule.valueOf(this.getName(),output);
+  if (!this.linkageMode.isWithSingles()) {
+    module.getOutput(0).setInput(0,output);
+    return module;
+  }
   ValueSplitter allTuples=new ValueSplitter(closure).withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL);
   allTuples.setName("all tuples");
-  Operator singleRecords=new Difference(this.recordLinkageInput,allTuples).withKeyProjection(0,this.recordLinkageInput.getIdProjection()).withValueProjection(0,this.recordLinkageInput.getResultProjection()).withKeyProjection(1,EvaluationExpression.KEY);
+  Operator singleRecords=new Difference(module.getInput(0),allTuples).withKeyProjection(0,this.recordLinkageInput.getIdProjection()).withValueProjection(0,this.recordLinkageInput.getResultProjection()).withKeyProjection(1,EvaluationExpression.KEY);
   singleRecords.setName("singleRecords");
   final Projection wrappedInArray=new Projection(new ArrayCreation(EvaluationExpression.VALUE),singleRecords);
-  return SopremoModule.valueOf(this.getName(),new UnionAll(wrappedInArray,output));
+  module.getOutput(0).setInput(0,new UnionAll(wrappedInArray,output));
+  return module;
 }
