@@ -1,5 +1,6 @@
 {
   final List<TaskSubmissionResult> submissionResultList=new SerializableArrayList<TaskSubmissionResult>();
+  final List<Task> tasksToStart=new ArrayList<Task>();
   for (  final TaskSubmissionWrapper tsw : tasks) {
     final Environment ee=tsw.getEnvironment();
     final ExecutionVertexID id=tsw.getVertexID();
@@ -8,21 +9,19 @@
     ee.setMemoryManager(this.memoryManager);
     ee.setIOManager(this.ioManager);
     ee.setInputSplitProvider(new TaskInputSplitProvider(ee.getJobID(),id,this.globalInputSplitProvider));
-    TaskSubmissionResult result=registerTask(id,jobConfiguration,ee,activeOutputChannels);
+    final Task task=new Task(id,ee,this);
+    ee.setExecutionObserver(task);
+    TaskSubmissionResult result=registerTask(id,jobConfiguration,task,activeOutputChannels);
     if (result != null) {
       submissionResultList.add(result);
     }
  else {
       submissionResultList.add(new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.SUCCESS));
     }
+    tasksToStart.add(task);
   }
-  for (  final TaskSubmissionWrapper tsw : tasks) {
-    final Environment ee=tsw.getEnvironment();
-    final ExecutionVertexID id=tsw.getVertexID();
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Starting execution of task with ID " + id);
-    }
-    ee.startExecution();
+  for (  final Task task : tasksToStart) {
+    task.startExecution();
   }
   return submissionResultList;
 }
