@@ -1,21 +1,23 @@
 {
   final Map<AbstractInstance,List<ExecutionVertex>> verticesToBeDeployed=new HashMap<AbstractInstance,List<ExecutionVertex>>();
   final ExecutionStage executionStage=executionGraph.getCurrentExecutionStage();
-  for (int i=0; i < executionStage.getNumberOfStageMembers(); ++i) {
-    final ExecutionGroupVertex startVertex=executionStage.getStageMember(i);
-    if (!startVertex.isInputVertex()) {
-      continue;
+synchronized (executionGraph) {
+    for (int i=0; i < executionStage.getNumberOfStageMembers(); ++i) {
+      final ExecutionGroupVertex startVertex=executionStage.getStageMember(i);
+      if (!startVertex.isInputVertex()) {
+        continue;
+      }
+      for (int j=0; j < startVertex.getCurrentNumberOfGroupMembers(); ++j) {
+        final ExecutionVertex vertex=startVertex.getGroupMember(j);
+        findVerticesToBeDeployed(vertex,verticesToBeDeployed);
+      }
     }
-    for (int j=0; j < startVertex.getCurrentNumberOfGroupMembers(); ++j) {
-      final ExecutionVertex vertex=startVertex.getGroupMember(j);
-      findVerticesToBeDeployed(vertex,verticesToBeDeployed);
-    }
-  }
-  if (!verticesToBeDeployed.isEmpty()) {
-    final Iterator<Map.Entry<AbstractInstance,List<ExecutionVertex>>> it2=verticesToBeDeployed.entrySet().iterator();
-    while (it2.hasNext()) {
-      final Map.Entry<AbstractInstance,List<ExecutionVertex>> entry=it2.next();
-      this.deploymentManager.deploy(executionGraph.getJobID(),entry.getKey(),entry.getValue());
+    if (!verticesToBeDeployed.isEmpty()) {
+      final Iterator<Map.Entry<AbstractInstance,List<ExecutionVertex>>> it2=verticesToBeDeployed.entrySet().iterator();
+      while (it2.hasNext()) {
+        final Map.Entry<AbstractInstance,List<ExecutionVertex>> entry=it2.next();
+        this.deploymentManager.deploy(executionGraph.getJobID(),entry.getKey(),entry.getValue());
+      }
     }
   }
 }
