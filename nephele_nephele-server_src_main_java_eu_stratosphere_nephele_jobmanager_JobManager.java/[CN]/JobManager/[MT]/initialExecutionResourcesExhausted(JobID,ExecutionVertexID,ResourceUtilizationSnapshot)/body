@@ -4,14 +4,20 @@
     LOG.error("Cannot find execution graph to job ID " + jobID);
     return;
   }
-  final ExecutionVertex vertex=graph.getVertexByID(vertexID);
-  if (vertex == null) {
-    LOG.error("Cannot find execution vertex with ID " + vertexID);
-    return;
+  ExecutionVertex tmpVertex;
+synchronized (graph) {
+    tmpVertex=graph.getVertexByID(vertexID);
+    if (tmpVertex == null) {
+      LOG.error("Cannot find execution vertex with ID " + vertexID);
+      return;
+    }
   }
+  final ExecutionVertex vertex=tmpVertex;
   final Runnable taskStateChangeRunnable=new Runnable(){
     @Override public void run(){
-      vertex.initialExecutionResourcesExhausted(resourceUtilizationSnapshot);
+synchronized (graph) {
+        vertex.initialExecutionResourcesExhausted(resourceUtilizationSnapshot);
+      }
     }
   }
 ;

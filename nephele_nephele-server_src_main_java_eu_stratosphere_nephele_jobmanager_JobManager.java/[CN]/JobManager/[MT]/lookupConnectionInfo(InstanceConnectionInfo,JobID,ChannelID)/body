@@ -4,53 +4,55 @@
     LOG.error("Cannot find execution graph to job ID " + jobID);
     return ConnectionInfoLookupResponse.createReceiverNotFound();
   }
-  final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
-  if (outputChannel == null) {
-    AbstractInputChannel<? extends Record> inputChannel=eg.getInputChannelByID(sourceChannelID);
-    final ChannelID connectedChannelID=inputChannel.getConnectedChannelID();
-    final ExecutionVertex connectedVertex=eg.getVertexByChannelID(connectedChannelID);
-    final AbstractInstance assignedInstance=connectedVertex.getAllocatedResource().getInstance();
-    if (assignedInstance == null) {
-      LOG.error("Cannot resolve lookup: vertex found for channel ID " + connectedChannelID + " but no instance assigned");
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
+synchronized (eg) {
+    final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
+    if (outputChannel == null) {
+      AbstractInputChannel<? extends Record> inputChannel=eg.getInputChannelByID(sourceChannelID);
+      final ChannelID connectedChannelID=inputChannel.getConnectedChannelID();
+      final ExecutionVertex connectedVertex=eg.getVertexByChannelID(connectedChannelID);
+      final AbstractInstance assignedInstance=connectedVertex.getAllocatedResource().getInstance();
+      if (assignedInstance == null) {
+        LOG.error("Cannot resolve lookup: vertex found for channel ID " + connectedChannelID + " but no instance assigned");
+        return ConnectionInfoLookupResponse.createReceiverNotReady();
+      }
+      final ExecutionState executionState=connectedVertex.getExecutionState();
+      if (executionState == ExecutionState.FINISHED) {
+        return ConnectionInfoLookupResponse.createReceiverFoundAndReady();
+      }
+      if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
+        return ConnectionInfoLookupResponse.createReceiverNotReady();
+      }
+      if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
+        return ConnectionInfoLookupResponse.createReceiverFoundAndReady(connectedChannelID);
+      }
+ else {
+        return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+      }
     }
-    final ExecutionState executionState=connectedVertex.getExecutionState();
-    if (executionState == ExecutionState.FINISHED) {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady();
-    }
-    if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
-    }
-    if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(connectedChannelID);
+    if (outputChannel.isBroadcastChannel()) {
+      return multicastManager.lookupConnectionInfo(caller,jobID,sourceChannelID);
     }
  else {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
-    }
-  }
-  if (outputChannel.isBroadcastChannel()) {
-    return multicastManager.lookupConnectionInfo(caller,jobID,sourceChannelID);
-  }
+      final ExecutionVertex targetVertex=eg.getVertexByChannelID(outputChannel.getConnectedChannelID());
+      if (targetVertex == null) {
+        LOG.error("Cannot find vertex to input channel " + outputChannel.getConnectedChannelID());
+        return ConnectionInfoLookupResponse.createReceiverNotFound();
+      }
+      final ExecutionState executionState=targetVertex.getExecutionState();
+      if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
+        return ConnectionInfoLookupResponse.createReceiverNotReady();
+      }
+      final AbstractInstance assignedInstance=targetVertex.getAllocatedResource().getInstance();
+      if (assignedInstance == null) {
+        LOG.error("Cannot resolve lookup: vertex found for channel ID " + outputChannel.getConnectedChannelID() + " but no instance assigned");
+        return ConnectionInfoLookupResponse.createReceiverNotReady();
+      }
+      if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
+        return ConnectionInfoLookupResponse.createReceiverFoundAndReady(outputChannel.getConnectedChannelID());
+      }
  else {
-    final ExecutionVertex targetVertex=eg.getVertexByChannelID(outputChannel.getConnectedChannelID());
-    if (targetVertex == null) {
-      LOG.error("Cannot find vertex to input channel " + outputChannel.getConnectedChannelID());
-      return ConnectionInfoLookupResponse.createReceiverNotFound();
-    }
-    final ExecutionState executionState=targetVertex.getExecutionState();
-    if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
-    }
-    final AbstractInstance assignedInstance=targetVertex.getAllocatedResource().getInstance();
-    if (assignedInstance == null) {
-      LOG.error("Cannot resolve lookup: vertex found for channel ID " + outputChannel.getConnectedChannelID() + " but no instance assigned");
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
-    }
-    if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(outputChannel.getConnectedChannelID());
-    }
- else {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+        return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+      }
     }
   }
 }
