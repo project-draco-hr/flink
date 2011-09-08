@@ -1,42 +1,24 @@
 {
   long start=System.currentTimeMillis();
   long remaining=this.timeoutMillies;
-  if (this.exception != null) {
-    throw this.exception;
-  }
-  if (this.fdos != null) {
-    return this.fdos;
-  }
 synchronized (this.lock) {
-    do {
-      try {
+    boolean success=false;
+    try {
+      while (this.exception == null && this.fdos == null && (remaining=this.timeoutMillies + start - System.currentTimeMillis()) > 0) {
         this.lock.wait(remaining);
       }
- catch (      InterruptedException iex) {
-        this.canceled=true;
-        if (this.fdos != null) {
-          try {
-            this.fdos.close();
-          }
- catch (          Throwable t) {
-          }
-        }
-        throw new Exception("Output Path Opener was interrupted.");
+      if (this.exception != null) {
+        throw this.exception;
       }
-    }
- while (this.exception == null && this.fdos == null && (remaining=this.timeoutMillies + start - System.currentTimeMillis()) > 0);
-    if (this.exception != null) {
       if (this.fdos != null) {
-        try {
-          this.fdos.close();
-        }
- catch (        Throwable t) {
-        }
+        success=true;
+        return this.fdos;
       }
-      throw this.exception;
     }
-    if (this.fdos != null) {
-      return this.fdos;
+  finally {
+      if (!success) {
+        this.canceled=true;
+      }
     }
   }
   throw new Exception("Output Path Opener timed out.");
