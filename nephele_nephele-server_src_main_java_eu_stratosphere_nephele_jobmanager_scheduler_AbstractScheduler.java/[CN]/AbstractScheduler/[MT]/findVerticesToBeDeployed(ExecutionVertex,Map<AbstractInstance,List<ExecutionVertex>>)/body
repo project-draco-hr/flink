@@ -1,29 +1,31 @@
 {
-  if (vertex.getExecutionState() == ExecutionState.ASSIGNED) {
-    final AbstractInstance instance=vertex.getAllocatedResource().getInstance();
-    if (instance instanceof DummyInstance) {
-      LOG.error("Inconsistency: Vertex " + vertex.getName() + "("+ vertex.getEnvironment().getIndexInSubtaskGroup()+ "/"+ vertex.getEnvironment().getCurrentNumberOfSubtasks()+ ") is about to be deployed on a DummyInstance");
+  final ExecutionGraph executionGraph=vertex.getExecutionGraph();
+synchronized (executionGraph) {
+    if (vertex.getExecutionState() == ExecutionState.ASSIGNED) {
+      final AbstractInstance instance=vertex.getAllocatedResource().getInstance();
+      if (instance instanceof DummyInstance) {
+        LOG.error("Inconsistency: Vertex " + vertex.getName() + "("+ vertex.getEnvironment().getIndexInSubtaskGroup()+ "/"+ vertex.getEnvironment().getCurrentNumberOfSubtasks()+ ") is about to be deployed on a DummyInstance");
+      }
+      List<ExecutionVertex> verticesForInstance=verticesToBeDeployed.get(instance);
+      if (verticesForInstance == null) {
+        verticesForInstance=new ArrayList<ExecutionVertex>();
+        verticesToBeDeployed.put(instance,verticesForInstance);
+      }
+      vertex.updateExecutionState(ExecutionState.READY);
+      verticesForInstance.add(vertex);
     }
-    List<ExecutionVertex> verticesForInstance=verticesToBeDeployed.get(instance);
-    if (verticesForInstance == null) {
-      verticesForInstance=new ArrayList<ExecutionVertex>();
-      verticesToBeDeployed.put(instance,verticesForInstance);
-    }
-    vertex.setExecutionState(ExecutionState.READY);
-    verticesForInstance.add(vertex);
-  }
-  final Environment env=vertex.getEnvironment();
-  final int numberOfOutputGates=env.getNumberOfOutputGates();
-  for (int i=0; i < numberOfOutputGates; ++i) {
-    final OutputGate<? extends Record> outputGate=env.getOutputGate(i);
-    boolean deployTarget;
+    final Environment env=vertex.getEnvironment();
+    final int numberOfOutputGates=env.getNumberOfOutputGates();
+    for (int i=0; i < numberOfOutputGates; ++i) {
+      final OutputGate<? extends Record> outputGate=env.getOutputGate(i);
+      boolean deployTarget;
 switch (outputGate.getChannelType()) {
 case FILE:
-      deployTarget=false;
-    break;
+        deployTarget=false;
+      break;
 case NETWORK:
-  deployTarget=!this.allowTaskMerging;
-break;
+    deployTarget=!this.allowTaskMerging;
+  break;
 case INMEMORY:
 deployTarget=true;
 break;
@@ -36,6 +38,7 @@ for (int j=0; j < numberOfOutputChannels; ++j) {
 final AbstractOutputChannel<? extends Record> outputChannel=outputGate.getOutputChannel(j);
 final ExecutionVertex connectedVertex=vertex.getExecutionGraph().getVertexByChannelID(outputChannel.getConnectedChannelID());
 findVerticesToBeDeployed(connectedVertex,verticesToBeDeployed);
+}
 }
 }
 }

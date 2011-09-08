@@ -3,11 +3,14 @@
     LOG.error("Method 'deploy' called but list of vertices to be deployed is empty");
     return;
   }
-  for (  final ExecutionVertex vertex : verticesToBeDeployed) {
-    if (vertex.getExecutionState() != ExecutionState.READY) {
-      LOG.error("Expected vertex " + vertex + " to be in state READY but it is in state "+ vertex.getExecutionState());
+  final ExecutionGraph eg=verticesToBeDeployed.get(0).getExecutionGraph();
+synchronized (eg) {
+    for (    final ExecutionVertex vertex : verticesToBeDeployed) {
+      if (vertex.getExecutionState() != ExecutionState.READY) {
+        LOG.error("Expected vertex " + vertex + " to be in state READY but it is in state "+ vertex.getExecutionState());
+      }
+      vertex.updateExecutionState(ExecutionState.STARTING,null);
     }
-    vertex.setExecutionState(ExecutionState.STARTING);
   }
   final Runnable deploymentRunnable=new Runnable(){
     /** 
@@ -21,9 +24,11 @@
         LOG.error("Cannot check library availability: " + StringUtils.stringifyException(ioe));
       }
       final List<TaskSubmissionWrapper> submissionList=new SerializableArrayList<TaskSubmissionWrapper>();
-      for (      final ExecutionVertex vertex : verticesToBeDeployed) {
-        submissionList.add(new TaskSubmissionWrapper(vertex.getID(),vertex.getEnvironment(),vertex.getExecutionGraph().getJobConfiguration(),vertex.constructInitialActiveOutputChannelsSet()));
-        LOG.info("Starting task " + vertex + " on "+ vertex.getAllocatedResource().getInstance());
+synchronized (eg) {
+        for (        final ExecutionVertex vertex : verticesToBeDeployed) {
+          submissionList.add(new TaskSubmissionWrapper(vertex.getID(),vertex.getEnvironment(),vertex.getExecutionGraph().getJobConfiguration(),vertex.constructInitialActiveOutputChannelsSet()));
+          LOG.info("Starting task " + vertex + " on "+ vertex.getAllocatedResource().getInstance());
+        }
       }
       List<TaskSubmissionResult> submissionResultList=null;
       try {
@@ -31,8 +36,10 @@
       }
  catch (      final IOException ioe) {
         final String errorMsg=StringUtils.stringifyException(ioe);
-        for (        final ExecutionVertex vertex : verticesToBeDeployed) {
-          vertex.getEnvironment().changeExecutionState(ExecutionState.FAILED,errorMsg);
+synchronized (eg) {
+          for (          final ExecutionVertex vertex : verticesToBeDeployed) {
+            vertex.updateExecutionState(ExecutionState.FAILED,errorMsg);
+          }
         }
       }
       if (verticesToBeDeployed.size() != submissionResultList.size()) {
@@ -56,7 +63,9 @@
           }
         }
         if (tsr.getReturnCode() == AbstractTaskResult.ReturnCode.ERROR) {
-          vertex.getEnvironment().changeExecutionState(ExecutionState.FAILED,tsr.getDescription());
+synchronized (eg) {
+            vertex.updateExecutionState(ExecutionState.FAILED,tsr.getDescription());
+          }
         }
       }
     }
