@@ -1,0 +1,93 @@
+{
+  this.keyCopier.setCopy(key);
+  this.valCopier.setCopy(firstV2);
+  V2 val2Copy=this.value2Serialization.newInstance();
+  this.valCopier.getCopy(val2Copy);
+  this.valCopier.setCopy(firstV1);
+  V1 val1Copy=this.value1Serialization.newInstance();
+  this.valCopier.getCopy(val1Copy);
+  matchFunction.match(key,val1Copy,val2Copy,collector);
+  SpillingResettableIterator<V1> spillIt=null;
+  BlockResettableIterator<V2> blockIt=null;
+  try {
+    final ValueDeserializer<V2> v2Deserializer=new ValueDeserializer<V2>(this.value2Class);
+    blockIt=new BlockResettableIterator<V2>(this.memoryManager,blockVals,this.memoryForBlockNestedLoops - SpillingResettableIterator.MIN_TOTAL_MEMORY,1,v2Deserializer,this.parentTask);
+    blockIt.open();
+    while (blockIt.hasNext()) {
+      final K keyCopy=this.keySerialization.newInstance();
+      this.keyCopier.getCopy(keyCopy);
+      val1Copy=this.value1Serialization.newInstance();
+      this.valCopier.getCopy(val1Copy);
+      V2 val2=blockIt.next();
+      matchFunction.match(keyCopy,val1Copy,val2,collector);
+    }
+    blockIt.reset();
+    final LastRepeatableIterator<V1> repeatableIter;
+    boolean spillingRequired=blockIt.hasFurtherInput();
+    if (spillingRequired) {
+      final ValueDeserializer<V1> v1Deserializer=new ValueDeserializer<V1>(this.value1Class);
+      spillIt=new SpillingResettableIterator<V1>(this.memoryManager,this.ioManager,spillVals,SpillingResettableIterator.MIN_TOTAL_MEMORY,v1Deserializer,this.parentTask);
+      repeatableIter=spillIt;
+      spillIt.open();
+    }
+ else {
+      repeatableIter=new RepeatableIteratorWrapper<V1>(spillVals,this.value1Serialization);
+    }
+    this.valCopier.setCopy(firstV2);
+    while (repeatableIter.hasNext()) {
+      V1 nextSpillVal=repeatableIter.next();
+      K keyCopy=this.keySerialization.newInstance();
+      this.keyCopier.getCopy(keyCopy);
+      val2Copy=this.value2Serialization.newInstance();
+      this.valCopier.getCopy(val2Copy);
+      matchFunction.match(keyCopy,nextSpillVal,val2Copy,collector);
+      while (this.running && blockIt.hasNext()) {
+        keyCopy=this.keySerialization.newInstance();
+        this.keyCopier.getCopy(keyCopy);
+        nextSpillVal=repeatableIter.repeatLast();
+        final V2 nextBlockVal=blockIt.next();
+        matchFunction.match(keyCopy,nextSpillVal,nextBlockVal,collector);
+      }
+      blockIt.reset();
+    }
+    if (!spillingRequired) {
+      return;
+    }
+    this.valCopier.setCopy(firstV1);
+    while (blockIt.nextBlock()) {
+      spillIt.reset();
+      while (this.running && blockIt.hasNext()) {
+        final K keyCopy=this.keySerialization.newInstance();
+        this.keyCopier.getCopy(keyCopy);
+        val1Copy=this.value1Serialization.newInstance();
+        this.valCopier.getCopy(val1Copy);
+        final V2 nextBlockVal=blockIt.next();
+        matchFunction.match(keyCopy,val1Copy,nextBlockVal,collector);
+      }
+      blockIt.reset();
+      while (spillIt.hasNext()) {
+        V1 nextSpillVal=spillIt.next();
+        while (this.running && blockIt.hasNext()) {
+          final K keyCopy=this.keySerialization.newInstance();
+          this.keyCopier.getCopy(keyCopy);
+          final V2 nextBlockVal=blockIt.next();
+          matchFunction.match(keyCopy,nextSpillVal,nextBlockVal,collector);
+          if (blockIt.hasNext())           nextSpillVal=spillIt.repeatLast();
+        }
+        blockIt.reset();
+      }
+      spillIt.reset();
+    }
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+ finally {
+    if (blockIt != null) {
+      blockIt.close();
+    }
+    if (spillIt != null) {
+      spillIt.close();
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  SpillingResettableIterator<KeyValuePair<Key,Value>> innerInput=null;
+  RepeatableIterator outerInput=null;
+  try {
+    final boolean firstInputIsOuter;
+    if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
+      try {
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()),this);
+        spillingResetIt=innerInput;
+      }
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain SpillingResettable iterator for inner side.",mae);
+      }
+      outerInput=new RepeatableIterator(outerReader,stub.getFirstInKeyType(),stub.getFirstInValueType());
+      firstInputIsOuter=true;
+    }
+ else     if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+      try {
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()),this);
+        spillingResetIt=innerInput;
+      }
+ catch (      MemoryAllocationException mae) {
+        throw new RuntimeException("Unable to obtain SpillingResettable iterator for inner side.",mae);
+      }
+      outerInput=new RepeatableIterator(outerReader,stub.getSecondInKeyType(),stub.getSecondInValueType());
+      firstInputIsOuter=false;
+    }
+ else {
+      throw new RuntimeException("Invalid local strategy for CrossTask: " + config.getLocalStrategy());
+    }
+    try {
+      innerInput.open();
+    }
+ catch (    ServiceException se) {
+      throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",se);
+    }
+catch (    IOException ioe) {
+      throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",ioe);
+    }
+catch (    InterruptedException ie) {
+      throw new RuntimeException("Unable to open SpillingResettable iterator for inner side.",ie);
+    }
+    if (this.taskCanceled)     return;
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Resetable iterator obtained"));
+    stub.open();
+    while (!this.taskCanceled && outerInput.hasNext()) {
+      KeyValuePair outerPair=outerInput.next();
+      while (!this.taskCanceled && innerInput.hasNext()) {
+        KeyValuePair innerPair=innerInput.next();
+        if (firstInputIsOuter) {
+          stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
+        }
+ else {
+          stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),output);
+        }
+        outerPair=outerInput.repeatLast();
+      }
+      if (!this.taskCanceled && outerInput.hasNext()) {
+        innerInput.reset();
+      }
+    }
+    stub.close();
+  }
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      LOG.error(getLogString("Unexpected ERROR in PACT code"));
+      throw ex;
+    }
+  }
+ finally {
+    if (innerInput != null) {
+      innerInput.close();
+    }
+  }
+}

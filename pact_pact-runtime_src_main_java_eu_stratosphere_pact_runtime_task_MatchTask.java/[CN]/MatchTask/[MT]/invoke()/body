@@ -1,37 +1,38 @@
 {
-  LOG.info("Start PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-  MatchTaskIterator matchIterator=null;
+  if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
+  final MatchStub matchStub=this.matchStub;
+  final OutputCollector collector=this.output;
   try {
-    matchIterator=getIterator(reader1,reader2);
-    matchIterator.open();
-    LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
-    matchStub.open();
-    while (matchIterator.next() && !taskCanceled) {
-      crossValues(matchIterator.getKey(),matchIterator.getValues1(),matchIterator.getValues2());
-    }
+    this.matchIterator=getIterator(this.reader1,this.reader2);
+    this.matchIterator.open();
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Iterator obtained"));
+    this.matchStub.open();
+    while (this.taskRunning && matchIterator.callWithNextKey(matchStub,collector))     ;
   }
  catch (  Exception ex) {
-    if (!this.taskCanceled) {
-      LOG.error("Unexpected ERROR in PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    if (this.taskRunning) {
+      LOG.error(getLogString("Unexpected ERROR in PACT code"));
       throw ex;
     }
   }
  finally {
-    if (matchIterator != null) {
-      matchIterator.close();
+    if (this.matchIterator != null) {
+      this.matchIterator.close();
     }
     try {
-      matchStub.close();
+      this.matchStub.close();
     }
  catch (    Throwable t) {
-      LOG.error("Error while closing the Match user function " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")",t);
+      LOG.error(getLogString("Error while closing the Match user function"),t);
     }
-    output.close();
+    if (this.output != null) {
+      this.output.close();
+    }
   }
-  if (!this.taskCanceled) {
-    LOG.info("Finished PACT code: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+  if (this.taskRunning) {
+    if (LOG.isInfoEnabled())     LOG.info(getLogString("Finished PACT code"));
   }
  else {
-    LOG.warn("PACT code cancelled: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
+    if (LOG.isWarnEnabled())     LOG.warn(getLogString("PACT code cancelled"));
   }
 }
