@@ -1,0 +1,61 @@
+{
+  final Reader<R> reader=this.reader;
+  R next=null;
+  boolean allRead=false;
+  while (this.alive && !allRead) {
+    MemorySegment request=null;
+    try {
+      request=this.requestQueue.take();
+    }
+ catch (    InterruptedException iex) {
+      if (this.alive) {
+        throw new RuntimeException(iex);
+      }
+ else {
+        return;
+      }
+    }
+    Buffer.Output out=new Buffer.Output(request);
+    if (next != null) {
+      out.write(next);
+    }
+    while (this.alive && reader.hasNext()) {
+      try {
+        next=reader.next();
+      }
+ catch (      IOException ioex) {
+        throw new RuntimeException(ioex);
+      }
+catch (      InterruptedException iex) {
+        throw new RuntimeException(iex);
+      }
+      if (!out.write(next)) {
+        break;
+      }
+    }
+    int pos=out.getPosition();
+    MemorySegment seg=out.dispose();
+    Buffer.Input in=new Buffer.Input(seg);
+    in.reset(pos);
+    this.finishedTasks.add(in);
+    if (!reader.hasNext()) {
+      allRead=true;
+    }
+  }
+  if (!this.alive) {
+    return;
+  }
+  MemorySegment request=null;
+  try {
+    request=requestQueue.take();
+  }
+ catch (  InterruptedException iex) {
+    if (this.alive) {
+      throw new RuntimeException(iex);
+    }
+ else {
+      return;
+    }
+  }
+  this.finishedTasks.add(new Buffer.Input(request));
+}

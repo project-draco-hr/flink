@@ -1,0 +1,36 @@
+{
+  if (this.floatingInstances.containsKey(instanceConnectionInfo)) {
+    final FloatingInstance floatingInstance=this.floatingInstances.get(instanceConnectionInfo);
+    floatingInstance.updateLastReceivedHeartBeat();
+    return;
+  }
+  CloudInstance instance=isAssignedInstance(instanceConnectionInfo);
+  if (instance != null) {
+    instance.updateLastReceivedHeartBeat();
+    return;
+  }
+  try {
+    instance=isReservedInstance(instanceConnectionInfo);
+  }
+ catch (  InstanceException e) {
+    LOG.error(e);
+  }
+  if (instance != null) {
+    JobID jobID=null;
+    jobID=this.reservedInstances.get(instance.getInstanceID());
+    if (jobID == null) {
+      LOG.error("Cannot find job ID to instance ID " + instance.getInstanceID());
+      return;
+    }
+    this.reservedInstances.remove(instance.getInstanceID());
+    instance.updateLastReceivedHeartBeat();
+    final JobToInstancesMapping mapping=this.jobToInstancesMap.get(jobID);
+    if (mapping == null) {
+      LOG.error("Cannot find mapping for job ID " + jobID);
+      return;
+    }
+    mapping.assignInstanceToJob(instance);
+    this.instanceListener.resourceAllocated(jobID,instance.asAllocatedResource());
+    return;
+  }
+}

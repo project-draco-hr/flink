@@ -1,4 +1,10 @@
 {
+  if (!this.checkpointFinished) {
+    LOG.error("Checkpoint is not finished!");
+  }
+  if (this.fileChannel.isOpen()) {
+    LOG.error("File channel is still open!");
+  }
   final String filename=getFilename();
   FileInputStream fis=null;
   try {
@@ -16,24 +22,25 @@
     LOG.error(ioe);
   }
   this.fileInputChannel=fis.getChannel();
-  LOG.info("Recovering from " + filename);
-  if (this.outgoingConnection == null) {
-    this.outgoingConnection=byteBufferedChannelManager.createOutgoingCheckpointConnection(byteBufferedChannelManager,this.fileInputChannel,this.sourceChannelID);
+  if (this.fileInputChannel == null) {
+    LOG.error("FileChannel is null");
   }
+  System.out.println("Recovering from " + filename);
+  final CheckpointOutgoingConnection outgoingConnection=byteBufferedChannelManager.createOutgoingCheckpointConnection(byteBufferedChannelManager,this.fileInputChannel,this.sourceChannelID);
   try {
     while (true) {
-      this.outgoingConnection.write();
+      outgoingConnection.write();
     }
   }
  catch (  EOFException e) {
-    LOG.info("EOF. Checkpoint recovered.");
   }
 catch (  IOException e) {
     e.printStackTrace();
+    outgoingConnection.reportTransmissionProblem(e);
     return;
   }
   try {
-    this.outgoingConnection.closeConnection();
+    outgoingConnection.closeConnection();
   }
  catch (  IOException e) {
     e.printStackTrace();

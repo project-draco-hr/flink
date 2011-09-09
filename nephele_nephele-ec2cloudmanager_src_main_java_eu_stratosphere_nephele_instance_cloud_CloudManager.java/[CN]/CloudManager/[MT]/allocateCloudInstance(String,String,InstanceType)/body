@@ -1,0 +1,46 @@
+{
+  final Boolean isSecure=GlobalConfiguration.getBoolean(EC2WSSECUREKEY,false);
+  final String server=GlobalConfiguration.getString(EC2WSSERVERKEY,null);
+  if (server == null) {
+    LOG.error("Unable to contact cloud: web service server unknown");
+    return null;
+  }
+  final int port=GlobalConfiguration.getInteger(EC2WSPORTKEY,-1);
+  if (port < 0) {
+    LOG.error("cloud.ec2ws.port not defined in config file");
+    return null;
+  }
+  final String imageID=GlobalConfiguration.getString("ec2.image.id",null);
+  if (imageID == null) {
+    LOG.error("Unable to allocate instance: Image ID is unknown");
+    return null;
+  }
+  com.xerox.amazonws.ec2.Jec2 ec2Client=null;
+  try {
+    ec2Client=new com.xerox.amazonws.ec2.Jec2(awsAccessId,awsSecretKey,isSecure,server,port);
+    ec2Client.setResourcePrefix("/services/Eucalyptus");
+    ec2Client.setSignatureVersion(1);
+  }
+ catch (  Exception e) {
+    LOG.error("Unable to contact cloud: " + StringUtils.stringifyException(e));
+    return null;
+  }
+  com.xerox.amazonws.ec2.ReservationDescription reservation=null;
+  try {
+    reservation=ec2Client.runInstances(imageID,1,1,new ArrayList<String>(),new String(),"mykey",true,com.xerox.amazonws.ec2.InstanceType.getTypeFromString(instanceType.getIdentifier()),new String(),new String(),new String(),new ArrayList<com.xerox.amazonws.ec2.BlockDeviceMapping>());
+  }
+ catch (  Exception e) {
+    LOG.error("Unable to allocate instance: " + StringUtils.stringifyException(e));
+    return null;
+  }
+  if (reservation == null) {
+    LOG.error("Unable to allocate instance: reservation is null");
+    return null;
+  }
+  if (reservation.getInstances().size() != 1) {
+    LOG.error("More or less than one instance reserved at a time, this is unexpected");
+    return null;
+  }
+  System.out.println(reservation.getInstances().get(0).getLaunchTime());
+  return reservation.getInstances().get(0).getInstanceId();
+}

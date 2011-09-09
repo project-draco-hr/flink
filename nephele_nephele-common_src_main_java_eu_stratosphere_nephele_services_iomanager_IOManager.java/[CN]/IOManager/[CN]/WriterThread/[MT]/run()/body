@@ -1,6 +1,6 @@
 {
   while (this.alive) {
-    WriteRequest request=null;
+    IORequest<Buffer.Output> request=null;
     while (request == null) {
       try {
         request=requestQueue.take();
@@ -13,7 +13,9 @@
     }
     IOException ioex=null;
     try {
-      request.write();
+      if (!request.buffer.memory.isFree()) {
+        request.buffer.writeToChannel(request.channel.fileChannel);
+      }
     }
  catch (    IOException e) {
       ioex=e;
@@ -21,6 +23,6 @@
 catch (    Throwable t) {
       ioex=new IOException("The buffer could not be written: " + t.getMessage(),t);
     }
-    request.requestDone(ioex);
+    request.channel.handleProcessedBuffer(request.buffer,ioex);
   }
 }

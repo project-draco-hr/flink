@@ -7,20 +7,25 @@
     LOG.debug("Available instance is of type DummyInstance!");
     return;
   }
+  try {
+    allocatedResource.getInstance().checkLibraryAvailability(jobID);
+  }
+ catch (  IOException ioe) {
+    LOG.error("Cannot check library availability: " + StringUtils.stringifyException(ioe));
+  }
 synchronized (this.jobQueue) {
     final ExecutionGraph eg=getExecutionGraphByID(jobID);
     if (eg == null) {
       try {
-        getInstanceManager().releaseAllocatedResource(jobID,null,allocatedResource);
+        this.instanceManager.releaseAllocatedResource(jobID,null,allocatedResource);
       }
  catch (      InstanceException e) {
         LOG.error(e);
       }
       return;
     }
-    final int indexOfCurrentStage=eg.getIndexOfCurrentExecutionStage();
     AllocatedResource resourceToBeReplaced=null;
-    ExecutionGraphIterator it=new ExecutionGraphIterator(eg,indexOfCurrentStage,true,true);
+    ExecutionGraphIterator it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
     while (it.hasNext()) {
       final ExecutionVertex vertex=it.next();
       if (vertex.getExecutionState() == ExecutionState.ASSIGNING && vertex.getAllocatedResource() != null) {
@@ -33,7 +38,7 @@ synchronized (this.jobQueue) {
     if (resourceToBeReplaced == null) {
       LOG.warn("Instance " + allocatedResource.getInstance() + " is not required for job"+ eg.getJobID());
       try {
-        getInstanceManager().releaseAllocatedResource(jobID,eg.getJobConfiguration(),allocatedResource);
+        this.instanceManager.releaseAllocatedResource(jobID,eg.getJobConfiguration(),allocatedResource);
       }
  catch (      InstanceException e) {
         LOG.error(e);
@@ -47,9 +52,6 @@ synchronized (this.jobQueue) {
         vertex.setAllocatedResource(allocatedResource);
         vertex.setExecutionState(ExecutionState.ASSIGNED);
       }
- else {
-      }
     }
-    deployAssignedVertices(eg);
   }
 }

@@ -1,0 +1,46 @@
+{
+  Value spillVal;
+  Value blockVal;
+  keyCopier.setCopy(key);
+  SpillingResettableIterator<Value> spillIt=null;
+  BlockResettableIterator<Value> blockIt=null;
+  try {
+    ValueDeserializer<Value> v2Deserializer=new ValueDeserializer<Value>(matchStub.getSecondInValueType());
+    blockIt=new BlockResettableIterator<Value>(getEnvironment().getMemoryManager(),blockVals,(long)(this.availableMemory * (MEMORY_SHARE_RATIO / 2)),2,v2Deserializer,this);
+    blockIt.open();
+    ValueDeserializer<Value> v1Deserializer=new ValueDeserializer<Value>(matchStub.getFirstInValueType());
+    spillIt=new SpillingResettableIterator<Value>(getEnvironment().getMemoryManager(),getEnvironment().getIOManager(),spillVals,(long)(this.availableMemory * (MEMORY_SHARE_RATIO / 2)),v1Deserializer,this);
+    spillIt.open();
+    do {
+      while (!this.taskCanceled && spillIt.hasNext()) {
+        spillVal=spillIt.next();
+        while (!this.taskCanceled && blockIt.hasNext()) {
+          key=this.keySerialization.newInstance();
+          this.keyCopier.getCopy(key);
+          blockVal=blockIt.next();
+          if (spillFirstInput) {
+            matchStub.match(key,spillVal,blockVal,output);
+          }
+ else {
+            matchStub.match(key,blockVal,spillVal,output);
+          }
+          if (blockIt.hasNext())           spillVal=spillIt.repeatLast();
+        }
+        blockIt.reset();
+      }
+      spillIt.reset();
+    }
+ while (!this.taskCanceled && blockIt.nextBlock());
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+ finally {
+    if (blockIt != null) {
+      blockIt.close();
+    }
+    if (spillIt != null) {
+      spillIt.close();
+    }
+  }
+}

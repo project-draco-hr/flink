@@ -7,25 +7,44 @@
   final SerializationFactory<Value> valSerialization=new WritableSerializationFactory<Value>(valueClass);
 switch (config.getLocalStrategy()) {
 case SELF_NESTEDLOOP:
-    Iterator<KeyValuePair<Key,Value>> iter=new NepheleReaderIterator<KeyValuePair<Key,Value>>(this.reader);
-  return new SimpleCloseableInputProvider<KeyValuePair<Key,Value>>(iter);
-case SORT_SELF_NESTEDLOOP:
-final Comparator<Key> keyComparator=new Comparator<Key>(){
-  @Override public int compare(  Key k1,  Key k2){
-    return k1.compareTo(k2);
-  }
-}
+{
+      Iterator<KeyValuePair<Key,Value>> iter=new Iterator<KeyValuePair<Key,Value>>(){
+        @Override public boolean hasNext(){
+          return reader.hasNext();
+        }
+        @Override public KeyValuePair<Key,Value> next(){
+          try {
+            return reader.next();
+          }
+ catch (          Exception e) {
+            throw new RuntimeException(e);
+          }
+        }
+        @Override public void remove(){
+        }
+      }
 ;
-try {
-SortMerger<Key,Value> sortMerger=new UnilateralSortMerger<Key,Value>(memoryManager,ioManager,(long)(this.availableMemory * (1.0 - MEMORY_SHARE_RATIO)),this.maxFileHandles,keySerialization,valSerialization,keyComparator,reader,this,this.spillThreshold);
-return sortMerger;
-}
- catch (MemoryAllocationException mae) {
-throw new RuntimeException("MemoryManager is not able to provide the required amount of memory for SelfMatchTask",mae);
-}
-catch (IOException ioe) {
-throw new RuntimeException("IOException caught when obtaining SortMerger for SelfMatchTask",ioe);
-}
+      return new SimpleCloseableInputProvider<KeyValuePair<Key,Value>>(iter);
+    }
+case SORT_SELF_NESTEDLOOP:
+{
+    final Comparator<Key> keyComparator=new Comparator<Key>(){
+      @Override public int compare(      Key k1,      Key k2){
+        return k1.compareTo(k2);
+      }
+    }
+;
+    try {
+      SortMerger<Key,Value> sortMerger=new UnilateralSortMerger<Key,Value>(memoryManager,ioManager,(long)(this.availableMemory * (1.0 - MEMORY_SHARE_RATIO)),this.maxFileHandles,keySerialization,valSerialization,keyComparator,reader,this,this.spillThreshold);
+      return sortMerger;
+    }
+ catch (    MemoryAllocationException mae) {
+      throw new RuntimeException("MemoryManager is not able to provide the required amount of memory for SelfMatchTask",mae);
+    }
+catch (    IOException ioe) {
+      throw new RuntimeException("IOException caught when obtaining SortMerger for SelfMatchTask",ioe);
+    }
+  }
 default :
 throw new RuntimeException("Invalid local strategy provided for SelfMatchTask: " + config.getLocalStrategy());
 }
