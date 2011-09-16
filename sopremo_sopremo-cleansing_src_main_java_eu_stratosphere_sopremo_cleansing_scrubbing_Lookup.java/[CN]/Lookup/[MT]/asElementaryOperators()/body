@@ -1,22 +1,23 @@
 {
   final SopremoModule sopremoModule=new SopremoModule(this.getName(),2,1);
-  final Projection right=new Projection(this.dictionaryKeyExtraction,this.dictionaryValueExtraction,sopremoModule.getInput(1));
+  final Projection right=new Projection();
+  right.setKeyTransformation(this.dictionaryKeyExtraction);
+  right.setValueTransformation(this.dictionaryValueExtraction);
+  right.setInputs(sopremoModule.getInput(1));
   if (arrayElementsReplacement) {
-    final ValueSplitter arraySplit=new ValueSplitter(sopremoModule.getInput(0));
-    arraySplit.withArrayProjection(this.inputKeyExtractor.asExpression());
-    arraySplit.withKeyProjection(new ArrayAccess(0));
-    arraySplit.withValueProjection(new ArrayAccess(1,2));
-    final Operator replacedElements=defaultExpression == FILTER_RECORDS ? new ElementStrictReplace(arraySplit,right) : new ElementReplaceWithDefault(defaultExpression,arraySplit,right);
-    final Operator arrayDictionary=new AssembleArray(replacedElements);
-    final Lookup arrayLookup=new Lookup(sopremoModule.getInput(0),arrayDictionary);
+    final ValueSplitter arraySplit=new ValueSplitter(sopremoModule.getInput(0)).withArrayProjection(this.inputKeyExtractor.asExpression()).withKeyProjection(new ArrayAccess(0)).withValueProjection(new ArrayAccess(1,2));
+    final Operator replacedElements=defaultExpression == FILTER_RECORDS ? new ElementStrictReplace().withInputs(arraySplit,right) : new ElementReplaceWithDefault().withDefaultExpression(defaultExpression).withInputs(arraySplit,right);
+    final Operator arrayDictionary=new AssembleArray().withInputs(replacedElements);
+    final Lookup arrayLookup=new Lookup();
+    arrayLookup.setInputs(sopremoModule.getInput(0),arrayDictionary);
     arrayLookup.setInputKeyExtractor(inputKeyExtractor);
-    Selection emptyArrays=new Selection(new UnaryExpression(inputKeyExtractor.asExpression(),true),sopremoModule.getInput(0));
-    sopremoModule.getOutput(0).setInput(0,new UnionAll(arrayLookup,emptyArrays));
+    Operator emptyArrays=new Selection().withCondition(new UnaryExpression(inputKeyExtractor.asExpression(),true)).withInputs(sopremoModule.getInput(0));
+    sopremoModule.getOutput(0).setInput(0,new UnionAll().withInputs(arrayLookup,emptyArrays));
   }
  else {
-    final Projection left=new Projection(this.inputKeyExtractor.asExpression(),EvaluationExpression.VALUE,sopremoModule.getInput(0));
-    if (defaultExpression == FILTER_RECORDS)     sopremoModule.getOutput(0).setInput(0,new StrictReplace(this.inputKeyExtractor,left,right));
- else     sopremoModule.getOutput(0).setInput(0,new ReplaceWithDefaultValue(this.inputKeyExtractor,this.defaultExpression,left,right));
+    final Operator left=new Projection().withKeyTransformation(this.inputKeyExtractor.asExpression()).withInputs(sopremoModule.getInput(0));
+    if (defaultExpression == FILTER_RECORDS)     sopremoModule.getOutput(0).setInput(0,new StrictReplace(this.inputKeyExtractor).withInputs(left,right));
+ else     sopremoModule.getOutput(0).setInput(0,new ReplaceWithDefaultValue(this.inputKeyExtractor,this.defaultExpression).withInputs(left,right));
   }
   return sopremoModule;
 }
