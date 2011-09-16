@@ -1,8 +1,18 @@
 {
-  final byte[] backingArray=this.memory.getBackingArray();
-  final int offsetPositionI=readOffsetPosition(i);
-  final int offsetPositionJ=readOffsetPosition(j);
-  final int indexI=readPairOffset(offsetPositionI);
-  final int indexJ=readPairOffset(offsetPositionJ);
-  return comparator.compare(backingArray,backingArray,this.memory.translateOffset(indexI),this.memory.translateOffset(indexJ));
+  final int bufferNumI=i / this.indexEntriesPerSegment;
+  final int segmentOffsetI=(i % this.indexEntriesPerSegment) * this.indexEntrySize;
+  final int bufferNumJ=j / this.indexEntriesPerSegment;
+  final int segmentOffsetJ=(j % this.indexEntriesPerSegment) * this.indexEntrySize;
+  final MemorySegment segI=this.sortIndex.get(bufferNumI);
+  final MemorySegment segJ=this.sortIndex.get(bufferNumJ);
+  final byte[] bI=segI.getBackingArray();
+  final byte[] bJ=segJ.getBackingArray();
+  int val=0;
+  for (int pos=0, posI=segI.translateOffset(segmentOffsetI + OFFSET_LEN), posJ=segJ.translateOffset(segmentOffsetJ + OFFSET_LEN); pos < this.numKeyBytes && (val=bI[posI] - bJ[posJ]) != 0; pos++)   ;
+  if (val != 0) {
+    return val;
+  }
+  final long pointerI=segI.getLong(segmentOffsetI);
+  final long pointerJ=segJ.getLong(segmentOffsetJ);
+  return compareRecords(pointerI,pointerJ);
 }
