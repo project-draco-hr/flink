@@ -1,27 +1,37 @@
 {
+  LOG.info("in findRestarts");
   ArrayList<ExecutionVertex> restart=new ArrayList<ExecutionVertex>();
-  Queue<ExecutionVertex> totest=new PriorityQueue<ExecutionVertex>();
+  Queue<ExecutionVertex> totest=new ArrayDeque<ExecutionVertex>();
   ArrayList<ExecutionVertex> visited=new ArrayList<ExecutionVertex>();
   totest.add(failed);
+  int k=0;
+  LOG.info("added totest");
+  ExecutionVertex vertex=failed;
   while (!totest.isEmpty()) {
-    ExecutionVertex vertex=totest.poll();
-    System.out.println("Testing " + vertex.getName());
+    LOG.info("in while");
+    if (k != 0) {
+      vertex=totest.peek();
+    }
+    LOG.info("Testing " + vertex.getName());
+    k++;
+    totest.remove(vertex);
     if (!restart.contains(vertex)) {
       restart.add(vertex);
     }
     for (int i=0; i < vertex.getNumberOfSuccessors(); i++) {
       ExecutionVertex successor=vertex.getSuccessor(i);
+      restart.add(successor);
+      LOG.info("add " + successor.getName() + " torestart");
       if (successor.isCheckpoint()) {
         this.checkpoints.remove(successor);
       }
-      restart.add(successor);
-      LOG.info("add " + successor.getName() + " torestart");
       List<ExecutionVertex> follower=findFollowers(successor,restart);
       restart.addAll(follower);
       Iterator<ExecutionVertex> iter=follower.iterator();
       while (iter.hasNext()) {
         ExecutionVertex follow=iter.next();
         if (!visited.contains(follow)) {
+          LOG.info("add totest" + follow.getName());
           totest.add(follow);
         }
       }
@@ -33,6 +43,7 @@
         restart.add(predecessor);
         if (!visited.contains(predecessor)) {
           totest.add(predecessor);
+          LOG.info("add totest" + predecessor);
         }
       }
  else {
@@ -48,6 +59,7 @@
         while (iter.hasNext()) {
           ExecutionVertex follow=iter.next();
           if (!visited.contains(follow)) {
+            LOG.info("add totest" + follow.getName());
             totest.add(follow);
           }
         }
@@ -55,5 +67,6 @@
     }
     visited.add(vertex);
   }
+  LOG.info("finderestartsfinished");
   return restart;
 }
