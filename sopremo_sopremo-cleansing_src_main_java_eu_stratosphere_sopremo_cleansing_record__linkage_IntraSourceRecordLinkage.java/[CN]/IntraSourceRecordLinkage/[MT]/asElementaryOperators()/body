@@ -1,33 +1,31 @@
 {
-  SopremoModule module=new SopremoModule(getName(),1,1);
-  RecordLinkageInput recordLinkageInput=this.recordLinkageInput.clone();
+  SopremoModule module=new SopremoModule(this.getName(),1,1);
+  RecordLinkageInput recordLinkageInput=this.getRecordLinkageInput(0).clone();
   recordLinkageInput.setSource(module.getInput(0).getSource());
-  EvaluationExpression resultProjection=this.recordLinkageInput.getResultProjection();
-  if (this.linkageMode.ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal() && !recordLinkageInput.getResultProjection().equals(recordLinkageInput.getIdProjection()))   recordLinkageInput.setResultProjection(recordLinkageInput.getIdProjection());
+  EvaluationExpression resultProjection=this.getRecordLinkageInput(0).getResultProjection();
+  if (this.getLinkageMode().ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal() && !recordLinkageInput.getResultProjection().equals(recordLinkageInput.getIdProjection()))   recordLinkageInput.setResultProjection(recordLinkageInput.getIdProjection());
   Operator duplicatePairs;
-  if (this.algorithm instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.algorithm).getIntraSource(this.similarityCondition,recordLinkageInput);
+  if (this.getAlgorithm() instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.getAlgorithm()).getIntraSource(this.getSimilarityCondition(),recordLinkageInput);
  else   duplicatePairs=this.simulateIntraSource();
-  if (this.linkageMode == LinkageMode.LINKS_ONLY) {
+  if (this.getLinkageMode() == LinkageMode.LINKS_ONLY) {
     module.getOutput(0).setInput(0,duplicatePairs);
     return module;
   }
-  Operator output;
-  final TransitiveClosure closure=new TransitiveClosure(duplicatePairs);
-  ClosureMode closureMode=this.linkageMode.getClosureMode();
+  ClosureMode closureMode=this.getLinkageMode().getClosureMode();
   if (closureMode.isCluster())   closureMode=ClosureMode.CLUSTER;
-  closure.setClosureMode(closureMode);
-  output=closure;
+  Operator closure=new TransitiveClosure().withClosureMode(closureMode).withInputs(duplicatePairs);
+  Operator output=closure;
   if (recordLinkageInput.getResultProjection() != resultProjection) {
-    Operator reverseLookup=new Lookup().withDictionaryKeyExtraction(this.recordLinkageInput.getIdProjection()).withDictionaryValueExtraction(this.recordLinkageInput.getResultProjection()).withArrayElementsReplacement(true).withInputs(closure,module.getInput(0));
+    Operator reverseLookup=new Lookup().withDictionaryKeyExtraction(this.getRecordLinkageInput(0).getIdProjection()).withDictionaryValueExtraction(this.getRecordLinkageInput(0).getResultProjection()).withArrayElementsReplacement(true).withInputs(output,module.getInput(0));
     output=reverseLookup;
   }
-  if (!this.linkageMode.isWithSingles()) {
+  if (!this.getLinkageMode().isWithSingles()) {
     module.getOutput(0).setInput(0,output);
     return module;
   }
-  ValueSplitter allTuples=new ValueSplitter(closure).withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL);
+  Operator allTuples=new ValueSplitter().withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL).withInputs(closure);
   allTuples.setName("all tuples");
-  Operator singleRecords=new Difference().withKeyProjection(0,this.recordLinkageInput.getIdProjection()).withValueProjection(0,this.recordLinkageInput.getResultProjection()).withKeyProjection(1,EvaluationExpression.KEY).withInputs(module.getInput(0),allTuples);
+  Operator singleRecords=new Difference().withIdentityKey(0,this.getRecordLinkageInput(0).getIdProjection()).withValueProjection(0,this.getRecordLinkageInput(0).getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY).withInputs(module.getInput(0),allTuples);
   singleRecords.setName("singleRecords");
   final Operator wrappedInArray=new Projection().withValueTransformation(new ArrayCreation(EvaluationExpression.VALUE)).withInputs(singleRecords);
   module.getOutput(0).setInput(0,new UnionAll().withInputs(wrappedInArray,output));
