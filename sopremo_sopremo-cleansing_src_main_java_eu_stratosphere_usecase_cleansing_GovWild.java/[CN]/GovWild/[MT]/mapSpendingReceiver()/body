@@ -1,20 +1,19 @@
 {
   ObjectCreation projection=new ObjectCreation();
   final BatchAggregationExpression batch=new BatchAggregationExpression();
-  projection.addMapping("name",new PathExpression(batch.add(CleansFunctions.FIRST),new ObjectAccess("ParentRecipientOrCompanyName")));
+  projection.addMapping("name",new PathExpression(batch.add(BuiltinFunctions.FIRST),new ObjectAccess("ParentRecipientOrCompanyName")));
   projection.addMapping("id",new GenerateExpression("spendingReceiver%s"));
   ObjectCreation funds=new ObjectCreation();
   funds.addMapping("fund",new FunctionCall("format",new ConstantExpression("spendings%s"),new ObjectAccess("UniqueTransactionID")));
-  funds.addMapping("amount",coerce(DecimalNode.class,new ObjectAccess("DollarsObligated")));
+  funds.addMapping("amount",this.coerce(DecimalNode.class,new ObjectAccess("DollarsObligated")));
   funds.addMapping("currency",new ConstantExpression("USD"));
-  projection.addMapping("receivedFunds",batch.add(CleansFunctions.ALL,funds));
+  projection.addMapping("receivedFunds",batch.add(BuiltinFunctions.ALL,funds));
   ObjectCreation address=new ObjectCreation();
   address.addMapping("street",new ObjectAccess("RecipientAddressLine123"));
   address.addMapping("city",new ObjectAccess("RecipientCity"));
   address.addMapping("zipCode",new ObjectAccess("RecipientZipCode"));
   address.addMapping("state",new FunctionCall("camelCase",new ObjectAccess("RecipientState")));
-  projection.addMapping("addresses",new FunctionCall("distinct",batch.add(CleansFunctions.ALL,address)));
-  Grouping grouping=new Grouping(projection,this.scrubbed[SPENDING]);
-  grouping.withKeyProjection(new ObjectAccess("ParentRecipientOrCompanyName"));
+  projection.addMapping("addresses",new FunctionCall("distinct",batch.add(BuiltinFunctions.ALL,address)));
+  Grouping grouping=new Grouping().withInputs(this.scrubbed[SPENDING]).withGroupingKey(new ObjectAccess("ParentRecipientOrCompanyName")).withResultProjection(projection);
   return grouping;
 }

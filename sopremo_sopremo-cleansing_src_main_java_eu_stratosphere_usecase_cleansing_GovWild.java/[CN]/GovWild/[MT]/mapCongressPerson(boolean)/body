@@ -21,10 +21,10 @@
   AggExpression parties=new AggExpression(new ObjectAccess("party"),partyProjection);
   ObjectCreation stateProjections=new ObjectCreation();
   stateProjections.addMapping("legalEntity",new FunctionCall("format",new ConstantExpression("congressLegalEntity%s"),new PathExpression(new ArrayAccess(0),new ObjectAccess("state"))));
-  stateProjections.addMapping("positions",new FunctionCall("distinct",new AggregationExpression(CleansFunctions.ALL,new ObjectAccess("position"))));
+  stateProjections.addMapping("positions",new FunctionCall("distinct",new AggregationExpression(BuiltinFunctions.ALL,new ObjectAccess("position"))));
   stateProjections.addMapping("startYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MIN,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("\\(([0-9]{0,4})-")))));
   stateProjections.addMapping("endYear",this.coerce(IntNode.class,new AggregationExpression(CleansFunctions.MAX,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("-([0-9]{0,4})")))));
-  stateProjections.addMapping("congresses",new AggregationExpression(CleansFunctions.ALL,this.coerce(IntNode.class,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("([0-9]+)\\(")))));
+  stateProjections.addMapping("congresses",new AggregationExpression(BuiltinFunctions.ALL,this.coerce(IntNode.class,new FunctionCall("extract",new ObjectAccess("number"),new ConstantExpression("([0-9]+)\\(")))));
   AggExpression congresses=new AggExpression(new ObjectAccess("state"),stateProjections);
   projection.addMapping("employment",new PathExpression(new ObjectAccess("congresses"),new FunctionCall("unionAll",parties,congresses)));
   ObjectCreation relative=new ObjectCreation();
@@ -37,7 +37,7 @@
   EvaluationExpression trimmedSplit=new PathExpression(commaSplit,new ArrayProjection(new FunctionCall("trim",EvaluationExpression.VALUE)));
   projection.addMapping("relatives",new PathExpression(new FunctionCall("filter",trimmedSplit,new ConstantExpression("")),new ArrayProjection(relative)));
   if (this.scrubbed[CONGRESS] == null)   this.scrubCongress(true);
-  SchemaMapping congressMapping=new SchemaMapping(projection,this.scrubbed[CONGRESS]);
+  SchemaMapping congressMapping=new SchemaMapping().withProjection(projection).withInputs(this.scrubbed[CONGRESS]);
   this.inputs[CONGRESS][PERSON]=congressMapping;
-  this.sinks.add(new Sink(getInternalOutputFormat(),String.format("%s/CongressPersons.json",this.outputDir),congressMapping));
+  this.sinks.add(new Sink(this.getInternalOutputFormat(),String.format("%s/CongressPersons.json",this.outputDir)).withInputs(congressMapping));
 }

@@ -1,5 +1,5 @@
 {
-  SopremoModule module=new SopremoModule(getName(),getInputs().size(),1);
+  SopremoModule module=new SopremoModule(this.getName(),this.getInputs().size(),1);
   final List<RecordLinkageInput> originalInputs=new ArrayList<RecordLinkageInput>();
   for (int index=0, size=this.getInputs().size(); index < size; index++)   originalInputs.add(this.getRecordLinkageInput(index));
   final List<RecordLinkageInput> inputs=new ArrayList<RecordLinkageInput>(originalInputs);
@@ -8,39 +8,39 @@
     inputs.get(index).setResultProjection(inputs.get(index).getIdProjection());
   }
   for (int index=0, size=inputs.size(); index < size; index++)   inputs.get(index).setSource(module.getInput(index).getSource());
-  Operator duplicatePairs=this.getAlgorithm().getDuplicatePairStream(this.getSimilarityCondition(),inputs);
+  Operator<?> duplicatePairs=this.getAlgorithm().getDuplicatePairStream(this.getSimilarityCondition(),inputs);
   if (this.getLinkageMode() == LinkageMode.LINKS_ONLY) {
     module.getOutput(0).setInput(0,duplicatePairs);
     return module;
   }
-  Operator output;
-  final Operator closure=new TransitiveClosure().withClosureMode(this.getLinkageMode().getClosureMode()).withInputs(duplicatePairs);
+  Operator<?> output;
+  final TransitiveClosure closure=new TransitiveClosure().withClosureMode(this.getLinkageMode().getClosureMode()).withInputs(duplicatePairs);
   output=closure;
   if (this.getLinkageMode().getClosureMode().isProvenance())   for (int index=0, size=inputs.size(); index < size; index++)   if (inputs.get(index).getResultProjection() != originalInputs.get(index).getResultProjection()) {
-    Operator reverseLookup=new Lookup().withDictionaryKeyExtraction(originalInputs.get(index).getIdProjection()).withDictionaryValueExtraction(originalInputs.get(index).getResultProjection()).withInputKeyExtractor(new ArrayAccess(index)).withArrayElementsReplacement(true).withInputs(output,inputs.get(index));
+    Lookup reverseLookup=new Lookup().withDictionaryKeyExtraction(originalInputs.get(index).getIdProjection()).withDictionaryValueExtraction(originalInputs.get(index).getResultProjection()).withInputKeyExtractor(new ArrayAccess(index)).withArrayElementsReplacement(true).withInputs(output,inputs.get(index));
     output=reverseLookup;
   }
   if (!this.getLinkageMode().isWithSingles()) {
     module.getOutput(0).setInput(0,output);
     return module;
   }
-  List<Operator> outputs=new ArrayList<Operator>();
+  List<Operator<?>> outputs=new ArrayList<Operator<?>>();
   outputs.add(output);
   if (this.getLinkageMode().getClosureMode().isProvenance())   for (int index=0; index < originalInputs.size(); index++) {
-    Operator allTuples=new ValueSplitter().withArrayProjection(new ArrayAccess(index)).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL).withInputs(closure);
+    ValueSplitter allTuples=new ValueSplitter().withInputs(closure).withArrayProjection(new ArrayAccess(index)).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL);
     RecordLinkageInput recordLinkageInput=originalInputs.get(index);
-    Operator singleRecords=new Difference().withIdentityKey(0,recordLinkageInput.getIdProjection()).withValueProjection(0,recordLinkageInput.getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY).withInputs(module.getInput(index),allTuples);
+    Difference singleRecords=new Difference().withInputs(module.getInput(index),allTuples).withIdentityKey(0,recordLinkageInput.getIdProjection()).withValueProjection(0,recordLinkageInput.getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY);
     EvaluationExpression[] expressions=new EvaluationExpression[inputs.size()];
     Arrays.fill(expressions,new ArrayCreation());
     expressions[index]=new ArrayCreation(EvaluationExpression.VALUE);
-    outputs.add(new Projection().withValueTransformation(new ArrayCreation(expressions)).withInputs(singleRecords));
+    outputs.add(new Projection().withInputs(singleRecords).withValueTransformation(new ArrayCreation(expressions)));
   }
  else {
-    Operator allTuples=new ValueSplitter().withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL).withInputs(closure);
+    ValueSplitter allTuples=new ValueSplitter().withArrayProjection(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL).withInputs(closure);
     for (int index=0; index < originalInputs.size(); index++) {
       RecordLinkageInput recordLinkageInput=originalInputs.get(index);
-      Operator singleRecords=new Difference().withIdentityKey(0,recordLinkageInput.getResultProjection()).withValueProjection(0,recordLinkageInput.getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY).withInputs(module.getInput(index),allTuples);
-      outputs.add(new Projection().withValueTransformation(new ArrayCreation(EvaluationExpression.VALUE)).withInputs(singleRecords));
+      Difference singleRecords=new Difference().withInputs(module.getInput(index),allTuples).withIdentityKey(0,recordLinkageInput.getResultProjection()).withValueProjection(0,recordLinkageInput.getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY);
+      outputs.add(new Projection().withInputs(singleRecords).withValueTransformation(new ArrayCreation(EvaluationExpression.VALUE)));
     }
   }
   module.getOutput(0).setInput(0,new UnionAll().withInputs(outputs));
