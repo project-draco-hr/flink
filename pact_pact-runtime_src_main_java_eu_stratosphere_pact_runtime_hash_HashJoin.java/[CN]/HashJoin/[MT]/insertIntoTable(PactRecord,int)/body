@@ -12,13 +12,18 @@
   if (pointer == -1) {
     MemorySegment nextSeg=getNextBuffer();
     if (nextSeg == null) {
-      spillPartition();
-      nextSeg=getNextBuffer();
-      if (nextSeg == null) {
-        throw new RuntimeException("Bug in HybridHashJoin: No memory became available after spilling partition.");
+      int spilledPartitionNum=spillPartition();
+      if (spilledPartitionNum != partitionNumber) {
+        nextSeg=getNextBuffer();
+        if (nextSeg == null) {
+          throw new RuntimeException("Bug in HybridHashJoin: No memory became available after spilling partition.");
+        }
+        p.addBuildSideBuffer(nextSeg);
       }
     }
-    p.addBuildSideBuffer(nextSeg);
+ else {
+      p.addBuildSideBuffer(nextSeg);
+    }
     pointer=p.insertIntoBuildBuffer(record);
     if (pointer == -1) {
       throw new IOException("Record could not be added to fresh buffer. Probably cause: Record length exceeds buffer size limit.");
