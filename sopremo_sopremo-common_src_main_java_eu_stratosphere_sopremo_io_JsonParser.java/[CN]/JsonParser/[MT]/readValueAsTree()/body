@@ -1,48 +1,82 @@
 {
-  JsonNode node=null;
+  boolean insideString=false;
+  ArrayNode root=new ArrayNode();
+  state.push(root);
   StringBuilder sb=new StringBuilder();
   int nextChar;
   while ((nextChar=this.reader.read()) != -1) {
     char character=(char)nextChar;
+    if (insideString && character != '\"') {
+      sb.append(character);
+    }
+ else {
 switch (character) {
 case '[':
 {
-        state.push(START_ARRAY);
-        break;
-      }
+          if (state.top() == root) {
+            ArrayNode node=new ArrayNode();
+            root.add(node);
+            state.push(node);
+          }
+ else {
+            ArrayNode newArray=new ArrayNode();
+            ((ArrayNode)state.top()).add(newArray);
+            state.push(newArray);
+          }
+          break;
+        }
 case ']':
 {
-      if (START_ARRAY != state.pop()) {
-        throw new JsonParseException();
+        ArrayNode node=(ArrayNode)state.pop();
+        if (sb.length() != 0) {
+          node.add(PrimitiveParser.parse(sb.toString()));
+          sb.setLength(0);
+        }
+        break;
       }
-      break;
-    }
 case '{':
 {
-    state.push(START_OBJECT);
-    break;
-  }
+      break;
+    }
 case '}':
 {
-  if (START_OBJECT != state.pop()) {
-    throw new JsonParseException();
+    break;
   }
-  break;
-}
 case ':':
 {
-state.push(KEY_VALUE_DELIMITER);
-break;
+  break;
 }
 case '\"':
 {
-if (state.top() == START_STRING) {
-state.pop();
-PrimitiveParser.parse(sb.toString());
-sb.setLength(0);
+if (sb.length() == 0) {
+  insideString=true;
 }
  else {
-state.push(START_STRING);
+  if (!sb.toString().endsWith("\\")) {
+    insideString=false;
+    ArrayNode node=(ArrayNode)state.top();
+    node.add(TextNode.valueOf(sb.toString()));
+    sb.setLength(0);
+  }
+ else {
+    sb.append(character);
+  }
+}
+break;
+}
+case ',':
+{
+if (sb.length() != 0) {
+ArrayNode node=(ArrayNode)state.top();
+node.add(PrimitiveParser.parse(sb.toString()));
+sb.setLength(0);
+}
+break;
+}
+case ' ':
+{
+if (insideString) {
+sb.append(character);
 }
 break;
 }
@@ -53,5 +87,6 @@ break;
 }
 }
 }
-return node;
+}
+return root.isEmpty() ? PrimitiveParser.parse(sb.toString()) : root.get(0);
 }
