@@ -1,8 +1,9 @@
 {
   final int numSegments=MEMORY_SIZE / MEMORY_SEGMENT_SIZE;
   final List<MemorySegment> memory=this.memoryManager.allocate(new DummyInvokable(),numSegments,MEMORY_SEGMENT_SIZE);
-  NormalizedKeySorter<PactRecord> sorter=newSortBuffer(memory);
-  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+  @SuppressWarnings("unchecked") PactRecordAccessors accessors=new PactRecordAccessors(new int[]{1},new Class[]{Value.class});
+  NormalizedKeySorter<PactRecord> sorter=new NormalizedKeySorter<PactRecord>(accessors,memory);
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
   PactRecord record=new PactRecord();
   do {
     generator.next(record);
@@ -12,15 +13,15 @@
   qs.sort(sorter);
   MutableObjectIterator<PactRecord> iter=sorter.getIterator();
   PactRecord readTarget=new PactRecord();
-  Key current=new Key();
-  Key last=new Key();
+  Value current=new Value();
+  Value last=new Value();
   iter.next(readTarget);
-  readTarget.getFieldInto(0,last);
+  readTarget.getFieldInto(1,last);
   while (iter.next(readTarget)) {
-    readTarget.getFieldInto(0,current);
+    readTarget.getFieldInto(1,current);
     final int cmp=last.compareTo(current);
-    if (cmp > 0)     Assert.fail("Next key is not larger or equal to previous key.");
-    Key tmp=current;
+    if (cmp > 0)     Assert.fail("Next value is not larger or equal to previous value.");
+    Value tmp=current;
     current=last;
     last=tmp;
   }
