@@ -1,7 +1,5 @@
 {
-  boolean insideString=false;
-  ArrayNode root=new ArrayNode();
-  state.push(root);
+  this.state.push(this.root);
   StringBuilder sb=new StringBuilder();
   int nextChar;
   while ((nextChar=this.reader.read()) != -1) {
@@ -10,83 +8,11 @@
       sb.append(character);
     }
  else {
-switch (character) {
-case '[':
-{
-          if (state.top() == root) {
-            ArrayNode node=new ArrayNode();
-            root.add(node);
-            state.push(node);
-          }
- else {
-            ArrayNode newArray=new ArrayNode();
-            ((ArrayNode)state.top()).add(newArray);
-            state.push(newArray);
-          }
-          break;
-        }
-case ']':
-{
-        ArrayNode node=(ArrayNode)state.pop();
-        if (sb.length() != 0) {
-          node.add(PrimitiveParser.parse(sb.toString()));
-          sb.setLength(0);
-        }
-        break;
-      }
-case '{':
-{
-      break;
+      this.handler.get(character).handleCharacter(sb,character);
     }
-case '}':
-{
-    break;
   }
-case ':':
-{
-  break;
-}
-case '\"':
-{
-if (sb.length() == 0) {
-  insideString=true;
-}
- else {
-  if (!sb.toString().endsWith("\\")) {
-    insideString=false;
-    ArrayNode node=(ArrayNode)state.top();
-    node.add(TextNode.valueOf(sb.toString()));
-    sb.setLength(0);
+  if (state.top() != root) {
+    throw new JsonParseException();
   }
- else {
-    sb.append(character);
-  }
-}
-break;
-}
-case ',':
-{
-if (sb.length() != 0) {
-ArrayNode node=(ArrayNode)state.top();
-node.add(PrimitiveParser.parse(sb.toString()));
-sb.setLength(0);
-}
-break;
-}
-case ' ':
-{
-if (insideString) {
-sb.append(character);
-}
-break;
-}
-default :
-{
-sb.append(character);
-break;
-}
-}
-}
-}
-return root.isEmpty() ? PrimitiveParser.parse(sb.toString()) : root.get(0);
+  return root.isEmpty() ? JsonParser.parsePrimitive(sb.toString()) : root.get(0);
 }
