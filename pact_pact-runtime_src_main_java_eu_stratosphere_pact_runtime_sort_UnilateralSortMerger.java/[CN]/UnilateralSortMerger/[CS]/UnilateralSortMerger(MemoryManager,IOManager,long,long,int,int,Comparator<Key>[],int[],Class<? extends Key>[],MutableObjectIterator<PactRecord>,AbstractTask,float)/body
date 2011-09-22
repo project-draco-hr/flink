@@ -8,14 +8,15 @@
   if (maxNumFileHandles < 2) {
     throw new IllegalArgumentException("Merger cannot work with less than two file handles.");
   }
-  if (totalMemory < maxNumFileHandles * MIN_IO_BUFFER_SIZE) {
-    throw new IOException("Too little memory for merging operations.");
-  }
   if (keyComparators.length < 1) {
     throw new IllegalArgumentException("There must be at least one sort column and hence one comparator.");
   }
   if (keyComparators.length != keyPositions.length || keyPositions.length != keyClasses.length) {
     throw new IllegalArgumentException("The number of comparators, key columns and key types must match.");
+  }
+  if (ioMemory != 0 && totalMemory < maxNumFileHandles * MIN_IO_BUFFER_SIZE) {
+    maxNumFileHandles=(int)(totalMemory / MIN_IO_BUFFER_SIZE);
+    LOG.warn("Reducing merge fan-in to " + maxNumFileHandles + " due too memory limitations.");
   }
   this.maxNumFileHandles=maxNumFileHandles;
   this.memoryManager=memoryManager;
@@ -27,37 +28,37 @@
   this.memoryToReleaseAtShutdown=new ArrayList<List<MemorySegment>>();
   this.channelsToDeleteAtShutdown=new ArrayList<List<StreamChannelAccess<?,?>>>();
   final CircularQueues circularQueues=new CircularQueues();
-  long sortMem;
   if (ioMemory < 0) {
     ioMemory=totalMemory / 64;
     ioMemory=Math.max(Math.min(ioMemory,NUM_WRITE_BUFFERS * MAX_IO_BUFFER_SIZE),NUM_WRITE_BUFFERS * MIN_IO_BUFFER_SIZE);
-    ioMemory&=BUFFER_ALIGNMENT_MASK << 1;
+    ioMemory&=IO_BUFFER_ALIGNMENT_MASK << 1;
   }
-  sortMem=totalMemory - ioMemory;
-  if (sortMem < MIN_SORT_BUFFER_SIZE) {
+  final long sortMem=totalMemory - ioMemory;
+  long numSortMemSegments=sortMem / SORT_MEM_SEGMENT_SIZE;
+  if (numSortMemSegments < MIN_NUM_SORT_MEM_SEGMENTS) {
     throw new IOException("Too little memory provided to Sort-Merger to perform task.");
   }
   if (numSortBuffers < 1) {
     if (sortMem > 96 * 1024 * 1024) {
       numSortBuffers=3;
     }
- else     if (sortMem >= 2 * MIN_SORT_BUFFER_SIZE) {
+ else     if (numSortMemSegments >= 2 * MIN_NUM_SORT_MEM_SEGMENTS) {
       numSortBuffers=2;
     }
  else {
       numSortBuffers=1;
     }
   }
+  final int numSegmentsPerSortBuffer=numSortMemSegments / numSortBuffers > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)(numSortMemSegments / numSortBuffers);
   if (LOG.isDebugEnabled()) {
-    LOG.debug("Instantiating unilateral sort-merger with " + ioMemory + " bytes of write cache and "+ sortMem+ " bytes of sorting/merging memory. Dividing sort memory over "+ numSortBuffers+ " buffers, merging maximally "+ maxNumFileHandles+ " streams at once.");
+    LOG.debug("Instantiating unilateral sort-merger with " + ioMemory + " bytes of write cache and "+ sortMem+ " bytes of sorting/merging memory. Dividing sort memory over "+ numSortBuffers+ " buffers ("+ numSegmentsPerSortBuffer+ " pages a "+ SORT_MEM_SEGMENT_SIZE+ " bytes) , merging maximally "+ maxNumFileHandles+ " streams at once.");
   }
-  final List<MemorySegment> sortSegments=this.memoryManager.allocate(parentTask,sortMem,numSortBuffers,MIN_SORT_BUFFER_SIZE);
-  registerSegmentsToBeFreedAtShutdown(sortSegments);
-  this.sortSegments=sortSegments;
-  for (int i=0; i < sortSegments.size(); i++) {
-    MemorySegment mseg=sortSegments.get(i);
-    RawComparator comparator=new DeserializerComparator(keyPositions,keyClasses,keyComparators);
-    BufferSortableGuaranteed buffer=new BufferSortableGuaranteed(mseg,comparator);
+  this.sortBuffers=new ArrayList<NormalizedKeySorter<?>>(numSortBuffers);
+  final PactRecordAccessors accessors=new PactRecordAccessors(keyPositions,keyClasses);
+  for (int i=0; i < numSortBuffers; i++) {
+    final List<MemorySegment> sortSegments=this.memoryManager.allocateStrict(parent,numSegmentsPerSortBuffer,SORT_MEM_SEGMENT_SIZE);
+    final NormalizedKeySorter<PactRecord> buffer=new NormalizedKeySorter<PactRecord>(accessors,sortSegments);
+    this.sortBuffers.add(buffer);
     CircularElement element=new CircularElement(i,buffer);
     circularQueues.empty.add(element);
   }

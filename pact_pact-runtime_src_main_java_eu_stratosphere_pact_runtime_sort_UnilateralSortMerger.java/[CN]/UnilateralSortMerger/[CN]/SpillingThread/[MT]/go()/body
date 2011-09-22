@@ -40,7 +40,8 @@
   final List<MemorySegment> writeBuffers;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
   try {
-    writeBuffers=this.memoryManager.allocate(UnilateralSortMerger.this.parent,writeMemSize,NUM_WRITE_BUFFERS,MIN_IO_BUFFER_SIZE);
+    int writeBufferSize=(int)this.writeMemSize / NUM_WRITE_BUFFERS;
+    writeBuffers=this.memoryManager.allocateStrict(UnilateralSortMerger.this.parent,NUM_WRITE_BUFFERS,writeBufferSize);
     registerSegmentsToBeFreedAtShutdown(writeBuffers);
   }
  catch (  MemoryAllocationException maex) {
@@ -80,10 +81,6 @@
     LOG.debug("Releasing sort-buffer memory.");
   }
   releaseSortBuffers();
-  if (UnilateralSortMerger.this.sortSegments != null) {
-    unregisterSegmentsToBeFreedAtShutdown(UnilateralSortMerger.this.sortSegments);
-    UnilateralSortMerger.this.sortSegments.clear();
-  }
   try {
     while (channelIDs.size() > UnilateralSortMerger.this.maxNumFileHandles) {
       channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
