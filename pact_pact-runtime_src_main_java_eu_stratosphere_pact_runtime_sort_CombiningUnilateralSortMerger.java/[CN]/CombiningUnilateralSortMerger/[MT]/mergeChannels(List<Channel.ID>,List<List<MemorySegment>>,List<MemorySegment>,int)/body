@@ -1,0 +1,27 @@
+{
+  final List<ChannelAccess<?,?>> channelAccesses=new ArrayList<ChannelAccess<?,?>>(channelIDs.size());
+  final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,channelAccesses);
+  final KeyGroupedIterator groupedIter=new KeyGroupedIterator(mergeIterator,this.keyPositions,this.keyClasses);
+  final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+  final Channel.ID mergedChannelID=this.ioManager.createChannel();
+  final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(mergedChannelID,returnQueue);
+  registerOpenChannelToBeRemovedAtShudown(writer);
+  final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,writeBufferSize);
+  final WriterCollector collector=new WriterCollector(output);
+  final ReduceStub combineStub=this.combineStub;
+  try {
+    while (groupedIter.nextKey()) {
+      combineStub.combine(groupedIter.getValues(),collector);
+    }
+  }
+ catch (  Exception e) {
+    throw new IOException("An error occurred in the combiner user code.");
+  }
+  writer.close();
+  unregisterOpenChannelToBeRemovedAtShudown(writer);
+  registerChannelToBeRemovedAtShudown(mergedChannelID);
+  for (int i=0; i < channelAccesses.size(); i++) {
+    unregisterOpenChannelToBeRemovedAtShudown(channelAccesses.get(i));
+  }
+  return mergedChannelID;
+}

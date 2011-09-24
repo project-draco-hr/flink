@@ -46,10 +46,12 @@
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
-  final List<MemorySegment> writeBuffers;
+  final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+  final int writeBufferSize=(int)this.writeMemSize / NUM_WRITE_BUFFERS;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
+  List<MemorySegment> writeBuffers;
   try {
-    writeBuffers=this.memoryManager.allocate(CombiningUnilateralSortMerger.this.parent,writeMemSize,NUM_WRITE_BUFFERS,MIN_IO_BUFFER_SIZE);
+    writeBuffers=this.memoryManager.allocateStrict(CombiningUnilateralSortMerger.this.parent,NUM_WRITE_BUFFERS,writeBufferSize);
     registerSegmentsToBeFreedAtShutdown(writeBuffers);
   }
  catch (  MemoryAllocationException maex) {
@@ -77,11 +79,13 @@
     final Channel.ID channel=enumerator.next();
     channelIDs.add(channel);
     if (LOG.isDebugEnabled())     LOG.debug("Creating temp file " + channel.toString() + '.');
-    final ChannelWriter writer=ioManager.createChannelWriter(channel,writeBuffers);
+    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,returnQueue);
+    registerOpenChannelToBeRemovedAtShudown(writer);
+    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,writeBufferSize);
     if (LOG.isDebugEnabled())     LOG.debug("Combining buffer " + element.id + '.');
     final NormalizedKeySorter<PactRecord> buffer=element.buffer;
     final CombineValueIterator iter=new CombineValueIterator(buffer);
-    final WriterCollector collector=new WriterCollector(writer);
+    final WriterCollector collector=new WriterCollector(output);
     int i=0;
     int stop=buffer.size() - 1;
     try {
@@ -91,7 +95,7 @@
           i++;
         }
         if (i == seqStart) {
-          buffer.writeToChannel(writer,seqStart,1);
+          buffer.writeToOutput(output,seqStart,1);
         }
  else {
           iter.set(seqStart,i);
@@ -104,10 +108,12 @@
       throw new IOException("An error occurred in the combiner user code.",ex);
     }
     if (i == stop) {
-      buffer.writeToChannel(writer,stop,1);
+      buffer.writeToOutput(output,stop,1);
     }
     if (LOG.isDebugEnabled())     LOG.debug("Combined and spilled buffer " + element.id + ".");
-    writer.close();
+    writeBuffers=output.close();
+    unregisterOpenChannelToBeRemovedAtShudown(writer);
+    registerChannelToBeRemovedAtShudown(channel);
     element.buffer.reset();
     this.queues.empty.add(element);
   }
@@ -118,20 +124,19 @@
   releaseSortBuffers();
   try {
     while (channelIDs.size() > CombiningUnilateralSortMerger.this.maxNumFileHandles) {
-      channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
+      channelIDs=mergeChannelList(channelIDs,writeBuffers,writeBufferSize,this.readMemSize);
     }
     this.memoryManager.release(writeBuffers);
     unregisterSegmentsToBeFreedAtShutdown(writeBuffers);
+    writeBuffers.clear();
     if (channelIDs.isEmpty()) {
       setResultIterator(EmptyMutableObjectIterator.<PactRecord>get());
     }
  else {
-      final List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
-      final List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
+      List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
+      List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
       registerSegmentsToBeFreedAtShutdown(allBuffers);
-      final List<StreamChannelAccess<?,?>> readers=new ArrayList<StreamChannelAccess<?,?>>(channelIDs.size());
-      registerChannelsToBeRemovedAtShudown(readers);
-      final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,readers);
+      final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<ChannelAccess<?,?>>(channelIDs.size()));
       if (CombiningUnilateralSortMerger.this.combineLastMerge) {
         KeyGroupedIterator iter=new KeyGroupedIterator(mergeIterator,keyPositions,keyClasses);
         setResultIterator(new CombiningIterator(combineStub,iter));
