@@ -53,7 +53,7 @@ synchronized (this.iteratorLock) {
   }
   finally {
     try {
-      while (!this.openChannels.isEmpty()) {
+      while (!this.memoryToReleaseAtShutdown.isEmpty()) {
         try {
           List<MemorySegment> segments=this.memoryToReleaseAtShutdown.remove(this.memoryToReleaseAtShutdown.size() - 1);
           this.memoryManager.release(segments);
@@ -75,17 +75,9 @@ synchronized (this.iteratorLock) {
     }
     while (!this.openChannels.isEmpty()) {
       try {
-        ChannelAccess<?,?> channel=this.openChannels.remove(this.openChannels.size() - 1);
-        if (channel instanceof StreamChannelAccess<?,?>) {
-          StreamChannelAccess<?,?> sc=(StreamChannelAccess<?,?>)channel;
-          sc.close();
-          sc.deleteChannel();
-        }
- else         if (channel instanceof BlockChannelAccess<?,?>) {
-          BlockChannelAccess<?,?> bc=(BlockChannelAccess<?,?>)channel;
-          bc.close();
-          bc.deleteChannel();
-        }
+        BlockChannelAccess<?,?> channel=this.openChannels.remove(this.openChannels.size() - 1);
+        if (!channel.isClosed())         channel.close();
+        channel.deleteChannel();
       }
  catch (      Throwable t) {
       }

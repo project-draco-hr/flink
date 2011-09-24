@@ -47,7 +47,7 @@
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
   final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
-  final int writeBufferSize=(int)this.writeMemSize / NUM_WRITE_BUFFERS;
+  final int writeBufferSize=CombiningUnilateralSortMerger.this.ioBufferSize;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
   List<MemorySegment> writeBuffers;
   try {
@@ -111,7 +111,7 @@
       buffer.writeToOutput(output,stop,1);
     }
     if (LOG.isDebugEnabled())     LOG.debug("Combined and spilled buffer " + element.id + ".");
-    writeBuffers=output.close();
+    output.close();
     unregisterOpenChannelToBeRemovedAtShudown(writer);
     registerChannelToBeRemovedAtShudown(channel);
     element.buffer.reset();
@@ -124,7 +124,7 @@
   releaseSortBuffers();
   try {
     while (channelIDs.size() > CombiningUnilateralSortMerger.this.maxNumFileHandles) {
-      channelIDs=mergeChannelList(channelIDs,writeBuffers,writeBufferSize,this.readMemSize);
+      channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
     }
     this.memoryManager.release(writeBuffers);
     unregisterSegmentsToBeFreedAtShutdown(writeBuffers);
@@ -136,7 +136,7 @@
       List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
       List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
       registerSegmentsToBeFreedAtShutdown(allBuffers);
-      final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<ChannelAccess<?,?>>(channelIDs.size()));
+      final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size()));
       if (CombiningUnilateralSortMerger.this.combineLastMerge) {
         KeyGroupedIterator iter=new KeyGroupedIterator(mergeIterator,keyPositions,keyClasses);
         setResultIterator(new CombiningIterator(combineStub,iter));
