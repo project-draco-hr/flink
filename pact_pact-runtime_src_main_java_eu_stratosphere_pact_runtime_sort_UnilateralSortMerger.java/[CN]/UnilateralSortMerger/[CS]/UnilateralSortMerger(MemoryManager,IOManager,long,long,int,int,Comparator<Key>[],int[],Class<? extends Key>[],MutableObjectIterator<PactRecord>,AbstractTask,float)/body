@@ -14,6 +14,9 @@
   if (keyComparators.length != keyPositions.length || keyPositions.length != keyClasses.length) {
     throw new IllegalArgumentException("The number of comparators, key columns and key types must match.");
   }
+  if (totalMemory < MIN_SORT_MEM + MIN_WRITE_MEM) {
+    throw new IllegalArgumentException("Too little memory provided to Sort-Merger to perform task.");
+  }
   this.maxNumFileHandles=maxNumFileHandles;
   this.memoryManager=memoryManager;
   this.ioManager=ioManager;
@@ -25,8 +28,8 @@
   this.channelsToDeleteAtShutdown=new ArrayList<Channel.ID>();
   this.openChannels=new ArrayList<BlockChannelAccess<?,?>>();
   if (maxWriteMem != 0) {
-    if (maxWriteMem != -1 && maxWriteMem < NUM_WRITE_BUFFERS * MIN_IO_BUFFER_SIZE) {
-      throw new IllegalArgumentException("The specified maximum write memory is to low. " + "Required are at least " + (NUM_WRITE_BUFFERS * MIN_IO_BUFFER_SIZE) + " bytes.");
+    if (maxWriteMem != -1 && maxWriteMem < MIN_WRITE_MEM) {
+      throw new IllegalArgumentException("The specified maximum write memory is to low. " + "Required are at least " + MIN_WRITE_MEM + " bytes.");
     }
     final int minBuffers=NUM_WRITE_BUFFERS + maxNumFileHandles;
     final int desiredBuffers=NUM_WRITE_BUFFERS + 2 * maxNumFileHandles;
@@ -41,7 +44,10 @@
  else {
       bufferSize=Math.min(MAX_IO_BUFFER_SIZE,MathUtils.roundDownToPowerOf2(bufferSize));
     }
-    this.ioBufferSize=maxWriteMem > 0 ? Math.min(bufferSize,MathUtils.roundDownToPowerOf2((int)(maxWriteMem / NUM_WRITE_BUFFERS))) : bufferSize;
+    if (maxWriteMem < 0) {
+      maxWriteMem=Math.max(totalMemory / 64,MIN_WRITE_MEM);
+    }
+    this.ioBufferSize=Math.min(bufferSize,MathUtils.roundDownToPowerOf2((int)(maxWriteMem / NUM_WRITE_BUFFERS)));
     maxWriteMem=NUM_WRITE_BUFFERS * this.ioBufferSize;
   }
  else {
@@ -49,9 +55,6 @@
   }
   final long sortMem=totalMemory - maxWriteMem;
   final long numSortMemSegments=sortMem / SORT_MEM_SEGMENT_SIZE;
-  if (sortMem < MIN_SORT_MEM) {
-    throw new IOException("Too little memory provided to Sort-Merger to perform task.");
-  }
   if (numSortBuffers < 1) {
     if (sortMem > 96 * 1024 * 1024) {
       numSortBuffers=3;
