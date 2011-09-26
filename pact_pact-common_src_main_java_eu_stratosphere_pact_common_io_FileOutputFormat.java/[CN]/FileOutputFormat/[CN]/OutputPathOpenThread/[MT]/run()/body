@@ -7,20 +7,29 @@
     }
     final FSDataOutputStream stream=fs.create(p,true);
 synchronized (this.lock) {
-      this.lock.notifyAll();
-      if (!this.canceled) {
-        this.fdos=stream;
+      if (canceled) {
+        try {
+          stream.close();
+        }
+ catch (        Throwable t) {
+        }
       }
  else {
-        this.fdos=null;
-        stream.close();
+        this.fdos=stream;
       }
+      this.lock.notifyAll();
     }
   }
  catch (  Exception t) {
 synchronized (this.lock) {
-      this.canceled=true;
       this.exception=t;
+      this.lock.notifyAll();
+    }
+  }
+catch (  Throwable t) {
+synchronized (this.lock) {
+      this.exception=new Exception(t);
+      this.lock.notifyAll();
     }
   }
 }

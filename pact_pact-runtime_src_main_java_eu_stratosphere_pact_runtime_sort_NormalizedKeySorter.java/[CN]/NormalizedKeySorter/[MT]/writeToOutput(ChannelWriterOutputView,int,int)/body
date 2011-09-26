@@ -1,0 +1,25 @@
+{
+  int currentMemSeg=start / this.indexEntriesPerSegment;
+  int offset=(start % this.indexEntriesPerSegment) * this.indexEntrySize;
+  while (num > 0) {
+    final MemorySegment currentIndexSegment=this.sortIndex.get(currentMemSeg++);
+    if (num >= this.indexEntriesPerSegment && offset == 0) {
+      for (; offset <= this.lastIndexEntryOffset; offset+=this.indexEntrySize) {
+        final long pointer=currentIndexSegment.getLong(offset);
+        final int buffer=(int)(pointer >>> this.segmentSizeBits);
+        final int segmentOffset=(int)(pointer & this.segmentSizeMask);
+        this.accessors.copy(this.recordBuffers,buffer,segmentOffset,output);
+      }
+      num-=this.indexEntriesPerSegment;
+    }
+ else {
+      for (; num > 0 && offset <= this.lastIndexEntryOffset; num--, offset+=this.indexEntrySize) {
+        final long pointer=currentIndexSegment.getLong(offset);
+        final int buffer=(int)(pointer >>> this.segmentSizeBits);
+        final int segmentOffset=(int)(pointer & this.segmentSizeMask);
+        this.accessors.copy(this.recordBuffers,buffer,segmentOffset,output);
+      }
+    }
+    offset=0;
+  }
+}

@@ -1,0 +1,16 @@
+{
+  if (LOG.isDebugEnabled())   LOG.debug("Performing merge of " + channelIDs.size() + " sorted streams.");
+  final List<MutableObjectIterator<PactRecord>> iterators=new ArrayList<MutableObjectIterator<PactRecord>>(channelIDs.size());
+  for (int i=0; i < channelIDs.size(); i++) {
+    final Channel.ID id=channelIDs.get(i);
+    final List<MemorySegment> segsForChannel=inputSegments.get(i);
+    final BlockChannelReader reader=this.ioManager.createBlockChannelReader(id);
+    final ChannelReaderInputView inView=new ChannelReaderInputView(reader,segsForChannel);
+    readerList.add(reader);
+    registerOpenChannelToBeRemovedAtShudown(reader);
+    unregisterChannelToBeRemovedAtShudown(id);
+    final MutableObjectIterator<PactRecord> iterator=new ChannelReaderIterator(inView);
+    iterators.add(iterator);
+  }
+  return new MergeIterator(iterators,this.keyComparators,this.keyPositions,this.keyClasses);
+}

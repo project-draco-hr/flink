@@ -22,8 +22,8 @@
   try {
     ev=new ExecutionVertex(jobVertex.getJobGraph().getJobID(),invokableClass,this,groupVertex);
   }
- catch (  Exception e) {
-    throw new GraphConversionException(StringUtils.stringifyException(e));
+ catch (  Throwable t) {
+    throw new GraphConversionException(StringUtils.stringifyException(t));
   }
   try {
     jobVertex.checkConfiguration(ev.getEnvironment().getInvokable());
@@ -52,11 +52,11 @@
   groupVertex.setMinMemberSize(minimumNumberOfSubtasks);
   groupVertex.setMaxMemberSize(maximumNumberOfSubtasks);
   ev.setAllocatedResource(new AllocatedResource(DummyInstance.createDummyInstance(instanceType),instanceType,null));
-  if (jobVertex instanceof JobInputVertex) {
+  if (jobVertex instanceof AbstractJobInputVertex) {
     final InputSplit[] inputSplits;
     if (ev.getEnvironment().getInvokable() instanceof AbstractInputTask) {
       try {
-        inputSplits=((AbstractInputTask)ev.getEnvironment().getInvokable()).computeInputSplits(jobVertex.getNumberOfSubtasks());
+        inputSplits=((AbstractInputTask<?>)ev.getEnvironment().getInvokable()).computeInputSplits(jobVertex.getNumberOfSubtasks());
       }
  catch (      Exception e) {
         throw new GraphConversionException("Cannot compute input splits for " + groupVertex.getName() + ": "+ StringUtils.stringifyException(e));
@@ -64,6 +64,12 @@
     }
  else {
       throw new GraphConversionException("BUG: JobInputVertex contained a task class which was not an input task.");
+    }
+    if (inputSplits == null) {
+      LOG.info("Job input vertex " + jobVertex.getName() + " generated 0 input splits");
+    }
+ else {
+      LOG.info("Job input vertex " + jobVertex.getName() + " generated "+ inputSplits.length+ " input splits");
     }
     groupVertex.setInputSplits(inputSplits);
   }

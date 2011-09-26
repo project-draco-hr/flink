@@ -1,0 +1,48 @@
+{
+  final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
+  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
+  while (it.hasNext()) {
+    final Map.Entry<InstanceType,Integer> entry=it.next();
+    final int maximumNumberOfInstances=entry.getValue().intValue();
+    for (int i=0; i < maximumNumberOfInstances; i++) {
+      LOG.info("Trying to allocate instance of type " + entry.getKey().getIdentifier());
+      AllocatedSlice slice=null;
+      for (      final ClusterInstance host : this.registeredHosts.values()) {
+        if (host.getType().equals(entry.getKey())) {
+          slice=host.createSlice(entry.getKey(),jobID);
+          if (slice != null) {
+            break;
+          }
+        }
+      }
+      if (slice == null) {
+        for (        final ClusterInstance host : this.registeredHosts.values()) {
+          slice=host.createSlice(entry.getKey(),jobID);
+          if (slice != null) {
+            break;
+          }
+        }
+      }
+      if (slice == null) {
+        if (i < instanceRequestMap.getMinimumNumberOfInstances(entry.getKey())) {
+          removeAllSlicesOfJob(jobID);
+          throw new InstanceException("Could not find a suitable instance");
+        }
+ else {
+          break;
+        }
+      }
+      List<AllocatedSlice> allocatedSlices=this.slicesOfJobs.get(jobID);
+      if (allocatedSlices == null) {
+        allocatedSlices=new ArrayList<AllocatedSlice>();
+        this.slicesOfJobs.put(jobID,allocatedSlices);
+      }
+      allocatedSlices.add(slice);
+      allocatedResources.add(new AllocatedResource(slice.getHostingInstance(),slice.getType(),slice.getAllocationID()));
+    }
+  }
+  if (this.instanceListener != null) {
+    final ClusterInstanceNotifier clusterInstanceNotifier=new ClusterInstanceNotifier(this.instanceListener,jobID,allocatedResources);
+    clusterInstanceNotifier.start();
+  }
+}

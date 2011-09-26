@@ -26,7 +26,7 @@
     return;
   }
   if (cacheOnly) {
-    if (LOG.isDebugEnabled())     LOG.debug("Initiating merge-iterator (in-memory segments).");
+    if (LOG.isDebugEnabled())     LOG.debug("Initiating in memory merge.");
     List<MutableObjectIterator<PactRecord>> iterators=new ArrayList<MutableObjectIterator<PactRecord>>(cache.size());
     for (    CircularElement cached : cache) {
       iterators.add(cached.buffer.getIterator());
@@ -37,10 +37,12 @@
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
-  final List<MemorySegment> writeBuffers;
+  final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+  final int writeBufferSize=UnilateralSortMerger.this.ioBufferSize;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
+  List<MemorySegment> writeBuffers;
   try {
-    writeBuffers=this.memoryManager.allocate(UnilateralSortMerger.this.parent,writeMemSize,NUM_WRITE_BUFFERS,MIN_IO_BUFFER_SIZE);
+    writeBuffers=this.memoryManager.allocateStrict(UnilateralSortMerger.this.parent,NUM_WRITE_BUFFERS,writeBufferSize);
     registerSegmentsToBeFreedAtShutdown(writeBuffers);
   }
  catch (  MemoryAllocationException maex) {
@@ -48,16 +50,14 @@
   }
   while (isRunning()) {
     try {
-      element=takeNext(queues.spill,cache);
+      element=takeNext(this.queues.spill,cache);
     }
  catch (    InterruptedException iex) {
       if (isRunning()) {
         LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
         continue;
       }
- else {
-        return;
-      }
+ else       return;
     }
     if (!isRunning()) {
       return;
@@ -67,11 +67,15 @@
     }
     Channel.ID channel=enumerator.next();
     channelIDs.add(channel);
-    ChannelWriter writer=this.ioManager.createChannelWriter(channel,writeBuffers);
+    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,returnQueue);
+    registerOpenChannelToBeRemovedAtShudown(writer);
+    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,writeBufferSize);
     if (LOG.isDebugEnabled())     LOG.debug("Spilling buffer " + element.id + ".");
-    element.buffer.writeToChannel(writer);
+    element.buffer.writeToOutput(output);
     if (LOG.isDebugEnabled())     LOG.debug("Spilled buffer " + element.id + ".");
-    writer.close();
+    output.close();
+    unregisterOpenChannelToBeRemovedAtShudown(writer);
+    registerChannelToBeRemovedAtShudown(channel);
     element.buffer.reset();
     this.queues.empty.add(element);
   }
@@ -80,10 +84,6 @@
     LOG.debug("Releasing sort-buffer memory.");
   }
   releaseSortBuffers();
-  if (UnilateralSortMerger.this.sortSegments != null) {
-    unregisterSegmentsToBeFreedAtShutdown(UnilateralSortMerger.this.sortSegments);
-    UnilateralSortMerger.this.sortSegments.clear();
-  }
   try {
     while (channelIDs.size() > UnilateralSortMerger.this.maxNumFileHandles) {
       channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
@@ -99,9 +99,7 @@
       List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
       List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
       registerSegmentsToBeFreedAtShutdown(allBuffers);
-      List<StreamChannelAccess<?,?>> readers=new ArrayList<StreamChannelAccess<?,?>>(channelIDs.size());
-      registerChannelsToBeRemovedAtShudown(readers);
-      setResultIterator(getMergingIterator(channelIDs,readBuffers,readers));
+      setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size())));
     }
   }
  catch (  MemoryAllocationException maex) {

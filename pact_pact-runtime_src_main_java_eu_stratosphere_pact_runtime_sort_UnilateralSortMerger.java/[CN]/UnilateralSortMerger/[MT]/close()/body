@@ -12,39 +12,39 @@ synchronized (this.iteratorLock) {
         this.iteratorLock.notifyAll();
       }
     }
-    if (readThread != null) {
+    if (this.readThread != null) {
       try {
-        readThread.shutdown();
+        this.readThread.shutdown();
       }
  catch (      Throwable t) {
         LOG.error("Error shutting down reader thread: " + t.getMessage(),t);
       }
     }
-    if (sortThread != null) {
+    if (this.sortThread != null) {
       try {
-        sortThread.shutdown();
+        this.sortThread.shutdown();
       }
  catch (      Throwable t) {
         LOG.error("Error shutting down sorter thread: " + t.getMessage(),t);
       }
     }
-    if (spillThread != null) {
+    if (this.spillThread != null) {
       try {
-        spillThread.shutdown();
+        this.spillThread.shutdown();
       }
  catch (      Throwable t) {
         LOG.error("Error shutting down spilling thread: " + t.getMessage(),t);
       }
     }
     try {
-      if (readThread != null) {
-        readThread.join();
+      if (this.readThread != null) {
+        this.readThread.join();
       }
-      if (sortThread != null) {
-        sortThread.join();
+      if (this.sortThread != null) {
+        this.sortThread.join();
       }
-      if (spillThread != null) {
-        spillThread.join();
+      if (this.spillThread != null) {
+        this.spillThread.join();
       }
     }
  catch (    InterruptedException iex) {
@@ -52,21 +52,45 @@ synchronized (this.iteratorLock) {
     }
   }
   finally {
-    for (    List<StreamChannelAccess<?,?>> channels : this.channelsToDeleteAtShutdown) {
-      for (      StreamChannelAccess<?,?> channel : channels) {
+    try {
+      while (!this.memoryToReleaseAtShutdown.isEmpty()) {
         try {
-          if (!channel.isClosed()) {
-            channel.close();
-          }
-          channel.deleteChannel();
+          List<MemorySegment> segments=this.memoryToReleaseAtShutdown.remove(this.memoryToReleaseAtShutdown.size() - 1);
+          this.memoryManager.release(segments);
         }
  catch (        Throwable t) {
         }
       }
+      this.memoryToReleaseAtShutdown.clear();
     }
-    for (    List<MemorySegment> segments : this.memoryToReleaseAtShutdown) {
-      memoryManager.release(segments);
+ catch (    Throwable t) {
     }
-    this.memoryToReleaseAtShutdown.clear();
+    try {
+      for (      NormalizedKeySorter<?> sorter : this.sortBuffers) {
+        this.memoryManager.release(sorter.dispose());
+      }
+      this.sortBuffers.clear();
+    }
+ catch (    Throwable t) {
+    }
+    while (!this.openChannels.isEmpty()) {
+      try {
+        BlockChannelAccess<?,?> channel=this.openChannels.remove(this.openChannels.size() - 1);
+        if (!channel.isClosed())         channel.close();
+        channel.deleteChannel();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    for (    Channel.ID channel : this.channelsToDeleteAtShutdown) {
+      try {
+        final File f=new File(channel.getPath());
+        if (f.exists()) {
+          f.delete();
+        }
+      }
+ catch (      Throwable t) {
+      }
+    }
   }
 }

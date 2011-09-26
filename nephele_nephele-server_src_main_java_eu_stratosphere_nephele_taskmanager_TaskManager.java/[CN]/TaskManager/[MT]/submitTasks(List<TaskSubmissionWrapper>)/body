@@ -1,0 +1,27 @@
+{
+  final List<TaskSubmissionResult> submissionResultList=new SerializableArrayList<TaskSubmissionResult>();
+  final List<Task> tasksToStart=new ArrayList<Task>();
+  for (  final TaskSubmissionWrapper tsw : tasks) {
+    final Environment ee=tsw.getEnvironment();
+    final ExecutionVertexID id=tsw.getVertexID();
+    final Configuration jobConfiguration=tsw.getConfiguration();
+    final Set<ChannelID> activeOutputChannels=tsw.getActiveOutputChannels();
+    ee.setMemoryManager(this.memoryManager);
+    ee.setIOManager(this.ioManager);
+    ee.setInputSplitProvider(new TaskInputSplitProvider(ee.getJobID(),id,this.globalInputSplitProvider));
+    final Task task=new Task(id,ee,this);
+    ee.setExecutionObserver(task);
+    TaskSubmissionResult result=registerTask(id,jobConfiguration,task,activeOutputChannels);
+    if (result != null) {
+      submissionResultList.add(result);
+    }
+ else {
+      submissionResultList.add(new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.SUCCESS));
+    }
+    tasksToStart.add(task);
+  }
+  for (  final Task task : tasksToStart) {
+    task.startExecution();
+  }
+  return submissionResultList;
+}

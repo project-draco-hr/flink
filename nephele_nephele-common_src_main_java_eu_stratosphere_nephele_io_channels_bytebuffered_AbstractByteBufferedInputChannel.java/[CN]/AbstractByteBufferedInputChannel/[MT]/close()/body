@@ -3,7 +3,22 @@
   if (this.uncompressedDataBuffer != null) {
     releasedConsumedReadBuffer();
   }
-  if (getType() == ChannelType.NETWORK) {
+  if (this.getType() == ChannelType.NETWORK) {
+synchronized (this.synchronisationObject) {
+      if (!this.brokerAggreedToCloseChannel) {
+        while (!this.brokerAggreedToCloseChannel) {
+          requestReadBuffersFromBroker();
+          if (this.uncompressedDataBuffer != null || this.compressedDataBuffer != null) {
+            releasedConsumedReadBuffer();
+          }
+          this.synchronisationObject.wait(500);
+        }
+        this.bufferedRecord=null;
+      }
+    }
+  }
+  final ChannelType type=getType();
+  if (type == ChannelType.NETWORK || type == ChannelType.INMEMORY) {
     transferEvent(new ByteBufferedChannelCloseEvent());
   }
 }

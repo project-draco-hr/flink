@@ -1,0 +1,25 @@
+{
+  final ExecutionGraph executionGraph=this.scheduler.getExecutionGraphByID(taskCheckpointState.getJobID());
+  if (executionGraph == null) {
+    LOG.error("Cannot find execution graph for job " + taskCheckpointState.getJobID() + " to update checkpoint state");
+    return;
+  }
+  ExecutionVertex tmpVertex;
+synchronized (executionGraph) {
+    tmpVertex=executionGraph.getVertexByID(taskCheckpointState.getVertexID());
+    if (tmpVertex == null) {
+      LOG.error("Cannot find vertex with ID " + taskCheckpointState.getVertexID() + " to update checkpoint state");
+      return;
+    }
+  }
+  final ExecutionVertex vertex=tmpVertex;
+  final Runnable taskStateChangeRunnable=new Runnable(){
+    @Override public void run(){
+synchronized (executionGraph) {
+        vertex.updateCheckpointState(taskCheckpointState.getCheckpointState());
+      }
+    }
+  }
+;
+  this.executorService.execute(taskStateChangeRunnable);
+}

@@ -1,0 +1,68 @@
+{
+  updateBinaryRepresenation();
+  long bytesForLen=1;
+  if (target.getRemainingBytes() >= this.binaryLen + 5) {
+    int len=this.binaryLen;
+    while (len >= MAX_BIT) {
+      target.write(len | MAX_BIT);
+      len>>=7;
+      bytesForLen++;
+    }
+    target.write(len);
+    target.write(this.binaryData,0,this.binaryLen);
+  }
+ else {
+    if (target.getRemainingBytes() < 6) {
+      int len=this.binaryLen;
+      while (len >= MAX_BIT) {
+        if (target.getRemainingBytes() == 0) {
+          target=getNextBuffer(furtherBuffers,targetForUsedFurther);
+          if (target == null) {
+            return -1;
+          }
+        }
+        target.write(len | MAX_BIT);
+        len>>=7;
+        bytesForLen++;
+      }
+      if (target.getRemainingBytes() == 0) {
+        target=getNextBuffer(furtherBuffers,targetForUsedFurther);
+        if (target == null) {
+          return -1;
+        }
+      }
+      target.write(len);
+      if (target.getRemainingBytes() == 0) {
+        target=getNextBuffer(furtherBuffers,targetForUsedFurther);
+        if (target == null) {
+          return -1;
+        }
+      }
+    }
+ else {
+      int len=this.binaryLen;
+      while (len >= MAX_BIT) {
+        target.write(len | MAX_BIT);
+        len>>=7;
+        bytesForLen++;
+      }
+      target.write(len);
+    }
+    int currOff=0;
+    while (true) {
+      int toWrite=Math.min(this.binaryLen - currOff,target.getRemainingBytes());
+      target.write(this.binaryData,currOff,toWrite);
+      currOff+=toWrite;
+      if (currOff < this.binaryLen) {
+        target=getNextBuffer(furtherBuffers,targetForUsedFurther);
+        if (target == null) {
+          return -1;
+        }
+      }
+ else {
+        break;
+      }
+    }
+  }
+  return bytesForLen + this.binaryLen;
+}

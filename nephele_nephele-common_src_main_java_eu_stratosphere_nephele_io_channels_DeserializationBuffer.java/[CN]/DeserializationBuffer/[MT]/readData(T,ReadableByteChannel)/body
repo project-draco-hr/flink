@@ -1,0 +1,35 @@
+{
+  if (this.recordLength < 0) {
+    if (readableByteChannel.read(this.lengthBuf) == -1 && this.propagateEndOfStream) {
+      if (this.lengthBuf.position() == 0) {
+        throw new EOFException();
+      }
+ else {
+        throw new IOException("Deserilization error: Expected to read " + this.lengthBuf.remaining() + " more bytes of length information from the stream!");
+      }
+    }
+    if (this.lengthBuf.hasRemaining()) {
+      return null;
+    }
+    this.recordLength=byteArrayToInt(lengthBuf.array());
+    if (this.tempBuffer == null) {
+      tempBuffer=ByteBuffer.allocate(recordLength);
+    }
+    if (this.tempBuffer.capacity() < recordLength) {
+      tempBuffer=ByteBuffer.allocate(recordLength);
+    }
+    this.tempBuffer.position(0);
+    this.tempBuffer.limit(this.recordLength);
+  }
+  if (readableByteChannel.read(tempBuffer) == -1 && this.propagateEndOfStream) {
+    throw new IOException("Deserilization error: Expected to read " + this.tempBuffer.remaining() + " more bytes from stream!");
+  }
+  if (this.tempBuffer.hasRemaining()) {
+    return null;
+  }
+  this.deserializationBuffer.reset(tempBuffer.array(),this.recordLength);
+  final T record=deserializer.deserialize(target,this.deserializationBuffer);
+  this.recordLength=-1;
+  this.lengthBuf.clear();
+  return record;
+}

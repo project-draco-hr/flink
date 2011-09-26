@@ -1,0 +1,30 @@
+{
+  final MemorySegment memory=this.memoryManager.allocate(new DummyInvokable(),MEMORY_SIZE);
+  BufferSortableGuaranteed sorter=newSortBuffer(memory);
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+  PactRecord record=new PactRecord();
+  int num=-1;
+  do {
+    generator.next(record);
+    num++;
+  }
+ while (sorter.write(record));
+  int start=0, end=num - 1;
+  while (start < end) {
+    sorter.swap(start++,end--);
+  }
+  generator.reset();
+  PactRecord readTarget=new PactRecord();
+  int i=num - 1;
+  while (i >= 0) {
+    generator.next(record);
+    sorter.getRecord(readTarget,i--);
+    Key rk=readTarget.getField(0,Key.class);
+    Key gk=record.getField(0,Key.class);
+    Value rv=readTarget.getField(1,Value.class);
+    Value gv=record.getField(1,Value.class);
+    Assert.assertEquals("The re-read key is wrong",gk,rk);
+    Assert.assertEquals("The re-read value is wrong",gv,rv);
+  }
+  this.memoryManager.release(sorter.unbind());
+}
