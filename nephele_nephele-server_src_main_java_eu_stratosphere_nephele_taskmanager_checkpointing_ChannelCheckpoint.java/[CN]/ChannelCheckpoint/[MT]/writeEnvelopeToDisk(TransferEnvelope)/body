@@ -4,18 +4,20 @@
     duplicatTransferEnvelope=transferEnvelope.duplicate();
   }
   if (this.fileChannel == null) {
-    final FileOutputStream fos=new FileOutputStream(getFilename());
+    final FileOutputStream fos=new FileOutputStream(getFilename(),true);
     this.fileChannel=fos.getChannel();
   }
   if (this.transferEnvelopeSerializer == null) {
     this.transferEnvelopeSerializer=new TransferEnvelopeSerializer();
   }
-  this.transferEnvelopeSerializer.setTransferEnvelope(duplicatTransferEnvelope);
-  FileLock lock=this.fileChannel.lock();
-  while (this.transferEnvelopeSerializer.write(this.fileChannel))   ;
-  lock.release();
-  transferEnvelope.getProcessingLog().setWrittenToCheckpoint();
-  if (this.finishCheckpoint) {
-    transferEnvelope.getProcessingLog().setSentViaNetwork();
+synchronized (this.transferEnvelopeSerializer) {
+    this.transferEnvelopeSerializer.setTransferEnvelope(duplicatTransferEnvelope);
+    System.out.println("writing envelope " + duplicatTransferEnvelope.getSequenceNumber());
+    while (this.transferEnvelopeSerializer.write(this.fileChannel))     ;
+    transferEnvelope.getProcessingLog().setWrittenToCheckpoint();
+    if (this.finishCheckpoint) {
+      transferEnvelope.getProcessingLog().setSentViaNetwork();
+    }
+    this.offsets.add(this.fileChannel.size());
   }
 }

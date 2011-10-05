@@ -1,6 +1,8 @@
 {
+  if (this.checkpointFinished) {
+    LOG.error("Recieved Envelope" + transferEnvelope.getSequenceNumber() + " for a finished Checkpoint from "+ transferEnvelope.getSource());
+  }
   if (transferEnvelope.getSequenceNumber() != this.expectedSequenceNumber) {
-    this.byteBufferedChannelManager=byteBufferedChannelManager;
     throw new IOException("Expected envelope with sequence number " + this.expectedSequenceNumber + " but received "+ transferEnvelope.getSequenceNumber());
   }
   ++this.expectedSequenceNumber;
@@ -9,6 +11,13 @@
   }
   if (this.isPersistent) {
     this.writeEnvelopeToDisk(transferEnvelope);
+    Iterator<AbstractEvent> iter=transferEnvelope.getEventList().iterator();
+    while (iter.hasNext()) {
+      if (iter.next() instanceof ByteBufferedChannelCloseEvent) {
+        LOG.info("Envelope " + transferEnvelope.getSequenceNumber() + "contains Close Event");
+        markChannelCheckpointAsFinished(transferEnvelope.getSequenceNumber());
+      }
+    }
   }
  else {
     if (!this.queuedEnvelopes.contains(transferEnvelope)) {

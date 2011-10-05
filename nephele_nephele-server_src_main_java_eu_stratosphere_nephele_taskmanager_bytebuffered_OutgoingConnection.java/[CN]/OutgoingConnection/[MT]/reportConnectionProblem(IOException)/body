@@ -26,14 +26,22 @@ synchronized (this.queuedEnvelopes) {
       return;
     }
     LOG.error(ioe);
+    this.connectionThread.interrupt();
     if (this.currentEnvelope != null) {
       this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(this.currentEnvelope.getSource(),ioe);
+      if (this.currentEnvelope.getBuffer() != null) {
+        this.currentEnvelope.getProcessingLog().setSentViaNetwork();
+        this.currentEnvelope=null;
+      }
     }
     final Iterator<TransferEnvelope> iter=this.queuedEnvelopes.iterator();
     while (iter.hasNext()) {
       final TransferEnvelope envelope=iter.next();
       iter.remove();
       this.byteBufferedChannelManager.reportIOExceptionForOutputChannel(envelope.getSource(),ioe);
+      if (envelope.getBuffer() != null) {
+        envelope.getProcessingLog().setSentViaNetwork();
+      }
     }
   }
 }

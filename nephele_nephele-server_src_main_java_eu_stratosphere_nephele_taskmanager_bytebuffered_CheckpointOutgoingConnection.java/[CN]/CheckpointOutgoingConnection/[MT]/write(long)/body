@@ -1,0 +1,46 @@
+{
+  if (!this.isConnected) {
+    this.retriesLeft=this.numberOfConnectionRetries;
+    this.timstampOfLastRetry=System.currentTimeMillis();
+    this.connectionThread.triggerConnect(this);
+    this.isConnected=true;
+    this.isSubscribedToWriteEvent=true;
+  }
+ else {
+    if (!this.isSubscribedToWriteEvent) {
+      this.connectionThread.subscribeToWriteEvent(this.selectionKey);
+      this.isSubscribedToWriteEvent=true;
+    }
+  }
+  while (this.selectionKey == null) {
+    System.out.println("selektionkey null");
+    this.connectionThread.triggerConnect(this);
+    try {
+      Thread.sleep(2000);
+    }
+ catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
+  }
+  WritableByteChannel writableByteChannel=null;
+  writableByteChannel=(WritableByteChannel)super.selectionKey.channel();
+synchronized (writableByteChannel) {
+    ByteBuffer tempBuffer=ByteBuffer.allocate(this.DEFAULT_BUFFER_SIZE_IN_BYTES);
+    while (l != this.bytesread) {
+      try {
+        this.eof=this.readableByteChannel.transferTo(this.bytesread,l - this.bytesread,writableByteChannel);
+        this.bytesread+=this.eof;
+        LOG.debug(" transfered " + this.eof + " ALL "+ this.bytesread+ " of "+ l);
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+        try {
+          Thread.sleep(120000);
+        }
+ catch (        InterruptedException ie) {
+          ie.printStackTrace();
+        }
+      }
+    }
+  }
+}
