@@ -1,0 +1,43 @@
+{
+  LOG.info("recovery running");
+  if (this.failedVertices.isEmpty()) {
+    LOG.error("No failed vertices to recover");
+  }
+  Iterator<ExecutionVertex> vertexIter=this.failedVertices.iterator();
+  while (vertexIter.hasNext()) {
+    ExecutionVertex failed=vertexIter.next();
+    LOG.info("Staring Recovery for " + failed);
+    List<ExecutionVertex> restart=findRestarts(failed);
+    if (restart.size() < 2) {
+      LOG.info("No other Vertices have to be restarted?");
+    }
+ else {
+      LOG.info(restart.size());
+    }
+    Iterator<ExecutionVertex> restartIterator=restart.iterator();
+    while (restartIterator.hasNext()) {
+      ExecutionVertex vertex=restartIterator.next();
+      if (!vertex.equals(failed)) {
+        LOG.info("---------------");
+        LOG.info("Restarting " + vertex.getName());
+        try {
+          vertex.getAllocatedResource().getInstance().restart(vertex.getID(),job.getJobConfiguration());
+        }
+ catch (        Exception e) {
+          LOG.info("Catched Exception " + StringUtils.stringifyException(e) + "wihle restarting");
+        }
+        System.out.println("restarted " + vertex.getName());
+        LOG.info("---------------");
+      }
+    }
+    Iterator<ExecutionVertex> checkpointIterator=this.globalConsistentCheckpoint.iterator();
+    while (checkpointIterator.hasNext()) {
+      ExecutionVertex checkpoint=checkpointIterator.next();
+      AbstractInstance instance=checkpoint.getAllocatedResource().getInstance();
+      instance.recoverAll(checkpoint.getEnvironment().getOutputGate(0).getOutputChannel(0).getID());
+    }
+    LOG.info("Finished recovery for " + failed);
+  }
+  this.job.executionStateChanged(null,ExecutionState.RERUNNING,null);
+  LOG.info("Recovery Finsihed");
+}
