@@ -20,8 +20,10 @@
       if (!vertex.equals(failed)) {
         LOG.info("---------------");
         LOG.info("Restarting " + vertex.getName());
+        final List<ExecutionVertexID> checkpointsToReplay=new ArrayList<ExecutionVertexID>();
+        checkpointsToReplay.add(vertex.getID());
         try {
-          vertex.getAllocatedResource().getInstance().restart(vertex.getID(),job.getJobConfiguration());
+          vertex.getAllocatedResource().getInstance().replayCheckpoints(checkpointsToReplay);
         }
  catch (        Exception e) {
           LOG.info("Catched Exception " + StringUtils.stringifyException(e) + "wihle restarting");
@@ -30,14 +32,8 @@
         LOG.info("---------------");
       }
     }
-    Iterator<ExecutionVertex> checkpointIterator=this.globalConsistentCheckpoint.iterator();
-    while (checkpointIterator.hasNext()) {
-      ExecutionVertex checkpoint=checkpointIterator.next();
-      AbstractInstance instance=checkpoint.getAllocatedResource().getInstance();
-      instance.recoverAll(checkpoint.getEnvironment().getOutputGate(0).getOutputChannel(0).getID());
-    }
     LOG.info("Finished recovery for " + failed);
   }
-  this.job.executionStateChanged(null,ExecutionState.RERUNNING,null);
+  this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.RERUNNING,null);
   LOG.info("Recovery Finsihed");
 }
