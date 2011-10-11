@@ -2,27 +2,29 @@
   if (this.failedVertices.isEmpty()) {
     LOG.error("No failed vertices to recover");
   }
+  List<CheckpointReplayResult> replayCheckpoints=new ArrayList();
   Iterator<ExecutionVertex> vertexIter=this.failedVertices.iterator();
   while (vertexIter.hasNext()) {
     ExecutionVertex failed=vertexIter.next();
     LOG.info("Staring Recovery for " + failed);
-    List<ExecutionVertex> restart=findRestarts(failed);
-    Iterator<ExecutionVertex> restartIterator=restart.iterator();
-    while (restartIterator.hasNext()) {
-      ExecutionVertex vertex=restartIterator.next();
-      if (!vertex.equals(failed)) {
-        LOG.info("Restarting " + vertex.getName());
-        final List<ExecutionVertexID> checkpointsToReplay=new ArrayList<ExecutionVertexID>();
-        checkpointsToReplay.add(vertex.getID());
-        try {
-          vertex.getAllocatedResource().getInstance().replayCheckpoints(checkpointsToReplay);
-        }
- catch (        Exception e) {
-          LOG.info("Catched Exception " + StringUtils.stringifyException(e) + "wihle restarting");
-        }
+    findRestarts(failed);
+    Iterator<ExecutionVertexID> checkpointIterator=this.globalConsistentCheckpoint.iterator();
+    while (checkpointIterator.hasNext()) {
+      ExecutionVertexID checkpoint=checkpointIterator.next();
+      AbstractInstance instance=job.getVertexByID(checkpoint).getAllocatedResource().getInstance();
+      try {
+        replayCheckpoints.addAll(instance.replayCheckpoints(this.globalConsistentCheckpoint));
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
       }
     }
-    LOG.info("Finished recovery for " + failed);
+  }
+  for (  CheckpointReplayResult replayResult : replayCheckpoints) {
+    if (replayResult.getReturnCode() == ReturnCode.ERROR) {
+      LOG.info("Replay of Checkpoints return Error " + replayResult.getDescription());
+      return;
+    }
   }
   this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.RERUNNING,null);
   LOG.info("Recovery Finsihed");
