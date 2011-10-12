@@ -1,0 +1,26 @@
+{
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String edgeInput="hdfs://cloud-7.dima.tu-berlin.de:40010/graph/ibm_interactions.csv";
+  String output="hdfs://cloud-7.dima.tu-berlin.de:40010/graph/result";
+  FileDataSource edges=new FileDataSource(EdgeInFormat.class,edgeInput,"Input Edges");
+  edges.setParameter(DelimitedInputFormat.RECORD_DELIMITER,"\n");
+  edges.setDegreeOfParallelism(noSubTasks);
+  MapContract projectEdge=new MapContract(ProjectEdge.class,edges,"Project Edge");
+  projectEdge.setDegreeOfParallelism(noSubTasks);
+  ReduceContract edgeCounter=new ReduceContract(CountEdges.class,0,PactInteger.class,projectEdge,"Count Adjacent Edges");
+  edgeCounter.setDegreeOfParallelism(noSubTasks);
+  @SuppressWarnings("unchecked") ReduceContract countJoiner=new ReduceContract(JoinCountsAndUniquify.class,new int[]{0,1},new Class[]{PactInteger.class,PactInteger.class},edgeCounter,"Join Counts");
+  countJoiner.setDegreeOfParallelism(noSubTasks);
+  MapContract toLowerDegreeEdge=new MapContract(ProjectToLowerDegreeVertex.class,countJoiner,"Select lower-degree Edge");
+  toLowerDegreeEdge.setDegreeOfParallelism(noSubTasks);
+  MapContract projectOutCounts=new MapContract(ProjectOutCounts.class,countJoiner,"Project out Counts");
+  projectOutCounts.setDegreeOfParallelism(noSubTasks);
+  ReduceContract buildTriads=new ReduceContract(BuildTriads.class,0,PactInteger.class,toLowerDegreeEdge,"Build Triads");
+  buildTriads.setDegreeOfParallelism(noSubTasks);
+  @SuppressWarnings("unchecked") MatchContract closeTriads=new MatchContract(CloseTriads.class,new Class[]{PactInteger.class,PactInteger.class},new int[]{1,2},new int[]{0,1},buildTriads,projectOutCounts,"Close Triads");
+  closeTriads.setDegreeOfParallelism(noSubTasks);
+  closeTriads.setParameter("LOCAL_STRATEGY","LOCAL_STRATEGY_HASH_BUILD_SECOND");
+  FileDataSink triangles=new FileDataSink(EdgeOutFormat.class,output,closeTriads,"Triangles");
+  triangles.setDegreeOfParallelism(noSubTasks);
+  return new Plan(triangles,"Enumerate Triangles");
+}

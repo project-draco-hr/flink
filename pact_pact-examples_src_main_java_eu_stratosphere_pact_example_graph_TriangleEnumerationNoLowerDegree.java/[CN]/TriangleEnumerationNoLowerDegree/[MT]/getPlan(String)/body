@@ -1,0 +1,27 @@
+{
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String edgeInput="hdfs://cloud-7.dima.tu-berlin.de:40010/graph/ibm_interactions.csv";
+  String output="hdfs://cloud-7.dima.tu-berlin.de:40010/graph/result";
+  FileDataSourceContract<PactInteger,PactInteger> edges=new FileDataSourceContract<PactInteger,PactInteger>(EdgeInFormat.class,edgeInput,"Input Edges");
+  edges.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  edges.setDegreeOfParallelism(noSubTasks);
+  edges.getCompilerHints().setAvgNumValuesPerKey(156);
+  MapContract<PactInteger,PactInteger,PactLong,PactNull> buildEdge=new MapContract<PactInteger,PactInteger,PactLong,PactNull>(BuildEdge.class,"Assign Keys");
+  buildEdge.setDegreeOfParallelism(noSubTasks);
+  buildEdge.getCompilerHints().setAvgNumValuesPerKey(1);
+  buildEdge.getCompilerHints().setAvgRecordsEmittedPerStubCall(1);
+  ReduceContract<PactInteger,PactInteger,PactLong,PactInteger> buildTriads=new ReduceContract<PactInteger,PactInteger,PactLong,PactInteger>(BuildTriads.class,"Build Triads");
+  buildTriads.setDegreeOfParallelism(noSubTasks);
+  buildTriads.getCompilerHints().setAvgBytesPerRecord(12);
+  buildTriads.getCompilerHints().setAvgRecordsEmittedPerStubCall(5000);
+  MatchContract<PactLong,PactInteger,PactNull,PactInteger,PactLong> closeTriads=new MatchContract<PactLong,PactInteger,PactNull,PactInteger,PactLong>(CloseTriads.class,"Close Triads");
+  closeTriads.setDegreeOfParallelism(noSubTasks);
+  FileDataSinkContract<PactInteger,PactLong> triangles=new FileDataSinkContract<PactInteger,PactLong>(EdgeOutFormat.class,output,"Triangles");
+  triangles.setDegreeOfParallelism(noSubTasks);
+  triangles.setInput(closeTriads);
+  closeTriads.setFirstInput(buildTriads);
+  closeTriads.setSecondInput(buildEdge);
+  buildTriads.setInput(edges);
+  buildEdge.setInput(edges);
+  return new Plan(triangles,"Enumerate Triangles");
+}
