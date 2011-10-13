@@ -10,23 +10,6 @@
     if (!restart.contains(vertex)) {
       restart.add(vertex);
     }
-    for (int i=0; i < vertex.getNumberOfSuccessors(); i++) {
-      ExecutionVertex successor=vertex.getSuccessor(i);
-      restart.add(successor);
-      if (successor.getCheckpointState() == CheckpointState.PARTIAL) {
-        this.checkpoints.remove(successor);
-        this.globalConsistentCheckpoint.remove(successor.getID());
-      }
-      List<ExecutionVertex> follower=findFollowers(successor,restart);
-      restart.addAll(follower);
-      Iterator<ExecutionVertex> iter=follower.iterator();
-      while (iter.hasNext()) {
-        ExecutionVertex follow=iter.next();
-        if (!visited.contains(follow)) {
-          totest.add(follow);
-        }
-      }
-    }
     for (int j=0; j < vertex.getNumberOfPredecessors(); j++) {
       ExecutionVertex predecessor=vertex.getPredecessor(j);
       if (predecessor.getCheckpointState() != CheckpointState.PARTIAL) {
@@ -39,23 +22,9 @@
         if (!this.globalConsistentCheckpoint.contains(predecessor.getID())) {
           this.globalConsistentCheckpoint.add(predecessor.getID());
         }
-        List<ExecutionVertex> follower=findFollowers(predecessor,restart);
-        for (int i=0; i < follower.size(); i++) {
-          LOG.info("add " + follower.get(i) + " torestart");
-        }
-        restart.addAll(follower);
-        Iterator<ExecutionVertex> iter=follower.iterator();
-        while (iter.hasNext()) {
-          ExecutionVertex follow=iter.next();
-          if (!visited.contains(follow)) {
-            LOG.info("add totest" + follow.getName());
-            totest.add(follow);
-          }
-        }
       }
     }
     visited.add(vertex);
   }
-  LOG.info("finderestartsfinished");
   return restart;
 }

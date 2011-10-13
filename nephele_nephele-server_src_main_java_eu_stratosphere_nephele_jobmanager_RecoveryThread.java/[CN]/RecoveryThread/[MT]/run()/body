@@ -7,13 +7,40 @@
   while (vertexIter.hasNext()) {
     ExecutionVertex failed=vertexIter.next();
     LOG.info("Staring Recovery for " + failed);
-    findRestarts(failed);
-    Iterator<ExecutionVertexID> checkpointIterator=this.globalConsistentCheckpoint.iterator();
-    while (checkpointIterator.hasNext()) {
-      ExecutionVertexID checkpoint=checkpointIterator.next();
-      AbstractInstance instance=job.getVertexByID(checkpoint).getAllocatedResource().getInstance();
+    List<ExecutionVertex> restart=findRestarts(failed);
+    Iterator<ExecutionVertex> restartIterator=restart.iterator();
+    while (restartIterator.hasNext()) {
+      ExecutionVertex vertex=restartIterator.next();
+      if (vertex.getID() != failed.getID()) {
+        try {
+          vertex.getAllocatedResource().getInstance().restartTask(vertex.getID(),this.job.getJobConfiguration(),vertex.getEnvironment(),vertex.constructInitialActiveOutputChannelsSet());
+        }
+ catch (        IOException e) {
+          e.printStackTrace();
+          this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.FAILED,null);
+          return;
+        }
+      }
+    }
+    try {
+      failed.getAllocatedResource().getInstance().submitTask(failed.getID(),this.job.getJobConfiguration(),failed.getEnvironment(),failed.constructInitialActiveOutputChannelsSet());
+    }
+ catch (    IOException e1) {
+      e1.printStackTrace();
+      this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.FAILED,null);
+      return;
+    }
+    List<AbstractInstance> instances=new SerializableArrayList<AbstractInstance>();
+    for (    ExecutionVertexID id : this.globalConsistentCheckpoint) {
+      AbstractInstance instance=this.job.getVertexByID(id).getAllocatedResource().getInstance();
+      if (!instances.contains(instance)) {
+        instances.add(instance);
+      }
+    }
+    Iterator<AbstractInstance> instanceIterator=instances.iterator();
+    while (instanceIterator.hasNext()) {
       try {
-        replayCheckpoints.addAll(instance.replayCheckpoints(this.globalConsistentCheckpoint));
+        replayCheckpoints.addAll(instanceIterator.next().replayCheckpoints(this.globalConsistentCheckpoint));
       }
  catch (      IOException e) {
         e.printStackTrace();
@@ -23,9 +50,10 @@
   for (  CheckpointReplayResult replayResult : replayCheckpoints) {
     if (replayResult.getReturnCode() == ReturnCode.ERROR) {
       LOG.info("Replay of Checkpoints return Error " + replayResult.getDescription());
+      this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.FAILED,null);
       return;
     }
   }
   this.job.executionStateChanged(this.job.getJobID(),null,ExecutionState.RERUNNING,null);
-  LOG.info("Recovery Finsihed");
+  LOG.info("Recovery Finished");
 }
