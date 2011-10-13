@@ -1,4 +1,5 @@
 {
+  final String checkpointDir=GlobalConfiguration.getString(CheckpointReplayManager.CHECKPOINT_DIRECTORY_KEY,CheckpointReplayManager.DEFAULT_CHECKPOINT_DIRECTORY);
   final Buffer buffer=transferEnvelope.getBuffer();
   if (buffer != null) {
     if (buffer.isBackedByMemory()) {
@@ -12,15 +13,15 @@
     if (this.metaDataFileChannel != null) {
       this.metaDataFileChannel.close();
       this.metaDataFileChannel=null;
+      renameCheckpointPart(checkpointDir);
       ++this.metaDataSuffix;
     }
   }
   if (this.metaDataFileChannel == null) {
-    final String checkpointDir=GlobalConfiguration.getString(CheckpointReplayManager.CHECKPOINT_DIRECTORY_KEY,CheckpointReplayManager.DEFAULT_CHECKPOINT_DIRECTORY);
     if (LOG.isDebugEnabled()) {
       LOG.debug("Writing checkpointing meta data to directory " + checkpointDir);
     }
-    final FileOutputStream fos=new FileOutputStream(checkpointDir + File.separator + CheckpointReplayManager.METADATA_PREFIX+ "_"+ this.task.getVertexID()+ "_"+ this.metaDataSuffix);
+    final FileOutputStream fos=new FileOutputStream(checkpointDir + File.separator + CheckpointReplayManager.METADATA_PREFIX+ "_"+ this.task.getVertexID()+ "_part");
     this.metaDataFileChannel=fos.getChannel();
   }
   this.transferEnvelopeSerializer.setTransferEnvelope(transferEnvelope);
@@ -39,8 +40,8 @@
   if (this.numberOfClosedChannels == this.numberOfConnectedChannels) {
     if (this.metaDataFileChannel != null) {
       this.metaDataFileChannel.close();
+      renameCheckpointPart(checkpointDir);
     }
-    final String checkpointDir=GlobalConfiguration.getString(CheckpointReplayManager.CHECKPOINT_DIRECTORY_KEY,CheckpointReplayManager.DEFAULT_CHECKPOINT_DIRECTORY);
     new FileOutputStream(checkpointDir + File.separator + CheckpointReplayManager.METADATA_PREFIX+ "_"+ this.task.getVertexID()+ "_final").close();
     this.fileBufferManager.forceCloseOfWritableSpillingFile(this.task.getVertexID());
     LOG.info("Finished persistent checkpoint for vertex " + this.task.getVertexID());
