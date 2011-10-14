@@ -1,13 +1,14 @@
 {
+  boolean failing=false;
   final int failAfterRecord=getRuntimeConfiguration().getInteger(FAILED_AFTER_RECORD_KEY,-1);
-  final boolean failing=(getIndexInSubtaskGroup() == getRuntimeConfiguration().getInteger(FAILURE_INDEX_KEY,-1));
+synchronized (FAILED_ONCE) {
+    failing=(getIndexInSubtaskGroup() == getRuntimeConfiguration().getInteger(FAILURE_INDEX_KEY,-1)) && FAILED_ONCE.add(getEnvironment().getTaskName());
+  }
   final FailingJobRecord record=new FailingJobRecord();
   for (int i=0; i < RECORDS_TO_GENERATE; ++i) {
     this.recordWriter.emit(record);
     if (i == failAfterRecord && failing) {
-      if (FAILED_ONCE.compareAndSet(false,true)) {
-        throw new RuntimeException("Runtime exception in " + getEnvironment().getTaskName() + " "+ getIndexInSubtaskGroup());
-      }
+      throw new RuntimeException("Runtime exception in " + getEnvironment().getTaskName() + " "+ getIndexInSubtaskGroup());
     }
   }
 }
