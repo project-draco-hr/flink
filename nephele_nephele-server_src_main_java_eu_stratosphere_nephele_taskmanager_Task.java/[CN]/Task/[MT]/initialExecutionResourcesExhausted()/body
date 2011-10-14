@@ -3,6 +3,8 @@
     throw new ConcurrentModificationException("initialExecutionResourcesExhausted must be called from the task that executes the user code");
   }
   final long timestamp=System.currentTimeMillis();
+  ThreadMXBean threadBean=ManagementFactory.getThreadMXBean();
+  long userCPU=(threadBean.getCurrentThreadUserTime() / NANO_TO_MILLISECONDS) * 100 / (timestamp - this.startTime);
   final Map<ChannelID,Long> outputChannelUtilization=new HashMap<ChannelID,Long>();
   for (int i=0; i < this.environment.getNumberOfOutputGates(); ++i) {
     final OutputGate<? extends Record> outputGate=this.environment.getOutputGate(i);
@@ -11,7 +13,7 @@
       outputChannelUtilization.put(outputChannel.getID(),Long.valueOf(outputChannel.getAmountOfDataTransmitted()));
     }
   }
-  final ResourceUtilizationSnapshot rus=new ResourceUtilizationSnapshot(timestamp,outputChannelUtilization);
+  final ResourceUtilizationSnapshot rus=new ResourceUtilizationSnapshot(timestamp,outputChannelUtilization,userCPU);
   final Iterator<ExecutionListener> it=this.registeredListeners.iterator();
   while (it.hasNext()) {
     it.next().initialExecutionResourcesExhausted(this.environment.getJobID(),this.vertexID,rus);
