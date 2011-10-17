@@ -1,18 +1,19 @@
 {
-  OptimizerNode pred=input == null ? null : input.getSourcePact();
   CompilerHints hints=getPactContract().getCompilerHints();
-  if (hints.getAvgBytesPerRecord() != -1) {
+  if (hints != null && hints.getAvgBytesPerRecord() != -1) {
     return hints.getAvgBytesPerRecord();
   }
- else   if (pred != null) {
-    if (pred.estimatedOutputSize != -1 && pred.estimatedNumRecords != -1) {
-      return (pred.getEstimatedOutputSize() / pred.getEstimatedNumRecords()) >= 1 ? (long)(pred.getEstimatedOutputSize() / pred.getEstimatedNumRecords()) : 1;
-    }
- else {
-      return -1.0;
+  long outputSize=0;
+  long numRecords=0;
+  for (  PactConnection c : this.input) {
+    OptimizerNode pred=c.getSourcePact();
+    if (pred != null) {
+      if (pred.estimatedOutputSize == -1 || pred.estimatedNumRecords == -1)       return -1;
+      outputSize+=pred.estimatedOutputSize;
+      numRecords+=pred.estimatedNumRecords;
     }
   }
- else {
-    return -1.0;
-  }
+  double result=outputSize / (double)numRecords;
+  if (result < 1)   return 1;
+  return result;
 }

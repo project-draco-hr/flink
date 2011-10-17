@@ -1,15 +1,27 @@
 {
-  List<? extends OptimizerNode> inPlans1=input1.getSourcePact().getAlternativePlans(estimator);
-  List<? extends OptimizerNode> inPlans2=input2.getSourcePact().getAlternativePlans(estimator);
+  List<OptimizerNode> allPreds1=new ArrayList<OptimizerNode>(this.input1.size());
+  for (  PactConnection c : this.input1) {
+    allPreds1.add(c.getSourcePact());
+  }
+  List<OptimizerNode> allPreds2=new ArrayList<OptimizerNode>(this.input2.size());
+  for (  PactConnection c : this.input2) {
+    allPreds2.add(c.getSourcePact());
+  }
   List<SinkJoiner> outputPlans=new ArrayList<SinkJoiner>();
-  for (  OptimizerNode pred1 : inPlans1) {
-    for (    OptimizerNode pred2 : inPlans2) {
-      if (!areBranchCompatible(pred1,pred2)) {
-        continue;
+  for (  PactConnection c : this.input1) {
+    List<? extends OptimizerNode> inPlans1=c.getSourcePact().getAlternativePlans(estimator);
+    for (    PactConnection cc : this.input2) {
+      List<? extends OptimizerNode> inPlans2=cc.getSourcePact().getAlternativePlans(estimator);
+      for (      OptimizerNode pred1 : inPlans1) {
+        for (        OptimizerNode pred2 : inPlans2) {
+          if (!areBranchCompatible(pred1,pred2)) {
+            continue;
+          }
+          SinkJoiner n=new SinkJoiner(this,allPreds1,allPreds2);
+          estimator.costOperator(n);
+          outputPlans.add(n);
+        }
       }
-      SinkJoiner n=new SinkJoiner(this,pred1,pred2);
-      estimator.costOperator(n);
-      outputPlans.add(n);
     }
   }
   if (outputPlans.isEmpty()) {

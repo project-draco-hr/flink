@@ -1,23 +1,35 @@
 {
-  if (cachedPlans != null) {
-    return cachedPlans;
+  if (this.cachedPlans != null) {
+    return this.cachedPlans;
   }
-  List<? extends OptimizerNode> inPlans1=input1.getSourcePact().getAlternativePlans(estimator);
-  List<? extends OptimizerNode> inPlans2=input2.getSourcePact().getAlternativePlans(estimator);
+  List<OptimizerNode> allPreds1=new ArrayList<OptimizerNode>(this.input1.size());
+  for (  PactConnection c : this.input1) {
+    allPreds1.add(c.getSourcePact());
+  }
+  List<OptimizerNode> allPreds2=new ArrayList<OptimizerNode>(this.input2.size());
+  for (  PactConnection c : this.input2) {
+    allPreds2.add(c.getSourcePact());
+  }
   List<CrossNode> outputPlans=new ArrayList<CrossNode>();
-  for (  OptimizerNode pred1 : inPlans1) {
-    for (    OptimizerNode pred2 : inPlans2) {
-      if (!areBranchCompatible(pred1,pred2)) {
-        continue;
-      }
-      ShipStrategy ss1=input1.getShipStrategy();
-      ShipStrategy ss2=input2.getShipStrategy();
-      if (ss1 != ShipStrategy.NONE) {
-        createLocalAlternatives(outputPlans,pred1,pred2,ss1,ss2,estimator);
-      }
+  for (  PactConnection c : this.input1) {
+    List<? extends OptimizerNode> inPlans1=c.getSourcePact().getAlternativePlans(estimator);
+    for (    PactConnection cc : this.input2) {
+      List<? extends OptimizerNode> inPlans2=cc.getSourcePact().getAlternativePlans(estimator);
+      for (      OptimizerNode pred1 : inPlans1) {
+        for (        OptimizerNode pred2 : inPlans2) {
+          if (!areBranchCompatible(pred1,pred2)) {
+            continue;
+          }
+          ShipStrategy ss1=c.getShipStrategy();
+          ShipStrategy ss2=cc.getShipStrategy();
+          if (ss1 != ShipStrategy.NONE) {
+            createLocalAlternatives(outputPlans,pred1,pred2,ss1,ss2,estimator,allPreds1,allPreds2);
+          }
  else {
-        createLocalAlternatives(outputPlans,pred1,pred2,ShipStrategy.BROADCAST,ShipStrategy.FORWARD,estimator);
-        createLocalAlternatives(outputPlans,pred1,pred2,ShipStrategy.FORWARD,ShipStrategy.BROADCAST,estimator);
+            createLocalAlternatives(outputPlans,pred1,pred2,ShipStrategy.BROADCAST,ShipStrategy.FORWARD,estimator,allPreds1,allPreds2);
+            createLocalAlternatives(outputPlans,pred1,pred2,ShipStrategy.FORWARD,ShipStrategy.BROADCAST,estimator,allPreds1,allPreds2);
+          }
+        }
       }
     }
   }

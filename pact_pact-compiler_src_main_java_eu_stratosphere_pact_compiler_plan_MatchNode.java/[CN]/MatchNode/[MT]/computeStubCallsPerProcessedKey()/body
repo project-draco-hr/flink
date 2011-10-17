@@ -1,17 +1,33 @@
 {
-  OptimizerNode pred1=input1 == null ? null : input1.getSourcePact();
-  OptimizerNode pred2=input2 == null ? null : input2.getSourcePact();
-  if (pred1 != null && pred2 != null) {
-    double callsPerKey=1;
-    if (pred1.getEstimatedKeyCardinality() != -1 && pred2.getEstimatedNumRecords() != -1) {
-      callsPerKey*=pred1.getEstimatedNumRecords() / pred1.getEstimatedKeyCardinality();
+  long numKey1=0;
+  long numRecords1=0;
+  long numKey2=0;
+  long numRecords2=0;
+  for (  PactConnection c : this.input1) {
+    OptimizerNode n=c.getSourcePact();
+    if (n.estimatedKeyCardinality == -1 || n.estimatedNumRecords == -1) {
+      numKey1=-1;
+      break;
     }
-    if (pred2.getEstimatedKeyCardinality() != -1 && pred2.getEstimatedNumRecords() != -1) {
-      callsPerKey*=pred2.getEstimatedNumRecords() / pred2.getEstimatedKeyCardinality();
+    numKey1+=n.estimatedKeyCardinality;
+    numRecords1+=n.estimatedNumRecords;
+  }
+  for (  PactConnection c : this.input2) {
+    OptimizerNode n=c.getSourcePact();
+    if (n.estimatedKeyCardinality == -1 || n.estimatedNumRecords == -1) {
+      numKey2=-1;
+      break;
     }
-    return callsPerKey;
+    numKey2+=n.estimatedKeyCardinality;
+    numRecords2+=n.estimatedNumRecords;
   }
- else {
-    return -1;
+  if (numKey1 == -1 && numKey2 == -1)   return -1;
+  double callsPerKey=1;
+  if (numKey1 != -1) {
+    callsPerKey*=numKey1 / (double)numRecords1;
   }
+  if (numKey2 != -1) {
+    callsPerKey*=numKey2 / (double)numRecords2;
+  }
+  return callsPerKey;
 }

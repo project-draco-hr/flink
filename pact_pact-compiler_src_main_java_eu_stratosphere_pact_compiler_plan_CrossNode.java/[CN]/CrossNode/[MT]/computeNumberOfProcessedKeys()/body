@@ -1,22 +1,28 @@
 {
-  OptimizerNode pred1=input1 == null ? null : input1.getSourcePact();
-  OptimizerNode pred2=input2 == null ? null : input2.getSourcePact();
-  if (pred1 != null && pred2 != null) {
+  long numKey1=0;
+  for (  PactConnection c : this.input1) {
+    long keys=c.getSourcePact().estimatedKeyCardinality;
+    if (keys == -1) {
+      numKey1=-1;
+      break;
+    }
+    numKey1+=keys;
+  }
+  long numKey2=0;
+  for (  PactConnection c : this.input2) {
+    long keys=c.getSourcePact().estimatedKeyCardinality;
+    if (keys == -1) {
+      numKey2=-1;
+      break;
+    }
+    numKey2+=keys;
+  }
 switch (this.getOutputContract()) {
 case SameKeyFirst:
-      return pred1.getEstimatedKeyCardinality();
+    return numKey1;
 case SameKeySecond:
-    return pred2.getEstimatedKeyCardinality();
-default :
-  if (pred1.getEstimatedKeyCardinality() != -1 && pred2.getEstimatedKeyCardinality() != -1) {
-    return pred1.getEstimatedKeyCardinality() * pred2.getEstimatedKeyCardinality();
-  }
- else {
-    return -1;
-  }
+  return numKey2;
 }
-}
- else {
-return -1;
-}
+if (numKey1 == -1 || numKey2 == -1) return -1;
+return numKey1 * numKey2;
 }
