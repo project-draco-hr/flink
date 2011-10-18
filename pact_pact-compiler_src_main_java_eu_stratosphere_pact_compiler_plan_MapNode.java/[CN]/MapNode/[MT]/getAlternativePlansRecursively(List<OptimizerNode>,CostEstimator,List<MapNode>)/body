@@ -1,0 +1,25 @@
+{
+  final int allPredsSize=allPreds.size();
+  PactConnection connToProcess=this.input.get(allPredsSize);
+  List<? extends OptimizerNode> inPlans=connToProcess.getSourcePact().getAlternativePlans(estimator);
+  for (  OptimizerNode pred : inPlans) {
+    allPreds.add(pred);
+    ShipStrategy ss=connToProcess.getShipStrategy() == ShipStrategy.NONE ? ShipStrategy.FORWARD : connToProcess.getShipStrategy();
+    GlobalProperties gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
+    LocalProperties lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
+    if (allPredsSize + 1 == this.input.size()) {
+      MapNode nMap=new MapNode(this,allPreds,this.input,gp,lp);
+      for (      PactConnection cc : nMap.getInputConnections()) {
+        cc.setShipStrategy(ss);
+      }
+      nMap.getGlobalProperties().filterByOutputContract(getOutputContract());
+      nMap.getLocalProperties().filterByOutputContract(getOutputContract());
+      estimator.costOperator(nMap);
+      outputPlans.add(nMap);
+    }
+ else {
+      getAlternativePlansRecursively(allPreds,estimator,outputPlans);
+    }
+    allPreds.remove(allPredsSize);
+  }
+}

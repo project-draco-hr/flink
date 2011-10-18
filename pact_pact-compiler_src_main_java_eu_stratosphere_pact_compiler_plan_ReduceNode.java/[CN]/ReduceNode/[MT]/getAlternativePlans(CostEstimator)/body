@@ -2,68 +2,8 @@
   if (this.cachedPlans != null) {
     return this.cachedPlans;
   }
-  List<OptimizerNode> allPreds=new ArrayList<OptimizerNode>(this.input.size());
-  for (  PactConnection c : this.input) {
-    allPreds.add(c.getSourcePact());
-  }
   List<ReduceNode> outputPlans=new ArrayList<ReduceNode>();
-  for (  PactConnection c : this.input) {
-    List<? extends OptimizerNode> inPlans=c.getSourcePact().getAlternativePlans(estimator);
-    for (    OptimizerNode pred : inPlans) {
-      ShipStrategy ss=c.getShipStrategy();
-      LocalStrategy ls=getLocalStrategy();
-      GlobalProperties gp;
-      LocalProperties lp;
-      if (ss == ShipStrategy.NONE) {
-        gp=pred.getGlobalProperties();
-        lp=pred.getLocalProperties();
-        if (gp.getPartitioning().isPartitioned() || gp.isKeyUnique()) {
-          ss=ShipStrategy.FORWARD;
-        }
- else {
-          ss=ShipStrategy.PARTITION_HASH;
-        }
-        gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
-        lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
-      }
- else {
-        gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
-        lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
-        if (!(gp.getPartitioning().isPartitioned() || gp.isKeyUnique())) {
-          continue;
-        }
-      }
-      if (!(lp.areKeysGrouped() || lp.getKeyOrder().isOrdered() || lp.isKeyUnique())) {
-        if (ls != LocalStrategy.NONE) {
-          if (ls != LocalStrategy.COMBININGSORT && ls != LocalStrategy.SORT) {
-            continue;
-          }
-        }
- else {
-          ls=isCombineable() ? LocalStrategy.COMBININGSORT : LocalStrategy.SORT;
-        }
-      }
-      if (ls == LocalStrategy.COMBININGSORT || ls == LocalStrategy.SORT) {
-        lp.setKeyOrder(Order.ASCENDING);
-        lp.setKeysGrouped(true);
-      }
-      if (isCombineable() && ss != ShipStrategy.FORWARD) {
-        OptimizerNode combiner=new CombinerNode(getPactContract(),pred,this.combinerReducingFactor);
-        combiner.setDegreeOfParallelism(pred.getDegreeOfParallelism());
-        estimator.costOperator(combiner);
-        pred=combiner;
-      }
-      ReduceNode n=new ReduceNode(this,allPreds,this.input,gp,lp);
-      for (      PactConnection cc : n.getInputConnections()) {
-        cc.setShipStrategy(ss);
-      }
-      n.setLocalStrategy(ls);
-      n.getGlobalProperties().filterByOutputContract(getOutputContract());
-      n.getLocalProperties().filterByOutputContract(getOutputContract());
-      estimator.costOperator(n);
-      outputPlans.add(n);
-    }
-  }
+  getAlternativePlansRecursively(new ArrayList<OptimizerNode>(0),estimator,outputPlans);
   if (outputPlans.isEmpty()) {
     throw new CompilerException("Could not create a valid plan for the reduce contract '" + getPactContract().getName() + "'. The compiler hints specified incompatible shipping strategies.");
   }

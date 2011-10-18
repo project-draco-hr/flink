@@ -1,0 +1,66 @@
+{
+  final int allPredsSize=allPreds.size();
+  PactConnection connToProcess=this.input.get(allPredsSize);
+  List<? extends OptimizerNode> inPlans=connToProcess.getSourcePact().getAlternativePlans(estimator);
+  for (  OptimizerNode pred : inPlans) {
+    allPreds.add(pred);
+    ShipStrategy ss=connToProcess.getShipStrategy();
+    LocalStrategy ls=getLocalStrategy();
+    GlobalProperties gp;
+    LocalProperties lp;
+    if (ss == ShipStrategy.NONE) {
+      gp=pred.getGlobalProperties();
+      lp=pred.getLocalProperties();
+      if (gp.getPartitioning().isPartitioned() || gp.isKeyUnique()) {
+        ss=ShipStrategy.FORWARD;
+      }
+ else {
+        ss=ShipStrategy.PARTITION_HASH;
+      }
+      gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
+      lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
+    }
+ else {
+      gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
+      lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
+      if (!(gp.getPartitioning().isPartitioned() || gp.isKeyUnique())) {
+        continue;
+      }
+    }
+    if (!(lp.areKeysGrouped() || lp.getKeyOrder().isOrdered() || lp.isKeyUnique())) {
+      if (ls != LocalStrategy.NONE) {
+        if (ls != LocalStrategy.COMBININGSORT && ls != LocalStrategy.SORT) {
+          continue;
+        }
+      }
+ else {
+        ls=isCombineable() ? LocalStrategy.COMBININGSORT : LocalStrategy.SORT;
+      }
+    }
+    if (ls == LocalStrategy.COMBININGSORT || ls == LocalStrategy.SORT) {
+      lp.setKeyOrder(Order.ASCENDING);
+      lp.setKeysGrouped(true);
+    }
+    if (isCombineable() && ss != ShipStrategy.FORWARD) {
+      OptimizerNode combiner=new CombinerNode(getPactContract(),pred,this.combinerReducingFactor);
+      combiner.setDegreeOfParallelism(pred.getDegreeOfParallelism());
+      estimator.costOperator(combiner);
+      pred=combiner;
+    }
+    if (allPredsSize + 1 == this.input.size()) {
+      ReduceNode n=new ReduceNode(this,allPreds,this.input,gp,lp);
+      for (      PactConnection cc : n.getInputConnections()) {
+        cc.setShipStrategy(ss);
+      }
+      n.setLocalStrategy(ls);
+      n.getGlobalProperties().filterByOutputContract(getOutputContract());
+      n.getLocalProperties().filterByOutputContract(getOutputContract());
+      estimator.costOperator(n);
+      outputPlans.add(n);
+    }
+ else {
+      getAlternativePlansRecursively(allPreds,estimator,outputPlans);
+    }
+    allPreds.remove(allPredsSize);
+  }
+}
