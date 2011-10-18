@@ -1,0 +1,44 @@
+{
+  final Iterator<Map.Entry<JobID,PendingRequestsMap>> it=this.pendingRequestsOfJob.entrySet().iterator();
+  while (it.hasNext()) {
+    final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
+    final Map.Entry<JobID,PendingRequestsMap> entry=it.next();
+    final JobID jobID=entry.getKey();
+    final PendingRequestsMap pendingRequestsMap=entry.getValue();
+    final Iterator<Map.Entry<InstanceType,Integer>> it2=pendingRequestsMap.iterator();
+    while (it2.hasNext()) {
+      final Map.Entry<InstanceType,Integer> entry2=it2.next();
+      final InstanceType requestedInstanceType=entry2.getKey();
+      int numberOfPendingInstances=entry2.getValue().intValue();
+      if (numberOfPendingInstances <= 0) {
+        LOG.error("Inconsistency: Job " + jobID + " has "+ numberOfPendingInstances+ " requests for instance type "+ requestedInstanceType.getIdentifier());
+        continue;
+      }
+      while (numberOfPendingInstances > 0) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Trying to allocate instance of type " + requestedInstanceType.getIdentifier());
+        }
+        final AllocatedSlice slice=getSliceOfType(jobID,requestedInstanceType);
+        if (slice == null) {
+          break;
+        }
+ else {
+          LOG.info("Allocated instance of type " + requestedInstanceType.getIdentifier() + " as a result of pending request for job "+ jobID);
+          --numberOfPendingInstances;
+          pendingRequestsMap.decreaseNumberOfPendingInstances(requestedInstanceType);
+          List<AllocatedSlice> allocatedSlices=this.slicesOfJobs.get(jobID);
+          if (allocatedSlices == null) {
+            allocatedSlices=new ArrayList<AllocatedSlice>();
+            this.slicesOfJobs.put(jobID,allocatedSlices);
+          }
+          allocatedSlices.add(slice);
+          allocatedResources.add(new AllocatedResource(slice.getHostingInstance(),slice.getType(),slice.getAllocationID()));
+        }
+      }
+    }
+    if (!allocatedResources.isEmpty() && this.instanceListener != null) {
+      final ClusterInstanceNotifier clusterInstanceNotifier=new ClusterInstanceNotifier(this.instanceListener,jobID,allocatedResources);
+      clusterInstanceNotifier.start();
+    }
+  }
+}
