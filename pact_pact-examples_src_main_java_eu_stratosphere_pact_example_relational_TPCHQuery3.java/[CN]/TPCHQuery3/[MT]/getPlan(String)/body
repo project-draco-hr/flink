@@ -3,60 +3,37 @@
   String ordersPath=(args.length > 1 ? args[1] : "");
   String lineitemsPath=(args.length > 2 ? args[2] : "");
   String output=(args.length > 3 ? args[3] : "");
-  String awsAccessID=(args.length > 4 ? args[4] : null);
-  String awsSecretKey=(args.length > 5 ? args[5] : null);
-  String awsImageID=(args.length > 6 ? args[6] : null);
-  String sshKeyPair=(args.length > 7 ? args[7] : null);
-  FileDataSourceContract<PactInteger,Tuple> orders=new FileDataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,ordersPath,"Orders");
-  orders.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
-  orders.setDegreeOfParallelism(noSubtasks);
-  orders.setOutputContract(UniqueKey.class);
+  FileDataSource orders=new FileDataSource(NewTupleInFormat.class,ordersPath,"Orders");
+  orders.setParameter(NewTupleInFormat.RECORD_DELIMITER,"\n");
   orders.getCompilerHints().setAvgNumValuesPerKey(1);
-  FileDataSourceContract<PactInteger,Tuple> lineitems=new FileDataSourceContract<PactInteger,Tuple>(IntTupleDataInFormat.class,lineitemsPath,"LineItems");
-  lineitems.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
-  lineitems.setDegreeOfParallelism(noSubtasks);
+  FileDataSource lineitems=new FileDataSource(NewTupleInFormat.class,lineitemsPath,"LineItems");
+  lineitems.setParameter(NewTupleInFormat.RECORD_DELIMITER,"\n");
   lineitems.getCompilerHints().setAvgNumValuesPerKey(4);
-  MapContract<PactInteger,Tuple,PactInteger,Tuple> filterO=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(FilterO.class,"FilterO");
-  filterO.setDegreeOfParallelism(noSubtasks);
+  MapContract filterO=new MapContract(FilterO.class,orders,"FilterO");
   filterO.setParameter("YEAR_FILTER",1993);
   filterO.setParameter("PRIO_FILTER","5");
-  filterO.getCompilerHints().setAvgBytesPerRecord(32);
+  filterO.getCompilerHints().setAvgBytesPerRecord(16);
   filterO.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.05f);
   filterO.getCompilerHints().setAvgNumValuesPerKey(1);
-  MapContract<PactInteger,Tuple,PactInteger,Tuple> projectLi=new MapContract<PactInteger,Tuple,PactInteger,Tuple>(ProjectLi.class,"ProjectLi");
-  projectLi.setDegreeOfParallelism(noSubtasks);
-  projectLi.getCompilerHints().setAvgBytesPerRecord(48);
+  MapContract projectLi=new MapContract(ProjectLi.class,lineitems,"ProjectLi");
+  projectLi.getCompilerHints().setAvgBytesPerRecord(20);
   projectLi.getCompilerHints().setAvgRecordsEmittedPerStubCall(1.0f);
   projectLi.getCompilerHints().setAvgNumValuesPerKey(4);
-  MatchContract<PactInteger,Tuple,Tuple,N_IntStringPair,Tuple> joinLiO=new MatchContract<PactInteger,Tuple,Tuple,N_IntStringPair,Tuple>(JoinLiO.class,"JoinLiO");
-  joinLiO.setDegreeOfParallelism(noSubtasks);
-  joinLiO.getCompilerHints().setAvgBytesPerRecord(64);
+  MatchContract joinLiO=new MatchContract(JoinLiO.class,PactLong.class,0,0,filterO,projectLi,"JoinLiO");
+  joinLiO.getCompilerHints().setAvgBytesPerRecord(24);
   joinLiO.getCompilerHints().setAvgNumValuesPerKey(4);
-  ReduceContract<N_IntStringPair,Tuple,PactInteger,Tuple> aggLiO=new ReduceContract<N_IntStringPair,Tuple,PactInteger,Tuple>(AggLiO.class,"AggLio");
-  aggLiO.setDegreeOfParallelism(noSubtasks);
-  aggLiO.getCompilerHints().setAvgBytesPerRecord(64);
+  @SuppressWarnings("unchecked") ReduceContract aggLiO=new ReduceContract(AggLiO.class,new int[]{0,1},new Class[]{PactLong.class,PactString.class},joinLiO,"AggLio");
+  aggLiO.getCompilerHints().setAvgBytesPerRecord(30);
   aggLiO.getCompilerHints().setAvgRecordsEmittedPerStubCall(1.0f);
   aggLiO.getCompilerHints().setAvgNumValuesPerKey(1);
-  FileDataSinkContract<PactString,Tuple> result=new FileDataSinkContract<PactString,Tuple>(StringTupleDataOutFormat.class,output,"Output");
-  result.setDegreeOfParallelism(noSubtasks);
-  result.setInput(aggLiO);
-  aggLiO.setInput(joinLiO);
-  joinLiO.setFirstInput(filterO);
-  filterO.setInput(orders);
-  joinLiO.setSecondInput(projectLi);
-  projectLi.setInput(lineitems);
+  FileDataSink result=new FileDataSink(RecordOutputFormat.class,output,aggLiO,"Output");
+  result.getParameters().setString(RecordOutputFormat.RECORD_DELIMITER_PARAMETER,"\n");
+  result.getParameters().setString(RecordOutputFormat.FIELD_DELIMITER_PARAMETER,"|");
+  result.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,3);
+  result.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactLong.class);
+  result.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 1,PactString.class);
+  result.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 2,PactDouble.class);
   Plan plan=new Plan(result,"TPCH Q3");
-  if (awsAccessID != null) {
-    plan.getPlanConfiguration().setNepheleString("job.ec2.awsaccessid",awsAccessID);
-  }
-  if (awsSecretKey != null) {
-    plan.getPlanConfiguration().setNepheleString("job.ec2.awssecretkey",awsSecretKey);
-  }
-  if (awsImageID != null) {
-    plan.getPlanConfiguration().setNepheleString("job.ec2.ami",awsImageID);
-  }
-  if (sshKeyPair != null) {
-    plan.getPlanConfiguration().setNepheleString("job.ec2.sshkeypair",sshKeyPair);
-  }
+  plan.setDefaultParallelism(noSubtasks);
   return plan;
 }
