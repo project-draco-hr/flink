@@ -1,8 +1,8 @@
 {
-  RecordDeserializer<KeyValuePair<Key,Value>> deserializer1=new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType());
-  RecordDeserializer<KeyValuePair<Key,Value>> deserializer2=new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType());
+  RecordDeserializer<KeyValuePair<Key,Value>> deserializer1=new KeyValuePairDeserializer<Key,Value>(this.stub.getFirstInKeyType(),this.stub.getFirstInValueType());
+  RecordDeserializer<KeyValuePair<Key,Value>> deserializer2=new KeyValuePairDeserializer<Key,Value>(this.stub.getSecondInKeyType(),this.stub.getSecondInValueType());
   DistributionPattern dp1=null;
-switch (config.getInputShipStrategy(0)) {
+switch (this.config.getInputShipStrategy(0)) {
 case FORWARD:
     dp1=new PointwiseDistributionPattern();
   break;
@@ -19,7 +19,7 @@ default :
 throw new RuntimeException("No input ship strategy provided for first input of CrossTask.");
 }
 DistributionPattern dp2=null;
-switch (config.getInputShipStrategy(1)) {
+switch (this.config.getInputShipStrategy(1)) {
 case FORWARD:
 dp2=new PointwiseDistributionPattern();
 break;
@@ -35,6 +35,29 @@ break;
 default :
 throw new RuntimeException("No input ship strategy provided for second input of CrossTask.");
 }
-this.input1=new NepheleReaderIterator<KeyValuePair<Key,Value>>(new RecordReader<KeyValuePair<Key,Value>>(this,deserializer1,dp1));
-this.input2=new NepheleReaderIterator<KeyValuePair<Key,Value>>(new RecordReader<KeyValuePair<Key,Value>>(this,deserializer2,dp2));
+Reader reader1, reader2;
+final int groupSizeOne=this.config.getGroupSize(1);
+if (groupSizeOne == 1) {
+reader1=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer1,dp1);
+}
+ else {
+RecordReader<KeyValuePair<Key,Value>>[] readers=new RecordReader[groupSizeOne];
+for (int i=0; i < groupSizeOne; ++i) {
+readers[i]=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer1,dp1);
+}
+reader1=new UnionRecordReader<KeyValuePair<Key,Value>>(readers);
+}
+final int groupSizeTwo=this.config.getGroupSize(2);
+if (groupSizeTwo == 1) {
+reader2=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer2,dp2);
+}
+ else {
+RecordReader<KeyValuePair<Key,Value>>[] readers=new RecordReader[groupSizeTwo];
+for (int i=0; i < groupSizeTwo; ++i) {
+readers[i]=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer2,dp2);
+}
+reader2=new UnionRecordReader<KeyValuePair<Key,Value>>(readers);
+}
+this.input1=new NepheleReaderIterator<KeyValuePair<Key,Value>>(reader1);
+this.input2=new NepheleReaderIterator<KeyValuePair<Key,Value>>(reader2);
 }

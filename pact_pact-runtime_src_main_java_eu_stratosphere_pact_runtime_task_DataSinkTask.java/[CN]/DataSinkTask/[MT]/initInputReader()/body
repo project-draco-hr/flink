@@ -1,7 +1,7 @@
 {
-  RecordDeserializer<KeyValuePair<Key,Value>> deserializer=new KeyValuePairDeserializer(this.format.getKeyType(),format.getValueType());
+  RecordDeserializer<KeyValuePair<Key,Value>> deserializer=new KeyValuePairDeserializer(this.format.getKeyType(),this.format.getValueType());
   DistributionPattern dp=null;
-switch (config.getInputShipStrategy(0)) {
+switch (this.config.getInputShipStrategy(0)) {
 case FORWARD:
     dp=new PointwiseDistributionPattern();
   break;
@@ -11,8 +11,18 @@ break;
 default :
 throw new RuntimeException("No valid input ship strategy provided for DataSinkTask.");
 }
+final int numberOfInputs=this.config.getNumInputs();
+if (numberOfInputs == 1) {
 this.reader=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer,dp);
-this.availableMemory=config.getMemorySize();
-this.maxFileHandles=config.getNumFilehandles();
-this.spillThreshold=config.getSortSpillingTreshold();
+}
+ else {
+RecordReader<KeyValuePair<Key,Value>>[] readers=new RecordReader[numberOfInputs];
+for (int i=0; i < numberOfInputs; ++i) {
+readers[i]=new RecordReader<KeyValuePair<Key,Value>>(this,deserializer,dp);
+}
+this.reader=new UnionRecordReader<KeyValuePair<Key,Value>>(readers);
+}
+this.availableMemory=this.config.getMemorySize();
+this.maxFileHandles=this.config.getNumFilehandles();
+this.spillThreshold=this.config.getSortSpillingTreshold();
 }

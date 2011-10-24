@@ -1,52 +1,6 @@
 {
-  List<? extends OptimizerNode> inPlans=this.input.getSourcePact().getAlternativePlans(estimator);
-  List<DataSinkNode> plans=new ArrayList<DataSinkNode>(inPlans.size());
-  for (  OptimizerNode pred : inPlans) {
-    Order go=getPactContract().getGlobalOrder();
-    Order lo=getPactContract().getLocalOrder();
-    GlobalProperties gp=pred.getGlobalProperties().createCopy();
-    LocalProperties lp=pred.getLocalProperties().createCopy();
-    ShipStrategy ss=null;
-    LocalStrategy ls=null;
-    if (go != Order.NONE && go != gp.getKeyOrder()) {
-      if (this.input.getShipStrategy() == ShipStrategy.NONE || this.input.getShipStrategy() == ShipStrategy.PARTITION_RANGE) {
-        ss=ShipStrategy.PARTITION_RANGE;
-      }
- else {
-        continue;
-      }
-      if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
-        ls=LocalStrategy.SORT;
-      }
- else {
-        continue;
-      }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED);
-      gp.setKeyOrder(go);
-      lp.setKeyOrder(go);
-    }
- else     if (lo != Order.NONE && lo != lp.getKeyOrder()) {
-      if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
-        ls=LocalStrategy.SORT;
-      }
- else {
-        continue;
-      }
-      ls=LocalStrategy.SORT;
-      lp.setKeyOrder(lo);
-    }
-    DataSinkNode ns=new DataSinkNode(this,pred,this.input,gp,lp);
-    if (ss == null) {
-      ss=ShipStrategy.FORWARD;
-    }
-    ns.input.setShipStrategy(ss);
-    if (ls == null) {
-      ls=LocalStrategy.NONE;
-    }
-    ns.setLocalStrategy(ls);
-    estimator.costOperator(ns);
-    plans.add(ns);
-  }
+  List<DataSinkNode> plans=new ArrayList<DataSinkNode>();
+  getAlternativePlansRecursively(new ArrayList<OptimizerNode>(0),estimator,plans);
   prunePlanAlternatives(plans);
   if (plans.isEmpty()) {
     throw new CompilerException("Could not create a valid plan for the DataSource contract '" + getPactContract().getName() + "'. The compiler hints specified incompatible shipping strategies.");

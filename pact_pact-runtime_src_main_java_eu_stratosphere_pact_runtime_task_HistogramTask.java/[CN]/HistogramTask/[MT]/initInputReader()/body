@@ -1,7 +1,7 @@
 {
-  RecordDeserializer<KeyValuePair<Key,Value>> deserializer=new KeyValuePairDeserializer(keyType,PactNull.class);
+  RecordDeserializer<KeyValuePair<Key,Value>> deserializer=new KeyValuePairDeserializer(this.keyType,PactNull.class);
   DistributionPattern dp=null;
-switch (config.getInputShipStrategy(0)) {
+switch (this.config.getInputShipStrategy(0)) {
 case FORWARD:
     dp=new PointwiseDistributionPattern();
   break;
@@ -14,5 +14,16 @@ break;
 default :
 throw new RuntimeException("No input ship strategy provided for ReduceTask.");
 }
-reader=new CountingRecordReader(this,deserializer,dp);
+final int numberOfInputs=this.config.getNumInputs();
+if (numberOfInputs == 1) {
+this.reader=new CountingRecordReader(this,deserializer,dp);
+this.allReaders=new CountingRecordReader[]{(CountingRecordReader)this.reader};
+}
+ else {
+this.allReaders=new CountingRecordReader[numberOfInputs];
+for (int i=0; i < numberOfInputs; ++i) {
+this.allReaders[i]=new CountingRecordReader(this,deserializer,dp);
+}
+this.reader=new UnionRecordReader<KeyValuePair<Key,Value>>(this.allReaders);
+}
 }

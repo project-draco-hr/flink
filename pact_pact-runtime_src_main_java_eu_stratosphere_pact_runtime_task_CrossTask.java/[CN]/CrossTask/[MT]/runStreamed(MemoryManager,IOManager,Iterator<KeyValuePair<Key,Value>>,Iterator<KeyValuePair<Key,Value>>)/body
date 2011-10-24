@@ -3,30 +3,30 @@
   RepeatableIterator outerInput=null;
   try {
     final boolean firstInputIsOuter;
-    if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
+    if (this.config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
       try {
-        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(stub.getSecondInKeyType(),stub.getSecondInValueType()),this);
-        spillingResetIt=innerInput;
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(this.stub.getSecondInKeyType(),this.stub.getSecondInValueType()),this);
+        this.spillingResetIt=innerInput;
       }
  catch (      MemoryAllocationException mae) {
         throw new RuntimeException("Unable to obtain SpillingResettable iterator for inner side.",mae);
       }
-      outerInput=new RepeatableIterator(outerReader,stub.getFirstInKeyType(),stub.getFirstInValueType());
+      outerInput=new RepeatableIterator(outerReader,this.stub.getFirstInKeyType(),this.stub.getFirstInValueType());
       firstInputIsOuter=true;
     }
- else     if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+ else     if (this.config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
       try {
-        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(stub.getFirstInKeyType(),stub.getFirstInValueType()),this);
-        spillingResetIt=innerInput;
+        innerInput=new SpillingResettableIterator<KeyValuePair<Key,Value>>(memoryManager,ioManager,innerReader,this.availableMemory,new KeyValuePairDeserializer<Key,Value>(this.stub.getFirstInKeyType(),this.stub.getFirstInValueType()),this);
+        this.spillingResetIt=innerInput;
       }
  catch (      MemoryAllocationException mae) {
         throw new RuntimeException("Unable to obtain SpillingResettable iterator for inner side.",mae);
       }
-      outerInput=new RepeatableIterator(outerReader,stub.getSecondInKeyType(),stub.getSecondInValueType());
+      outerInput=new RepeatableIterator(outerReader,this.stub.getSecondInKeyType(),this.stub.getSecondInValueType());
       firstInputIsOuter=false;
     }
  else {
-      throw new RuntimeException("Invalid local strategy for CrossTask: " + config.getLocalStrategy());
+      throw new RuntimeException("Invalid local strategy for CrossTask: " + this.config.getLocalStrategy());
     }
     try {
       innerInput.open();
@@ -42,16 +42,16 @@ catch (    InterruptedException ie) {
     }
     if (this.taskCanceled)     return;
     if (LOG.isDebugEnabled())     LOG.debug(getLogString("Resetable iterator obtained"));
-    stub.open();
+    this.stub.open();
     while (!this.taskCanceled && outerInput.hasNext()) {
       KeyValuePair outerPair=outerInput.next();
       while (!this.taskCanceled && innerInput.hasNext()) {
         KeyValuePair innerPair=innerInput.next();
         if (firstInputIsOuter) {
-          stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),output);
+          this.stub.cross(outerPair.getKey(),outerPair.getValue(),innerPair.getKey(),innerPair.getValue(),this.output);
         }
  else {
-          stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),output);
+          this.stub.cross(innerPair.getKey(),innerPair.getValue(),outerPair.getKey(),outerPair.getValue(),this.output);
         }
         outerPair=outerInput.repeatLast();
       }
@@ -59,7 +59,7 @@ catch (    InterruptedException ie) {
         innerInput.reset();
       }
     }
-    stub.close();
+    this.stub.close();
   }
  catch (  Exception ex) {
     if (!this.taskCanceled) {
