@@ -1,27 +1,20 @@
 {
   final ExecutionGraph eg=this.executionVertex.getExecutionGraph();
 synchronized (eg) {
-    if (newExecutionState == ExecutionState.FINISHED) {
+    if (newExecutionState == ExecutionState.FINISHING) {
+      final ExecutionPipeline pipeline=this.executionVertex.getExecutionPipeline();
+      if (!pipeline.isFinishing()) {
+        return;
+      }
       final ExecutionGroupVertex groupVertex=this.executionVertex.getGroupVertex();
       for (int i=0; i < groupVertex.getCurrentNumberOfGroupMembers(); ++i) {
         final ExecutionVertex groupMember=groupVertex.getGroupMember(i);
         if (groupMember.getExecutionState() == ExecutionState.SCHEDULED) {
-          groupMember.setAllocatedResource(this.executionVertex.getAllocatedResource());
-          groupMember.updateExecutionState(ExecutionState.READY);
+          final ExecutionPipeline pipelineToBeDeployed=groupMember.getExecutionPipeline();
+          pipelineToBeDeployed.setAllocatedResource(this.executionVertex.getAllocatedResource());
+          pipelineToBeDeployed.updateExecutionState(ExecutionState.ASSIGNED);
           this.scheduler.deployAssignedVertices(eg);
           return;
-        }
-      }
-      final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(eg,eg.getIndexOfCurrentExecutionStage(),true,true);
-      while (it.hasNext()) {
-        final ExecutionVertex nextVertex=it.next();
-        if (nextVertex.getExecutionState() == ExecutionState.SCHEDULED) {
-          if (nextVertex.getAllocatedResource().getInstanceType().equals(this.executionVertex.getAllocatedResource().getInstanceType())) {
-            nextVertex.setAllocatedResource(this.executionVertex.getAllocatedResource());
-            nextVertex.updateExecutionState(ExecutionState.READY);
-            this.scheduler.deployAssignedVertices(eg);
-            return;
-          }
         }
       }
     }
