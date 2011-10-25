@@ -2,59 +2,13 @@
   if (this.openBranches != null) {
     return;
   }
-  List<UnclosedBranchDescriptor> l;
-  List<UnclosedBranchDescriptor> child1open=new ArrayList<UnclosedBranchDescriptor>();
+  List<UnclosedBranchDescriptor> result1=new ArrayList<UnclosedBranchDescriptor>();
   for (  PactConnection c : this.input1) {
-    l=c.getSourcePact().getBranchesForParent(this);
-    if (l != null)     child1open.addAll(l);
+    result1=mergeLists(result1,c.getSourcePact().getBranchesForParent(this));
   }
-  List<UnclosedBranchDescriptor> child2open=new ArrayList<UnclosedBranchDescriptor>();
+  List<UnclosedBranchDescriptor> result2=new ArrayList<UnclosedBranchDescriptor>();
   for (  PactConnection c : this.input2) {
-    l=c.getSourcePact().getBranchesForParent(this);
-    if (l != null)     child2open.addAll(l);
+    result2=mergeLists(result2,c.getSourcePact().getBranchesForParent(this));
   }
-  if (child1open.isEmpty()) {
-    this.openBranches=child2open;
-  }
- else   if (child2open.isEmpty()) {
-    this.openBranches=child1open;
-  }
- else {
-    this.openBranches=new ArrayList<OptimizerNode.UnclosedBranchDescriptor>(4);
-    int index1=child1open.size() - 1;
-    int index2=child2open.size() - 1;
-    while (index1 >= 0 || index2 >= 0) {
-      int id1=-1;
-      int id2=index2 >= 0 ? child2open.get(index2).getBranchingNode().getId() : -1;
-      while (index1 >= 0 && (id1=child1open.get(index1).getBranchingNode().getId()) > id2) {
-        this.openBranches.add(child1open.get(index1));
-        index1--;
-      }
-      while (index2 >= 0 && (id2=child2open.get(index2).getBranchingNode().getId()) > id1) {
-        this.openBranches.add(child2open.get(index2));
-        index2--;
-      }
-      if (id1 == id2) {
-        OptimizerNode currBanchingNode=child1open.get(index1).getBranchingNode();
-        if (this.lastJoinedBranchNode == null) {
-          this.lastJoinedBranchNode=currBanchingNode;
-        }
-        long joinedInputs=child1open.get(index1).getJoinedPathsVector() | child2open.get(index2).getJoinedPathsVector();
-        long allInputs=(0x1L << currBanchingNode.getOutgoingConnections().size()) - 1;
-        if (joinedInputs == allInputs) {
-        }
- else {
-          this.openBranches.add(new UnclosedBranchDescriptor(currBanchingNode,joinedInputs));
-        }
-        index1--;
-        index2--;
-      }
-    }
-    if (this.openBranches.isEmpty()) {
-      this.openBranches=null;
-    }
- else {
-      Collections.reverse(this.openBranches);
-    }
-  }
+  this.openBranches=mergeLists(result1,result2);
 }
