@@ -13,7 +13,17 @@
       outputChannelUtilization.put(outputChannel.getID(),Long.valueOf(outputChannel.getAmountOfDataTransmitted()));
     }
   }
-  final ResourceUtilizationSnapshot rus=new ResourceUtilizationSnapshot(timestamp,outputChannelUtilization,userCPU);
+  Boolean force=null;
+  if (this.environment.getInvokable().getClass().isAnnotationPresent(Statefull.class) && !this.environment.getInvokable().getClass().isAnnotationPresent(Stateless.class)) {
+    force=false;
+  }
+ else {
+    ForceCheckpoint forced=this.environment.getInvokable().getClass().getAnnotation(ForceCheckpoint.class);
+    if (forced != null) {
+      force=forced.checkpoint();
+    }
+  }
+  final ResourceUtilizationSnapshot rus=new ResourceUtilizationSnapshot(timestamp,outputChannelUtilization,userCPU,force);
   final Iterator<ExecutionListener> it=this.registeredListeners.iterator();
   while (it.hasNext()) {
     it.next().initialExecutionResourcesExhausted(this.environment.getJobID(),this.vertexID,rus);
