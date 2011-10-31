@@ -1,5 +1,13 @@
 {
-  OptimizerNode pred=null;
+  boolean allPredsAvailable=false;
+  if (this.input != null) {
+    for (    PactConnection c : this.input) {
+      if (c.getSourcePact() == null) {
+        allPredsAvailable=false;
+        break;
+      }
+    }
+  }
   CompilerHints hints=getPactContract().getCompilerHints();
   if (this.getOutputContract().equals(OutputContract.SameKey)) {
     if (hints.getAvgNumValuesPerKey() != -1 && hints.getAvgRecordsEmittedPerStubCall() == -1) {
@@ -9,7 +17,7 @@
       hints.setAvgNumValuesPerKey(hints.getAvgRecordsEmittedPerStubCall());
     }
   }
-  if (pred == null) {
+  if (!allPredsAvailable) {
     this.estimatedKeyCardinality=hints.getKeyCardinality();
     if (hints.getKeyCardinality() != -1 && hints.getAvgNumValuesPerKey() != -1) {
       this.estimatedNumRecords=(hints.getKeyCardinality() * hints.getAvgNumValuesPerKey()) >= 1 ? (long)(hints.getKeyCardinality() * hints.getAvgNumValuesPerKey()) : 1;
@@ -21,7 +29,18 @@
  else {
     this.estimatedNumRecords=this.computeNumberOfStubCalls();
     this.estimatedKeyCardinality=-1;
-    this.estimatedOutputSize=pred.estimatedOutputSize;
+    long outputSize=0;
+    for (    PactConnection c : this.input) {
+      OptimizerNode pred=c.getSourcePact();
+      if (pred != null) {
+        if (pred.estimatedOutputSize == -1) {
+          outputSize=-1;
+          break;
+        }
+        outputSize+=pred.estimatedOutputSize;
+      }
+    }
+    this.estimatedOutputSize=outputSize;
     boolean outputCardEstimated=true;
     if (hints.getKeyCardinality() != -1 && hints.getAvgNumValuesPerKey() != -1) {
       this.estimatedNumRecords=(hints.getKeyCardinality() * hints.getAvgNumValuesPerKey() >= 1) ? (long)(hints.getKeyCardinality() * hints.getAvgNumValuesPerKey()) : 1;
