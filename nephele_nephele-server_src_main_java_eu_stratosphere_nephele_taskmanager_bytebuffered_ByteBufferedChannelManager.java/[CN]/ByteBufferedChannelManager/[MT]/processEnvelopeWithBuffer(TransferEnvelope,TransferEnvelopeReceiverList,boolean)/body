@@ -1,4 +1,39 @@
 {
+  final int val=this.envelopeCounter.incrementAndGet();
+  if ((val % LOG_INTERVAL) == 0) {
+    final long timestamp=System.currentTimeMillis();
+    final int availableBuffers=this.transitBufferPool.getNumberOfAvailableBuffers();
+    final int designatedBuffers=this.transitBufferPool.getDesignatedNumberOfBuffers();
+    final StringBuilder sb=new StringBuilder();
+    sb.append(timestamp);
+    sb.append(' ');
+    sb.append(val);
+    sb.append(' ');
+    sb.append(availableBuffers);
+    sb.append(' ');
+    sb.append(designatedBuffers);
+    final List<InetSocketAddress> remoteReceivers=receiverList.getRemoteReceivers();
+    for (    final InetSocketAddress remoteReceiver : remoteReceivers) {
+      final int ql=this.networkConnectionManager.getQueueLength(remoteReceiver);
+      sb.append(' ');
+      sb.append(ql);
+    }
+    final List<ChannelID> localReceivers=receiverList.getLocalReceivers();
+    for (    final ChannelID localReceiver : localReceivers) {
+      final ChannelContext cc=this.registeredChannels.get(localReceiver);
+      if (cc == null) {
+        LOG.error("Cannot find channel context for " + localReceiver);
+        continue;
+      }
+      final InputChannelContext icc=(InputChannelContext)cc;
+      final int ql=icc.getNumberOfQueuedEnvelopes();
+      sb.append(' ');
+      sb.append(ql);
+    }
+    sb.append('\n');
+    this.bufferedWriter.write(sb.toString());
+    this.bufferedWriter.flush();
+  }
   if (!freeSourceBuffer) {
     final List<ChannelID> localReceivers=receiverList.getLocalReceivers();
     if (localReceivers.size() != 1) {
