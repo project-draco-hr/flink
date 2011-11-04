@@ -1,0 +1,46 @@
+{
+  if (this.currentIterator != null && this.currentIterator.next(target)) {
+    return true;
+  }
+ else   if (this.closed) {
+    throw new IllegalStateException();
+  }
+ else {
+    if (AsynchronousPartialSorter.this.iteratorException != null) {
+      throw AsynchronousPartialSorter.this.iteratorException;
+    }
+    while (true) {
+      if (this.currentElement == SENTINEL) {
+        return false;
+      }
+ else       if (this.currentElement != null) {
+        this.currentElement.buffer.reset();
+        this.queues.empty.add(this.currentElement);
+      }
+      try {
+        this.currentElement=null;
+        while (!this.closed && this.currentElement == null) {
+          this.currentElement=queues.spill.poll(1000,TimeUnit.MILLISECONDS);
+        }
+        if (AsynchronousPartialSorter.this.iteratorException != null) {
+          throw AsynchronousPartialSorter.this.iteratorException;
+        }
+        if (this.currentElement == SENTINEL) {
+          return false;
+        }
+        if (this.currentElement == SPILLING_MARKER) {
+          this.currentElement=null;
+          continue;
+        }
+      }
+ catch (      InterruptedException e) {
+        throw new RuntimeException("Iterator was interrupted getting the next sortedBuffer.");
+      }
+      this.currentIterator=this.currentElement.buffer.getIterator();
+      if (this.currentIterator.next(target)) {
+        return true;
+      }
+      this.currentIterator=null;
+    }
+  }
+}

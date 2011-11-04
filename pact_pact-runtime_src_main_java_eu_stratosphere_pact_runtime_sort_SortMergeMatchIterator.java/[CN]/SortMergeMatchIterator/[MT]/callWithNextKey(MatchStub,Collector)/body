@@ -1,0 +1,52 @@
+{
+  if (!this.iterator1.nextKey() || !this.iterator2.nextKey()) {
+    return false;
+  }
+  Key[] keys1=this.iterator1.getKeys();
+  Key[] keys2=this.iterator2.getKeys();
+  while (true) {
+    int comp=0;
+    for (int i=0; i < keys1.length; i++) {
+      int c=keys1[i].compareTo(keys2[i]);
+      if (c != 0) {
+        comp=c;
+        break;
+      }
+    }
+    if (comp == 0)     break;
+    if (comp > 0) {
+      if (!this.iterator2.nextKey()) {
+        return false;
+      }
+      keys2=this.iterator2.getKeys();
+    }
+ else {
+      if (!this.iterator1.nextKey()) {
+        return false;
+      }
+      keys1=this.iterator1.getKeys();
+    }
+  }
+  final KeyGroupedIterator.ValuesIterator values1=this.iterator1.getValues();
+  final KeyGroupedIterator.ValuesIterator values2=this.iterator2.getValues();
+  final PactRecord firstV1=values1.next().createCopy();
+  final PactRecord firstV2=values2.next().createCopy();
+  if (firstV1 == null || firstV2 == null) {
+    return false;
+  }
+  final boolean v1HasNext=values1.hasNext();
+  final boolean v2HasNext=values2.hasNext();
+  if (!v1HasNext && !v2HasNext) {
+    matchFunction.match(firstV1,firstV2,collector);
+  }
+ else   if (!v1HasNext) {
+    crossFirst1withNValues(firstV1,firstV2,values2,matchFunction,collector);
+  }
+ else   if (!v2HasNext) {
+    crossSecond1withNValues(firstV2,firstV1,values1,matchFunction,collector);
+  }
+ else {
+    crossMwithNValues(firstV1,values1,firstV2,values2,matchFunction,collector);
+  }
+  return true;
+}

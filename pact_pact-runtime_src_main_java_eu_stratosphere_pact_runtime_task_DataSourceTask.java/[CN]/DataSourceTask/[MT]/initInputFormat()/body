@@ -2,8 +2,8 @@
   this.config=new TaskConfig(getRuntimeConfiguration());
   try {
     ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
-    Class<? extends InputFormat> formatClass=this.config.getStubClass(InputFormat.class,cl);
-    this.format=formatClass.newInstance();
+    @SuppressWarnings("unchecked") Class<? extends InputFormat<InputSplit>> formatClass=(Class<? extends InputFormat<InputSplit>>)this.config.getStubClass(InputFormat.class,cl);
+    this.format=InstantiationUtil.instantiate(formatClass,InputFormat.class);
   }
  catch (  IOException ioe) {
     throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
@@ -11,11 +11,8 @@
 catch (  ClassNotFoundException cnfe) {
     throw new RuntimeException("InputFormat implementation class was not found.",cnfe);
   }
-catch (  InstantiationException ie) {
-    throw new RuntimeException("InputFormat implementation could not be instanciated. " + "Likely reasons are either a missing nullary constructor, or that the class is abstract.",ie);
-  }
-catch (  IllegalAccessException iae) {
-    throw new RuntimeException("InputFormat implementation class or its nullary constructor are " + "not accessible (private or protected).",iae);
+catch (  ClassCastException ccex) {
+    throw new RuntimeException("Format format class is not a proper subclass of " + InputFormat.class.getName(),ccex);
   }
   try {
     this.format.configure(this.config.getStubParameters());

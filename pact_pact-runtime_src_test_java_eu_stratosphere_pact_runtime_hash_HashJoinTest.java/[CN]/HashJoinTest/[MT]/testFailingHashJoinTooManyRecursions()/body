@@ -5,22 +5,22 @@
   final int NUM_KEYS=1000000;
   final int BUILD_VALS_PER_KEY=3;
   final int PROBE_VALS_PER_KEY=10;
-  Iterator<KeyValuePair<PactInteger,PactInteger>> build1=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> build2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> build3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
-  List<Iterator<KeyValuePair<PactInteger,PactInteger>>> builds=new ArrayList<Iterator<KeyValuePair<PactInteger,PactInteger>>>();
+  MutableObjectIterator<PactRecord> build1=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<PactRecord> build2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  MutableObjectIterator<PactRecord> build3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<MutableObjectIterator<PactRecord>> builds=new ArrayList<MutableObjectIterator<PactRecord>>();
   builds.add(build1);
   builds.add(build2);
   builds.add(build3);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> buildInput=new UnionIterator<KeyValuePair<PactInteger,PactInteger>>(builds);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probe1=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probe2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probe3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
-  List<Iterator<KeyValuePair<PactInteger,PactInteger>>> probes=new ArrayList<Iterator<KeyValuePair<PactInteger,PactInteger>>>();
+  MutableObjectIterator<PactRecord> buildInput=new UnionIterator<PactRecord>(builds);
+  MutableObjectIterator<PactRecord> probe1=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<PactRecord> probe2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  MutableObjectIterator<PactRecord> probe3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<MutableObjectIterator<PactRecord>> probes=new ArrayList<MutableObjectIterator<PactRecord>>();
   probes.add(probe1);
   probes.add(probe2);
   probes.add(probe3);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probeInput=new UnionIterator<KeyValuePair<PactInteger,PactInteger>>(probes);
+  MutableObjectIterator<PactRecord> probeInput=new UnionIterator<PactRecord>(probes);
   MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
@@ -32,21 +32,16 @@
     return;
   }
   IOManager ioManager=new IOManager();
-  final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
-  HashJoin<PactInteger,PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger,PactInteger>(buildInput,probeInput,PactInteger.class,PactInteger.class,PactInteger.class,memSegments,ioManager);
+  @SuppressWarnings("unchecked") final HashJoin join=new HashJoin(buildInput,probeInput,new int[]{0},new int[]{0},new Class[]{PactInteger.class},memSegments,ioManager);
   join.open();
+  final PactRecord record=new PactRecord();
   try {
-    while (join.nextKey()) {
-      Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
-      while (probeIter.hasNext()) {
-        probeIter.next();
-      }
-      HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
-      if (!buildSide.next(pair)) {
+    while (join.nextRecord()) {
+      HashBucketIterator buildSide=join.getBuildSideIterator();
+      if (!buildSide.next(record)) {
         fail("No build side values found for a probe key.");
       }
-      while (buildSide.next(pair))       ;
-      ;
+      while (buildSide.next(record))       ;
     }
     fail("Hash Join must have failed due to too many recursions.");
   }

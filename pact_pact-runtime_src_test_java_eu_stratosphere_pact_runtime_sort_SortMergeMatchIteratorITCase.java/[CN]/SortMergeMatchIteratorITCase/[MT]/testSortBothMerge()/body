@@ -1,19 +1,21 @@
 {
   try {
-    generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    generator2=new Generator(SEED2,500,2048,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    reader1=new RecordReaderMock(generator1,INPUT_1_SIZE);
-    reader2=new RecordReaderMock(generator2,INPUT_2_SIZE);
-    final Map<Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(generator1,INPUT_1_SIZE),collectData(generator2,INPUT_2_SIZE));
-    final MatchStub<TestData.Key,TestData.Value,TestData.Value,TestData.Key,TestData.Value> matcher=new MatchRemovingMatcher(expectedMatchesMap);
-    final Collector<TestData.Key,TestData.Value> collector=new DiscardingOutputCollector<TestData.Key,TestData.Value>();
+    final TestData.Generator generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.Generator generator2=new Generator(SEED2,500,2048,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.GeneratorIterator input1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
+    final TestData.GeneratorIterator input2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
+    final Map<TestData.Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(input1),collectData(input2));
+    final MatchStub matcher=new MatchRemovingMatcher(expectedMatchesMap);
+    final Collector collector=new DiscardingOutputCollector();
     generator1.reset();
     generator2.reset();
-    SortMergeMatchIterator<TestData.Key,TestData.Value,TestData.Value> iterator=new SortMergeMatchIterator<TestData.Key,TestData.Value,TestData.Value>(memoryManager,ioManager,reader1,reader2,TestData.Key.class,TestData.Value.class,TestData.Value.class,MEMORY_SIZE,64,0.7f,LocalStrategy.SORT_BOTH_MERGE,parentTask);
+    input1.reset();
+    input2.reset();
+    @SuppressWarnings("unchecked") SortMergeMatchIterator iterator=new SortMergeMatchIterator(memoryManager,ioManager,input1,input2,new int[]{0},new int[]{0},new Class[]{TestData.Key.class},MEMORY_SIZE,64,0.7f,LocalStrategy.SORT_BOTH_MERGE,parentTask);
     iterator.open();
     while (iterator.callWithNextKey(matcher,collector))     ;
     iterator.close();
-    for (    Entry<Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
+    for (    Entry<TestData.Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
       Assert.assertTrue("Collection for key " + entry.getKey() + " is not empty",entry.getValue().isEmpty());
     }
   }
