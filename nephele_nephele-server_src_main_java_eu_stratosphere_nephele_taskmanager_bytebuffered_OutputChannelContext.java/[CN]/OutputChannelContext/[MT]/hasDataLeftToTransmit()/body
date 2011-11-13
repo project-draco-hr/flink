@@ -2,6 +2,16 @@
   if (!this.isReceiverRunning) {
     return true;
   }
-  flushQueuedOutgoingEnvelopes();
-  return (!this.queuedOutgoingEnvelopes.isEmpty());
+  if (!this.queuedOutgoingEnvelopes.isEmpty()) {
+    if (this.outputGateContext.registerSpillingQueueWithNetworkConnection(this.byteBufferedOutputChannel.getID(),this.queuedOutgoingEnvelopes)) {
+      return true;
+    }
+ else {
+      this.queuedOutgoingEnvelopes.disableAsynchronousUnspilling();
+      while (!this.queuedOutgoingEnvelopes.isEmpty()) {
+        this.outputGateContext.processEnvelope(this,this.queuedOutgoingEnvelopes.poll());
+      }
+    }
+  }
+  return false;
 }
