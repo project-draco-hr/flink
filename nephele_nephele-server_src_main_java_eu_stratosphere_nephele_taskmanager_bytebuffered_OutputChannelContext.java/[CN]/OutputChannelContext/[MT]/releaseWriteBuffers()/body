@@ -11,10 +11,24 @@
   buffer.finishWritePhase();
   if (!this.isReceiverRunning) {
     this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
-    this.outgoingTransferEnvelope=null;
-    return;
   }
-  flushQueuedOutgoingEnvelopes();
-  this.outputGateContext.processEnvelope(this,this.outgoingTransferEnvelope);
+ else {
+    if (!this.queuedOutgoingEnvelopes.isEmpty()) {
+      this.queuedOutgoingEnvelopes.add(this.outgoingTransferEnvelope);
+      if (!this.spillingQueueRegisteredWithNetworkConnection) {
+        if (this.outputGateContext.registerSpillingQueueWithNetworkConnection(this.byteBufferedOutputChannel.getID(),this.queuedOutgoingEnvelopes)) {
+          this.spillingQueueRegisteredWithNetworkConnection=true;
+        }
+ else {
+          while (!this.queuedOutgoingEnvelopes.isEmpty()) {
+            this.outputGateContext.processEnvelope(this,this.queuedOutgoingEnvelopes.poll());
+          }
+        }
+      }
+    }
+ else {
+      this.outputGateContext.processEnvelope(this,this.outgoingTransferEnvelope);
+    }
+  }
   this.outgoingTransferEnvelope=null;
 }
