@@ -31,6 +31,17 @@
     return result;
   }
   LOG.debug("The dependency chain for instance sharing is acyclic");
+  for (  final JobManagerPlugin plugin : this.jobManagerPlugins) {
+    final JobGraph inputJob=job;
+    job=plugin.rewriteJobGraph(inputJob);
+    if (job == null) {
+      LOG.warn("Plugin " + plugin + " set job graph to null, reverting changes...");
+      job=inputJob;
+    }
+    if (job != inputJob) {
+      LOG.debug("Plugin " + plugin + " rewrote job graph");
+    }
+  }
   LOG.info("Creating initial execution graph from job graph " + job.getName());
   ExecutionGraph eg=null;
   try {
@@ -40,8 +51,16 @@
     JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,gce.getMessage());
     return result;
   }
-  if (this.optimizer != null) {
-    this.optimizer.optimize(eg);
+  for (  final JobManagerPlugin plugin : this.jobManagerPlugins) {
+    final ExecutionGraph inputGraph=eg;
+    eg=plugin.rewriteExecutionGraph(inputGraph);
+    if (eg == null) {
+      LOG.warn("Plugin " + plugin + " set execution graph to null, reverting changes...");
+      eg=inputGraph;
+    }
+    if (eg != inputGraph) {
+      LOG.debug("Plugin " + plugin + " rewrote execution graph");
+    }
   }
   boolean profilingEnabled=false;
   if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
