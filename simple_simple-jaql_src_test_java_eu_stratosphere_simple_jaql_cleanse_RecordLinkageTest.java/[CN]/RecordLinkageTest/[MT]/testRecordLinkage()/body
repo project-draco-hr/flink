@@ -1,0 +1,9 @@
+{
+  SopremoPlan actualPlan=parseScript("using cleansing;" + "$sponsors = read hdfs('EarmarkSponsors.json');" + "$members = read hdfs('CongressMembers.json');"+ "$linkedPersons = cluster records"+ "		$sponsor in $sponsors, $member in $members"+ "	where jaccard($.lastName) >= 0.9 &&"+ "		[ 5 * jaroWinkler($.firstName),"+ "		  5 * jaroWinkler($.lastName)] >= 0.8"+ "	partition on "+ "		[ removeVowels($.lastName)[0:3],"+ "		  $.state + $.firstName[0:2] ]"+ "	into { $sponsor, $member  };"+ "write $linkedPersons to hdfs('Links.json');");
+  SopremoPlan expectedPlan=new SopremoPlan();
+  Source input=new Source("input.json");
+  Selection selection=new Selection().withCondition(new OrExpression(new UnaryExpression(JsonUtil.createPath("$","mgr")),new ComparativeExpression(JsonUtil.createPath("$","income"),BinaryOperator.GREATER,new ConstantExpression(30000)))).withInputs(input);
+  Sink output=new Sink("output.json").withInputs(selection);
+  expectedPlan.setSinks(output);
+  assertEquals(expectedPlan,actualPlan);
+}
