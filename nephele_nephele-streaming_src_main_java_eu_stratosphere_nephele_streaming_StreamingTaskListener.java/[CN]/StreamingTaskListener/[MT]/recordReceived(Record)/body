@@ -1,21 +1,35 @@
 {
-switch (this.taskType) {
-case INPUT:
+  if (this.taskType == TaskType.INPUT) {
     throw new IllegalStateException("Input task received record");
-case REGULAR:
-{
-    final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
-    this.tag=taggableRecord.getTag();
   }
-break;
-case OUTPUT:
-{
-final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
-this.tag=taggableRecord.getTag();
-if (this.tag != null) {
-  System.out.println(System.currentTimeMillis() - byteArrayToLong(this.tag));
-}
-}
-break;
-}
+  final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
+  this.tag=(StreamingTag)taggableRecord.getTag();
+  if (this.tag != null) {
+    final long pathLatency=System.currentTimeMillis() - this.tag.getTimestamp();
+    final ExecutionVertexID sourceID=this.tag.getSourceID();
+    Double aggregatedLatency=this.aggregatedValue.get(sourceID);
+    if (aggregatedLatency == null) {
+      aggregatedLatency=Double.valueOf(pathLatency);
+    }
+ else {
+      aggregatedLatency=Double.valueOf((ALPHA * pathLatency) + ((1 - ALPHA) * aggregatedLatency.doubleValue()));
+    }
+    this.aggregatedValue.put(sourceID,aggregatedLatency);
+    Integer counter=this.aggregationCounter.get(sourceID);
+    if (counter == null) {
+      counter=Integer.valueOf(0);
+    }
+    counter=Integer.valueOf(counter.intValue() + 1);
+    if (counter.intValue() == this.aggregationInterval) {
+      final PathLatency pl=new PathLatency(this.jobID,sourceID,this.vertexID,aggregatedLatency.doubleValue());
+      try {
+        this.communicationThread.sendDataAsynchronously(pl);
+      }
+ catch (      InterruptedException e) {
+        LOG.warn(StringUtils.stringifyException(e));
+      }
+      counter=Integer.valueOf(0);
+    }
+    this.aggregationCounter.put(sourceID,counter);
+  }
 }
