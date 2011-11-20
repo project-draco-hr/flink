@@ -2,8 +2,19 @@
 switch (this.taskType) {
 case INPUT:
     if (this.tagCounter++ == this.taggingInterval) {
+      final long timestamp=System.currentTimeMillis();
       final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
-      taggableRecord.setTag(createTag());
+      taggableRecord.setTag(createTag(timestamp));
+      if (this.lastTimestamp > 0) {
+        final long taskLatency=(timestamp - this.lastTimestamp) / this.taggingInterval;
+        try {
+          this.communicationThread.sendDataAsynchronously(new TaskLatency(this.jobID,this.vertexID,taskLatency));
+        }
+ catch (        InterruptedException e) {
+          LOG.error(StringUtils.stringifyException(e));
+        }
+      }
+      this.lastTimestamp=timestamp;
       this.tagCounter=0;
     }
   break;
@@ -13,8 +24,10 @@ if (this.tag == null) {
 taggableRecord.setTag(null);
 }
  else {
-this.tag=createTag();
+final long timestamp=System.currentTimeMillis();
+this.tag=createTag(timestamp);
 taggableRecord.setTag(this.tag);
+this.lastTimestamp=timestamp;
 }
 break;
 case OUTPUT:
