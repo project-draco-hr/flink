@@ -1,0 +1,35 @@
+{
+  long timestamp=-1L;
+  if (this.listenerContext.isInputVertex()) {
+    final int taggingInterval=this.listenerContext.getTaggingInterval();
+    if (this.tagCounter++ == taggingInterval) {
+      timestamp=System.currentTimeMillis();
+      final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
+      taggableRecord.setTag(createTag(timestamp));
+      if (this.lastTimestamp > 0L) {
+        final long taskLatency=(timestamp - this.lastTimestamp) / taggingInterval;
+        try {
+          this.listenerContext.sendDataAsynchronously(new TaskLatency(this.listenerContext.getJobID(),this.listenerContext.getVertexID(),taskLatency));
+        }
+ catch (        InterruptedException e) {
+          LOG.error(StringUtils.stringifyException(e));
+        }
+      }
+      this.lastTimestamp=timestamp;
+      this.tagCounter=0;
+    }
+  }
+ else {
+    final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
+    if (this.tag == null) {
+      taggableRecord.setTag(null);
+    }
+ else {
+      timestamp=System.currentTimeMillis();
+      this.tag=createTag(timestamp);
+      taggableRecord.setTag(this.tag);
+      this.lastTimestamp=timestamp;
+    }
+  }
+  return timestamp;
+}
