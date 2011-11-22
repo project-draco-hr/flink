@@ -1,0 +1,12 @@
+{
+  SopremoPlan actualPlan=parseScript("using cleansing;\n" + "$dirty_earmarks = read hdfs('UsEarmark.json');\n" + "$nick_names = read hdfs('UsNickNames.json');\n"+ "NormalizeName = javaudf('eu.stratosphere.simple.jaql.cleanse.ScrubTest.normalizeName');\n"+ "$scrubbed_earmarks = scrub $dirty_earmark in $dirty_earmarks with {\n"+ "	sponsorFirstName: replace $ with $nick_names default $,\n"+ "};\n"+ "write $scrubbed_earmarks to hdfs('scrubbed_earmarks.json');");
+  SopremoPlan expectedPlan=new SopremoPlan();
+  Source dirty_earmarks=new Source("UsEarmark.json");
+  Source nick_names=new Source("UsNickNames.json");
+  Scrubbing scrubbing=new Scrubbing().withInputs(dirty_earmarks);
+  Replace replace=new Replace().withInputs(dirty_earmarks,nick_names).withDefaultExpression(new InputSelection(0).withTag(JsonStreamExpression.THIS_CONTEXT));
+  scrubbing.addRawRule(new NestedOperatorExpression(replace),new ObjectAccess("sponsorFirstName"));
+  Sink output=new Sink("scrubbed_earmarks.json").withInputs(scrubbing);
+  expectedPlan.setSinks(output);
+  assertEquals(expectedPlan,actualPlan);
+}

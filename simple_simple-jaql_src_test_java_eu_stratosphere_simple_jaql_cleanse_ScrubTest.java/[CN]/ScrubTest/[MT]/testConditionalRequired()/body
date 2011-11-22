@@ -1,0 +1,10 @@
+{
+  SopremoPlan actualPlan=parseScript("using cleansing;\n" + "$dirty_earmarks = read hdfs('UsEarmark.json');\n" + "$scrubbed_earmarks = scrub $dirty_earmark in $dirty_earmarks with {\n"+ "	sponsorLastName: required if $dirty_earmark.type == 's',\n"+ "};\n"+ "write $scrubbed_earmarks to hdfs('scrubbed_earmarks.json');");
+  SopremoPlan expectedPlan=new SopremoPlan();
+  Source dirty_earmarks=new Source("UsEarmark.json");
+  Scrubbing scrubbing=new Scrubbing().withInputs(dirty_earmarks);
+  scrubbing.addRawRule(new TernaryExpression(new ComparativeExpression(JsonUtil.createPath("1","type"),BinaryOperator.EQUAL,new ConstantExpression("s")),new PathExpression(new InputSelection(0),new NonNullRule()),EvaluationExpression.VALUE),new ObjectAccess("sponsorLastName"));
+  Sink output=new Sink("scrubbed_earmarks.json").withInputs(scrubbing);
+  expectedPlan.setSinks(output);
+  assertEquals(expectedPlan,actualPlan);
+}
