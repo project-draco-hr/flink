@@ -1,2 +1,48 @@
 {
+  final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
+  this.tag=(StreamingTag)taggableRecord.getTag();
+  if (this.tag != null) {
+    final long timestamp=System.currentTimeMillis();
+    if (this.lastTimestamp > 0) {
+      final TaskLatency tl=new TaskLatency(this.listenerContext.getJobID(),this.listenerContext.getVertexID(),timestamp - this.lastTimestamp);
+      try {
+        this.listenerContext.sendDataAsynchronously(tl);
+      }
+ catch (      InterruptedException e) {
+        LOG.error(StringUtils.stringifyException(e));
+      }
+      if (this.listenerContext.isRegularVertex()) {
+        this.lastTimestamp=-1L;
+      }
+ else {
+        this.lastTimestamp=timestamp;
+      }
+    }
+    final long pathLatency=timestamp - this.tag.getTimestamp();
+    final ExecutionVertexID sourceID=this.tag.getSourceID();
+    Double aggregatedLatency=this.aggregatedValue.get(sourceID);
+    if (aggregatedLatency == null) {
+      aggregatedLatency=Double.valueOf(pathLatency);
+    }
+ else {
+      aggregatedLatency=Double.valueOf((ALPHA * pathLatency) + ((1 - ALPHA) * aggregatedLatency.doubleValue()));
+    }
+    this.aggregatedValue.put(sourceID,aggregatedLatency);
+    Integer counter=this.aggregationCounter.get(sourceID);
+    if (counter == null) {
+      counter=Integer.valueOf(0);
+    }
+    counter=Integer.valueOf(counter.intValue() + 1);
+    if (counter.intValue() == this.listenerContext.getAggregationInterval()) {
+      final ChannelLatency pl=new ChannelLatency(this.listenerContext.getJobID(),sourceID,this.listenerContext.getVertexID(),aggregatedLatency.doubleValue());
+      try {
+        this.listenerContext.sendDataAsynchronously(pl);
+      }
+ catch (      InterruptedException e) {
+        LOG.warn(StringUtils.stringifyException(e));
+      }
+      counter=Integer.valueOf(0);
+    }
+    this.aggregationCounter.put(sourceID,counter);
+  }
 }
