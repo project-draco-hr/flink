@@ -2,9 +2,9 @@
   long timestamp=-1L;
   if (this.listenerContext.isInputVertex()) {
     final int taggingInterval=this.listenerContext.getTaggingInterval();
+    final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
     if (this.tagCounter++ == taggingInterval) {
       timestamp=System.currentTimeMillis();
-      final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
       taggableRecord.setTag(createTag(timestamp));
       if (this.lastTimestamp > 0L) {
         final long taskLatency=(timestamp - this.lastTimestamp) / taggingInterval;
@@ -18,17 +18,28 @@
       this.lastTimestamp=timestamp;
       this.tagCounter=0;
     }
+ else {
+      taggableRecord.setTag(null);
+    }
   }
  else {
     final AbstractTaggableRecord taggableRecord=(AbstractTaggableRecord)record;
-    if (this.tag == null) {
-      taggableRecord.setTag(null);
+    if (this.lastTimestamp > 0L) {
+      timestamp=System.currentTimeMillis();
+      taggableRecord.setTag(createTag(timestamp));
+      final JobID jobID=this.listenerContext.getJobID();
+      final ExecutionVertexID vertexID=this.listenerContext.getVertexID();
+      final TaskLatency tl=new TaskLatency(jobID,vertexID,timestamp - this.lastTimestamp);
+      try {
+        this.listenerContext.sendDataAsynchronously(tl);
+      }
+ catch (      InterruptedException e) {
+        LOG.error(StringUtils.stringifyException(e));
+      }
+      this.lastTimestamp=-1L;
     }
  else {
-      timestamp=System.currentTimeMillis();
-      this.tag=createTag(timestamp);
-      taggableRecord.setTag(this.tag);
-      this.lastTimestamp=timestamp;
+      taggableRecord.setTag(null);
     }
   }
   return timestamp;
