@@ -1,0 +1,10 @@
+{
+  SopremoPlan actualPlan=parseScript("using cleansing;\n" + "$personCluster = read 'personCluster.json';\n" + "abbr = fn(str, prefix) str + prefix;\n"+ "MergeAddresses = javaudf('eu.stratosphere.simple.jaql.cleanse.FusionTest.mergeAddresses');\n"+ "$fusedPersons = fuse [$member, $sponsor] in $personCluster\n"+ "	update {\n"+ "		$.relative[*].id: $.id,\n"+ "	};\n"+ "write $fusedPersons to hdfs('fusedPersons.json');");
+  SopremoPlan expectedPlan=new SopremoPlan();
+  Source personCluster=new Source("personCluster.json");
+  Fusion fusion=new Fusion().withInputs(personCluster);
+  fusion.addUpdateRule(new ObjectAccess("id"),new PathExpression(new JsonStreamExpression(fusion),new ObjectAccess("relative"),new ArrayProjection(new ObjectAccess("id"))));
+  Sink fusedPersons=new Sink("fusedPersons.json").withInputs(fusion);
+  expectedPlan.setSinks(fusedPersons);
+  assertEquals(expectedPlan,actualPlan);
+}
