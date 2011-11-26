@@ -1,3 +1,46 @@
 {
-  return null;
+  final Iterator<AbstractJobInputVertex> inputIt=jobGraph.getInputVertices();
+  while (inputIt.hasNext()) {
+    final AbstractJobInputVertex abstractInputVertex=inputIt.next();
+    final Class<? extends AbstractInvokable> originalClass=abstractInputVertex.getInvokableClass();
+    if (abstractInputVertex instanceof JobFileInputVertex) {
+      final JobFileInputVertex fileInputVertex=(JobFileInputVertex)abstractInputVertex;
+      fileInputVertex.setFileInputClass(StreamingFileInputWrapper.class);
+    }
+ else     if (abstractInputVertex instanceof JobInputVertex) {
+      final JobInputVertex inputVertex=(JobInputVertex)abstractInputVertex;
+      inputVertex.setInputClass(StreamingInputWrapper.class);
+    }
+ else {
+      LOG.warn("Cannot wrap input task of type " + originalClass + ", skipping...");
+      continue;
+    }
+    abstractInputVertex.getConfiguration().setString(WrapperUtils.WRAPPED_CLASS_KEY,originalClass.getName());
+  }
+  final Iterator<JobTaskVertex> taskIt=jobGraph.getTaskVertices();
+  while (taskIt.hasNext()) {
+    final JobTaskVertex taskVertex=taskIt.next();
+    final Class<? extends AbstractInvokable> originalClass=taskVertex.getInvokableClass();
+    taskVertex.setTaskClass(StreamingTaskWrapper.class);
+    taskVertex.getConfiguration().setString(WrapperUtils.WRAPPED_CLASS_KEY,originalClass.getName());
+  }
+  final Iterator<AbstractJobOutputVertex> outputIt=jobGraph.getOutputVertices();
+  while (outputIt.hasNext()) {
+    final AbstractJobOutputVertex abstractOutputVertex=outputIt.next();
+    final Class<? extends AbstractInvokable> originalClass=abstractOutputVertex.getInvokableClass();
+    if (abstractOutputVertex instanceof JobFileOutputVertex) {
+      final JobFileOutputVertex fileOutputVertex=(JobFileOutputVertex)abstractOutputVertex;
+      fileOutputVertex.setFileOutputClass(StreamingFileOutputWrapper.class);
+    }
+ else     if (abstractOutputVertex instanceof JobOutputVertex) {
+      final JobOutputVertex outputVertex=(JobOutputVertex)abstractOutputVertex;
+      outputVertex.setOutputClass(StreamingOutputWrapper.class);
+    }
+ else {
+      LOG.warn("Cannot wrap output task of type " + originalClass + ", skipping...");
+      continue;
+    }
+    abstractOutputVertex.getConfiguration().setString(WrapperUtils.WRAPPED_CLASS_KEY,originalClass.getName());
+  }
+  return jobGraph;
 }
