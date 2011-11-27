@@ -1,5 +1,36 @@
 {
-  final T retVal=getWrappedInputGate().readRecord(target);
-  this.streamListener.recordReceived(retVal);
-  return retVal;
+  T record=null;
+  if (this.executingThread == null) {
+    this.executingThread=Thread.currentThread();
+  }
+  if (this.executingThread.isInterrupted()) {
+    throw new InterruptedException();
+  }
+  while (true) {
+    if (this.channelToReadFrom == -1) {
+      this.availableChannelRetVal=waitForAnyChannelToBecomeAvailable();
+      this.channelToReadFrom=this.availableChannelRetVal;
+    }
+    try {
+      record=this.getInputChannel(this.channelToReadFrom).readRecord(target);
+    }
+ catch (    EOFException e) {
+      if (this.isClosed()) {
+        return null;
+      }
+    }
+    if (++this.channelToReadFrom == getNumberOfInputChannels()) {
+      this.channelToReadFrom=0;
+    }
+    if (record != null) {
+      break;
+    }
+ else {
+      if (this.channelToReadFrom == this.availableChannelRetVal) {
+        this.channelToReadFrom=-1;
+      }
+    }
+  }
+  this.streamListener.recordReceived(record);
+  return record;
 }
