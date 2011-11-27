@@ -1,5 +1,16 @@
 {
-  ManagementEdgeID sourceEdgeID=profilingSubgraph.getEdgeByReceiverVertexID(channelLatency.getSinkVertexID().toManagementVertexID());
-  EdgeCharacteristics edgeCharacteristics=profilingSubgraph.getEdgeCharacteristicsBySourceEdgeID(sourceEdgeID);
-  edgeCharacteristics.addLatencyMeasurement(timestamp,channelLatency.getChannelLatency());
+  if (Double.isInfinite(channelLatency.getChannelLatency()) || Double.isNaN(channelLatency.getChannelLatency())) {
+    return;
+  }
+  if (!channelLatency.getSourceVertexID().equals(channelLatency.getSinkVertexID())) {
+    XoredVertexID xored=new XoredVertexID(channelLatency.getSourceVertexID().toManagementVertexID(),channelLatency.getSinkVertexID().toManagementVertexID());
+    ManagementEdgeID sourceEdgeID=profilingSubgraph.getSourceEdgeIDByXoredVertexID(xored);
+    if (sourceEdgeID == null) {
+      ExecutionVertex source=executionGraph.getVertexByID(channelLatency.getSourceVertexID());
+      ExecutionVertex sink=executionGraph.getVertexByID(channelLatency.getSinkVertexID());
+      throw new RuntimeException("No source edge ID for " + getName(source) + "->"+ getName(sink)+ " "+ xored.toString());
+    }
+    EdgeCharacteristics edgeCharacteristics=profilingSubgraph.getEdgeCharacteristicsBySourceEdgeID(sourceEdgeID);
+    edgeCharacteristics.addLatencyMeasurement(timestamp,channelLatency.getChannelLatency());
+  }
 }
