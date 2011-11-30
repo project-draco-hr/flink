@@ -31,9 +31,17 @@
     return result;
   }
   LOG.debug("The dependency chain for instance sharing is acyclic");
+  boolean jobRunsWithProfiling=false;
+  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+    jobRunsWithProfiling=true;
+  }
   Iterator<JobManagerPlugin> it=this.jobManagerPlugins.values().iterator();
   while (it.hasNext()) {
     final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping job graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
     final JobGraph inputJob=job;
     job=plugin.rewriteJobGraph(inputJob);
     if (job == null) {
@@ -56,6 +64,10 @@
   it=this.jobManagerPlugins.values().iterator();
   while (it.hasNext()) {
     final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping execution graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
     final ExecutionGraph inputGraph=eg;
     eg=plugin.rewriteExecutionGraph(inputGraph);
     if (eg == null) {
@@ -66,14 +78,10 @@
       LOG.debug("Plugin " + plugin + " rewrote execution graph");
     }
   }
-  boolean profilingEnabled=false;
-  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
-    profilingEnabled=true;
-  }
   if (this.eventCollector != null) {
-    this.eventCollector.registerJob(eg,profilingEnabled);
+    this.eventCollector.registerJob(eg,jobRunsWithProfiling);
   }
-  if (profilingEnabled) {
+  if (jobRunsWithProfiling) {
     this.profiler.registerProfilingJob(eg);
     if (this.eventCollector != null) {
       this.profiler.registerForProfilingData(eg.getJobID(),this.eventCollector);
