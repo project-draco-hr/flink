@@ -11,15 +11,15 @@
     final TestData.GeneratorIterator gen2Iter=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
     final TestData.ConstantValueIterator const1Iter=new TestData.ConstantValueIterator(DUPLICATE_KEY,"LEFT String for Duplicate Keys",INPUT_1_DUPLICATES);
     final TestData.ConstantValueIterator const2Iter=new TestData.ConstantValueIterator(DUPLICATE_KEY,"RIGHT String for Duplicate Keys",INPUT_2_DUPLICATES);
-    final List<Iterator<KeyValuePair<TestData.Key,TestData.Value>>> inList1=new ArrayList<Iterator<KeyValuePair<TestData.Key,TestData.Value>>>();
+    final List<MutableObjectIterator<PactRecord>> inList1=new ArrayList<MutableObjectIterator<PactRecord>>();
     inList1.add(gen1Iter);
     inList1.add(const1Iter);
-    final List<Iterator<KeyValuePair<TestData.Key,TestData.Value>>> inList2=new ArrayList<Iterator<KeyValuePair<TestData.Key,TestData.Value>>>();
+    final List<MutableObjectIterator<PactRecord>> inList2=new ArrayList<MutableObjectIterator<PactRecord>>();
     inList2.add(gen2Iter);
     inList2.add(const2Iter);
-    Iterator<KeyValuePair<TestData.Key,TestData.Value>> input1=new UnionIterator<KeyValuePair<TestData.Key,TestData.Value>>(inList1);
-    Iterator<KeyValuePair<TestData.Key,TestData.Value>> input2=new UnionIterator<KeyValuePair<TestData.Key,TestData.Value>>(inList2);
-    final Map<Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(input1),collectData(input2));
+    MutableObjectIterator<PactRecord> input1=new UnionIterator<PactRecord>(inList1);
+    MutableObjectIterator<PactRecord> input2=new UnionIterator<PactRecord>(inList2);
+    final Map<TestData.Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(input1),collectData(input2));
     generator1.reset();
     generator2.reset();
     const1Iter.reset();
@@ -32,15 +32,15 @@
     inList2.clear();
     inList2.add(gen2Iter);
     inList2.add(const2Iter);
-    input1=new UnionIterator<KeyValuePair<TestData.Key,TestData.Value>>(inList1);
-    input2=new UnionIterator<KeyValuePair<TestData.Key,TestData.Value>>(inList2);
-    final MatchStub<TestData.Key,TestData.Value,TestData.Value,TestData.Key,TestData.Value> matcher=new MatchRemovingMatcher(expectedMatchesMap);
-    final Collector<TestData.Key,TestData.Value> collector=new DiscardingOutputCollector<TestData.Key,TestData.Value>();
-    BuildFirstHashMatchIterator<TestData.Key,TestData.Value,TestData.Value> iterator=new BuildFirstHashMatchIterator<TestData.Key,TestData.Value,TestData.Value>(input1,input2,TestData.Key.class,TestData.Value.class,TestData.Value.class,this.memoryManager,ioManager,this.parentTask,MEMORY_SIZE);
+    input1=new UnionIterator<PactRecord>(inList1);
+    input2=new UnionIterator<PactRecord>(inList2);
+    final MatchStub matcher=new MatchRemovingMatcher(expectedMatchesMap);
+    final Collector collector=new DiscardingOutputCollector();
+    @SuppressWarnings("unchecked") BuildFirstHashMatchIterator iterator=new BuildFirstHashMatchIterator(input1,input2,new int[]{0},new int[]{0},new Class[]{TestData.Key.class},this.memoryManager,ioManager,this.parentTask,MEMORY_SIZE);
     iterator.open();
     while (iterator.callWithNextKey(matcher,collector))     ;
     iterator.close();
-    for (    Entry<Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
+    for (    Entry<TestData.Key,Collection<Match>> entry : expectedMatchesMap.entrySet()) {
       if (!entry.getValue().isEmpty()) {
         Assert.fail("Collection for key " + entry.getKey() + " is not empty");
       }

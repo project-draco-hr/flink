@@ -1,0 +1,26 @@
+{
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  final TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.CONSTANT,VAL);
+  final MutableObjectIterator<PactRecord> source=new TestData.GeneratorIterator(generator,NUM_PAIRS);
+  LOG.debug("Initializing sortmerger...");
+  @SuppressWarnings("unchecked") SortMerger merger=new UnilateralSortMerger(this.memoryManager,this.ioManager,16 * 1024 * 1024,64,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},source,this.parentTask,0.7f);
+  LOG.debug("Reading and sorting data...");
+  MutableObjectIterator<PactRecord> iterator=merger.getIterator();
+  LOG.debug("Checking results...");
+  int pairsEmitted=1;
+  PactRecord rec1=new PactRecord();
+  PactRecord rec2=new PactRecord();
+  Assert.assertTrue(iterator.next(rec1));
+  while (iterator.next(rec2)) {
+    final Key k1=rec1.getField(0,TestData.Key.class);
+    final Key k2=rec2.getField(0,TestData.Key.class);
+    pairsEmitted++;
+    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+    PactRecord tmp=rec1;
+    rec1=rec2;
+    k1.setKey(k2.getKey());
+    rec2=tmp;
+  }
+  Assert.assertTrue(NUM_PAIRS == pairsEmitted);
+  merger.close();
+}

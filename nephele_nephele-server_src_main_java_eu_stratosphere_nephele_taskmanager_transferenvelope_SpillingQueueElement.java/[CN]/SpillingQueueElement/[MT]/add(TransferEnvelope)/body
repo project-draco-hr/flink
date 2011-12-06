@@ -1,0 +1,33 @@
+{
+  if (!canBeAdded(transferEnvelope)) {
+    throw new IllegalStateException("Cannot add transfer envelope to this spilling queue element");
+  }
+  if (this.tailSequenceNumber == -1) {
+    this.tailSequenceNumber=transferEnvelope.getSequenceNumber();
+    this.headSequenceNumber=this.tailSequenceNumber;
+    this.bufferRef=transferEnvelope.getBuffer();
+    this.eventList=transferEnvelope.getEventList();
+  }
+ else {
+    this.tailSequenceNumber=transferEnvelope.getSequenceNumber();
+    if (this.tailSequenceNumber == (this.headSequenceNumber + 1)) {
+      final Buffer buf=(Buffer)this.bufferRef;
+      final Queue<Object> bufferQueue=new CapacityConstrainedArrayQueue<Object>(SIZE_LIMIT);
+      if (buf == null) {
+        bufferQueue.offer(NULL_OBJECT);
+      }
+ else {
+        bufferQueue.offer(buf);
+      }
+      this.bufferRef=bufferQueue;
+    }
+    @SuppressWarnings("unchecked") final Queue<Object> bufferQueue=(Queue<Object>)this.bufferRef;
+    final Buffer buf=transferEnvelope.getBuffer();
+    if (buf == null) {
+      bufferQueue.offer(NULL_OBJECT);
+    }
+ else {
+      bufferQueue.offer(buf);
+    }
+  }
+}

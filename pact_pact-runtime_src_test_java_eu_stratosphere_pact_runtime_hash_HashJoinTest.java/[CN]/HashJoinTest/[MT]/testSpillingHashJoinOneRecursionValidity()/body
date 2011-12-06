@@ -2,8 +2,8 @@
   final int NUM_KEYS=1000000;
   final int BUILD_VALS_PER_KEY=3;
   final int PROBE_VALS_PER_KEY=10;
-  Iterator<KeyValuePair<PactInteger,PactInteger>> buildInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
-  Iterator<KeyValuePair<PactInteger,PactInteger>> probeInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<PactRecord> buildInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<PactRecord> probeInput=new RegularlyGeneratedInputGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
   MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
@@ -15,39 +15,32 @@
     return;
   }
   IOManager ioManager=new IOManager();
-  final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
   HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
-  HashJoin<PactInteger,PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger,PactInteger>(buildInput,probeInput,PactInteger.class,PactInteger.class,PactInteger.class,memSegments,ioManager);
+  @SuppressWarnings("unchecked") final HashJoin join=new HashJoin(buildInput,probeInput,new int[]{0},new int[]{0},new Class[]{PactInteger.class},memSegments,ioManager);
   join.open();
-  int numKeyCalls=0;
-  while (join.nextKey()) {
-    numKeyCalls++;
+  final PactRecord record=new PactRecord();
+  while (join.nextRecord()) {
     int numBuildValues=0;
-    int numProbeValues=0;
     int key=0;
-    HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
-    if (buildSide.next(pair)) {
+    HashBucketIterator buildSide=join.getBuildSideIterator();
+    if (buildSide.next(record)) {
       numBuildValues=1;
-      key=pair.getKey().getValue();
+      key=record.getField(0,PactInteger.class).getValue();
     }
  else {
       fail("No build side values found for a probe key.");
     }
-    while (buildSide.next(pair)) {
+    while (buildSide.next(record)) {
       numBuildValues++;
     }
-    Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
-    while (probeIter.hasNext()) {
-      KeyValuePair<PactInteger,PactInteger> nextPair=probeIter.next();
-      Assert.assertEquals("Probe-side key was different than build-side key.",key,nextPair.getKey().getValue());
-      numProbeValues++;
-    }
+    PactRecord pr=join.getCurrentProbeRecord();
+    Assert.assertEquals("Probe-side key was different than build-side key.",key,pr.getField(0,PactInteger.class).getValue());
     Long contained=map.get(key);
     if (contained == null) {
-      contained=new Long(numBuildValues * numProbeValues);
+      contained=new Long(numBuildValues);
     }
  else {
-      contained=new Long(contained.longValue() + (numBuildValues * numProbeValues));
+      contained=new Long(contained.longValue() + (numBuildValues));
     }
     map.put(key,contained);
   }

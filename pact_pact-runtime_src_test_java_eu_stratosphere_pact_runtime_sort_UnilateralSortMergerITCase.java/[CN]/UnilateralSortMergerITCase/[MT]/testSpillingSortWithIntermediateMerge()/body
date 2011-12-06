@@ -1,0 +1,31 @@
+{
+  final int PAIRS=10000000;
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  final TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  final MutableObjectIterator<PactRecord> source=new TestData.GeneratorIterator(generator,PAIRS);
+  LOG.debug("Initializing sortmerger...");
+  @SuppressWarnings("unchecked") SortMerger merger=new UnilateralSortMerger(this.memoryManager,this.ioManager,1024 * 1024 * 64,16,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},source,this.parentTask,0.7f);
+  LOG.debug("Emitting data...");
+  MutableObjectIterator<PactRecord> iterator=merger.getIterator();
+  LOG.debug("Checking results...");
+  int pairsRead=1;
+  int nextStep=PAIRS / 20;
+  PactRecord rec1=new PactRecord();
+  PactRecord rec2=new PactRecord();
+  Assert.assertTrue(iterator.next(rec1));
+  while (iterator.next(rec2)) {
+    final Key k1=rec1.getField(0,TestData.Key.class);
+    final Key k2=rec2.getField(0,TestData.Key.class);
+    pairsRead++;
+    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+    PactRecord tmp=rec1;
+    rec1=rec2;
+    k1.setKey(k2.getKey());
+    rec2=tmp;
+    if (pairsRead == nextStep) {
+      nextStep+=PAIRS / 20;
+    }
+  }
+  Assert.assertEquals("Not all pairs were read back in.",PAIRS,pairsRead);
+  merger.close();
+}

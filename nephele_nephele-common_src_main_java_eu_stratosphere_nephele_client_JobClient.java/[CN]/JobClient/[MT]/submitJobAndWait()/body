@@ -23,6 +23,7 @@ synchronized (this.jobSubmitClient) {
     Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
     logErrorAndRethrow(StringUtils.stringifyException(e));
   }
+  long startTimestamp=-1;
   while (true) {
     if (Thread.interrupted()) {
       logErrorAndRethrow("Job client has been interrupted");
@@ -52,9 +53,14 @@ synchronized (this.jobSubmitClient) {
       if (event instanceof JobEvent) {
         final JobEvent jobEvent=(JobEvent)event;
         final JobStatus jobStatus=jobEvent.getCurrentJobStatus();
+        if (jobStatus == JobStatus.SCHEDULED) {
+          startTimestamp=jobEvent.getTimestamp();
+        }
         if (jobStatus == JobStatus.FINISHED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-          return;
+          final long jobDuration=jobEvent.getTimestamp() - startTimestamp;
+          System.out.println("Job duration (in ms): " + jobDuration);
+          return jobDuration;
         }
  else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
