@@ -21,7 +21,7 @@
           if (!s.isDir()) {
             files.add(s);
             if (s.getModificationTime() > stats.getLastModificationTime()) {
-              stats.fileModTime=s.getModificationTime();
+              stats.setFileModTime(s.getModificationTime());
               unmodified=false;
             }
           }
@@ -35,31 +35,31 @@
         if (stats.getLastModificationTime() == modTime) {
           return stats;
         }
-        stats.fileModTime=modTime;
+        stats.setFileModTime(modTime);
         files=new ArrayList<FileStatus>(1);
         files.add(status);
       }
     }
-    stats.avgBytesPerRecord=-1.0f;
-    stats.fileSize=0;
+    stats.setAvgBytesPerRecord(-1.0f);
+    stats.setFileSize(0);
     for (    FileStatus s : files) {
-      stats.fileSize+=s.getLen();
+      stats.setFileSize(s.getLen());
     }
-    if (stats.fileSize <= 0) {
-      stats.fileSize=BaseStatistics.UNKNOWN;
+    if (stats.getTotalInputSize() <= 0) {
+      stats.setFileSize(BaseStatistics.UNKNOWN);
       return stats;
     }
     final byte[] delimiter=getDelimiter();
     if (!((delimiter.length == 1 && delimiter[0] == '\n') || (delimiter.length == 2 && delimiter[0] == '\r' && delimiter[1] == '\n'))) {
       return stats;
     }
-    int numSamples=Math.min(this.numLineSamples,(int)(stats.fileSize / 1024));
+    int numSamples=Math.min(this.numLineSamples,(int)(stats.getTotalInputSize() / 1024));
     if (numSamples < 2) {
       numSamples=2;
     }
     long offset=0;
     long bytes=0;
-    long stepSize=stats.fileSize / numSamples;
+    long stepSize=stats.getTotalInputSize() / numSamples;
     int fileNum=0;
     int samplesTaken=0;
     for (int sampleNum=0; sampleNum < numSamples && fileNum < files.size(); sampleNum++) {
@@ -90,7 +90,7 @@
         fileNum++;
       }
     }
-    stats.avgBytesPerRecord=bytes / (float)samplesTaken;
+    stats.setAvgBytesPerRecord(bytes / (float)samplesTaken);
   }
  catch (  IOException ioex) {
     if (LOG.isWarnEnabled())     LOG.warn("Could not determine complete statistics for file '" + filePath + "' due to an io error: "+ ioex.getMessage());
