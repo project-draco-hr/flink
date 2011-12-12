@@ -1,0 +1,93 @@
+{
+  List<PactConnection> incomingConnections=getIncomingConnections();
+  ArrayList<OptimizerNode> preds=new ArrayList<OptimizerNode>(incomingConnections.size());
+  for (  PactConnection connection : incomingConnections) {
+    if (connection.getSourcePact() != null) {
+      preds.add(connection.getSourcePact());
+    }
+  }
+  CompilerHints hints=getPactContract().getCompilerHints();
+  if (preds.size() == 0) {
+    this.estimatedCardinality.putAll(hints.getCardinalities());
+    this.estimatedNumRecords=0;
+    int count=0;
+    for (    Entry<FieldSet,Long> cardinality : hints.getCardinalities().entrySet()) {
+      float avgNumValues=hints.getAvgNumValuesPerDistinctValue(cardinality.getKey());
+      if (avgNumValues != -1) {
+        this.estimatedNumRecords+=cardinality.getValue() * avgNumValues;
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.estimatedNumRecords=(this.estimatedNumRecords / count) >= 1 ? (this.estimatedNumRecords / count) : 1;
+    }
+ else {
+      this.estimatedNumRecords=-1;
+    }
+    if (this.estimatedNumRecords != -1 && hints.getAvgBytesPerRecord() != -1) {
+      this.estimatedOutputSize=(this.estimatedNumRecords * hints.getAvgBytesPerRecord() >= 1) ? (long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) : 1;
+    }
+  }
+ else {
+    if (preds.size() == 1) {
+      this.estimatedOutputSize=preds.get(0).estimatedOutputSize;
+    }
+ else {
+      this.estimatedOutputSize=-1;
+    }
+    boolean outputCardEstimated=true;
+    this.estimatedNumRecords=0;
+    int count=0;
+    for (    Entry<FieldSet,Long> cardinality : hints.getCardinalities().entrySet()) {
+      float avgNumValues=hints.getAvgNumValuesPerDistinctValue(cardinality.getKey());
+      if (avgNumValues != -1) {
+        this.estimatedNumRecords+=cardinality.getValue() * avgNumValues;
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.estimatedNumRecords=(this.estimatedNumRecords / count) >= 1 ? (this.estimatedNumRecords / count) : 1;
+    }
+ else {
+      this.estimatedNumRecords=this.computeNumberOfStubCalls();
+      if (hints.getAvgRecordsEmittedPerStubCall() != -1.0) {
+        this.estimatedNumRecords=(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall() >= 1) ? (long)(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall()) : 1;
+      }
+ else {
+        outputCardEstimated=false;
+      }
+    }
+    this.estimatedCardinality.putAll(hints.getCardinalities());
+    if (this.estimatedNumRecords != -1) {
+      for (      Entry<FieldSet,Float> avgNumValues : hints.getAvgNumValuesPerDistinctValues().entrySet()) {
+        if (estimatedCardinality.get(avgNumValues.getKey()) == null) {
+          long estimatedCard=(this.estimatedNumRecords / avgNumValues.getValue() >= 1) ? (long)(this.estimatedNumRecords / avgNumValues.getValue()) : 1;
+          estimatedCardinality.put(avgNumValues.getKey(),estimatedCard);
+        }
+      }
+    }
+    if (!outputCardEstimated) {
+      long newEstimatedNumRecords=0;
+      count=0;
+      for (      Entry<FieldSet,Long> cardinality : estimatedCardinality.entrySet()) {
+        float avgNumValues=hints.getAvgNumValuesPerDistinctValue(cardinality.getKey());
+        if (avgNumValues != -1) {
+          newEstimatedNumRecords+=cardinality.getValue() * avgNumValues;
+          count++;
+        }
+      }
+      if (count > 0) {
+        newEstimatedNumRecords=(newEstimatedNumRecords / count) >= 1 ? (newEstimatedNumRecords / count) : 1;
+      }
+    }
+    double estAvgRecordWidth=this.computeAverageRecordWidth();
+    if (this.estimatedNumRecords != -1 && estAvgRecordWidth != -1) {
+      this.estimatedOutputSize=(this.estimatedNumRecords * estAvgRecordWidth) >= 1 ? (long)(this.estimatedNumRecords * estAvgRecordWidth) : 1;
+    }
+    for (    Entry<FieldSet,Long> cardinality : this.estimatedCardinality.entrySet()) {
+      if (cardinality.getValue() > this.estimatedNumRecords) {
+        cardinality.setValue(this.estimatedNumRecords);
+      }
+    }
+  }
+}

@@ -172,7 +172,14 @@ jsonString.append("\n\t\t]");
 }
 jsonString.append(",\n\t\t\"properties\": [\n");
 addProperty(jsonString,"Est. Cardinality",visitable.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedNumRecords()),true);
-addProperty(jsonString,"Est. Key-Cardinality",visitable.getEstimatedKeyCardinality() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedKeyCardinality()),false);
+String estCardinality="(unknown)";
+if (visitable.getEstimatedCardinalities().size() > 0) {
+estCardinality="";
+for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Est. Key-Cardinality",estCardinality,false);
 addProperty(jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
 jsonString.append("\t\t]");
 if (visitable.getNodeCosts() != null) {
@@ -187,9 +194,23 @@ if (visitable.getPactContract().getCompilerHints() != null) {
 CompilerHints hints=visitable.getPactContract().getCompilerHints();
 CompilerHints defaults=new CompilerHints();
 jsonString.append(",\n\t\t\"compiler_hints\": [\n");
-addProperty(jsonString,"Key-Cardinality",hints.getKeyCardinality() == defaults.getKeyCardinality() ? "(none)" : formatNumber(hints.getKeyCardinality()),true);
-addProperty(jsonString,"Avg. Records/StubCall",String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
-addProperty(jsonString,"Avg. Values/Key",hints.getAvgNumValuesPerKey() == defaults.getAvgNumValuesPerKey() ? "(none)" : String.valueOf(hints.getAvgNumValuesPerKey()),false);
+String hintCardinality="(none)";
+if (hints.getCardinalities().size() > 0) {
+hintCardinality="";
+for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+hintCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Key-Cardinality",hintCardinality,true);
+addProperty(jsonString,"Avg. Records/StubCall",hints.getAvgRecordsEmittedPerStubCall() == defaults.getAvgRecordsEmittedPerStubCall() ? "(none)" : String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
+String valuesKey="(none)";
+if (hints.getAvgNumValuesPerDistinctValues().size() > 0) {
+valuesKey="";
+for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+valuesKey+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Avg. Values/Key",valuesKey,false);
 addProperty(jsonString,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
 jsonString.append("\t\t]");
 }
