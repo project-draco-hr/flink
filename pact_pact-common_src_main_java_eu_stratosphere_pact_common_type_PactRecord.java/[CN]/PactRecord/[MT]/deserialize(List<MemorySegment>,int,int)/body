@@ -1,0 +1,66 @@
+{
+  MemorySegment seg=sources.get(segmentNum);
+  if (seg.size() - segmentOffset > 5) {
+    int val=seg.get(segmentOffset++) & 0xff;
+    if (val >= MAX_BIT) {
+      int shift=7;
+      int curr;
+      val=val & 0x7f;
+      while ((curr=seg.get(segmentOffset++) & 0xff) >= MAX_BIT) {
+        val|=(curr & 0x7f) << shift;
+        shift+=7;
+      }
+      val|=curr << shift;
+    }
+    this.binaryLen=val;
+  }
+ else {
+    int end=seg.size();
+    int val=seg.get(segmentOffset++) & 0xff;
+    if (segmentOffset == end) {
+      segmentOffset=0;
+      seg=sources.get(++segmentNum);
+    }
+    if (val >= MAX_BIT) {
+      int shift=7;
+      int curr;
+      val=val & 0x7f;
+      while ((curr=seg.get(segmentOffset++) & 0xff) >= MAX_BIT) {
+        val|=(curr & 0x7f) << shift;
+        shift+=7;
+        if (segmentOffset == end) {
+          segmentOffset=0;
+          seg=sources.get(++segmentNum);
+        }
+      }
+      val|=curr << shift;
+    }
+    this.binaryLen=val;
+    if (segmentOffset == end) {
+      segmentOffset=0;
+      seg=sources.get(++segmentNum);
+    }
+  }
+  if (this.binaryData == null || this.binaryData.length < this.binaryLen) {
+    this.binaryData=new byte[this.binaryLen];
+  }
+  int remaining=seg.size() - segmentOffset;
+  if (remaining >= this.binaryLen) {
+    seg.get(segmentOffset,this.binaryData,0,this.binaryLen);
+  }
+ else {
+    int offset=0;
+    while (true) {
+      int toRead=Math.min(seg.size() - segmentOffset,this.binaryLen - offset);
+      seg.get(segmentOffset,this.binaryData,offset,toRead);
+      offset+=toRead;
+      segmentOffset+=toRead;
+      if (offset < this.binaryLen) {
+        segmentOffset=0;
+        seg=sources.get(++segmentNum);
+      }
+ else       break;
+    }
+  }
+  initFields(this.binaryData,0,this.binaryLen);
+}

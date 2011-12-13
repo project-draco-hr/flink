@@ -1,0 +1,35 @@
+{
+  int numInputs=getNumberOfInputs();
+  @SuppressWarnings("unchecked") final MutableObjectIterator<PactRecord>[] inputs=new MutableObjectIterator[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    final ShipStrategy shipStrategy=this.config.getInputShipStrategy(i);
+    DistributionPattern dp=null;
+switch (shipStrategy) {
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+case PARTITION_LOCAL_RANGE:
+      dp=new PointwiseDistributionPattern();
+    break;
+case PARTITION_HASH:
+case PARTITION_RANGE:
+case BROADCAST:
+case SFR:
+  dp=new BipartiteDistributionPattern();
+break;
+default :
+throw new RuntimeException("Invalid input ship strategy provided for input " + i + ": "+ shipStrategy.name());
+}
+final int groupSize=this.config.getGroupSize(i + 1);
+if (groupSize == 1) {
+inputs[i]=new NepheleReaderIterator(new MutableRecordReader<PactRecord>(this,dp));
+}
+ else {
+@SuppressWarnings("unchecked") MutableRecordReader<PactRecord>[] readers=new MutableRecordReader[groupSize];
+for (int j=0; j < groupSize; ++j) {
+readers[j]=new MutableRecordReader<PactRecord>(this,dp);
+}
+inputs[i]=new NepheleReaderIterator(new MutableUnionRecordReader<PactRecord>(readers));
+}
+}
+this.inputs=inputs;
+}

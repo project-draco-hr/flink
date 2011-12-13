@@ -1,0 +1,33 @@
+{
+  if (getBuffer() == null) {
+    try {
+      if (!getDeserializedJobID().equals(this.lastDeserializedJobID) || !getDeserializedSourceID().equals(this.lastDeserializedSourceID)) {
+        this.bufferProvider=this.bufferProviderBroker.getBufferProvider(getDeserializedJobID(),getDeserializedSourceID());
+        this.lastDeserializedJobID=getDeserializedJobID();
+        this.lastDeserializedSourceID=getDeserializedSourceID();
+      }
+      setBuffer(this.bufferProvider.requestEmptyBufferBlocking(getSizeOfBuffer()));
+      if (getBuffer() == null) {
+        Thread.sleep(100);
+        return true;
+      }
+    }
+ catch (    InterruptedException e) {
+      return true;
+    }
+  }
+ else {
+    final Buffer buffer=getBuffer();
+    final int bytesWritten=buffer.write(readableByteChannel);
+    if (!buffer.hasRemaining()) {
+      buffer.finishWritePhase();
+      return false;
+    }
+ else {
+      if (bytesWritten == -1) {
+        throw new IOException("Deserialization error: Expected at least " + buffer.remaining() + " more bytes to follow");
+      }
+    }
+  }
+  return true;
+}

@@ -8,6 +8,8 @@
   super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
   super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
   super.getTaskConfig().setNumFilehandles(2);
+  super.getTaskConfig().setLocalStrategyKeyTypes(0,new int[]{0});
+  super.getTaskConfig().setLocalStrategyKeyTypes(new Class[]{PactInteger.class});
   super.registerTask(testTask,MockCombiningReduceStub.class);
   try {
     testTask.invoke();
@@ -21,13 +23,17 @@
     expSum+=i;
   }
   HashMap<PactInteger,PactInteger> aggMap=new HashMap<PactInteger,PactInteger>();
-  for (  KeyValuePair<PactInteger,PactInteger> pair : this.outList) {
-    PactInteger prevVal=aggMap.get(pair.getKey());
+  for (  PactRecord record : this.outList) {
+    PactInteger key=new PactInteger();
+    PactInteger value=new PactInteger();
+    record.getField(0,key);
+    record.getField(1,value);
+    PactInteger prevVal=aggMap.get(key);
     if (prevVal != null) {
-      aggMap.put(pair.getKey(),new PactInteger(prevVal.getValue() + pair.getValue().getValue()));
+      aggMap.put(key,new PactInteger(prevVal.getValue() + value.getValue()));
     }
  else {
-      aggMap.put(pair.getKey(),pair.getValue());
+      aggMap.put(key,value);
     }
   }
   Assert.assertTrue("Resultset size was " + aggMap.size() + ". Expected was "+ keyCnt,aggMap.size() == keyCnt);

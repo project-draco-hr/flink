@@ -1,0 +1,25 @@
+{
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  this.keyPositions=this.config.getLocalStrategyKeyPositions(0);
+  this.keyClasses=this.config.getLocalStrategyKeyClasses(this.userCodeClassLoader);
+  if (this.keyPositions == null || this.keyClasses == null) {
+    throw new Exception("The key positions and types are not specified for the ReduceTask.");
+  }
+  final Comparator<Key>[] comparators=new Comparator[keyPositions.length];
+  final KeyComparator kk=new KeyComparator();
+  for (int i=0; i < comparators.length; i++) {
+    comparators[i]=kk;
+  }
+  countingReader=new CountingMutableObjectIterator(inputs[0]);
+switch (this.config.getLocalStrategy()) {
+case NONE:
+    this.input=new SimpleCloseableInputProvider<PactRecord>(countingReader);
+  break;
+case SORT:
+this.input=new UnilateralSortMerger(memoryManager,ioManager,availableMemory,maxFileHandles,comparators,keyPositions,keyClasses,countingReader,this,spillThreshold);
+break;
+default :
+throw new RuntimeException("Invalid local strategy provided for ReduceTask.");
+}
+}

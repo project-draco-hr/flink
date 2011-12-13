@@ -1,0 +1,63 @@
+{
+  firstV1.copyTo(this.copy1);
+  firstV2.copyTo(this.copy2);
+  matchFunction.match(firstV1,firstV2,collector);
+  SpillingResettableIterator<PactRecord> spillIt=null;
+  try {
+    this.blockIt.reopen(blockVals);
+    while (blockIt.hasNext()) {
+      PactRecord nextBlockRec=blockIt.next();
+      this.copy1.copyTo(this.instance);
+      matchFunction.match(this.instance,nextBlockRec,collector);
+    }
+    blockIt.reset();
+    final LastRepeatableIterator<PactRecord> repeatableIter;
+    boolean spillingRequired=blockIt.hasFurtherInput();
+    if (spillingRequired) {
+      spillIt=new SpillingResettableIterator<PactRecord>(this.memoryManager,this.ioManager,spillVals,new PactRecord(),SpillingResettableIterator.MIN_TOTAL_MEMORY,this.parentTask);
+      repeatableIter=spillIt;
+      spillIt.open();
+    }
+ else {
+      repeatableIter=new PactRecordRepeatableIterator(spillVals);
+    }
+    while (repeatableIter.hasNext()) {
+      PactRecord nextSpillVal=repeatableIter.next();
+      this.copy2.copyTo(this.instance);
+      matchFunction.match(nextSpillVal,this.instance,collector);
+      while (blockIt.hasNext()) {
+        PactRecord nextBlockRec=blockIt.next();
+        nextSpillVal=repeatableIter.repeatLast();
+        matchFunction.match(nextSpillVal,nextBlockRec,collector);
+      }
+      blockIt.reset();
+    }
+    if (!spillingRequired) {
+      return;
+    }
+    while (blockIt.nextBlock()) {
+      spillIt.reset();
+      while (blockIt.hasNext()) {
+        this.copy1.copyTo(this.instance);
+        final PactRecord nextBlockVal=blockIt.next();
+        matchFunction.match(this.instance,nextBlockVal,collector);
+      }
+      blockIt.reset();
+      while (spillIt.hasNext()) {
+        PactRecord nextSpillVal=spillIt.next();
+        while (blockIt.hasNext()) {
+          final PactRecord nextBlockVal=blockIt.next();
+          matchFunction.match(nextSpillVal,nextBlockVal,collector);
+          if (blockIt.hasNext())           nextSpillVal=spillIt.repeatLast();
+        }
+        blockIt.reset();
+      }
+      spillIt.reset();
+    }
+  }
+  finally {
+    if (spillIt != null) {
+      spillIt.close();
+    }
+  }
+}

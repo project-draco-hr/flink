@@ -1,0 +1,56 @@
+{
+  if (!this.bufferExistanceDeserialized) {
+    this.tempBuffer.position(0);
+    this.tempBuffer.limit(1);
+    final int bytesRead=readableByteChannel.read(this.tempBuffer);
+    if (bytesRead == -1) {
+      if (this.tempBuffer.get(0) == 0 && this.tempBuffer.position() == 1) {
+        throw new EOFException();
+      }
+ else {
+        throw new IOException("Deserialization error: Expected at least " + this.tempBuffer.remaining() + " more bytes to follow");
+      }
+    }
+ else     if (bytesRead == 0) {
+      try {
+        Thread.sleep(50);
+      }
+ catch (      InterruptedException e) {
+      }
+    }
+    if (!this.tempBuffer.hasRemaining()) {
+      this.bufferExistanceDeserialized=true;
+      this.tempBuffer.position(0);
+      this.tempBuffer.limit(SIZEOFINT);
+      if (this.tempBuffer.get(0) == 0) {
+        this.transferEnvelope.setBuffer(null);
+        this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+        return false;
+      }
+    }
+ else {
+      return true;
+    }
+  }
+  if (this.sizeOfBuffer < 0) {
+    final int bytesRead=readableByteChannel.read(this.tempBuffer);
+    if (bytesRead == -1) {
+      throw new IOException("Deserialization error: Expected at least " + this.tempBuffer.remaining() + " more bytes to follow");
+    }
+    if (!this.tempBuffer.hasRemaining()) {
+      this.sizeOfBuffer=byteBufferToInteger(this.tempBuffer,0);
+      if (this.sizeOfBuffer <= 0) {
+        throw new IOException("Invalid buffer size: " + this.sizeOfBuffer);
+      }
+    }
+ else {
+      return true;
+    }
+  }
+  if (readBufferData(readableByteChannel)) {
+    return true;
+  }
+  this.transferEnvelope.setBuffer(this.buffer);
+  this.deserializationState=DeserializationState.FULLYDESERIALIZED;
+  return false;
+}
