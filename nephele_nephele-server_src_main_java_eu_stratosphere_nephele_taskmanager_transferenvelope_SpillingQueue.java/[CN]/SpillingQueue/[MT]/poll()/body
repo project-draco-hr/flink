@@ -2,20 +2,37 @@
   if (isEmpty()) {
     return null;
   }
-  final TransferEnvelope te=this.head.poll();
-  if (this.head.size() == 0) {
-    this.head=this.head.getNextElement();
+  TransferEnvelope te;
+  SpillingQueueThread unspillThread=null;
+  SpillingQueueElement lockedElement=null;
+synchronized (this.head) {
+    te=this.head.poll();
+    final Buffer buffer=te.getBuffer();
+    if (buffer != null) {
+      if (!buffer.isBackedByMemory() && this.allowAsynchronousUnspilling) {
+        unspillThread=new SpillingQueueThread(this.bufferProvider,this.head,this);
+        unspillThread.start();
+        lockedElement=this.head;
+      }
+    }
+    if (this.head.size() == 0) {
+      this.head=this.head.getNextElement();
+    }
+    if (this.head == null) {
+      this.tail=null;
+    }
   }
-  if (this.head == null) {
-    this.tail=null;
+  if (unspillThread != null) {
+    unspillThread.waitUntilFirstLockIsAcquired();
+synchronized (lockedElement) {
+    }
   }
   final Buffer buffer=te.getBuffer();
   if (buffer != null) {
     if (buffer.isBackedByMemory()) {
-      this.sizeOfMemoryBuffers-=buffer.size();
+      this.sizeOfMemoryBuffers.addAndGet(-buffer.size());
     }
   }
-  this.peekCache=null;
-  --this.size;
+  this.size.decrementAndGet();
   return te;
 }
