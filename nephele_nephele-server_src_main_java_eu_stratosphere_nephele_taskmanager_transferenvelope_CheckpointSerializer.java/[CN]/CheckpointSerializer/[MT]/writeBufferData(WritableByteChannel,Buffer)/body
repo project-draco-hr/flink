@@ -1,0 +1,40 @@
+{
+  final ByteBuffer tempBuffer=getTempBuffer();
+  if (!this.bufferDataSerializationStarted) {
+    final SerializationBuffer<IOReadableWritable> serializationBuffer=getSerializationBuffer();
+    if (buffer == null) {
+      throw new IllegalArgumentException("Argument buffer must not be null");
+    }
+    final InternalBuffer internalBuffer=buffer.getInternalBuffer();
+    if (internalBuffer.isInWriteMode()) {
+      throw new IllegalStateException("Buffer to be serialized is still in write mode");
+    }
+    if (!(internalBuffer instanceof FileBuffer)) {
+      throw new IllegalArgumentException("Provided buffer is not a file buffer");
+    }
+    final FileBuffer fileBuffer=(FileBuffer)internalBuffer;
+    serializationBuffer.clear();
+    serializationBuffer.serialize(fileBuffer.getFileID());
+    tempBuffer.clear();
+    longToByteBuffer(fileBuffer.getOffset(),tempBuffer);
+    this.bufferDataSerializationStarted=true;
+  }
+  if (!this.fileIDSerialized) {
+    final SerializationBuffer<IOReadableWritable> serializationBuffer=getSerializationBuffer();
+    if (serializationBuffer.dataLeftFromPreviousSerialization()) {
+      serializationBuffer.read(writableByteChannel);
+    }
+ else {
+      this.fileIDSerialized=true;
+    }
+  }
+ else {
+    if (tempBuffer.hasRemaining()) {
+      writableByteChannel.write(tempBuffer);
+    }
+ else {
+      return false;
+    }
+  }
+  return true;
+}

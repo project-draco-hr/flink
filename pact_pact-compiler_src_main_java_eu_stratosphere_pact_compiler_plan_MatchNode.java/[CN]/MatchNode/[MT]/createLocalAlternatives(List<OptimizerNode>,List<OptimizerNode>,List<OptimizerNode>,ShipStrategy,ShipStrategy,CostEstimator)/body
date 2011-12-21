@@ -1,0 +1,80 @@
+{
+  GlobalProperties gp1, gp2;
+  LocalProperties lp1, lp2;
+  if (allPreds1.size() == 1) {
+    gp1=PactConnection.getGlobalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+    lp1=PactConnection.getLocalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+  }
+ else {
+    gp1=new GlobalProperties();
+    lp1=new LocalProperties();
+  }
+  if (allPreds2.size() == 1) {
+    gp2=PactConnection.getGlobalPropertiesAfterConnection(allPreds2.get(0),this,ss2);
+    lp2=PactConnection.getLocalPropertiesAfterConnection(allPreds2.get(0),this,ss2);
+  }
+ else {
+    gp2=new GlobalProperties();
+    lp2=new LocalProperties();
+  }
+  GlobalProperties outGp=new GlobalProperties();
+  outGp.setPartitioning(gp1.getPartitioning().isComputablyPartitioned() ? gp1.getPartitioning() : gp2.getPartitioning());
+  outGp.setKeyOrder(gp1.getKeyOrder().isOrdered() ? gp1.getKeyOrder() : gp2.getKeyOrder());
+  LocalProperties outLp=new LocalProperties();
+  LocalStrategy ls=getLocalStrategy();
+  if (ls != LocalStrategy.NONE) {
+    if (ls == LocalStrategy.SORT_BOTH_MERGE || ls == LocalStrategy.SORT_FIRST_MERGE || ls == LocalStrategy.SORT_SECOND_MERGE || ls == LocalStrategy.MERGE) {
+      outLp.setKeyOrder(Order.ASCENDING);
+      outLp.setKeysGrouped(true);
+      createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,ls,outGp,outLp,estimator);
+    }
+ else     if (ls == LocalStrategy.HYBRIDHASH_FIRST || ls == LocalStrategy.HYBRIDHASH_SECOND || ls == LocalStrategy.MMHASH_FIRST || ls == LocalStrategy.MMHASH_SECOND) {
+      outLp.setKeyOrder(Order.NONE);
+      outLp.setKeysGrouped(false);
+      createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,ls,outGp,outLp,estimator);
+    }
+ else     if (ls == LocalStrategy.SORT_SELF_NESTEDLOOP) {
+      outLp.setKeyOrder(Order.ASCENDING);
+      outLp.setKeysGrouped(true);
+      createMatchAlternative(target,allPreds1,null,ss1,null,ls,outGp,outLp,estimator);
+    }
+ else     if (ls == LocalStrategy.SELF_NESTEDLOOP) {
+      outLp.setKeyOrder(lp1.getKeyOrder());
+      outLp.setKeysGrouped(true);
+      createMatchAlternative(target,allPreds1,null,ss1,null,ls,outGp,outLp,estimator);
+    }
+  }
+ else {
+    if (!areBranchesEqual(allPreds1,allPreds2)) {
+      if (haveValidOutputEstimates(allPreds1) && haveValidOutputEstimates(allPreds2)) {
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.HYBRIDHASH_FIRST,outGp.createCopy(),outLp.createCopy(),estimator);
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.HYBRIDHASH_SECOND,outGp.createCopy(),outLp.createCopy(),estimator);
+      }
+      outLp.setKeyOrder(Order.ASCENDING);
+      outLp.setKeysGrouped(true);
+      if (lp1.getKeyOrder() == Order.ASCENDING && lp2.getKeyOrder() == Order.ASCENDING) {
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.MERGE,outGp,outLp,estimator);
+      }
+ else       if (lp1.getKeyOrder() != Order.ASCENDING && lp2.getKeyOrder() == Order.ASCENDING) {
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.SORT_FIRST_MERGE,outGp,outLp,estimator);
+      }
+ else       if (lp1.getKeyOrder() == Order.ASCENDING && lp2.getKeyOrder() != Order.ASCENDING) {
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.SORT_SECOND_MERGE,outGp,outLp,estimator);
+      }
+ else {
+        createMatchAlternative(target,allPreds1,allPreds2,ss1,ss2,LocalStrategy.SORT_BOTH_MERGE,outGp,outLp,estimator);
+      }
+    }
+ else {
+      outLp.setKeysGrouped(true);
+      if (lp1.areKeysGrouped()) {
+        outLp.setKeyOrder(lp1.getKeyOrder());
+        createMatchAlternative(target,allPreds1,null,ss1,null,LocalStrategy.SELF_NESTEDLOOP,outGp,outLp,estimator);
+      }
+ else {
+        outLp.setKeyOrder(Order.ASCENDING);
+        createMatchAlternative(target,allPreds1,null,ss1,null,LocalStrategy.SORT_SELF_NESTEDLOOP,outGp,outLp,estimator);
+      }
+    }
+  }
+}

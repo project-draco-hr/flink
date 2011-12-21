@@ -1,21 +1,18 @@
 {
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
+  final MutableObjectIterator<PactRecord> reader=this.reader;
   final OutputFormat format=this.format;
-  CloseableInputProvider<KeyValuePair<Key,Value>> inputProvider=null;
+  final PactRecord record=new PactRecord();
   try {
     if (this.taskCanceled) {
       return;
     }
-    inputProvider=obtainInput();
-    Iterator<KeyValuePair<Key,Value>> iter=inputProvider.getIterator();
     if (LOG.isDebugEnabled()) {
-      LOG.debug("Iterator obtained: " + this.getEnvironment().getTaskName() + " ("+ (this.getEnvironment().getIndexInSubtaskGroup() + 1)+ "/"+ this.getEnvironment().getCurrentNumberOfSubtasks()+ ")");
       LOG.debug(getLogString("Starting to produce output"));
     }
     format.open(this.getEnvironment().getIndexInSubtaskGroup() + 1);
-    while (!this.taskCanceled && iter.hasNext()) {
-      KeyValuePair pair=iter.next();
-      format.writeRecord(pair);
+    while (!this.taskCanceled && reader.next(record)) {
+      format.writeRecord(record);
     }
     if (!this.taskCanceled) {
       this.format.close();
@@ -29,9 +26,6 @@
     }
   }
  finally {
-    if (inputProvider != null) {
-      inputProvider.close();
-    }
     if (this.format != null) {
       try {
         this.format.close();

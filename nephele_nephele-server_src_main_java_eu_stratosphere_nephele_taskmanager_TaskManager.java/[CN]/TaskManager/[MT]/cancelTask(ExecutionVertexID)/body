@@ -1,35 +1,17 @@
 {
-  Environment tmpEnvironment;
+  Task tmpTask;
 synchronized (this.runningTasks) {
-    tmpEnvironment=this.runningTasks.get(id);
-    if (tmpEnvironment == null) {
+    tmpTask=this.runningTasks.get(id);
+    if (tmpTask == null) {
       final TaskCancelResult taskCancelResult=new TaskCancelResult(id,AbstractTaskResult.ReturnCode.ERROR);
       taskCancelResult.setDescription("No task with ID + " + id + " is currently running");
       return taskCancelResult;
     }
   }
-  final Environment environment=tmpEnvironment;
+  final Task task=tmpTask;
   final Thread tmpThread=new Thread(new Runnable(){
     @Override public void run(){
-      for (int i=0; i < environment.getNumberOfInputGates(); ++i) {
-        final InputGate<?> inputGate=environment.getInputGate(i);
-        for (int j=0; j < inputGate.getNumberOfInputChannels(); ++j) {
-          final AbstractInputChannel<?> inputChannel=inputGate.getInputChannel(j);
-          if (inputChannel.getType() != ChannelType.INMEMORY) {
-            byteBufferedChannelManager.markChannelAsCanceled(inputChannel.getConnectedChannelID());
-          }
-        }
-      }
-      for (int i=0; i < environment.getNumberOfOutputGates(); ++i) {
-        final OutputGate<?> outputGate=environment.getOutputGate(i);
-        for (int j=0; j < outputGate.getNumberOfOutputChannels(); ++j) {
-          final AbstractOutputChannel<?> outputChannel=outputGate.getOutputChannel(j);
-          if (outputChannel.getType() != ChannelType.INMEMORY) {
-            byteBufferedChannelManager.markChannelAsCanceled(outputChannel.getID());
-          }
-        }
-      }
-      environment.cancelExecution();
+      task.cancelExecution();
     }
   }
 );

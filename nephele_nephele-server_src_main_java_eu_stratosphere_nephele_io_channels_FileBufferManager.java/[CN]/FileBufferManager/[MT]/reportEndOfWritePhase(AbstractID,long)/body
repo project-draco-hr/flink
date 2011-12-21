@@ -1,0 +1,31 @@
+{
+  WritableSpillingFile writableSpillingFile=null;
+  boolean removed=false;
+synchronized (this.writableSpillingFileMap) {
+    writableSpillingFile=this.writableSpillingFileMap.get(ownerID);
+    if (writableSpillingFile == null) {
+      throw new IOException("Cannot find writable spilling file for owner ID " + ownerID);
+    }
+    writableSpillingFile.unlockWritableFileChannel(currentFileSize);
+    if (writableSpillingFile.isReadRequested() && writableSpillingFile.isSafeToClose()) {
+      this.writableSpillingFileMap.remove(ownerID);
+      removed=true;
+    }
+  }
+  if (removed) {
+    writableSpillingFile.close();
+    Map<FileID,ReadableSpillingFile> map=null;
+synchronized (this.readableSpillingFileMap) {
+      map=this.readableSpillingFileMap.get(ownerID);
+      if (map == null) {
+        map=new HashMap<FileID,ReadableSpillingFile>();
+        this.readableSpillingFileMap.put(ownerID,map);
+      }
+    }
+synchronized (map) {
+      map.put(writableSpillingFile.getFileID(),writableSpillingFile.toReadableSpillingFile());
+      map.notify();
+    }
+  }
+  return writableSpillingFile.getFileID();
+}

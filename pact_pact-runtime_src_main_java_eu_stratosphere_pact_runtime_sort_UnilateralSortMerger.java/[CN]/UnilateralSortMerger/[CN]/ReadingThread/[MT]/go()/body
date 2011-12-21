@@ -1,7 +1,8 @@
 {
-  final eu.stratosphere.nephele.io.Reader<KeyValuePair<K,V>> reader=this.reader;
+  final MutableObjectIterator<PactRecord> reader=this.reader;
+  final PactRecord current=new PactRecord();
+  PactRecord leftoverRecord=null;
   CircularElement element=null;
-  KeyValuePair<K,V> leftoverPair=null;
   long bytesUntilSpilling=this.startSpillingBytes;
   boolean done=false;
   if (bytesUntilSpilling < 1) {
@@ -22,54 +23,47 @@
         }
       }
     }
-    final BufferSortableGuaranteed<K,V> buffer=element.buffer;
+    final NormalizedKeySorter<PactRecord> buffer=element.buffer;
     if (!buffer.isEmpty()) {
       throw new IOException("New buffer is not empty.");
     }
     if (LOG.isDebugEnabled()) {
       LOG.debug("Retrieved empty read buffer " + element.id + ".");
     }
-    if (leftoverPair != null) {
-      if (!buffer.write(leftoverPair)) {
-        throw new IOException("Pair could not be written to empty buffer: Serialized pair exceeds buffer capacity.");
+    if (leftoverRecord != null) {
+      if (!buffer.write(leftoverRecord)) {
+        throw new IOException("Record could not be written to empty buffer: Serialized record exceeds buffer capacity.");
       }
-      leftoverPair=null;
+      leftoverRecord=null;
     }
     if (bytesUntilSpilling > 0 && buffer.getCapacity() >= bytesUntilSpilling) {
       boolean fullBuffer=false;
-      try {
-        KeyValuePair<K,V> currentPair;
-        while (isRunning() && reader.hasNext()) {
-          currentPair=reader.next();
-          if (!buffer.write(currentPair)) {
-            leftoverPair=currentPair;
-            fullBuffer=true;
-            break;
-          }
-          if (bytesUntilSpilling - buffer.getOccupancy() <= 0) {
-            bytesUntilSpilling=0;
-            this.queues.sort.add(SPILLING_MARKER);
-            break;
-          }
+      while (isRunning() && reader.next(current)) {
+        if (!buffer.write(current)) {
+          leftoverRecord=current;
+          fullBuffer=true;
+          break;
         }
-        if (fullBuffer) {
-          if (bytesUntilSpilling > 0) {
-            bytesUntilSpilling-=buffer.getCapacity();
-            if (bytesUntilSpilling <= 0) {
-              bytesUntilSpilling=0;
-              this.queues.sort.add(SPILLING_MARKER);
-            }
-          }
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
-          }
-          this.queues.sort.add(element);
-          element=null;
-          continue;
+        if (bytesUntilSpilling - buffer.getOccupancy() <= 0) {
+          bytesUntilSpilling=0;
+          this.queues.sort.add(SPILLING_MARKER);
+          break;
         }
       }
- catch (      InterruptedException iex) {
-        throw new IOException("Reader Thread was interrupted while getting record from Nephele reader.",iex);
+      if (fullBuffer) {
+        if (bytesUntilSpilling > 0) {
+          bytesUntilSpilling-=buffer.getCapacity();
+          if (bytesUntilSpilling <= 0) {
+            bytesUntilSpilling=0;
+            this.queues.sort.add(SPILLING_MARKER);
+          }
+        }
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
+        }
+        this.queues.sort.add(element);
+        element=null;
+        continue;
       }
     }
  else     if (bytesUntilSpilling > 0) {
@@ -79,20 +73,13 @@
         this.queues.sort.add(SPILLING_MARKER);
       }
     }
-    try {
-      KeyValuePair<K,V> currentPair;
-      while (isRunning() && reader.hasNext()) {
-        currentPair=reader.next();
-        if (!buffer.write(currentPair)) {
-          leftoverPair=currentPair;
-          break;
-        }
+    while (isRunning() && reader.next(current)) {
+      if (!buffer.write(current)) {
+        leftoverRecord=current;
+        break;
       }
     }
- catch (    InterruptedException iex) {
-      throw new IOException("Reader Thread was interrupted while getting record from Nephele reader.",iex);
-    }
-    if (reader.hasNext() || leftoverPair != null) {
+    if (leftoverRecord != null) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
       }

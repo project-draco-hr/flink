@@ -1,12 +1,12 @@
 {
   String pathPrefix=getFilesystemProvider().getURIPrefix() + getFilesystemProvider().getTempDirPath();
-  FileDataSourceContract<PactString,PactString> input_left=new FileDataSourceContract<PactString,PactString>(CrossTestInFormat.class,pathPrefix + "/cross_left");
-  input_left.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  FileDataSource input_left=new FileDataSource(ContractITCaseInputFormat.class,pathPrefix + "/cross_left");
+  input_left.setParameter(DelimitedInputFormat.RECORD_DELIMITER,"\n");
   input_left.setDegreeOfParallelism(config.getInteger("CrossTest#NoSubtasks",1));
-  FileDataSourceContract<PactString,PactString> input_right=new FileDataSourceContract<PactString,PactString>(CrossTestInFormat.class,pathPrefix + "/cross_right");
-  input_right.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  FileDataSource input_right=new FileDataSource(ContractITCaseInputFormat.class,pathPrefix + "/cross_right");
+  input_right.setParameter(DelimitedInputFormat.RECORD_DELIMITER,"\n");
   input_right.setDegreeOfParallelism(config.getInteger("CrossTest#NoSubtasks",1));
-  CrossContract<PactString,PactString,PactString,PactString,PactString,PactInteger> testCross=new CrossContract<PactString,PactString,PactString,PactString,PactString,PactInteger>(TestCross.class);
+  CrossContract testCross=new CrossContract(TestCross.class);
   testCross.setDegreeOfParallelism(config.getInteger("CrossTest#NoSubtasks",1));
   testCross.getParameters().setString(PactCompiler.HINT_LOCAL_STRATEGY,config.getString("CrossTest#LocalStrategy",""));
   if (config.getString("CrossTest#ShipStrategy","").equals("BROADCAST_FIRST")) {
@@ -20,11 +20,11 @@
  else {
     testCross.getParameters().setString(PactCompiler.HINT_SHIP_STRATEGY,config.getString("CrossTest#ShipStrategy",""));
   }
-  FileDataSinkContract<PactString,PactInteger> output=new FileDataSinkContract<PactString,PactInteger>(CrossTestOutFormat.class,pathPrefix + "/result.txt");
+  FileDataSink output=new FileDataSink(ContractITCaseOutputFormat.class,pathPrefix + "/result.txt");
   output.setDegreeOfParallelism(1);
-  output.setInput(testCross);
-  testCross.setFirstInput(input_left);
-  testCross.setSecondInput(input_right);
+  output.addInput(testCross);
+  testCross.addFirstInput(input_left);
+  testCross.addSecondInput(input_right);
   Plan plan=new Plan(output);
   PactCompiler pc=new PactCompiler();
   OptimizedPlan op=pc.compile(plan);

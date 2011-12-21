@@ -1,21 +1,37 @@
 {
-  KeyValuePair<Key,Value> pair=null;
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
-  final Iterator<InputSplit> splitIterator=getInputSplits();
-  while (!this.taskCanceled && splitIterator.hasNext()) {
-    final InputSplit split=splitIterator.next();
-    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Opening input split " + split.toString()));
-    if (this.taskCanceled) {
-      return;
-    }
-    final InputFormat format=this.format;
-    try {
+  try {
+    AbstractPactTask.openChainedTasks(this.chainedTasks,this);
+    final Iterator<InputSplit> splitIterator=getInputSplits();
+    while (!this.taskCanceled && splitIterator.hasNext()) {
+      final InputSplit split=splitIterator.next();
+      if (LOG.isDebugEnabled())       LOG.debug(getLogString("Opening input split " + split.toString()));
+      final InputFormat<InputSplit> format=this.format;
       format.open(split);
       if (LOG.isDebugEnabled())       LOG.debug(getLogString("Starting to read input from split " + split.toString()));
-      while (!this.taskCanceled && !format.reachedEnd()) {
-        pair=format.createPair();
-        if (format.nextRecord(pair)) {
-          this.output.collect(pair.getKey(),pair.getValue());
+      final PactRecord record=new PactRecord();
+      if (this.output instanceof OutputCollector) {
+        final OutputCollector output=(OutputCollector)this.output;
+        while (!this.taskCanceled && !format.reachedEnd()) {
+          if (format.nextRecord(record)) {
+            output.collect(record);
+          }
+        }
+      }
+ else       if (this.output instanceof ChainedMapTask) {
+        final ChainedMapTask output=(ChainedMapTask)this.output;
+        while (!this.taskCanceled && !format.reachedEnd()) {
+          if (format.nextRecord(record)) {
+            output.collect(record);
+          }
+        }
+      }
+ else {
+        final Collector output=this.output;
+        while (!this.taskCanceled && !format.reachedEnd()) {
+          if (format.nextRecord(record)) {
+            output.collect(record);
+          }
         }
       }
       if (!this.taskCanceled) {
@@ -23,16 +39,18 @@
         format.close();
       }
     }
- catch (    Exception ex) {
-      try {
-        format.close();
-      }
- catch (      Throwable t) {
-      }
-      if (!this.taskCanceled) {
-        if (LOG.isErrorEnabled())         LOG.error(getLogString("Unexpected ERROR in PACT code"));
-        throw ex;
-      }
+    this.output.close();
+    AbstractPactTask.closeChainedTasks(this.chainedTasks,this);
+  }
+ catch (  Exception ex) {
+    try {
+      this.format.close();
+    }
+ catch (    Throwable t) {
+    }
+    AbstractPactTask.cancelChainedTasks(this.chainedTasks);
+    if (!this.taskCanceled) {
+      AbstractPactTask.logAndThrowException(ex,this);
     }
   }
   if (!this.taskCanceled) {

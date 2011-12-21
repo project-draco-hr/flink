@@ -1,0 +1,46 @@
+{
+  if (minimumSizeOfBuffer > this.maximumBufferSize) {
+    throw new IllegalArgumentException("Buffer of " + minimumSizeOfBuffer + " bytes is requested, but maximum buffer size is "+ this.maximumBufferSize);
+  }
+  while (true) {
+    boolean async=false;
+synchronized (this.buffers) {
+      while (this.requestedNumberOfBuffers > this.designatedNumberOfBuffers) {
+        final ByteBuffer buffer=this.buffers.poll();
+        if (buffer == null) {
+          break;
+        }
+        this.globalBufferPool.releaseGlobalBuffer(buffer);
+        this.requestedNumberOfBuffers--;
+      }
+      while (this.buffers.isEmpty()) {
+        if (this.requestedNumberOfBuffers < this.designatedNumberOfBuffers) {
+          final ByteBuffer buffer=this.globalBufferPool.lockGlobalBuffer();
+          if (buffer != null) {
+            this.buffers.add(buffer);
+            this.requestedNumberOfBuffers++;
+            continue;
+          }
+        }
+        if (this.asynchronousEventOccurred && block) {
+          this.asynchronousEventOccurred=false;
+          async=true;
+          break;
+        }
+        if (block) {
+          this.buffers.wait();
+        }
+ else {
+          return null;
+        }
+      }
+      if (!async) {
+        final ByteBuffer byteBuffer=this.buffers.poll();
+        return BufferFactory.createFromMemory(minimumSizeOfBuffer,byteBuffer,this.buffers);
+      }
+    }
+    if (this.eventListener != null) {
+      this.eventListener.asynchronousEventOccurred();
+    }
+  }
+}

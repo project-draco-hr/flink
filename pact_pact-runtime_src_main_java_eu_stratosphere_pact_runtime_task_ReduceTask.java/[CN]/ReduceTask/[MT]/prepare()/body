@@ -1,0 +1,34 @@
+{
+  final long availableMemory=this.config.getMemorySize();
+  final int maxFileHandles=this.config.getNumFilehandles();
+  final float spillThreshold=this.config.getSortSpillingTreshold();
+  LocalStrategy ls=this.config.getLocalStrategy();
+  if ((ls == LocalStrategy.SORT || ls == LocalStrategy.COMBININGSORT) && availableMemory < MIN_REQUIRED_MEMORY) {
+    throw new Exception("The Reduce task was initialized with too little memory for local strategy " + this.config.getLocalStrategy() + " : "+ availableMemory+ " bytes."+ "Required is at least "+ MIN_REQUIRED_MEMORY+ " bytes.");
+  }
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  this.keyPositions=this.config.getLocalStrategyKeyPositions(0);
+  this.keyClasses=this.config.getLocalStrategyKeyClasses(this.userCodeClassLoader);
+  if (this.keyPositions == null || this.keyClasses == null) {
+    throw new Exception("The key positions and types are not specified for the ReduceTask.");
+  }
+  @SuppressWarnings("unchecked") final Comparator<Key>[] comparators=new Comparator[keyPositions.length];
+  final KeyComparator kk=new KeyComparator();
+  for (int i=0; i < comparators.length; i++) {
+    comparators[i]=kk;
+  }
+switch (config.getLocalStrategy()) {
+case NONE:
+    this.input=new SimpleCloseableInputProvider<PactRecord>(this.inputs[0]);
+  break;
+case SORT:
+this.input=new UnilateralSortMerger(memoryManager,ioManager,availableMemory,maxFileHandles,comparators,keyPositions,keyClasses,this.inputs[0],this,spillThreshold);
+break;
+case COMBININGSORT:
+this.input=new CombiningUnilateralSortMerger(this.stub,memoryManager,ioManager,availableMemory,maxFileHandles,comparators,keyPositions,keyClasses,this.inputs[0],this,spillThreshold,false);
+break;
+default :
+throw new Exception("Invalid local strategy provided for ReduceTask: " + ls.name());
+}
+}
