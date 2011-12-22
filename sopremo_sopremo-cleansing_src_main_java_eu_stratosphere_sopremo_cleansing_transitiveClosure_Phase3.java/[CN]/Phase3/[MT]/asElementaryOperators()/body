@@ -2,20 +2,26 @@
   final SopremoModule sopremoModule=new SopremoModule(this.getName(),1,1);
   JsonStream input=sopremoModule.getInput(0);
   int itCount=3;
+  ExtractNonRelatingBlocks otherBlocks[]=new ExtractNonRelatingBlocks[itCount];
   TransformAKey[] a=new TransformAKey[itCount];
   TransformBKey[] b=new TransformBKey[itCount];
   TransformXKey[] x=new TransformXKey[itCount];
   BAndXMatch[] xb=new BAndXMatch[itCount];
   AMatch axb[]=new AMatch[itCount];
+  UnionAll itOutput[]=new UnionAll[itCount];
   for (int i=0; i < itCount; i++) {
-    a[i]=new TransformAKey().withInputs(i == 0 ? input : axb[i - 1]);
+    JsonStream inputStream=i == 0 ? input : itOutput[i - 1];
+    otherBlocks[i]=new ExtractNonRelatingBlocks().withInputs(inputStream);
+    otherBlocks[i].setIterationStep(i + 1);
+    a[i]=new TransformAKey().withInputs(inputStream);
     a[i].setIterationStep(i + 1);
-    b[i]=new TransformBKey().withInputs(i == 0 ? input : axb[i - 1]);
+    b[i]=new TransformBKey().withInputs(inputStream);
     b[i].setIterationStep(i + 1);
-    x[i]=new TransformXKey().withInputs(i == 0 ? input : axb[i - 1]);
+    x[i]=new TransformXKey().withInputs(inputStream);
     xb[i]=new BAndXMatch().withInputs(b[i],x[i]);
     axb[i]=new AMatch().withInputs(a[i],xb[i]);
+    itOutput[i]=new UnionAll().withInputs(axb[i],otherBlocks[i]);
   }
-  sopremoModule.getOutput(0).setInput(0,axb[itCount - 1]);
+  sopremoModule.getOutput(0).setInput(0,itOutput[itCount - 1]);
   return sopremoModule;
 }
