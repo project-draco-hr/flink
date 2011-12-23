@@ -1,0 +1,75 @@
+{
+  super.configure(config);
+  int numFields=config.getInteger(NUM_FIELDS_PARAMETER,-1);
+  if (numFields < 1) {
+    throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "Need to specify number of fields > 0.");
+  }
+  int[] textPosIdx=new int[numFields];
+  boolean anyTextPosSet=false;
+  boolean allTextPosSet=true;
+  int maxTextPos=-1;
+  for (int i=0; i < numFields; i++) {
+    int pos=config.getInteger(TEXT_POSITION_PARAMETER_PREFIX + i,-1);
+    if (pos == -1) {
+      allTextPosSet=false;
+      textPosIdx[i]=i;
+      maxTextPos=i;
+    }
+ else {
+      anyTextPosSet=true;
+      textPosIdx[i]=pos;
+      maxTextPos=pos > maxTextPos ? pos : maxTextPos;
+    }
+  }
+  if (anyTextPosSet && !allTextPosSet) {
+    throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "Not all text positions set");
+  }
+  int[] recPosIdx=new int[numFields];
+  boolean anyRecPosSet=false;
+  boolean allRecPosSet=true;
+  for (int i=0; i < numFields; i++) {
+    int pos=config.getInteger(RECORD_POSITION_PARAMETER_PREFIX + i,-1);
+    if (pos == -1) {
+      allRecPosSet=false;
+      recPosIdx[i]=i;
+    }
+ else {
+      anyRecPosSet=true;
+      recPosIdx[i]=pos;
+    }
+  }
+  if (anyRecPosSet && !allRecPosSet) {
+    throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "Not all record positions set");
+  }
+  this.fieldParsers=new FieldParser[maxTextPos + 1];
+  this.fieldValues=new Value[maxTextPos + 1];
+  this.recordPositions=new int[maxTextPos + 1];
+  for (int j=0; j < maxTextPos; j++) {
+    fieldParsers[j]=null;
+    fieldValues[j]=null;
+    recordPositions[j]=-1;
+  }
+  for (int i=0; i < numFields; i++) {
+    int pos=textPosIdx[i];
+    recordPositions[pos]=recPosIdx[i];
+    @SuppressWarnings("unchecked") Class<? extends FieldParser<Value>> clazz=(Class<? extends FieldParser<Value>>)config.getClass(FIELD_PARSER_PARAMETER_PREFIX + i,null);
+    if (clazz == null) {
+      throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "No field parser class for parameter " + i);
+    }
+    try {
+      fieldParsers[pos]=clazz.newInstance();
+    }
+ catch (    InstantiationException ie) {
+      throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "No field parser could not be instanciated for parameter " + i);
+    }
+catch (    IllegalAccessException e) {
+      throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "No field parser could not be instanciated for parameter " + i);
+    }
+    fieldValues[pos]=fieldParsers[pos].getValue();
+  }
+  String fieldDelimStr=config.getString(FIELD_DELIMITER_PARAMETER,",");
+  if (fieldDelimStr.length() != 1) {
+    throw new IllegalArgumentException("Invalid configuration for RecordInputFormat: " + "Field delimiter must be a single character");
+  }
+  this.fieldDelim=fieldDelimStr.charAt(0);
+}
