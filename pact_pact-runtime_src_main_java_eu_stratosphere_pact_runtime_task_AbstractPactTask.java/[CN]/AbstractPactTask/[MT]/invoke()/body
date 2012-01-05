@@ -9,8 +9,13 @@
  catch (    Throwable t) {
       throw new Exception("The data preparation for task '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
     }
+    AbstractPactTask.openChainedTasks(this.chainedTasks,this);
     try {
-      this.stub.open(this.config.getStubParameters());
+      Configuration stubConfig=this.config.getStubParameters();
+      stubConfig.setInteger("pact.parallel.task.id",this.getEnvironment().getIndexInSubtaskGroup());
+      stubConfig.setInteger("pact.parallel.task.count",this.getEnvironment().getCurrentNumberOfSubtasks());
+      stubConfig.setString("pact.parallel.task.name",this.getEnvironment().getTaskName());
+      this.stub.open(stubConfig);
       stubOpen=true;
     }
  catch (    Throwable t) {
@@ -21,6 +26,8 @@
       this.stub.close();
       stubOpen=false;
     }
+    this.output.close();
+    AbstractPactTask.closeChainedTasks(this.chainedTasks,this);
   }
  catch (  Exception ex) {
     if (stubOpen) {
@@ -30,17 +37,12 @@
  catch (      Throwable t) {
       }
     }
+    AbstractPactTask.cancelChainedTasks(this.chainedTasks);
     if (this.running) {
-      if (LOG.isErrorEnabled())       LOG.error(getLogString("Unexpected ERROR in PACT code."),ex);
-      throw ex;
+      AbstractPactTask.logAndThrowException(ex,this);
     }
   }
  finally {
-    try {
-      this.output.close();
-    }
- catch (    Throwable t) {
-    }
     cleanup();
   }
   if (this.running) {

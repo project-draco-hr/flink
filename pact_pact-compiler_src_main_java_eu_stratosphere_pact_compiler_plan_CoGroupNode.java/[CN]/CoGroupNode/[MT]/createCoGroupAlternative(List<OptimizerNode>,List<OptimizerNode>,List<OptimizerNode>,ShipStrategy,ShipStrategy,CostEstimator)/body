@@ -1,0 +1,43 @@
+{
+  GlobalProperties gp1;
+  LocalProperties lp1, lp2;
+  if (allPreds1.size() == 1) {
+    gp1=PactConnection.getGlobalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+    lp1=PactConnection.getLocalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+  }
+ else {
+    gp1=new GlobalProperties();
+    lp1=new LocalProperties();
+  }
+  if (allPreds2.size() == 1) {
+    lp2=PactConnection.getLocalPropertiesAfterConnection(allPreds2.get(0),this,ss2);
+  }
+ else {
+    lp2=new LocalProperties();
+  }
+  GlobalProperties outGp=new GlobalProperties();
+  outGp.setPartitioning(gp1.getPartitioning());
+  CoGroupNode n=new CoGroupNode(this,allPreds1,allPreds2,this.input1,this.input2,outGp,new LocalProperties());
+  for (  PactConnection c : n.input1)   c.setShipStrategy(ss1);
+  for (  PactConnection c : n.input2)   c.setShipStrategy(ss2);
+  n.getLocalProperties().setKeyOrder(Order.ASCENDING);
+  n.getLocalProperties().setKeysGrouped(true);
+  if (n.getLocalStrategy() == LocalStrategy.NONE) {
+    if (lp1.getKeyOrder() == Order.ASCENDING && lp2.getKeyOrder() == Order.ASCENDING) {
+      n.setLocalStrategy(LocalStrategy.MERGE);
+    }
+ else     if (lp1.getKeyOrder() != Order.ASCENDING && lp2.getKeyOrder() == Order.ASCENDING) {
+      n.setLocalStrategy(LocalStrategy.SORT_FIRST_MERGE);
+    }
+ else     if (lp1.getKeyOrder() == Order.ASCENDING && lp2.getKeyOrder() != Order.ASCENDING) {
+      n.setLocalStrategy(LocalStrategy.SORT_SECOND_MERGE);
+    }
+ else {
+      n.setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
+    }
+  }
+  n.getGlobalProperties().reset();
+  n.getLocalProperties().reset();
+  estimator.costOperator(n);
+  target.add(n);
+}

@@ -3,11 +3,13 @@
   OptimizerNode targetPact=conn.getTargetPact();
   if (sourcePact instanceof DataSourceNode) {
     DataSourceNode duplicateDataSource=new DataSourceNode((GenericDataSource<?>)sourcePact.getPactContract());
+    duplicateDataSource.setDegreeOfParallelism(sourcePact.getDegreeOfParallelism());
+    duplicateDataSource.setInstancesPerMachine(sourcePact.getInstancesPerMachine());
     PactConnection newConn=new PactConnection(conn,duplicateDataSource,targetPact);
     sourcePact.getOutgoingConnections().remove(conn);
     duplicateDataSource.addOutgoingConnection(newConn);
     if (targetPact instanceof SingleInputNode) {
-      ((SingleInputNode)targetPact).setInputConnection(newConn);
+      ((SingleInputNode)targetPact).addInputConnection(newConn);
     }
  else     if (targetPact instanceof TwoInputNode) {
       if (((TwoInputNode)targetPact).getFirstInputConnection() == conn) {
@@ -25,14 +27,16 @@
     conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
   }
  else {
-    PactConnection predConn=sourcePact.getIncomingConnections().get(0);
-    long curSize=sourcePact.getEstimatedOutputSize();
-    long predSize=predConn.getSourcePact().getEstimatedOutputSize();
-    if (curSize < predSize) {
-      conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
-    }
+    List<PactConnection> predConn=sourcePact.getIncomingConnections().get(0);
+    for (    PactConnection c : predConn) {
+      long curSize=sourcePact.getEstimatedOutputSize();
+      long predSize=c.getSourcePact().getEstimatedOutputSize();
+      if (curSize < predSize) {
+        conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
+      }
  else {
-      resolveDeadlock(predConn);
+        resolveDeadlock(c);
+      }
     }
   }
 }

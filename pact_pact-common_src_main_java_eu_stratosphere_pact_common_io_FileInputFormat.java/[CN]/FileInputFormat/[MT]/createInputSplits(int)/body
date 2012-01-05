@@ -1,6 +1,7 @@
 {
+  minNumSplits=Math.max(minNumSplits,this.numSplits);
   final Path path=this.filePath;
-  final List<FileInputSplit> inputSplits=new ArrayList<FileInputSplit>();
+  final List<FileInputSplit> inputSplits=new ArrayList<FileInputSplit>(minNumSplits);
   List<FileStatus> files=new ArrayList<FileStatus>();
   long totalLength=0;
   final FileSystem fs=path.getFileSystem();
@@ -18,12 +19,19 @@
     files.add(pathFile);
     totalLength+=pathFile.getLen();
   }
-  final long minSplitSize=1;
   final long maxSplitSize=(minNumSplits < 1) ? Long.MAX_VALUE : (totalLength / minNumSplits + (totalLength % minNumSplits == 0 ? 0 : 1));
   int splitNum=0;
   for (  final FileStatus file : files) {
     final long len=file.getLen();
     final long blockSize=file.getBlockSize();
+    final long minSplitSize;
+    if (this.minSplitSize <= blockSize) {
+      minSplitSize=this.minSplitSize;
+    }
+ else {
+      if (LOG.isWarnEnabled())       LOG.warn("Minimal split size of " + this.minSplitSize + " is larger than the block size of "+ blockSize+ ". Decreasing minimal split size to block size.");
+      minSplitSize=blockSize;
+    }
     final long splitSize=Math.max(minSplitSize,Math.min(maxSplitSize,blockSize));
     final long halfSplit=splitSize >>> 1;
     final long maxBytesForLastSplit=(long)(splitSize * MAX_SPLIT_SIZE_DISCREPANCY);

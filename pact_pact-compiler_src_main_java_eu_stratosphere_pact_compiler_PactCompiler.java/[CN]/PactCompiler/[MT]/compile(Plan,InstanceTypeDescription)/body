@@ -2,8 +2,8 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("Beginning compilation of PACT program '" + pactPlan.getJobName() + '\'');
   }
-  String instanceName=type.getInstanceType().getIdentifier();
-  long memoryPerInstance=(long)(type.getHardwareDescription().getSizeOfFreeMemory() * 0.95f);
+  final String instanceName=type.getInstanceType().getIdentifier();
+  final long memoryPerInstance=(long)(type.getHardwareDescription().getSizeOfFreeMemory() * 0.96f);
   int memoryMegabytes=(int)(memoryPerInstance >>> 20);
   int numInstances=type.getMaximumNumberOfAvailableInstances();
   int maxMachinesJob=pactPlan.getMaxNumberMachines();
@@ -26,23 +26,31 @@
     }
   }
   int defaultParallelism=pactPlan.getDefaultParallelism() > 0 ? pactPlan.getDefaultParallelism() : this.defaultDegreeOfParallelism;
-  if (defaultParallelism < 1) {
-    defaultParallelism=maxMachinesJob * this.defaultIntraNodeParallelism;
+  if (this.maxIntraNodeParallelism > 0) {
+    if (defaultParallelism < 1) {
+      defaultParallelism=maxMachinesJob * this.maxIntraNodeParallelism;
+    }
+ else     if (defaultParallelism > maxMachinesJob * this.maxIntraNodeParallelism) {
+      int oldParallelism=defaultParallelism;
+      defaultParallelism=maxMachinesJob * this.maxIntraNodeParallelism;
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Decreasing default degree of parallelism from " + oldParallelism + " to "+ defaultParallelism+ " to fit a maximum number of "+ maxMachinesJob+ " instances with a intra-parallelism of "+ this.maxIntraNodeParallelism);
+      }
+    }
   }
- else   if (defaultParallelism > maxMachinesJob * this.defaultIntraNodeParallelism) {
-    int oldParallelism=defaultParallelism;
-    defaultParallelism=maxMachinesJob * this.defaultIntraNodeParallelism;
+ else   if (defaultParallelism < 1) {
+    defaultParallelism=maxMachinesJob;
     if (LOG.isInfoEnabled()) {
-      LOG.info("Decreasing default degree of parallelism from " + oldParallelism + " to "+ defaultParallelism+ " to fit a maximum number of "+ maxMachinesJob+ " instances with a intra-parallelism of "+ defaultIntraNodeParallelism);
+      LOG.info("No default parallelism specified. Using default parallelism of " + defaultParallelism + " (One task per instance)");
     }
   }
   if (LOG.isDebugEnabled()) {
-    LOG.debug("Using a default degree of parallelism of " + defaultParallelism + ", a default intra-node parallelism of "+ this.defaultIntraNodeParallelism+ '.');
-    if (maxMachines > 0) {
-      LOG.debug("The execution is limited to a maximum number of " + maxMachines + " machines.");
+    LOG.debug("Using a default degree of parallelism of " + defaultParallelism + ", a maximum intra-node parallelism of "+ this.maxIntraNodeParallelism+ '.');
+    if (this.maxMachines > 0) {
+      LOG.debug("The execution is limited to a maximum number of " + maxMachinesJob + " machines.");
     }
   }
-  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(this.statistics,maxMachinesJob,defaultParallelism,this.defaultIntraNodeParallelism,true);
+  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(this.statistics,maxMachinesJob,defaultParallelism,true);
   pactPlan.accept(graphCreator);
   OptimizerNode rootNode=null;
   if (graphCreator.sinks.size() == 1) {
