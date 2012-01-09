@@ -12,7 +12,7 @@
     if (ss == ShipStrategy.NONE) {
       gp=pred.getGlobalProperties();
       lp=pred.getLocalProperties();
-      if (gp.getPartitioning().isPartitioned() || gp.isKeyUnique()) {
+      if (gp.getPartitioning().isPartitioned()) {
         ss=ShipStrategy.FORWARD;
       }
  else {
@@ -24,11 +24,16 @@
  else {
       gp=PactConnection.getGlobalPropertiesAfterConnection(pred,this,ss);
       lp=PactConnection.getLocalPropertiesAfterConnection(pred,this,ss);
-      if (!(gp.getPartitioning().isPartitioned() || gp.isKeyUnique())) {
+      if (!(gp.getPartitioning().isPartitioned())) {
         continue;
       }
     }
-    if (!(lp.areKeysGrouped() || lp.getKeyOrder().isOrdered() || lp.isKeyUnique())) {
+    FieldSet keySet=new FieldSet(getPactContract().getKeyColumnNumbers(0));
+    boolean localStrategyNeeded=!lp.getOrdering().groupsFieldSet(keySet);
+    if (localStrategyNeeded && lp.isGrouped() == true) {
+      localStrategyNeeded=!lp.getGroupedFields().containsAll(keySet);
+    }
+    if (localStrategyNeeded) {
       if (ls != LocalStrategy.NONE) {
         if (ls != LocalStrategy.COMBININGSORT && ls != LocalStrategy.SORT) {
           continue;
@@ -39,8 +44,12 @@
       }
     }
     if (ls == LocalStrategy.COMBININGSORT || ls == LocalStrategy.SORT) {
-      lp.setKeyOrder(Order.ASCENDING);
-      lp.setKeysGrouped(true);
+      Ordering ordering=new Ordering();
+      for (      Integer index : keySet) {
+        ordering.appendOrdering(index,Order.ASCENDING);
+      }
+      lp.setOrdering(ordering);
+      lp.setGrouped(true,keySet);
     }
     if (isCombineable() && ss != ShipStrategy.FORWARD) {
       OptimizerNode combiner=new CombinerNode(getPactContract(),pred,combinerReducingFactor);
@@ -51,8 +60,8 @@
     ReduceNode n=new ReduceNode(this,pred,input,gp,lp);
     n.input.setShipStrategy(ss);
     n.setLocalStrategy(ls);
-    n.getGlobalProperties().reset();
-    n.getLocalProperties().reset();
+    n.getGlobalProperties().filterByKeepSet(getKeepSet(0));
+    n.getLocalProperties().filterByKeepSet(getKeepSet(0));
     estimator.costOperator(n);
     outputPlans.add(n);
   }

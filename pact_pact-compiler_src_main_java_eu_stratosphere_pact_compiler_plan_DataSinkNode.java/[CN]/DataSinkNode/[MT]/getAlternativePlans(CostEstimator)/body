@@ -2,13 +2,13 @@
   List<? extends OptimizerNode> inPlans=input.getSourcePact().getAlternativePlans(estimator);
   List<DataSinkNode> plans=new ArrayList<DataSinkNode>(inPlans.size());
   for (  OptimizerNode pred : inPlans) {
-    Order go=getPactContract().getGlobalOrder();
-    Order lo=getPactContract().getLocalOrder();
+    Ordering go=getPactContract().getGlobalOrder();
+    Ordering lo=getPactContract().getLocalOrder();
     GlobalProperties gp=pred.getGlobalProperties().createCopy();
     LocalProperties lp=pred.getLocalProperties().createCopy();
     ShipStrategy ss=null;
     LocalStrategy ls=null;
-    if (go != Order.NONE && go != gp.getKeyOrder()) {
+    if (go != null && go != null) {
       if (input.getShipStrategy() == ShipStrategy.NONE || input.getShipStrategy() == ShipStrategy.PARTITION_RANGE) {
         ss=ShipStrategy.PARTITION_RANGE;
       }
@@ -21,11 +21,15 @@
  else {
         continue;
       }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED);
-      gp.setKeyOrder(go);
-      lp.setKeyOrder(go);
+      FieldSet fieldSet=new FieldSet();
+      for (      Integer field : go.getInvolvedIndexes()) {
+        fieldSet.add(field);
+      }
+      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,fieldSet);
+      gp.setOrdering(go);
+      lp.setOrdering(go);
     }
- else     if (lo != Order.NONE && lo != lp.getKeyOrder()) {
+ else     if (lo != null && lo.isMetBy(lp.getOrdering())) {
       if (localStrategy == LocalStrategy.NONE || localStrategy == LocalStrategy.SORT) {
         ls=LocalStrategy.SORT;
       }
@@ -33,7 +37,7 @@
         continue;
       }
       ls=LocalStrategy.SORT;
-      lp.setKeyOrder(lo);
+      lp.setOrdering(lo);
     }
     DataSinkNode ns=new DataSinkNode(this,pred,input,gp,lp);
     if (ss == null) {
