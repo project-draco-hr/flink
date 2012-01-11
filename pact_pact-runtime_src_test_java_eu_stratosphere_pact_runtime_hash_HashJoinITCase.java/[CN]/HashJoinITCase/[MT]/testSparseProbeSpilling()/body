@@ -1,0 +1,32 @@
+{
+  int reqMem=4 * 1024 * 1024;
+  final int NUM_BUILD_KEYS=1000000;
+  final int NUM_BUILD_VALS=1;
+  final int NUM_PROBE_KEYS=20;
+  final int NUM_PROBE_VALS=1;
+  MutableObjectIterator<PactRecord> buildInput=new RegularlyGeneratedInputGenerator(NUM_BUILD_KEYS,NUM_BUILD_VALS,false);
+  MemoryManager memMan;
+  List<MemorySegment> memSegments;
+  try {
+    memMan=new DefaultMemoryManager(reqMem);
+    memSegments=memMan.allocate(MEM_OWNER,reqMem,64,32 * 1024);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  IOManager ioManager=new IOManager();
+  @SuppressWarnings("unchecked") HashJoin join=new HashJoin(buildInput,new RegularlyGeneratedInputGenerator(NUM_PROBE_KEYS,NUM_PROBE_VALS,true),new int[]{0},new int[]{0},new Class[]{PactInteger.class},memSegments,ioManager);
+  join.open();
+  int expectedNumResults=(Math.min(NUM_PROBE_KEYS,NUM_BUILD_KEYS) * NUM_BUILD_VALS) * NUM_PROBE_VALS;
+  final PactRecord record=new PactRecord();
+  int numRecordsInJoinResult=0;
+  while (join.nextRecord()) {
+    HashBucketIterator buildSide=join.getBuildSideIterator();
+    while (buildSide.next(record)) {
+      numRecordsInJoinResult++;
+    }
+  }
+  Assert.assertEquals("Wrong number of records in join result.",expectedNumResults,numRecordsInJoinResult);
+  join.close();
+}
