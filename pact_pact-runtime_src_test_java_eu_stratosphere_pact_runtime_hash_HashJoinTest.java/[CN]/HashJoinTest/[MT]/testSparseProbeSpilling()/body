@@ -1,0 +1,42 @@
+{
+  int reqMem=4 * 1024 * 1024;
+  final int NUM_BUILD_KEYS=1000000;
+  final int NUM_BUILD_VALS=1;
+  final int NUM_PROBE_KEYS=20;
+  final int NUM_PROBE_VALS=1;
+  Iterator<KeyValuePair<PactInteger,PactInteger>> buildInput=new RegularlyGeneratedInputGenerator(NUM_BUILD_KEYS,NUM_BUILD_VALS,false);
+  MemoryManager memMan;
+  List<MemorySegment> memSegments;
+  try {
+    memMan=new DefaultMemoryManager(reqMem);
+    memSegments=memMan.allocate(MEM_OWNER,reqMem,64,32 * 1024);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  IOManager ioManager=new IOManager();
+  HashJoin<PactInteger,PactInteger,PactInteger> join=new HashJoin<PactInteger,PactInteger,PactInteger>(buildInput,new RegularlyGeneratedInputGenerator(NUM_PROBE_KEYS,NUM_PROBE_VALS,true),PactInteger.class,PactInteger.class,PactInteger.class,memSegments,ioManager);
+  join.open();
+  int expectedNumResults=(Math.min(NUM_PROBE_KEYS,NUM_BUILD_KEYS) * NUM_BUILD_VALS) * NUM_PROBE_VALS;
+  int numResults=0;
+  final KeyValuePair<PactInteger,PactInteger> pair=new KeyValuePair<PactInteger,PactInteger>(new PactInteger(),new PactInteger());
+  while (join.nextKey()) {
+    int numBuildValues=0;
+    int numProbeValues=0;
+    Iterator<KeyValuePair<PactInteger,PactInteger>> probeIter=join.getProbeSideIterator();
+    while (probeIter.hasNext()) {
+      numProbeValues++;
+      probeIter.next();
+    }
+    Assert.assertEquals("Wrong number of values from probe-side for a key",NUM_PROBE_VALS,numProbeValues);
+    HashBucketIterator<PactInteger,PactInteger> buildSide=join.getBuildSideIterator();
+    while (buildSide.next(pair)) {
+      numBuildValues++;
+    }
+    Assert.assertEquals("Wrong number of values from build-side for a key",NUM_BUILD_VALS,numBuildValues);
+    numResults+=numProbeValues * numBuildValues;
+  }
+  Assert.assertEquals("Wrong number of results",expectedNumResults,numResults);
+  join.close();
+}
