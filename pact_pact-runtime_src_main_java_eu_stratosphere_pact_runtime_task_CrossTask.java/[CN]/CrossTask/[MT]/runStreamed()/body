@@ -1,0 +1,41 @@
+{
+  final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+  final IOManager ioManager=getEnvironment().getIOManager();
+  final MutableObjectIterator<PactRecord> innerReader=inputs[0];
+  final MutableObjectIterator<PactRecord> outerReader=inputs[1];
+  LastRepeatableMutableObjectIterator<PactRecord> repeatableInput=null;
+  final boolean firstInputIsOuter;
+  if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST) {
+    innerInput=new SpillingResettableMutableObjectIterator(memoryManager,ioManager,innerReader,availableMemory,this);
+    repeatableInput=new RepeatableMutableObjectIterator(outerReader);
+    firstInputIsOuter=true;
+  }
+ else   if (config.getLocalStrategy() == LocalStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+    innerInput=new SpillingResettableMutableObjectIterator(memoryManager,ioManager,innerReader,availableMemory,this);
+    repeatableInput=new RepeatableMutableObjectIterator(outerReader);
+    firstInputIsOuter=false;
+  }
+ else {
+    throw new RuntimeException("Invalid local strategy for CrossTask: " + config.getLocalStrategy());
+  }
+  innerInput.open();
+  if (!this.running)   return;
+  if (LOG.isDebugEnabled())   LOG.debug(getLogString("Resetable iterator obtained"));
+  PactRecord innerRecord=new PactRecord();
+  PactRecord outerRecord=new PactRecord();
+  boolean outerValid=repeatableInput.next(outerRecord);
+  while (this.running && outerValid) {
+    while (this.running && innerInput.next(innerRecord)) {
+      if (firstInputIsOuter) {
+        stub.cross(outerRecord,innerRecord,output);
+      }
+ else {
+        stub.cross(innerRecord,outerRecord,output);
+      }
+      repeatableInput.repeatLast(outerRecord);
+    }
+    if (this.running && (outerValid=repeatableInput.next(outerRecord))) {
+      innerInput.reset();
+    }
+  }
+}

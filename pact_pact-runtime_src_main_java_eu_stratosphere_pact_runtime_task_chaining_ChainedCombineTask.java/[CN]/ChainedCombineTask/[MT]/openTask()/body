@@ -1,0 +1,43 @@
+{
+  Configuration stubConfig=this.config.getStubParameters();
+  stubConfig.setInteger("pact.parallel.task.id",this.parent.getEnvironment().getIndexInSubtaskGroup());
+  stubConfig.setInteger("pact.parallel.task.count",this.parent.getEnvironment().getCurrentNumberOfSubtasks());
+  stubConfig.setString("pact.parallel.task.name",this.parent.getEnvironment().getTaskName());
+  AbstractPactTask.openUserCode(this.combiner,stubConfig);
+  final long availableMemory=this.config.getMemorySize();
+  LocalStrategy ls=config.getLocalStrategy();
+  long strategyMinMem=0;
+switch (ls) {
+case COMBININGSORT:
+    strategyMinMem=MIN_REQUIRED_MEMORY;
+  break;
+}
+if (availableMemory < strategyMinMem) {
+throw new RuntimeException("The Combine task was initialized with too little memory for local strategy " + config.getLocalStrategy() + " : "+ availableMemory+ " bytes."+ "Required is at least "+ strategyMinMem+ " bytes.");
+}
+final MemoryManager memoryManager=this.parent.getEnvironment().getMemoryManager();
+final IOManager ioManager=this.parent.getEnvironment().getIOManager();
+final int[] keyPositions=this.config.getLocalStrategyKeyPositions(0);
+final Class<? extends Key>[] keyClasses=this.config.getLocalStrategyKeyClasses(this.userCodeClassLoader);
+if (keyPositions == null || keyClasses == null) {
+throw new Exception("The key positions and types are not specified for the CombineTask.");
+}
+@SuppressWarnings("unchecked") final Comparator<Key>[] comparators=new Comparator[keyPositions.length];
+final KeyComparator kk=new KeyComparator();
+for (int i=0; i < comparators.length; i++) {
+comparators[i]=kk;
+}
+switch (ls) {
+case COMBININGSORT:
+this.sorter=new AsynchronousPartialSorterCollector(memoryManager,ioManager,availableMemory,comparators,keyPositions,keyClasses,this.parent);
+this.inputCollector=this.sorter.getInputCollector();
+break;
+default :
+throw new RuntimeException("Invalid local strategy provided for CombineTask.");
+}
+this.combinerThread=new CombinerThread(this.sorter,keyPositions,keyClasses,this.combiner,this.outputCollector);
+this.combinerThread.start();
+if (this.parent != null) {
+this.parent.userThreadStarted(this.combinerThread);
+}
+}
