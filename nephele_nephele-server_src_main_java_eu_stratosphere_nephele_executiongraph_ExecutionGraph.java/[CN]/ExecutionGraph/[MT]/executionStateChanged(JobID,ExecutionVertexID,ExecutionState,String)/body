@@ -1,9 +1,8 @@
 {
-  final InternalJobStatus oldStatus=this.jobStatus;
   if (newExecutionState == ExecutionState.RERUNNING) {
     this.recovering.remove(getVertexByID(vertexID));
   }
-  checkAndUpdateJobStatus(newExecutionState);
+  final InternalJobStatus newJobStatus=determineNewJobStatus(this,newExecutionState);
   if (newExecutionState == ExecutionState.FINISHED) {
     if (this.isCurrentStageCompleted()) {
       ++this.indexToCurrentExecutionStage;
@@ -16,22 +15,11 @@
       }
     }
   }
-  if (newExecutionState == ExecutionState.FAILED && this.jobStatus == InternalJobStatus.RECOVERING) {
+  if (newExecutionState == ExecutionState.FAILED && newJobStatus == InternalJobStatus.RECOVERING) {
     LOG.info("RECOVERING");
     if (!this.recovering.contains(vertexID)) {
       this.recovering.add(this.getVertexByID(vertexID));
     }
   }
-  if (this.jobStatus != oldStatus) {
-    if (this.jobStatus == InternalJobStatus.FAILING) {
-      this.errorDescription=optionalMessage;
-    }
-    if (this.jobStatus == InternalJobStatus.FAILED) {
-      optionalMessage=this.errorDescription;
-    }
-    final Iterator<JobStatusListener> it=this.jobStatusListeners.iterator();
-    while (it.hasNext()) {
-      it.next().jobStatusHasChanged(this,this.jobStatus,optionalMessage);
-    }
-  }
+  updateJobStatus(newJobStatus,optionalMessage);
 }

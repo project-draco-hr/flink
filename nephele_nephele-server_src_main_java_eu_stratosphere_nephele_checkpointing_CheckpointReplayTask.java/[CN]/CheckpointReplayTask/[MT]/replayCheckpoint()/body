@@ -11,22 +11,39 @@
       if (this.isCheckpointComplete) {
         throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
       }
-      Thread.sleep(100);
-    }
-    final FileInputStream fis=new FileInputStream(metaDataFile);
-    final FileChannel fileChannel=fis.getChannel();
-    while (true) {
       try {
-        deserializer.read(fileChannel);
-        final TransferEnvelope transferEnvelope=deserializer.getFullyDeserializedTransferEnvelope();
-        if (transferEnvelope != null) {
-          this.transferEnvelopeDispatcher.processEnvelopeFromOutputChannel(transferEnvelope);
+        Thread.sleep(100);
+      }
+ catch (      InterruptedException e) {
+      }
+      if (this.isCanceled) {
+        return;
+      }
+    }
+    FileInputStream fis=null;
+    try {
+      fis=new FileInputStream(metaDataFile);
+      final FileChannel fileChannel=fis.getChannel();
+      while (!this.isCanceled) {
+        try {
+          deserializer.read(fileChannel);
+          final TransferEnvelope transferEnvelope=deserializer.getFullyDeserializedTransferEnvelope();
+          if (transferEnvelope != null) {
+            this.transferEnvelopeDispatcher.processEnvelopeFromOutputChannel(transferEnvelope);
+          }
+        }
+ catch (        EOFException eof) {
+          fileChannel.close();
+          ++metaDataIndex;
+          break;
         }
       }
- catch (      EOFException eof) {
-        fileChannel.close();
-        ++metaDataIndex;
-        break;
+    }
+ catch (    InterruptedException e) {
+    }
+ finally {
+      if (fis != null) {
+        fis.close();
       }
     }
   }
