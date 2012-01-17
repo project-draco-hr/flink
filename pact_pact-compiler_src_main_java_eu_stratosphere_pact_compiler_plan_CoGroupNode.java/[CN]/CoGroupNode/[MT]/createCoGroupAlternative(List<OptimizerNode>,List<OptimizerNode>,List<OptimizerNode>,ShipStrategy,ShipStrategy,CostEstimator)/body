@@ -1,0 +1,80 @@
+{
+  GlobalProperties gp1, gp2;
+  LocalProperties lp1, lp2;
+  if (allPreds1.size() == 1) {
+    gp1=PactConnection.getGlobalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+    lp1=PactConnection.getLocalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
+  }
+ else {
+    gp1=new GlobalProperties();
+    lp1=new LocalProperties();
+  }
+  if (allPreds2.size() == 1) {
+    gp2=PactConnection.getGlobalPropertiesAfterConnection(allPreds2.get(0),this,ss2);
+    lp2=PactConnection.getLocalPropertiesAfterConnection(allPreds2.get(0),this,ss2);
+  }
+ else {
+    gp2=new GlobalProperties();
+    lp2=new LocalProperties();
+  }
+  int[] keyColumns1=getPactContract().getKeyColumnNumbers(0);
+  Ordering ordering1=new Ordering();
+  for (  int keyColumn : keyColumns1) {
+    ordering1.appendOrdering(keyColumn,Order.ASCENDING);
+  }
+  int[] keyColumns2=getPactContract().getKeyColumnNumbers(1);
+  Ordering ordering2=new Ordering();
+  for (  int keyColumn : keyColumns2) {
+    ordering2.appendOrdering(keyColumn,Order.ASCENDING);
+  }
+  GlobalProperties outGp=new GlobalProperties();
+  outGp.setPartitioning(gp1.getPartitioning(),gp1.getPartitionedFiels());
+  CoGroupNode n=new CoGroupNode(this,allPreds1,allPreds2,this.input1,this.input2,outGp,new LocalProperties());
+  for (  PactConnection c : n.input1)   c.setShipStrategy(ss1);
+  for (  PactConnection c : n.input2)   c.setShipStrategy(ss2);
+  n.getLocalProperties().setOrdering(ordering1);
+  n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns1));
+  if (n.getLocalStrategy() == LocalStrategy.NONE) {
+    if (ordering1.isMetBy(lp1.getOrdering()) && ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.MERGE);
+    }
+ else     if (!ordering1.isMetBy(lp1.getOrdering()) && ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.SORT_FIRST_MERGE);
+    }
+ else     if (ordering1.isMetBy(lp1.getOrdering()) && !ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.SORT_SECOND_MERGE);
+    }
+ else {
+      n.setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
+    }
+  }
+  n.getGlobalProperties().filterByKeepSet(getKeepSet(0));
+  n.getLocalProperties().filterByKeepSet(getKeepSet(0));
+  estimator.costOperator(n);
+  target.add(n);
+  outGp=new GlobalProperties();
+  outGp.setPartitioning(gp2.getPartitioning(),gp2.getPartitionedFiels());
+  n=new CoGroupNode(this,allPreds1,allPreds2,input1,input2,outGp,new LocalProperties());
+  for (  PactConnection c : n.input1)   c.setShipStrategy(ss1);
+  for (  PactConnection c : n.input2)   c.setShipStrategy(ss2);
+  n.getLocalProperties().setOrdering(ordering2);
+  n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns2));
+  if (n.getLocalStrategy() == LocalStrategy.NONE) {
+    if (ordering1.isMetBy(lp1.getOrdering()) && ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.MERGE);
+    }
+ else     if (!ordering1.isMetBy(lp1.getOrdering()) && ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.SORT_FIRST_MERGE);
+    }
+ else     if (ordering1.isMetBy(lp1.getOrdering()) && !ordering2.isMetBy(lp2.getOrdering())) {
+      n.setLocalStrategy(LocalStrategy.SORT_SECOND_MERGE);
+    }
+ else {
+      n.setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
+    }
+  }
+  n.getGlobalProperties().filterByKeepSet(getKeepSet(1));
+  n.getLocalProperties().filterByKeepSet(getKeepSet(1));
+  estimator.costOperator(n);
+  target.add(n);
+}

@@ -1,0 +1,92 @@
+{
+  for (  List<OptimizerNode> predList : alternativeSubPlanCominations) {
+    ShipStrategy ss=ShipStrategy.NONE;
+    for (    PactConnection c : this.input) {
+      ShipStrategy newSS=c.getShipStrategy();
+      if (newSS == ShipStrategy.BROADCAST || newSS == ShipStrategy.SFR)       continue;
+      if (ss == ShipStrategy.NONE) {
+        ss=newSS;
+        continue;
+      }
+      if (ss == newSS)       continue;
+      continue;
+    }
+    GlobalProperties gp;
+    LocalProperties lp;
+    if (ss == ShipStrategy.NONE) {
+      if (predList.size() == 1) {
+        gp=predList.get(0).getGlobalProperties();
+        lp=predList.get(0).getLocalProperties();
+        if (gp.getPartitioning().isPartitioned()) {
+          ss=ShipStrategy.FORWARD;
+        }
+ else {
+          ss=ShipStrategy.PARTITION_HASH;
+        }
+        gp=PactConnection.getGlobalPropertiesAfterConnection(predList.get(0),this,ss);
+        lp=PactConnection.getLocalPropertiesAfterConnection(predList.get(0),this,ss);
+      }
+ else {
+        gp=new GlobalProperties();
+        lp=new LocalProperties();
+        ss=ShipStrategy.PARTITION_HASH;
+      }
+    }
+ else {
+      if (predList.size() == 1) {
+        gp=PactConnection.getGlobalPropertiesAfterConnection(predList.get(0),this,ss);
+        lp=PactConnection.getLocalPropertiesAfterConnection(predList.get(0),this,ss);
+      }
+ else {
+        gp=new GlobalProperties();
+        lp=new LocalProperties();
+      }
+      if (!(gp.getPartitioning().isPartitioned())) {
+        continue;
+      }
+    }
+    FieldSet keySet=new FieldSet(getPactContract().getKeyColumnNumbers(0));
+    boolean localStrategyNeeded=!lp.getOrdering().groupsFieldSet(keySet);
+    if (localStrategyNeeded && lp.isGrouped() == true) {
+      localStrategyNeeded=!lp.getGroupedFields().containsAll(keySet);
+    }
+    LocalStrategy ls=getLocalStrategy();
+    if (localStrategyNeeded) {
+      if (ls != LocalStrategy.NONE) {
+        if (ls != LocalStrategy.COMBININGSORT && ls != LocalStrategy.SORT) {
+          continue;
+        }
+      }
+ else {
+        ls=isCombineable() ? LocalStrategy.COMBININGSORT : LocalStrategy.SORT;
+      }
+    }
+    if (ls == LocalStrategy.COMBININGSORT || ls == LocalStrategy.SORT) {
+      Ordering ordering=new Ordering();
+      for (      Integer index : keySet) {
+        ordering.appendOrdering(index,Order.ASCENDING);
+      }
+      lp.setOrdering(ordering);
+      lp.setGrouped(true,keySet);
+    }
+    if (isCombineable() && ss != ShipStrategy.FORWARD) {
+      int index=0;
+      for (      OptimizerNode pred : predList) {
+        OptimizerNode combiner=new CombinerNode(getPactContract(),pred,this.combinerReducingFactor);
+        combiner.setDegreeOfParallelism(pred.getDegreeOfParallelism());
+        estimator.costOperator(combiner);
+        predList.set(index,combiner);
+        ++index;
+      }
+    }
+    ReduceNode n=new ReduceNode(this,predList,this.input,gp,lp);
+    for (    PactConnection cc : n.getInputConnections()) {
+      cc.setShipStrategy(ss);
+    }
+    n.setLocalStrategy(ls);
+    n.getGlobalProperties().filterByKeepSet(getKeepSet(0));
+    n.getLocalProperties().filterByKeepSet(getKeepSet(0));
+    estimator.costOperator(n);
+    outputPlans.add(n);
+  }
+}

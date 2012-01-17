@@ -1,13 +1,20 @@
 {
-  List<PactConnection> incomingConnections=getIncomingConnections();
-  ArrayList<OptimizerNode> preds=new ArrayList<OptimizerNode>(incomingConnections.size());
-  for (  PactConnection connection : incomingConnections) {
-    if (connection.getSourcePact() != null) {
-      preds.add(connection.getSourcePact());
+  boolean allPredsAvailable=true;
+  for (  List<PactConnection> incomingConnections : getIncomingConnections()) {
+    if (allPredsAvailable) {
+      for (      PactConnection incomingConnection : incomingConnections) {
+        if (incomingConnection.getSourcePact() == null) {
+          allPredsAvailable=false;
+          break;
+        }
+      }
+    }
+ else {
+      break;
     }
   }
   CompilerHints hints=getPactContract().getCompilerHints();
-  if (preds.size() == 0) {
+  if (!allPredsAvailable) {
     this.estimatedCardinality.putAll(hints.getCardinalities());
     this.estimatedNumRecords=0;
     int count=0;
@@ -29,12 +36,7 @@
     }
   }
  else {
-    if (preds.size() == 1) {
-      this.estimatedOutputSize=preds.get(0).estimatedOutputSize;
-    }
- else {
-      this.estimatedOutputSize=-1;
-    }
+    this.estimatedNumRecords=this.computeNumberOfStubCalls();
     boolean outputCardEstimated=true;
     this.estimatedNumRecords=0;
     int count=0;

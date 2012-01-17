@@ -1,20 +1,25 @@
 {
-  OptimizerNode pred1=input1 == null ? null : input1.getSourcePact();
-  OptimizerNode pred2=input2 == null ? null : input2.getSourcePact();
-  if (pred1 != null && pred2 != null) {
-    FieldSet fieldSet1=new FieldSet(getPactContract().getKeyColumnNumbers(0));
-    FieldSet fieldSet2=new FieldSet(getPactContract().getKeyColumnNumbers(1));
-    if (pred1.getEstimatedCardinality(fieldSet1) == -1) {
-      return pred2.getEstimatedCardinality(fieldSet2);
+  long numKey1=0;
+  long numKey2=0;
+  FieldSet fieldSet1=new FieldSet(getPactContract().getKeyColumnNumbers(0));
+  FieldSet fieldSet2=new FieldSet(getPactContract().getKeyColumnNumbers(1));
+  for (  PactConnection c : this.input1) {
+    long keys=c.getSourcePact().getEstimatedCardinality(fieldSet1);
+    if (keys == -1) {
+      numKey1=-1;
+      break;
     }
- else     if (pred2.getEstimatedCardinality(fieldSet2) == -1) {
-      return pred1.getEstimatedCardinality(fieldSet1);
-    }
- else {
-      return Math.max(pred1.getEstimatedCardinality(fieldSet1),pred2.getEstimatedCardinality(fieldSet2));
-    }
+    numKey1+=keys;
   }
- else {
-    return -1;
+  for (  PactConnection c : this.input2) {
+    long keys=c.getSourcePact().getEstimatedCardinality(fieldSet2);
+    if (keys == -1) {
+      numKey2=-1;
+      break;
+    }
+    numKey2+=keys;
   }
+  if (numKey1 == -1)   return numKey2;
+  if (numKey2 == -1)   return numKey1;
+  return Math.max(numKey1,numKey2);
 }

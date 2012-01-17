@@ -1,6 +1,6 @@
 {
-  jsonString.append("\t{\n");
-  jsonString.append("\t\t\"id\": " + nodeIds.get(visitable));
+  this.jsonString.append("\t{\n");
+  this.jsonString.append("\t\t\"id\": " + this.nodeIds.get(visitable));
   String type;
 switch (visitable.getPactType()) {
 case DataSink:
@@ -13,7 +13,7 @@ default :
 type="pact";
 break;
 }
-jsonString.append(",\n\t\t\"type\": \"" + type + "\"");
+this.jsonString.append(",\n\t\t\"type\": \"" + type + "\"");
 String contents;
 switch (visitable.getPactType()) {
 case DataSink:
@@ -27,24 +27,28 @@ jsonString.append(",\n\t\t\"pact\": \"" + visitable.getName() + "\"");
 contents=visitable.getPactContract().getName();
 break;
 }
-jsonString.append(",\n\t\t\"contents\": \"" + contents + "\"");
-jsonString.append(",\n\t\t\"parallelism\": \"" + (visitable.getDegreeOfParallelism() >= 1 ? visitable.getDegreeOfParallelism() : "default") + "\"");
-List<PactConnection> connList=visitable.getIncomingConnections();
-String child1name=null, child2name=null;
-if (connList != null && connList.size() > 0) {
-jsonString.append(",\n\t\t\"predecessors\": [");
+this.jsonString.append(",\n\t\t\"contents\": \"" + contents + "\"");
+this.jsonString.append(",\n\t\t\"parallelism\": \"" + (visitable.getDegreeOfParallelism() >= 1 ? visitable.getDegreeOfParallelism() : "default") + "\"");
+List<List<PactConnection>> connLists=visitable.getIncomingConnections();
+String child1name="", child2name="";
+if (connLists != null && connLists.size() > 0) {
+this.jsonString.append(",\n\t\t\"predecessors\": [");
 int connCnt=0;
-for (PactConnection conn : connList) {
-jsonString.append(connCnt == 0 ? "\n" : ",\n");
+int inputCnt=0;
+for (List<PactConnection> oneList : connLists) {
+for (PactConnection conn : oneList) {
+this.jsonString.append(inputCnt == 0 ? "\n" : ",\n");
 if (connCnt == 0) {
-child1name=conn.getSourcePact().getPactContract().getName();
+child1name+=child1name.length() > 0 ? ", " : "";
+child1name+=conn.getSourcePact().getPactContract().getName();
 }
  else if (connCnt == 1) {
+child2name+=child2name.length() > 0 ? ", " : "";
 child2name=conn.getSourcePact().getPactContract().getName();
 }
-jsonString.append("\t\t\t{\"id\": " + nodeIds.get(conn.getSourcePact()));
-if (connList.size() == 2) {
-jsonString.append(", \"side\": \"" + (connCnt == 0 ? "first" : "second") + "\"");
+this.jsonString.append("\t\t\t{\"id\": " + this.nodeIds.get(conn.getSourcePact()));
+if (connLists.size() == 2) {
+this.jsonString.append(", \"side\": \"" + (connCnt == 0 ? "first" : "second") + "\"");
 }
 String shipStrategy=null;
 String channelType=null;
@@ -78,19 +82,21 @@ default :
 throw new CompilerException("Unknown ship strategy '" + conn.getShipStrategy().name() + "' in JSON generator.");
 }
 if (shipStrategy != null) {
-jsonString.append(", \"shippingStrategy\": \"" + shipStrategy + "\"");
+this.jsonString.append(", \"shippingStrategy\": \"" + shipStrategy + "\"");
 }
 if (channelType != null) {
-jsonString.append(", \"channelType\": \"" + channelType + "\"");
+this.jsonString.append(", \"channelType\": \"" + channelType + "\"");
 }
 if (conn.getTempMode() != TempMode.NONE) {
 String tempMode=conn.getTempMode().toString();
-jsonString.append(", \"tempMode\": \"" + tempMode + "\"");
+this.jsonString.append(", \"tempMode\": \"" + tempMode + "\"");
 }
-jsonString.append('}');
+this.jsonString.append('}');
+inputCnt++;
+}
 connCnt++;
 }
-jsonString.append("\t\t]");
+this.jsonString.append("\t\t]");
 }
 String locString=null;
 if (visitable.getLocalStrategy() != null) {
@@ -149,29 +155,29 @@ default :
 throw new CompilerException("Unknown local strategy '" + visitable.getLocalStrategy().name() + "' in JSON generator.");
 }
 if (locString != null) {
-jsonString.append(",\n\t\t\"local_strategy\": \"");
-jsonString.append(locString);
-jsonString.append("\"");
+this.jsonString.append(",\n\t\t\"local_strategy\": \"");
+this.jsonString.append(locString);
+this.jsonString.append("\"");
 }
 }
 {
 GlobalProperties gp=visitable.getGlobalProperties();
-jsonString.append(",\n\t\t\"global_properties\": [\n");
+this.jsonString.append(",\n\t\t\"global_properties\": [\n");
 addProperty(jsonString,"Key-Partitioning",gp.getPartitioning().name(),true);
 addProperty(jsonString,"Key-Order",gp.getOrdering().getOrder(0).name(),false);
 addProperty(jsonString,"Key-Uniqueness","not unique",false);
-jsonString.append("\n\t\t]");
+this.jsonString.append("\n\t\t]");
 }
 {
 LocalProperties lp=visitable.getLocalProperties();
-jsonString.append(",\n\t\t\"local_properties\": [\n");
+this.jsonString.append(",\n\t\t\"local_properties\": [\n");
 addProperty(jsonString,"Key-Order",lp.getOrdering().getOrder(0).name(),true);
 addProperty(jsonString,"Key-Uniqueness","not unique",false);
 addProperty(jsonString,"Key-Grouping",lp.isGrouped() ? "grouped" : "not grouped",false);
-jsonString.append("\n\t\t]");
+this.jsonString.append("\n\t\t]");
 }
-jsonString.append(",\n\t\t\"properties\": [\n");
-addProperty(jsonString,"Est. Cardinality",visitable.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedNumRecords()),true);
+this.jsonString.append(",\n\t\t\"properties\": [\n");
+addProperty(this.jsonString,"Est. Cardinality",visitable.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedNumRecords()),true);
 String estCardinality="(unknown)";
 if (visitable.getEstimatedCardinalities().size() > 0) {
 estCardinality="";
@@ -181,19 +187,19 @@ estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 addProperty(jsonString,"Est. Key-Cardinality",estCardinality,false);
 addProperty(jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
-jsonString.append("\t\t]");
+this.jsonString.append("\t\t]");
 if (visitable.getNodeCosts() != null) {
-jsonString.append(",\n\t\t\"costs\": [\n");
-addProperty(jsonString,"Network",visitable.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getNetworkCost(),"B"),true);
-addProperty(jsonString,"Disk I/O",visitable.getNodeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getSecondaryStorageCost(),"B"),false);
-addProperty(jsonString,"Cumulative Network",visitable.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getNetworkCost(),"B"),false);
-addProperty(jsonString,"Cumulative Disk I/O",visitable.getCumulativeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getSecondaryStorageCost(),"B"),false);
-jsonString.append("\n\t\t]");
+this.jsonString.append(",\n\t\t\"costs\": [\n");
+addProperty(this.jsonString,"Network",visitable.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getNetworkCost(),"B"),true);
+addProperty(this.jsonString,"Disk I/O",visitable.getNodeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getNodeCosts().getSecondaryStorageCost(),"B"),false);
+addProperty(this.jsonString,"Cumulative Network",visitable.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getNetworkCost(),"B"),false);
+addProperty(this.jsonString,"Cumulative Disk I/O",visitable.getCumulativeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(visitable.getCumulativeCosts().getSecondaryStorageCost(),"B"),false);
+this.jsonString.append("\n\t\t]");
 }
 if (visitable.getPactContract().getCompilerHints() != null) {
 CompilerHints hints=visitable.getPactContract().getCompilerHints();
 CompilerHints defaults=new CompilerHints();
-jsonString.append(",\n\t\t\"compiler_hints\": [\n");
+this.jsonString.append(",\n\t\t\"compiler_hints\": [\n");
 String hintCardinality="(none)";
 if (hints.getCardinalities().size() > 0) {
 hintCardinality="";
@@ -212,7 +218,7 @@ valuesKey+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 addProperty(jsonString,"Avg. Values/Key",valuesKey,false);
 addProperty(jsonString,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
-jsonString.append("\t\t]");
+this.jsonString.append("\t\t]");
 }
-jsonString.append("\n\t},\n");
+this.jsonString.append("\n\t},\n");
 }
