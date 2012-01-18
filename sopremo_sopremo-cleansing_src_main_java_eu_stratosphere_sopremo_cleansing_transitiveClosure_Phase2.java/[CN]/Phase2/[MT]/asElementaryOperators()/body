@@ -1,13 +1,18 @@
 {
-  final SopremoModule sopremoModule=new SopremoModule(this.getName(),2,1);
+  final SopremoModule sopremoModule=new SopremoModule(this.getName(),1,1);
   JsonStream phase1=sopremoModule.getInput(0);
-  JsonStream matrix=sopremoModule.getInput(1);
-  final TransformDiagonal transDia=new TransformDiagonal().withInputs(phase1);
-  final GenerateRows rows=new GenerateRows().withInputs(matrix);
+  final ExtractDiagonal transDia=new ExtractDiagonal().withInputs(phase1);
+  transDia.setIterationStep(this.iterationStep);
+  final ExtractNonRelatingBlocks nonRelatingBlocks=new ExtractNonRelatingBlocks().withInputs(phase1);
+  nonRelatingBlocks.setIterationStep(this.iterationStep);
+  final GenerateRows rows=new GenerateRows().withInputs(phase1);
+  rows.setIterationStep(this.iterationStep);
   final ComputeBlockTuples computeRows=new ComputeBlockTuples().withInputs(transDia,rows);
-  final GenerateColumns columns=new GenerateColumns().withInputs(computeRows);
-  final ComputeBlockTuples computeTuples=new ComputeBlockTuples().withInputs(transDia,columns);
-  GenerateFullMatrix fullMatrix=new GenerateFullMatrix().withInputs(computeTuples);
-  sopremoModule.getOutput(0).setInput(0,fullMatrix);
+  final GenerateColumns columns=new GenerateColumns().withInputs(phase1);
+  columns.setIterationStep(this.iterationStep);
+  final ComputeBlockTuples computeColumns=new ComputeBlockTuples().withInputs(transDia,columns);
+  UnionAll union=new UnionAll().withInputs(transDia,computeRows,computeColumns,nonRelatingBlocks);
+  GenerateFullMatrix fullMatrix=new GenerateFullMatrix().withInputs(union);
+  sopremoModule.getOutput(0).setInput(0,(this.iterationStep == 0) ? fullMatrix : union);
   return sopremoModule;
 }
