@@ -1,18 +1,31 @@
 {
-  int numFields=record.getNumFields();
-  if (numFields > this.classes.length) {
-    if (this.lenient) {
-      numFields=this.classes.length;
-      if (LOG.isWarnEnabled())       LOG.warn("Serializing only first " + numFields + " fields from record.");
+  int numRecFields=record.getNumFields();
+  int readPos;
+  for (int i=0; i < this.numFields; i++) {
+    readPos=this.recordPositions[i];
+    if (readPos < numRecFields) {
+      Value v=record.getField(this.recordPositions[i],this.classes[i]);
+      if (v != null) {
+        if (i != 0)         this.wrt.write(this.fieldDelimiter);
+        this.wrt.write(v.toString());
+      }
+ else {
+        if (this.lenient) {
+          if (i != 0)           this.wrt.write(this.fieldDelimiter);
+        }
+ else {
+          throw new RuntimeException("Cannot serialize record with <null> value at position: " + readPos);
+        }
+      }
     }
  else {
-      throw new RuntimeException("Cannot serialize record with more fields than the RecordOutputFormat knows types.");
+      if (this.lenient) {
+        if (i != 0)         this.wrt.write(this.fieldDelimiter);
+      }
+ else {
+        throw new RuntimeException("Cannot serialize record with out field at position: " + readPos);
+      }
     }
-  }
-  for (int i=0; i < numFields; i++) {
-    if (i != 0)     this.wrt.write(this.fieldDelimiter);
-    Value v=record.getField(i,this.classes[i]);
-    this.wrt.write(v.toString());
   }
   this.wrt.write(this.recordDelimiter);
 }
