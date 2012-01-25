@@ -1,2 +1,27 @@
 {
+  for (  final AllocatedResource allocatedResource : allocatedResources) {
+    LOG.info("Resource on " + allocatedResource.getInstance().getName() + " for Job "+ jobID+ " died.");
+    final ExecutionGraph executionGraph=getExecutionGraphByID(jobID);
+    if (executionGraph == null) {
+      LOG.error("Cannot find execution graph for job " + jobID);
+      return;
+    }
+    final List<ExecutionVertex> vertices=executionGraph.getVerticesAssignedToResource(allocatedResource);
+    final Iterator<ExecutionVertex> vertexIter=vertices.iterator();
+    while (vertexIter.hasNext()) {
+      final ExecutionVertex vertex=vertexIter.next();
+      vertex.updateCheckpointState(CheckpointState.NONE);
+      final ExecutionState state=vertex.getExecutionState();
+switch (state) {
+case ASSIGNED:
+case READY:
+case STARTING:
+case RUNNING:
+case FINISHING:
+        vertex.updateExecutionState(ExecutionState.FAILED,"The resource " + allocatedResource.getInstance().getName() + " the vertex "+ vertex.getEnvironment().getTaskName()+ " was assigned to died");
+      break;
+default :
+  }
+}
+}
 }
