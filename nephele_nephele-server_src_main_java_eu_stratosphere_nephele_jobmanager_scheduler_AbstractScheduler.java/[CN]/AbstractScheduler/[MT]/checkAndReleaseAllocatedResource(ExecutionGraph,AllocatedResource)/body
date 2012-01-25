@@ -11,17 +11,24 @@
   if (assignedVertices.isEmpty()) {
     return;
   }
-  boolean instanceCanBeReleased=true;
-  final Iterator<ExecutionVertex> it=assignedVertices.iterator();
+  boolean resourceCanBeReleased=true;
+  Iterator<ExecutionVertex> it=assignedVertices.iterator();
   while (it.hasNext()) {
     final ExecutionVertex vertex=it.next();
     final ExecutionState state=vertex.getExecutionState();
     if (state != ExecutionState.CREATED && state != ExecutionState.FINISHED && state != ExecutionState.FAILED && state != ExecutionState.CANCELED) {
-      instanceCanBeReleased=false;
+      resourceCanBeReleased=false;
       break;
     }
   }
-  if (instanceCanBeReleased) {
+  if (resourceCanBeReleased) {
+    final DummyInstance dummyInstance=DummyInstance.createDummyInstance(allocatedResource.getInstance().getType());
+    final AllocatedResource dummyResource=new AllocatedResource(dummyInstance,allocatedResource.getInstanceType(),new AllocationID());
+    it=assignedVertices.iterator();
+    while (it.hasNext()) {
+      final ExecutionVertex vertex=it.next();
+      vertex.setAllocatedResource(dummyResource);
+    }
     LOG.info("Releasing instance " + allocatedResource.getInstance());
     try {
       getInstanceManager().releaseAllocatedResource(executionGraph.getJobID(),executionGraph.getJobConfiguration(),allocatedResource);
