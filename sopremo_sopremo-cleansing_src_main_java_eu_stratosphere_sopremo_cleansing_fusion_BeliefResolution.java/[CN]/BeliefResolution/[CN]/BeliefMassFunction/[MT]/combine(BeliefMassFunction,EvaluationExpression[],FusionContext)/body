@@ -1,0 +1,30 @@
+{
+  BeliefMassFunction combined=new BeliefMassFunction();
+  Object2DoubleMap<JsonNode> nominators1=new Object2DoubleArrayMap<JsonNode>();
+  Object2DoubleMap<JsonNode> nominators2=new Object2DoubleArrayMap<JsonNode>();
+  double denominator=1;
+  for (  Object2DoubleMap.Entry<JsonNode> entry1 : valueMasses.object2DoubleEntrySet()) {
+    for (    Object2DoubleMap.Entry<JsonNode> entry2 : other.valueMasses.object2DoubleEntrySet()) {
+      JsonNode value1=entry1.getKey();
+      JsonNode value2=entry2.getKey();
+      boolean equal=value1.equals(value2);
+      boolean isFirstEvidenceForSecond=equal || isEvidence(value1,value2,evidenceExpressions,context);
+      boolean isSecondEvidenceForFirst=equal || isEvidence(value2,value1,evidenceExpressions,context);
+      double mass1=entry1.getDoubleValue();
+      double mass2=entry2.getDoubleValue();
+      double massProduct=mass1 * mass2;
+      if (isSecondEvidenceForFirst)       nominators1.put(value1,nominators1.getDouble(value1) + massProduct);
+      if (isFirstEvidenceForSecond)       nominators2.put(value2,nominators2.getDouble(value2) + massProduct);
+      if (!isFirstEvidenceForSecond && !isSecondEvidenceForFirst)       denominator-=massProduct;
+    }
+  }
+  for (  Object2DoubleMap.Entry<JsonNode> entry1 : this.valueMasses.object2DoubleEntrySet()) {
+    JsonNode value=entry1.getKey();
+    combined.valueMasses.put(value,combined.valueMasses.getDouble(value) + nominators1.getDouble(value) / denominator);
+  }
+  for (  Object2DoubleMap.Entry<JsonNode> entry2 : other.valueMasses.object2DoubleEntrySet()) {
+    JsonNode value=entry2.getKey();
+    combined.valueMasses.put(value,nominators2.getDouble(value) / denominator);
+  }
+  return combined;
+}

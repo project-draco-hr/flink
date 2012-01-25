@@ -22,31 +22,28 @@
   unwire();
   if (newNumberOfMembers < this.getCurrentNumberOfGroupMembers()) {
     while (this.getCurrentNumberOfGroupMembers() > newNumberOfMembers) {
-synchronized (this.groupMembers) {
-        this.groupMembers.remove(this.groupMembers.size() - 1);
-      }
+      this.groupMembers.remove(this.groupMembers.size() - 1);
     }
   }
  else {
     while (this.getCurrentNumberOfGroupMembers() < newNumberOfMembers) {
-synchronized (this.groupMembers) {
-        try {
-          final ExecutionVertex vertex=this.groupMembers.get(0).splitVertex();
-          this.groupMembers.add(vertex);
-        }
- catch (        Exception e) {
-          throw new GraphConversionException(StringUtils.stringifyException(e));
-        }
+      try {
+        final ExecutionVertex vertex=this.groupMembers.get(0).splitVertex();
+        vertex.setAllocatedResource(new AllocatedResource(DummyInstance.createDummyInstance(this.instanceType),this.instanceType,null));
+        this.groupMembers.add(vertex);
+      }
+ catch (      Exception e) {
+        throw new GraphConversionException(StringUtils.stringifyException(e));
       }
     }
   }
   wire();
-synchronized (this.groupMembers) {
-    for (int i=0; i < this.groupMembers.size(); i++) {
-      final ExecutionVertex vertex=this.groupMembers.get(i);
-      vertex.getEnvironment().setIndexInSubtaskGroup(i);
-      vertex.getEnvironment().setCurrentNumberOfSubtasks(this.groupMembers.size());
-    }
+  int index=0;
+  final int groupSize=this.groupMembers.size();
+  final Iterator<ExecutionVertex> it=this.groupMembers.iterator();
+  while (it.hasNext()) {
+    final ExecutionVertex vertex=it.next();
+    vertex.getEnvironment().setIndexInSubtaskGroup(index++);
+    vertex.getEnvironment().setCurrentNumberOfSubtasks(groupSize);
   }
-  reassignInstances();
 }

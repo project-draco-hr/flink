@@ -13,19 +13,29 @@ synchronized (this.jobSubmitClient) {
     sleep=interval.getValue() * 1000;
   }
  catch (  IOException ioe) {
-    logErrorAndRethrow(StringUtils.stringifyException(ioe));
+    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+    throw ioe;
   }
   try {
     Thread.sleep(sleep / 2);
   }
  catch (  InterruptedException e) {
+    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
     logErrorAndRethrow(StringUtils.stringifyException(e));
   }
+  long startTimestamp=-1;
   while (true) {
     if (Thread.interrupted()) {
       logErrorAndRethrow("Job client has been interrupted");
     }
-    final JobProgressResult jobProgressResult=getJobProgress();
+    JobProgressResult jobProgressResult=null;
+    try {
+      jobProgressResult=getJobProgress();
+    }
+ catch (    IOException ioe) {
+      Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+      throw ioe;
+    }
     if (jobProgressResult == null) {
       logErrorAndRethrow("Returned job progress is unexpectedly null!");
     }
@@ -43,9 +53,14 @@ synchronized (this.jobSubmitClient) {
       if (event instanceof JobEvent) {
         final JobEvent jobEvent=(JobEvent)event;
         final JobStatus jobStatus=jobEvent.getCurrentJobStatus();
+        if (jobStatus == JobStatus.SCHEDULED) {
+          startTimestamp=jobEvent.getTimestamp();
+        }
         if (jobStatus == JobStatus.FINISHED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-          return;
+          final long jobDuration=jobEvent.getTimestamp() - startTimestamp;
+          System.out.println("Job duration (in ms): " + jobDuration);
+          return jobDuration;
         }
  else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);

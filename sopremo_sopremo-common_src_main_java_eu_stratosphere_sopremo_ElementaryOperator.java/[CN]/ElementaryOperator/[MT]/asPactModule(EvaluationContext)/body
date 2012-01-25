@@ -1,9 +1,15 @@
 {
-  final Contract contract=this.getContract();
+  final Contract contract=this.getContract(context.getInputSchema(0));
   this.configureContract(contract,contract.getParameters(),context);
-  final Contract[] inputs=ContractUtil.getInputs(contract);
-  final PactModule module=new PactModule(this.toString(),inputs.length,1);
-  ContractUtil.setInputs(contract,module.getInputs());
-  module.getOutput(0).setInput(contract);
+  final List<List<Contract>> inputLists=ContractUtil.getInputs(contract);
+  final List<Contract> distinctInputs=new IdentityList<Contract>();
+  for (  List<Contract> inputs : inputLists) {
+    if (inputs.isEmpty())     inputs.add(new MapContract(IdentityMap.class));
+    for (    Contract input : inputs)     if (!distinctInputs.contains(input))     distinctInputs.add(input);
+  }
+  final PactModule module=new PactModule(this.toString(),distinctInputs.size(),1);
+  for (  List<Contract> inputs : inputLists)   for (int index=0; index < inputs.size(); index++)   inputs.set(index,module.getInput(distinctInputs.indexOf(inputs.get(index))));
+  ContractUtil.setInputs(contract,inputLists);
+  module.getOutput(0).addInput(contract);
   return module;
 }

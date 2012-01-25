@@ -1,16 +1,21 @@
 {
   final ExecutionGraph executionGraph=executionStage.getExecutionGraph();
-  final Map<InstanceType,Integer> requiredInstances=new HashMap<InstanceType,Integer>();
-  executionStage.collectRequiredInstanceTypes(requiredInstances,ExecutionState.SCHEDULED);
-  if (requiredInstances.isEmpty()) {
-    return;
-  }
-  this.instanceManager.requestInstance(executionGraph.getJobID(),executionGraph.getJobConfiguration(),requiredInstances,null);
-  final ExecutionGraphIterator it2=new ExecutionGraphIterator(executionGraph,executionGraph.getIndexOfCurrentExecutionStage(),true,true);
-  while (it2.hasNext()) {
-    final ExecutionVertex vertex=it2.next();
-    if (vertex.getExecutionState() == ExecutionState.SCHEDULED) {
-      vertex.setExecutionState(ExecutionState.ASSIGNING);
+  final InstanceRequestMap instanceRequestMap=new InstanceRequestMap();
+synchronized (executionStage) {
+    executionStage.collectRequiredInstanceTypes(instanceRequestMap,ExecutionState.CREATED);
+    final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMinimumIterator();
+    LOG.info("Requesting the following instances for job " + executionGraph.getJobID());
+    while (it.hasNext()) {
+      final Map.Entry<InstanceType,Integer> entry=it.next();
+      LOG.info(" " + entry.getKey() + " ["+ entry.getValue().intValue()+ ", "+ instanceRequestMap.getMaximumNumberOfInstances(entry.getKey())+ "]");
+    }
+    if (instanceRequestMap.isEmpty()) {
+      return;
+    }
+    this.instanceManager.requestInstance(executionGraph.getJobID(),executionGraph.getJobConfiguration(),instanceRequestMap,null);
+    final ExecutionGraphIterator it2=new ExecutionGraphIterator(executionGraph,executionGraph.getIndexOfCurrentExecutionStage(),true,true);
+    while (it2.hasNext()) {
+      it2.next().compareAndUpdateExecutionState(ExecutionState.CREATED,ExecutionState.SCHEDULED);
     }
   }
 }

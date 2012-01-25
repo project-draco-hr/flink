@@ -1,0 +1,56 @@
+{
+  if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code."));
+  boolean stubOpen=false;
+  this.running=true;
+  try {
+    try {
+      prepare();
+    }
+ catch (    Throwable t) {
+      throw new Exception("The data preparation for task '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
+    }
+    AbstractPactTask.openChainedTasks(this.chainedTasks,this);
+    try {
+      Configuration stubConfig=this.config.getStubParameters();
+      stubConfig.setInteger("pact.parallel.task.id",this.getEnvironment().getIndexInSubtaskGroup());
+      stubConfig.setInteger("pact.parallel.task.count",this.getEnvironment().getCurrentNumberOfSubtasks());
+      if (this.getEnvironment().getTaskName() != null) {
+        stubConfig.setString("pact.parallel.task.name",this.getEnvironment().getTaskName());
+      }
+      this.stub.open(stubConfig);
+      stubOpen=true;
+    }
+ catch (    Throwable t) {
+      throw new Exception("The user defined 'open()' method caused an exception: " + t.getMessage(),t);
+    }
+    run();
+    if (this.running) {
+      this.stub.close();
+      stubOpen=false;
+    }
+    this.output.close();
+    AbstractPactTask.closeChainedTasks(this.chainedTasks,this);
+  }
+ catch (  Exception ex) {
+    if (stubOpen) {
+      try {
+        this.stub.close();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    AbstractPactTask.cancelChainedTasks(this.chainedTasks);
+    if (this.running) {
+      AbstractPactTask.logAndThrowException(ex,this);
+    }
+  }
+ finally {
+    cleanup();
+  }
+  if (this.running) {
+    if (LOG.isInfoEnabled())     LOG.info(getLogString("Finished PACT code."));
+  }
+ else {
+    if (LOG.isWarnEnabled())     LOG.warn(getLogString("PACT code cancelled."));
+  }
+}
