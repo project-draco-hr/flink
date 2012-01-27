@@ -3,6 +3,13 @@
 synchronized (this.queuedEnvelopes) {
     final int expectedSequenceNumber=this.lastReceivedEnvelope + 1;
     if (sequenceNumber != expectedSequenceNumber) {
+      if (sequenceNumber > expectedSequenceNumber) {
+        this.byteBufferedInputChannel.reportIOException(new IOException("Missing data packet " + expectedSequenceNumber + " from sender"));
+        this.byteBufferedInputChannel.checkForNetworkEvents();
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.info("Input channel " + getChannelID() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
+      }
       final Buffer buffer=transferEnvelope.getBuffer();
       if (buffer != null) {
         buffer.recycleBuffer();
