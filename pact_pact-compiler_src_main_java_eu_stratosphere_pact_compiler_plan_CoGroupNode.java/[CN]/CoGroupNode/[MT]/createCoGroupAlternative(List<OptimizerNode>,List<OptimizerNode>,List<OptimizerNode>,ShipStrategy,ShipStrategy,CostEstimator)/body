@@ -1,6 +1,14 @@
 {
   GlobalProperties gp1, gp2;
   LocalProperties lp1, lp2;
+  int[] keyPositions1=null;
+  int[] keyPositions2=null;
+  if (ss1 == ShipStrategy.FORWARD && ss2 == ShipStrategy.PARTITION_HASH) {
+    keyPositions2=this.input1.get(0).getPartitionedFields();
+  }
+  if (ss2 == ShipStrategy.FORWARD && ss1 == ShipStrategy.PARTITION_HASH) {
+    keyPositions1=this.input2.get(0).getPartitionedFields();
+  }
   if (allPreds1.size() == 1) {
     gp1=PactConnection.getGlobalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
     lp1=PactConnection.getLocalPropertiesAfterConnection(allPreds1.get(0),this,ss1);
@@ -28,10 +36,16 @@
     ordering2.appendOrdering(keyColumn,Order.ASCENDING);
   }
   GlobalProperties outGp=new GlobalProperties();
-  outGp.setPartitioning(gp1.getPartitioning(),gp1.getPartitionedFiels());
+  outGp.setPartitioning(gp1.getPartitioning(),gp1.getPartitionedFields());
   CoGroupNode n=new CoGroupNode(this,allPreds1,allPreds2,this.input1,this.input2,outGp,new LocalProperties());
-  for (  PactConnection c : n.input1)   c.setShipStrategy(ss1);
-  for (  PactConnection c : n.input2)   c.setShipStrategy(ss2);
+  for (  PactConnection c : n.input1) {
+    c.setShipStrategy(ss1);
+    c.setPartitionedFields(keyPositions1);
+  }
+  for (  PactConnection c : n.input2) {
+    c.setShipStrategy(ss2);
+    c.setPartitionedFields(keyPositions2);
+  }
   n.getLocalProperties().setOrdering(ordering1);
   n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns1));
   if (n.getLocalStrategy() == LocalStrategy.NONE) {
@@ -53,10 +67,16 @@
   estimator.costOperator(n);
   target.add(n);
   outGp=new GlobalProperties();
-  outGp.setPartitioning(gp2.getPartitioning(),gp2.getPartitionedFiels());
+  outGp.setPartitioning(gp2.getPartitioning(),gp2.getPartitionedFields());
   n=new CoGroupNode(this,allPreds1,allPreds2,input1,input2,outGp,new LocalProperties());
-  for (  PactConnection c : n.input1)   c.setShipStrategy(ss1);
-  for (  PactConnection c : n.input2)   c.setShipStrategy(ss2);
+  for (  PactConnection c : n.input1) {
+    c.setShipStrategy(ss1);
+    c.setPartitionedFields(keyPositions1);
+  }
+  for (  PactConnection c : n.input2) {
+    c.setShipStrategy(ss2);
+    c.setPartitionedFields(keyPositions2);
+  }
   n.getLocalProperties().setOrdering(ordering2);
   n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns2));
   if (n.getLocalStrategy() == LocalStrategy.NONE) {

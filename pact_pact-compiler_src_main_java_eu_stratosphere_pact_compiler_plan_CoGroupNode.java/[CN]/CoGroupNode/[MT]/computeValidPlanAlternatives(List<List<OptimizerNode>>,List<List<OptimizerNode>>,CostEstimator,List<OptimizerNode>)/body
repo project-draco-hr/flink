@@ -28,11 +28,11 @@
             ss1=ShipStrategy.FORWARD;
           }
           if (partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning().isComputablyPartitioned()) {
-            if (!partitioningIsOnRightFields(gp1,0)) {
+            if (!partitioningIsOnRightFields(gp1,0) || !gp1.getPartitioning().isComputablyPartitioned()) {
               ss2=ShipStrategy.FORWARD;
             }
  else {
-              if (!gp1.getPartitioning().isComputablyPartitioned() || gp1.getPartitioning() == gp2.getPartitioning()) {
+              if (gp1.getPartitioning() == gp2.getPartitioning() && Arrays.equals(gp1.getPartitionedFields(),gp2.getPartitionedFields())) {
                 ss2=ShipStrategy.FORWARD;
               }
  else {
@@ -108,11 +108,12 @@ case FORWARD:
             }
           break;
 case PARTITION_HASH:
-        ss1=(partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
-      break;
+        int[] keyFields2=getPactContract().getKeyColumnNumbers(1);
+      ss1=(Arrays.equals(keyFields2,gp1.getPartitionedFields()) && gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
+    break;
 case PARTITION_RANGE:
-    ss1=(partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
-  break;
+  ss1=(partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
+break;
 default :
 throw new CompilerException("Invalid fixed shipping strategy '" + ss2.name() + "' for CoGroup contract '"+ getPactContract().getName()+ "'.");
 }
@@ -150,7 +151,8 @@ continue;
 }
 break;
 case PARTITION_HASH:
-ss2=(partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
+int[] keyFields1=getPactContract().getKeyColumnNumbers(0);
+ss2=(Arrays.equals(keyFields1,gp2.getPartitionedFields()) && gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
 break;
 case PARTITION_RANGE:
 ss2=(partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
@@ -173,7 +175,7 @@ gp2=PactConnection.getGlobalPropertiesAfterConnection(predList2.get(0),this,ss2)
  else {
 gp2=new GlobalProperties();
 }
-if (gp1.getPartitioning().isComputablyPartitioned() && gp1.getPartitioning() == gp2.getPartitioning() && partitioningIsOnRightFields(gp1,0) && partitioningIsOnRightFields(gp2,1)) {
+if (gp1.getPartitioning().isComputablyPartitioned() && gp1.getPartitioning() == gp2.getPartitioning() && Arrays.equals(gp1.getPartitionedFields(),gp2.getPartitionedFields())) {
 createCoGroupAlternative(outputPlans,predList1,predList2,ss1,ss2,estimator);
 }
  else {
