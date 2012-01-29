@@ -1,0 +1,20 @@
+{
+  final StreamChainLink chainLink=this.chainLinks.get(chainIndex);
+  final Mapper mapper=chainLink.getMapper();
+  chainLink.getInputGate().reportRecordReceived(record);
+  mapper.map(record);
+  final StreamingOutputGate outputGate=chainLink.getOutputGate();
+  final Queue outputCollector=mapper.getOutputCollector();
+  if (chainIndex == this.chainLinks.size() - 1) {
+    while (!outputCollector.isEmpty()) {
+      outputGate.writeRecord((Record)outputCollector.poll());
+    }
+  }
+ else {
+    while (!outputCollector.isEmpty()) {
+      final Record outputRecord=(Record)outputCollector.poll();
+      outputGate.reportRecordEmitted(outputRecord);
+      executeMapper(RecordUtils.createCopy(outputRecord),chainIndex + 1);
+    }
+  }
+}

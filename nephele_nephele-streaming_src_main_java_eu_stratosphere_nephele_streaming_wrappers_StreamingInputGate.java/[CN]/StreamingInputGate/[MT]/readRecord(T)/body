@@ -1,0 +1,36 @@
+{
+  T record=null;
+  if (this.executingThread == null) {
+    this.executingThread=Thread.currentThread();
+  }
+  if (this.executingThread.isInterrupted()) {
+    throw new InterruptedException();
+  }
+  final int numberOfInputChannels=getNumberOfInputChannels();
+  while (true) {
+    if (this.channelToReadFrom == -1) {
+      this.availableChannelRetVal=waitForAnyChannelToBecomeAvailable();
+      this.channelToReadFrom=this.availableChannelRetVal;
+    }
+    try {
+      record=this.getInputChannel(this.channelToReadFrom).readRecord(target);
+    }
+ catch (    EOFException e) {
+      if (this.isClosed()) {
+        return null;
+      }
+    }
+    if (record == null && this.channelToReadFrom == this.availableChannelRetVal) {
+      this.channelToReadFrom=-1;
+      continue;
+    }
+    if (++this.channelToReadFrom == numberOfInputChannels) {
+      this.channelToReadFrom=0;
+    }
+    if (record != null) {
+      break;
+    }
+  }
+  reportRecordReceived(record);
+  return record;
+}

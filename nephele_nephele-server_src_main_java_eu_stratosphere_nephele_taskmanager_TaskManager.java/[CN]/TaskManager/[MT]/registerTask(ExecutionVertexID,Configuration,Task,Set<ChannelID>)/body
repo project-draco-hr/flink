@@ -13,13 +13,7 @@ synchronized (this.runningTasks) {
       return result;
     }
   }
-  final Environment ee=task.getEnvironment();
-  if (ee.hasUnboundInputGates() || ee.hasUnboundOutputGates()) {
-    LOG.debug("Task with ID " + id + " has unbound gates");
-    TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
-    result.setDescription("Task with ID " + id + " has unbound gates");
-    return result;
-  }
+  final RuntimeEnvironment ee=task.getEnvironment();
   this.byteBufferedChannelManager.register(task,activeOutputChannels);
   boolean enableProfiling=false;
   if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
@@ -32,6 +26,12 @@ synchronized (this.runningTasks) {
     }
     for (int i=0; i < ee.getNumberOfOutputGates(); i++) {
       this.profiler.registerOutputGateListener(id,jobConfiguration,ee.getOutputGate(i));
+    }
+  }
+  if (!this.taskManagerPlugins.isEmpty()) {
+    final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
+    while (it.hasNext()) {
+      it.next().registerTask(id,jobConfiguration,ee);
     }
   }
   return null;

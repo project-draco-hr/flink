@@ -1,0 +1,24 @@
+{
+  if (!hasLatencies()) {
+    throw new UnsupportedOperationException("Elements of profiling path do not have the necessary latency values yet");
+  }
+  this.totalLatency=0;
+  int index=0;
+  for (  ManagementAttachment element : pathElements) {
+    if (element instanceof ManagementVertex) {
+      latencies[index]=((VertexLatency)element.getAttachment()).getLatencyInMillis();
+      this.totalLatency+=latencies[index];
+    }
+ else {
+      EdgeCharacteristics edgeCharacteristics=(EdgeCharacteristics)element.getAttachment();
+      latencies[index]=edgeCharacteristics.getOutputBufferLatencyInMillis() / 2;
+      if (latencies[index] < 0) {
+        throw new RuntimeException(ProfilingUtils.formatName(element) + " has invalid negative output buffer latency: " + latencies[index]);
+      }
+      index++;
+      latencies[index]=Math.max(0,edgeCharacteristics.getChannelLatencyInMillis() - latencies[index - 1]);
+      this.totalLatency+=latencies[index] + latencies[index - 1];
+    }
+    index++;
+  }
+}
