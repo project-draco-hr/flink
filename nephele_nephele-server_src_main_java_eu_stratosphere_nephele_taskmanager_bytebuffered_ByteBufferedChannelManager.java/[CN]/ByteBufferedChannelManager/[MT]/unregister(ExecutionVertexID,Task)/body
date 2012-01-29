@@ -1,34 +1,31 @@
 {
   final Environment environment=task.getEnvironment();
   this.recentlyRemovedChannelIDSet.add(environment);
-  for (int i=0; i < environment.getNumberOfOutputGates(); ++i) {
-    final OutputGate<?> outputGate=environment.getOutputGate(i);
-    for (int j=0; j < outputGate.getNumberOfOutputChannels(); ++j) {
-      final AbstractOutputChannel<?> outputChannel=outputGate.getOutputChannel(j);
-      this.registeredChannels.remove(outputChannel.getID());
-      this.receiverCache.remove(outputChannel.getID());
-    }
+  Iterator<ChannelID> channelIterator=environment.getOutputChannelIDs().iterator();
+  while (channelIterator.hasNext()) {
+    final ChannelID outputChannelID=channelIterator.next();
+    this.registeredChannels.remove(outputChannelID);
+    this.receiverCache.remove(outputChannelID);
   }
-  for (int i=0; i < environment.getNumberOfInputGates(); ++i) {
-    final InputGate<?> inputGate=environment.getInputGate(i);
-    for (int j=0; j < inputGate.getNumberOfInputChannels(); ++j) {
-      final AbstractInputChannel<?> inputChannel=inputGate.getInputChannel(j);
-      this.registeredChannels.remove(inputChannel.getID());
-      this.receiverCache.remove(inputChannel.getID());
-    }
-    final LocalBufferPoolOwner owner=this.localBufferPoolOwner.remove(inputGate.getGateID());
+  channelIterator=environment.getInputChannelIDs().iterator();
+  while (channelIterator.hasNext()) {
+    final ChannelID outputChannelID=channelIterator.next();
+    this.registeredChannels.remove(outputChannelID);
+    this.receiverCache.remove(outputChannelID);
+  }
+  final Iterator<GateID> inputGateIterator=environment.getInputGateIDs().iterator();
+  while (inputGateIterator.hasNext()) {
+    final GateID inputGateID=inputGateIterator.next();
+    final LocalBufferPoolOwner owner=this.localBufferPoolOwner.remove(inputGateID);
     if (owner == null) {
-      LOG.error("Cannot find local buffer pool owner for input gate " + inputGate.getGateID());
+      LOG.error("Cannot find local buffer pool owner for input gate " + inputGateID);
     }
  else {
       owner.clearLocalBufferPool();
     }
   }
   final LocalBufferPoolOwner owner=this.localBufferPoolOwner.remove(vertexID);
-  if (owner == null) {
-    LOG.error("Cannot find local buffer pool owner for vertex ID" + vertexID);
-  }
- else {
+  if (owner != null) {
     owner.clearLocalBufferPool();
   }
   redistributeGlobalBuffers();
