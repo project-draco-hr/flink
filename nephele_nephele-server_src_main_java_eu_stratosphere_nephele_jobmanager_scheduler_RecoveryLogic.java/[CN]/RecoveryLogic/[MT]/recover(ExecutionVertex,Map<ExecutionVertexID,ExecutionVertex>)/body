@@ -5,7 +5,7 @@
   }
   LOG.info("Starting recovery for failed vertex " + failedVertex);
   final Set<ExecutionVertex> verticesToBeCanceled=new HashSet<ExecutionVertex>();
-  final Map<AbstractInstance,List<ExecutionVertexID>> checkpointsToBeReplayed=new HashMap<AbstractInstance,List<ExecutionVertexID>>();
+  final Map<AbstractInstance,Set<ExecutionVertexID>> checkpointsToBeReplayed=new HashMap<AbstractInstance,Set<ExecutionVertexID>>();
   findVerticesToRestart(failedVertex,verticesToBeCanceled,checkpointsToBeReplayed);
   final Iterator<ExecutionVertex> cancelIterator=verticesToBeCanceled.iterator();
   while (cancelIterator.hasNext()) {
@@ -22,12 +22,12 @@
   if (!invalidateReceiverLookupCaches(failedVertex,verticesToBeCanceled)) {
     return false;
   }
-  final Iterator<Map.Entry<AbstractInstance,List<ExecutionVertexID>>> checkpointIterator=checkpointsToBeReplayed.entrySet().iterator();
+  final Iterator<Map.Entry<AbstractInstance,Set<ExecutionVertexID>>> checkpointIterator=checkpointsToBeReplayed.entrySet().iterator();
   while (checkpointIterator.hasNext()) {
-    final Map.Entry<AbstractInstance,List<ExecutionVertexID>> entry=checkpointIterator.next();
+    final Map.Entry<AbstractInstance,Set<ExecutionVertexID>> entry=checkpointIterator.next();
     final AbstractInstance instance=entry.getKey();
     try {
-      final List<CheckpointReplayResult> results=instance.replayCheckpoints(entry.getValue());
+      final List<CheckpointReplayResult> results=instance.replayCheckpoints(toListOfReplayRequests(failedVertex.getExecutionGraph(),entry.getValue()));
       for (      final CheckpointReplayResult result : results) {
         if (result.getReturnCode() != ReturnCode.SUCCESS) {
           LOG.error(result.getDescription());
