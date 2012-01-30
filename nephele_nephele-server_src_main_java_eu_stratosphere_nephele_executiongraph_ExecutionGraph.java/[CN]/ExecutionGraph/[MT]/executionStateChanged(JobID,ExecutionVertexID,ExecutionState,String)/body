@@ -1,9 +1,14 @@
 {
-  if (newExecutionState == ExecutionState.RERUNNING) {
+  final ExecutionVertex vertex=getVertexByID(vertexID);
+  if (vertex == null) {
+    LOG.error("Cannot find execution vertex with the ID " + vertexID);
+  }
+  final ExecutionState actualExecutionState=vertex.getExecutionState();
+  if (actualExecutionState == ExecutionState.RERUNNING) {
     this.recovering.remove(getVertexByID(vertexID));
   }
-  final InternalJobStatus newJobStatus=determineNewJobStatus(this,newExecutionState);
-  if (newExecutionState == ExecutionState.FINISHED) {
+  final InternalJobStatus newJobStatus=determineNewJobStatus(this,actualExecutionState);
+  if (actualExecutionState == ExecutionState.FINISHED) {
     if (this.isCurrentStageCompleted()) {
       ++this.indexToCurrentExecutionStage;
       if (this.indexToCurrentExecutionStage < this.stages.size()) {
@@ -15,7 +20,7 @@
       }
     }
   }
-  if (newExecutionState == ExecutionState.FAILED && newJobStatus == InternalJobStatus.RECOVERING) {
+  if (actualExecutionState == ExecutionState.FAILED && newJobStatus == InternalJobStatus.RECOVERING) {
     LOG.info("RECOVERING");
     if (!this.recovering.contains(vertexID)) {
       this.recovering.add(this.getVertexByID(vertexID));
