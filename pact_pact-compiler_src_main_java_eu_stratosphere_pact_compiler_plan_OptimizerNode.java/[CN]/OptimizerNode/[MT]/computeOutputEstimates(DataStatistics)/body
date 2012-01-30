@@ -36,7 +36,6 @@
     }
   }
  else {
-    this.estimatedNumRecords=this.computeNumberOfStubCalls();
     boolean outputCardEstimated=true;
     this.estimatedNumRecords=0;
     int count=0;
@@ -52,7 +51,7 @@
     }
  else {
       this.estimatedNumRecords=this.computeNumberOfStubCalls();
-      if (hints.getAvgRecordsEmittedPerStubCall() != -1.0) {
+      if (hints.getAvgRecordsEmittedPerStubCall() != -1.0 && this.computeNumberOfStubCalls() != -1) {
         this.estimatedNumRecords=(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall() >= 1) ? (long)(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall()) : 1;
       }
  else {
@@ -60,6 +59,23 @@
       }
     }
     this.estimatedCardinality.putAll(hints.getCardinalities());
+    for (int input=0; input < getIncomingConnections().size(); input++) {
+      int[] keyColumns;
+      if ((keyColumns=getConstantKeySet(input)) != null) {
+        long estimatedKeyCardinality;
+        if (hints.getAvgRecordsEmittedPerStubCall() < 1.0) {
+          double probToKeepKey=1.0 - Math.pow((1.0 - hints.getAvgRecordsEmittedPerStubCall()),this.computeStubCallsPerProcessedKey());
+          estimatedKeyCardinality=(this.computeNumberOfProcessedKeys() * probToKeepKey >= 1) ? (long)(this.computeNumberOfProcessedKeys() * probToKeepKey) : 1;
+        }
+ else {
+          estimatedKeyCardinality=this.computeNumberOfProcessedKeys();
+        }
+        FieldSet fieldSet=new FieldSet(keyColumns);
+        if (estimatedCardinality.get(fieldSet) != null) {
+          estimatedCardinality.put(fieldSet,estimatedKeyCardinality);
+        }
+      }
+    }
     if (this.estimatedNumRecords != -1) {
       for (      Entry<FieldSet,Float> avgNumValues : hints.getAvgNumValuesPerDistinctValues().entrySet()) {
         if (estimatedCardinality.get(avgNumValues.getKey()) == null) {

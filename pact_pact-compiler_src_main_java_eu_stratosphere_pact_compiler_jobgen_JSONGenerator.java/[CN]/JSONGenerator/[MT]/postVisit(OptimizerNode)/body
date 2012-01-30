@@ -163,27 +163,31 @@ this.jsonString.append("\"");
 {
 GlobalProperties gp=visitable.getGlobalProperties();
 this.jsonString.append(",\n\t\t\"global_properties\": [\n");
-addProperty(jsonString,"Key-Partitioning",gp.getPartitioning().name(),true);
+addProperty(jsonString,"Partitioning",gp.getPartitioning().name(),true);
+if (gp.getPartitioning() != PartitionProperty.NONE) {
+addProperty(jsonString,"Partitioned on",Arrays.toString(gp.getPartitionedFields()),false);
+}
 if (gp.getOrdering() != null) {
-addProperty(jsonString,"Key-Order",gp.getOrdering().getOrder(0).name(),false);
+addProperty(jsonString,"Key-Order",gp.getOrdering().toString(),false);
 }
  else {
-addProperty(jsonString,"Key-Order","none",false);
+addProperty(jsonString,"Key-Order","(none)",false);
 }
-addProperty(jsonString,"Key-Uniqueness","not unique",false);
 this.jsonString.append("\n\t\t]");
 }
 {
 LocalProperties lp=visitable.getLocalProperties();
 this.jsonString.append(",\n\t\t\"local_properties\": [\n");
 if (lp.getOrdering() != null) {
-addProperty(jsonString,"Key-Order",lp.getOrdering().getOrder(0).name(),true);
+addProperty(jsonString,"Order",lp.getOrdering().toString(),true);
 }
  else {
-addProperty(jsonString,"Key-Order","none",true);
+addProperty(jsonString,"Order","(none)",true);
 }
-addProperty(jsonString,"Key-Uniqueness","not unique",false);
-addProperty(jsonString,"Key-Grouping",lp.isGrouped() ? "grouped" : "not grouped",false);
+addProperty(jsonString,"Grouping",lp.isGrouped() ? "grouped" : "not grouped",false);
+if (lp.isGrouped()) {
+addProperty(jsonString,"Grouped on",lp.getGroupedFields().toString(),false);
+}
 this.jsonString.append("\n\t\t]");
 }
 this.jsonString.append(",\n\t\t\"properties\": [\n");
@@ -195,7 +199,7 @@ for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet
 estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 }
-addProperty(jsonString,"Est. Key-Cardinality",estCardinality,false);
+addProperty(jsonString,"Est. Cardinality",estCardinality,false);
 addProperty(jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
 this.jsonString.append("\t\t]");
 if (visitable.getNodeCosts() != null) {
@@ -217,16 +221,16 @@ for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet
 hintCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 }
-addProperty(jsonString,"Key-Cardinality",hintCardinality,true);
+addProperty(jsonString,"Cardinality",hintCardinality,true);
 addProperty(jsonString,"Avg. Records/StubCall",hints.getAvgRecordsEmittedPerStubCall() == defaults.getAvgRecordsEmittedPerStubCall() ? "(none)" : String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
 String valuesKey="(none)";
 if (hints.getAvgNumValuesPerDistinctValues().size() > 0) {
 valuesKey="";
-for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+for (Entry<FieldSet,Float> entry : hints.getAvgNumValuesPerDistinctValues().entrySet()) {
 valuesKey+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 }
-addProperty(jsonString,"Avg. Values/Key",valuesKey,false);
+addProperty(jsonString,"Avg. Values/Distinct fields",valuesKey,false);
 addProperty(jsonString,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
 this.jsonString.append("\t\t]");
 }
