@@ -5,31 +5,33 @@
   if (task == null) {
     throw new IllegalArgumentException("Argument task is null");
   }
-synchronized (this.runningTasks) {
-    if (this.runningTasks.containsKey(id)) {
-      LOG.debug("Task with ID " + id + " is already running");
-      TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
+synchronized (this) {
+    final Task runningTask=this.runningTasks.get(id);
+    if (runningTask != null) {
+      LOG.error("Task with ID " + id + " is already running");
+      final TaskSubmissionResult result=new TaskSubmissionResult(id,AbstractTaskResult.ReturnCode.ERROR);
       result.setDescription("Task with ID " + id + " is already running");
       return result;
     }
-  }
-  final Environment ee=task.getEnvironment();
-  task.registerMemoryManager(this.memoryManager);
-  task.registerIOManager(this.ioManager);
-  task.registerInputSplitProvider(new TaskInputSplitProvider(ee.getJobID(),id,this.globalInputSplitProvider));
-  this.byteBufferedChannelManager.register(task,activeOutputChannels);
-  boolean enableProfiling=false;
-  if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
-    enableProfiling=true;
-  }
-  if (enableProfiling) {
-    task.registerProfiler(this.profiler,jobConfiguration);
-  }
-  if (!this.taskManagerPlugins.isEmpty()) {
-    final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
-    while (it.hasNext()) {
-      it.next().registerTask(id,jobConfiguration,ee);
+    final Environment ee=task.getEnvironment();
+    task.registerMemoryManager(this.memoryManager);
+    task.registerIOManager(this.ioManager);
+    task.registerInputSplitProvider(new TaskInputSplitProvider(ee.getJobID(),id,this.globalInputSplitProvider));
+    this.byteBufferedChannelManager.register(task,activeOutputChannels);
+    boolean enableProfiling=false;
+    if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+      enableProfiling=true;
     }
+    if (enableProfiling) {
+      task.registerProfiler(this.profiler,jobConfiguration);
+    }
+    if (!this.taskManagerPlugins.isEmpty()) {
+      final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
+      while (it.hasNext()) {
+        it.next().registerTask(id,jobConfiguration,ee);
+      }
+    }
+    this.runningTasks.put(id,task);
   }
   return null;
 }

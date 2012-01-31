@@ -5,7 +5,7 @@
   }
   LOG.info("Starting recovery for failed vertex " + failedVertex);
   final Set<ExecutionVertex> verticesToBeCanceled=new HashSet<ExecutionVertex>();
-  final Map<AbstractInstance,Set<ExecutionVertexID>> checkpointsToBeReplayed=new HashMap<AbstractInstance,Set<ExecutionVertexID>>();
+  final Set<ExecutionVertex> checkpointsToBeReplayed=new HashSet<ExecutionVertex>();
   findVerticesToRestart(failedVertex,verticesToBeCanceled,checkpointsToBeReplayed);
   final Iterator<ExecutionVertex> cancelIterator=verticesToBeCanceled.iterator();
   while (cancelIterator.hasNext()) {
@@ -22,23 +22,9 @@
   if (!invalidateReceiverLookupCaches(failedVertex,verticesToBeCanceled)) {
     return false;
   }
-  final Iterator<Map.Entry<AbstractInstance,Set<ExecutionVertexID>>> checkpointIterator=checkpointsToBeReplayed.entrySet().iterator();
+  final Iterator<ExecutionVertex> checkpointIterator=checkpointsToBeReplayed.iterator();
   while (checkpointIterator.hasNext()) {
-    final Map.Entry<AbstractInstance,Set<ExecutionVertexID>> entry=checkpointIterator.next();
-    final AbstractInstance instance=entry.getKey();
-    try {
-      final List<CheckpointReplayResult> results=instance.replayCheckpoints(toListOfReplayRequests(failedVertex.getExecutionGraph(),entry.getValue()));
-      for (      final CheckpointReplayResult result : results) {
-        if (result.getReturnCode() != ReturnCode.SUCCESS) {
-          LOG.error(result.getDescription());
-          return false;
-        }
-      }
-    }
- catch (    IOException ioe) {
-      LOG.error(StringUtils.stringifyException(ioe));
-      return false;
-    }
+    checkpointIterator.next().updateExecutionState(ExecutionState.ASSIGNED);
   }
   if (failedVertex.getAllocatedResource().getInstance() instanceof DummyInstance) {
     failedVertex.updateExecutionState(ExecutionState.CREATED);
