@@ -1,0 +1,31 @@
+{
+  if (previousContext != null) {
+    throw new IllegalStateException("Found previous output context for channel " + channelID);
+  }
+  AbstractOutputChannel<? extends Record> channel=null;
+  for (int i=0; i < this.outputGate.getNumberOfOutputChannels(); ++i) {
+    AbstractOutputChannel<? extends Record> candidateChannel=this.outputGate.getOutputChannel(i);
+    if (candidateChannel.getID().equals(channelID)) {
+      channel=candidateChannel;
+      break;
+    }
+  }
+  if (channel == null) {
+    throw new IllegalArgumentException("Cannot find output channel with ID " + channelID);
+  }
+  if (!(channel instanceof AbstractByteBufferedOutputChannel)) {
+    throw new IllegalStateException("Channel with ID" + channelID + " is not of type AbstractByteBufferedOutputChannel");
+  }
+  AbstractByteBufferedOutputChannel<? extends Record> outputChannel=(AbstractByteBufferedOutputChannel<? extends Record>)channel;
+  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain();
+  final IncomingEventQueue incomingEventQueue=AbstractOutputChannelContext.createIncomingEventQueue(forwardingChain);
+  forwardingChain.addForwarder(new RuntimeOutputChannelBroker(this,forwardingChain,incomingEventQueue,outputChannel));
+  final EphemeralCheckpoint checkpoint=this.taskContext.getEphemeralCheckpoint();
+  if (checkpoint != null) {
+    forwardingChain.addForwarder(checkpoint);
+  }
+  forwardingChain.addForwarder(new ForwardingBarrier(channelID));
+  forwardingChain.addForwarder(new SpillingBarrier(isReceiverRunning));
+  forwardingChain.addForwarder(this.taskContext.getRuntimeDispatcher());
+  return new RuntimeOutputChannelContext(outputChannel,incomingEventQueue);
+}

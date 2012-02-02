@@ -31,6 +31,27 @@
     return result;
   }
   LOG.debug("The dependency chain for instance sharing is acyclic");
+  boolean jobRunsWithProfiling=false;
+  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+    jobRunsWithProfiling=true;
+  }
+  Iterator<JobManagerPlugin> it=this.jobManagerPlugins.values().iterator();
+  while (it.hasNext()) {
+    final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping job graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
+    final JobGraph inputJob=job;
+    job=plugin.rewriteJobGraph(inputJob);
+    if (job == null) {
+      LOG.warn("Plugin " + plugin + " set job graph to null, reverting changes...");
+      job=inputJob;
+    }
+    if (job != inputJob) {
+      LOG.debug("Plugin " + plugin + " rewrote job graph");
+    }
+  }
   LOG.info("Creating initial execution graph from job graph " + job.getName());
   ExecutionGraph eg=null;
   try {
@@ -40,20 +61,37 @@
     JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,gce.getMessage());
     return result;
   }
-  if (this.optimizer != null) {
-    this.optimizer.optimize(eg);
-  }
-  boolean profilingEnabled=false;
-  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
-    profilingEnabled=true;
+  it=this.jobManagerPlugins.values().iterator();
+  while (it.hasNext()) {
+    final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping execution graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
+    final ExecutionGraph inputGraph=eg;
+    eg=plugin.rewriteExecutionGraph(inputGraph);
+    if (eg == null) {
+      LOG.warn("Plugin " + plugin + " set execution graph to null, reverting changes...");
+      eg=inputGraph;
+    }
+    if (eg != inputGraph) {
+      LOG.debug("Plugin " + plugin + " rewrote execution graph");
+    }
   }
   if (this.eventCollector != null) {
-    this.eventCollector.registerJob(eg,profilingEnabled);
+    this.eventCollector.registerJob(eg,jobRunsWithProfiling);
   }
-  if (profilingEnabled) {
+  if (jobRunsWithProfiling) {
     this.profiler.registerProfilingJob(eg);
     if (this.eventCollector != null) {
       this.profiler.registerForProfilingData(eg.getJobID(),this.eventCollector);
+    }
+    it=this.jobManagerPlugins.values().iterator();
+    while (it.hasNext()) {
+      final ProfilingListener listener=it.next().getProfilingListener(eg.getJobID());
+      if (listener != null) {
+        this.profiler.registerForProfilingData(eg.getJobID(),listener);
+      }
     }
   }
   this.inputSplitManager.registerJob(eg);

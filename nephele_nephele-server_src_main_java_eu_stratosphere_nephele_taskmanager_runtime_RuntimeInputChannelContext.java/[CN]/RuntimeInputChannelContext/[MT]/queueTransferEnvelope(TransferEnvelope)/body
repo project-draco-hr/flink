@@ -1,0 +1,31 @@
+{
+  final int sequenceNumber=transferEnvelope.getSequenceNumber();
+synchronized (this.queuedEnvelopes) {
+    final int expectedSequenceNumber=this.lastReceivedEnvelope + 1;
+    if (sequenceNumber != expectedSequenceNumber) {
+      if (sequenceNumber > expectedSequenceNumber) {
+        if (expectedSequenceNumber > 0) {
+          this.byteBufferedInputChannel.reportIOException(new IOException("Expected data packet " + expectedSequenceNumber + " but received "+ sequenceNumber));
+          this.byteBufferedInputChannel.checkForNetworkEvents();
+        }
+      }
+ else {
+        try {
+          transferEventToOutputChannel(new UnexpectedEnvelopeEvent(expectedSequenceNumber));
+        }
+ catch (        Exception e) {
+          LOG.error(StringUtils.stringifyException(e));
+        }
+      }
+      LOG.warn("Input channel " + getChannelID() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
+      final Buffer buffer=transferEnvelope.getBuffer();
+      if (buffer != null) {
+        buffer.recycleBuffer();
+      }
+      return;
+    }
+    this.queuedEnvelopes.add(transferEnvelope);
+    this.lastReceivedEnvelope=sequenceNumber;
+  }
+  this.byteBufferedInputChannel.checkForNetworkEvents();
+}

@@ -2,15 +2,19 @@
   if (!freeSourceBuffer) {
     final List<ChannelID> localReceivers=receiverList.getLocalReceivers();
     if (localReceivers.size() != 1) {
-      throw new IOException("Expected receiver list to have exactly one element");
+      LOG.error("Expected receiver list to have exactly one element");
     }
     final ChannelID localReceiver=localReceivers.get(0);
     final ChannelContext cc=this.registeredChannels.get(localReceiver);
     if (cc == null) {
-      throw new IOException("Cannot find channel context for local receiver " + localReceiver);
+      if (!this.recentlyRemovedChannelIDSet.contains(localReceiver)) {
+        sendReceiverNotFoundEvent(transferEnvelope.getJobID(),localReceiver);
+      }
+      recycleBuffer(transferEnvelope);
+      return;
     }
     if (!cc.isInputChannel()) {
-      throw new IOException("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
+      LOG.error("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
     }
     cc.queueTransferEnvelope(transferEnvelope);
     return;
@@ -21,19 +25,28 @@
     for (    final ChannelID localReceiver : localReceivers) {
       final ChannelContext cc=this.registeredChannels.get(localReceiver);
       if (cc == null) {
-        if (this.recentlyRemovedChannelIDSet.contains(localReceiver)) {
-          continue;
+        if (!this.recentlyRemovedChannelIDSet.contains(localReceiver)) {
+          sendReceiverNotFoundEvent(transferEnvelope.getJobID(),localReceiver);
         }
- else {
-          throw new IOException("Cannot find channel context for local receiver " + localReceiver);
-        }
+        continue;
       }
       if (!cc.isInputChannel()) {
-        throw new IOException("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
+        LOG.error("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
+        continue;
       }
       final InputChannelContext inputChannelContext=(InputChannelContext)cc;
-      final Buffer destBuffer=inputChannelContext.requestEmptyBufferBlocking(srcBuffer.size());
-      srcBuffer.copyToBuffer(destBuffer);
+      Buffer destBuffer=null;
+      try {
+        destBuffer=inputChannelContext.requestEmptyBufferBlocking(srcBuffer.size());
+        srcBuffer.copyToBuffer(destBuffer);
+      }
+ catch (      Exception e) {
+        LOG.error(StringUtils.stringifyException(e));
+        if (destBuffer != null) {
+          destBuffer.recycleBuffer();
+        }
+        continue;
+      }
       final TransferEnvelope dup=transferEnvelope.duplicateWithoutBuffer();
       dup.setBuffer(destBuffer);
       inputChannelContext.queueTransferEnvelope(dup);
@@ -42,7 +55,18 @@
   if (receiverList.hasRemoteReceivers()) {
     final List<InetSocketAddress> remoteReceivers=receiverList.getRemoteReceivers();
     for (    final InetSocketAddress remoteReceiver : remoteReceivers) {
-      this.networkConnectionManager.queueEnvelopeForTransfer(remoteReceiver,transferEnvelope.duplicate());
+      TransferEnvelope dup=null;
+      try {
+        dup=transferEnvelope.duplicate();
+      }
+ catch (      Exception e) {
+        LOG.error(StringUtils.stringifyException(e));
+        if (dup != null) {
+          recycleBuffer(dup);
+          continue;
+        }
+      }
+      this.networkConnectionManager.queueEnvelopeForTransfer(remoteReceiver,dup);
     }
   }
   srcBuffer.recycleBuffer();

@@ -1,0 +1,56 @@
+{
+  if (id == null) {
+    throw new IllegalArgumentException("Argument id is null");
+  }
+  if (environment == null) {
+    throw new IllegalArgumentException("Argument environment is null");
+  }
+  Task task=null;
+synchronized (this) {
+    final Task runningTask=this.runningTasks.get(id);
+    boolean registerTask=true;
+    if (runningTask == null) {
+      if (CheckpointUtils.hasCompleteCheckpointAvailable(id)) {
+        task=new ReplayTask(id,environment,this);
+      }
+ else {
+        task=new RuntimeTask(id,environment,this);
+      }
+    }
+ else {
+      if (runningTask instanceof RuntimeTask) {
+        if (CheckpointUtils.hasPartialCheckpointAvailable(id)) {
+          task=new ReplayTask((RuntimeTask)runningTask);
+        }
+ else {
+          return null;
+        }
+      }
+ else {
+        registerTask=false;
+      }
+    }
+    final Environment ee=task.getEnvironment();
+    if (registerTask) {
+      task.registerMemoryManager(this.memoryManager);
+      task.registerIOManager(this.ioManager);
+      task.registerInputSplitProvider(new TaskInputSplitProvider(ee.getJobID(),id,this.globalInputSplitProvider));
+      this.byteBufferedChannelManager.register(task,activeOutputChannels);
+      boolean enableProfiling=false;
+      if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+        enableProfiling=true;
+      }
+      if (enableProfiling) {
+        task.registerProfiler(this.profiler,jobConfiguration);
+      }
+      if (!this.taskManagerPlugins.isEmpty()) {
+        final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
+        while (it.hasNext()) {
+          it.next().registerTask(id,jobConfiguration,ee);
+        }
+      }
+      this.runningTasks.put(id,task);
+    }
+  }
+  return task;
+}
