@@ -1,0 +1,44 @@
+{
+  final CheckpointDeserializer deserializer=new CheckpointDeserializer(this.vertexID);
+  int metaDataIndex=0;
+  while (true) {
+    if (this.restartRequested.compareAndSet(true,false)) {
+      metaDataIndex=0;
+    }
+    final File metaDataFile=new File(CheckpointUtils.getCheckpointDirectory() + File.separator + CheckpointUtils.METADATA_PREFIX+ "_"+ this.vertexID+ "_"+ metaDataIndex);
+    while (!metaDataFile.exists()) {
+      final File finalMetaDataFile=new File(CheckpointUtils.getCheckpointDirectory() + File.separator + CheckpointUtils.METADATA_PREFIX+ "_"+ this.vertexID+ "_final");
+      if (finalMetaDataFile.exists()) {
+        return;
+      }
+      if (this.isCheckpointComplete) {
+        throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
+      }
+      Thread.sleep(100);
+    }
+    FileInputStream fis=null;
+    try {
+      fis=new FileInputStream(metaDataFile);
+      final FileChannel fileChannel=fis.getChannel();
+      while (true) {
+        try {
+          deserializer.read(fileChannel);
+          final TransferEnvelope transferEnvelope=deserializer.getFullyDeserializedTransferEnvelope();
+          if (transferEnvelope != null) {
+            outputEnvelope(transferEnvelope);
+          }
+        }
+ catch (        EOFException eof) {
+          fileChannel.close();
+          ++metaDataIndex;
+          break;
+        }
+      }
+    }
+  finally {
+      if (fis != null) {
+        fis.close();
+      }
+    }
+  }
+}
