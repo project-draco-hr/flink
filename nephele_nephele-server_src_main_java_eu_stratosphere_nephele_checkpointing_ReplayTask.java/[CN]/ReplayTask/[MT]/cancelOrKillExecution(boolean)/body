@@ -1,0 +1,51 @@
+{
+  final Thread replayThread=this.environment.getExecutingThread();
+  Thread encapsulatedThread=null;
+  if (this.encapsulatedTask != null) {
+    encapsulatedThread=this.encapsulatedTask.getRuntimeEnvironment().getExecutingThread();
+  }
+  if (replayThread == null && encapsulatedThread == null) {
+    return;
+  }
+  if (cancel) {
+    this.isCanceled=true;
+    this.replayTaskExecutionState=ExecutionState.CANCELING;
+    if (this.encapsulatedExecutionState != null) {
+      this.encapsulatedExecutionState=ExecutionState.CANCELING;
+    }
+    reportExecutionStateChange(true,null);
+  }
+  if (this.encapsulatedTask != null) {
+    try {
+      final AbstractInvokable invokable=this.encapsulatedTask.getRuntimeEnvironment().getInvokable();
+      if (invokable != null) {
+        invokable.cancel();
+      }
+    }
+ catch (    Throwable e) {
+      LOG.error(StringUtils.stringifyException(e));
+    }
+  }
+  while (true) {
+    replayThread.interrupt();
+    if (encapsulatedThread != null) {
+      encapsulatedThread.interrupt();
+    }
+    if (cancel) {
+      if (this.overallExecutionState.get() == ExecutionState.CANCELED) {
+        break;
+      }
+    }
+ else {
+      if (this.overallExecutionState.get() == ExecutionState.FAILED) {
+        break;
+      }
+    }
+    try {
+      Thread.sleep(100);
+    }
+ catch (    InterruptedException e) {
+      break;
+    }
+  }
+}
