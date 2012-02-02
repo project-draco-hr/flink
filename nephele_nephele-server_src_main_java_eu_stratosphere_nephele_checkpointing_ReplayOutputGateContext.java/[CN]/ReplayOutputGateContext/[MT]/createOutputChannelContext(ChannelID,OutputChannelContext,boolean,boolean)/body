@@ -2,5 +2,12 @@
   if (previousContext != null) {
     activateForwardingBarrier(previousContext);
   }
-  return new ReplayOutputChannelContext(channelID,previousContext);
+  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain();
+  final IncomingEventQueue incomingEventQueue=AbstractOutputChannelContext.createIncomingEventQueue(forwardingChain);
+  final ReplayOutputBroker outputBroker=new ReplayOutputBroker(forwardingChain,incomingEventQueue);
+  forwardingChain.addForwarder(outputBroker);
+  forwardingChain.addForwarder(new ForwardingBarrier(channelID));
+  forwardingChain.addForwarder(new SpillingBarrier(isReceiverRunning,mergeSpillBuffers));
+  forwardingChain.addForwarder(this.taskContext.getRuntimeDispatcher());
+  return new ReplayOutputChannelContext(null,channelID,incomingEventQueue,previousContext);
 }
