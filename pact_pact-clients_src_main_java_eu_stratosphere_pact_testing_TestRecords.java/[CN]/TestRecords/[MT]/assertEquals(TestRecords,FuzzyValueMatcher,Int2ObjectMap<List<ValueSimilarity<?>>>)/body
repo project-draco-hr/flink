@@ -1,0 +1,36 @@
+{
+  try {
+    @SuppressWarnings("unchecked") Class<? extends Value>[] schema=firstNonNull(expectedValues.schema,this.schema);
+    similarityMap=canonalizeSimilarityMap(similarityMap,schema);
+    SortInfo sortInfo=getSortInfoForAssertion(similarityMap,firstNonNull(expectedValues.sortInfo,this.sortInfo));
+    if (sortInfo == null)     throw new IllegalStateException("Expected value does not have schema specified");
+    final Iterator<PactRecord> actualIterator=this.iterator(sortInfo);
+    final Iterator<PactRecord> expectedIterator=expectedValues.iterator(sortInfo);
+    List<Key> currentKeys=new ArrayList<Key>(Arrays.asList(new Key[sortInfo.sortKeys.size()])), nextKeys=new ArrayList<Key>(currentKeys);
+    int itemIndex=0;
+    List<PactRecord> expectedValuesWithCurrentKey=new ArrayList<PactRecord>();
+    List<PactRecord> actualValuesWithCurrentKey=new ArrayList<PactRecord>();
+    if (expectedIterator.hasNext()) {
+      PactRecord expected=expectedIterator.next();
+      setKeys(currentKeys,expected,sortInfo);
+      expectedValuesWithCurrentKey.add(expected);
+      while (actualIterator.hasNext() && expectedIterator.hasNext()) {
+        expected=expectedIterator.next().createCopy();
+        setKeys(nextKeys,expected,sortInfo);
+        if (!currentKeys.equals(nextKeys)) {
+          this.matchValues(actualIterator,currentKeys,sortInfo,schema,itemIndex,expectedValuesWithCurrentKey,actualValuesWithCurrentKey,fuzzyMatcher,similarityMap);
+          setKeys(currentKeys,expected,sortInfo);
+        }
+        expectedValuesWithCurrentKey.add(expected);
+        itemIndex++;
+      }
+      if (!expectedValuesWithCurrentKey.isEmpty())       this.matchValues(actualIterator,currentKeys,sortInfo,schema,itemIndex,expectedValuesWithCurrentKey,actualValuesWithCurrentKey,fuzzyMatcher,similarityMap);
+    }
+    if (!expectedValuesWithCurrentKey.isEmpty() || expectedIterator.hasNext())     Assert.fail("More elements expected: " + expectedValuesWithCurrentKey + toString(expectedIterator,schema));
+    if (!actualValuesWithCurrentKey.isEmpty() || actualIterator.hasNext())     Assert.fail("Less elements expected: " + actualValuesWithCurrentKey + toString(actualIterator,schema));
+  }
+  finally {
+    this.close();
+    expectedValues.close();
+  }
+}
