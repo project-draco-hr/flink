@@ -1,0 +1,17 @@
+{
+  final int parallelism=args.length > 0 ? Integer.parseInt(args[0]) : 1;
+  final String pageViewsFile="hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/pigmix625k/page_views";
+  FileDataSource pageViews=new FileDataSource(TextInputFormat.class,pageViewsFile,"Read PageViews");
+  pageViews.setDegreeOfParallelism(parallelism);
+  MapContract projectTimeSpent=new MapContract(ProjectTimeSpent.class,pageViews,"Project Time Spent");
+  projectTimeSpent.setDegreeOfParallelism(parallelism);
+  ReduceContract group=new ReduceContract(Group.class,PactString.class,0,projectTimeSpent,"Group");
+  group.setDegreeOfParallelism(40);
+  FileDataSink sink=new FileDataSink(RecordOutputFormat.class,"hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/result_L6",group,"Result");
+  sink.setDegreeOfParallelism(parallelism);
+  sink.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,2);
+  sink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactString.class);
+  sink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 1,PactInteger.class);
+  Plan plan=new Plan(sink,"L6 group with long key");
+  return plan;
+}
