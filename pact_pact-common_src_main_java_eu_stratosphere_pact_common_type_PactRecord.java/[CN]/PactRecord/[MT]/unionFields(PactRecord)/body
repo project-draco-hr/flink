@@ -1,3 +1,134 @@
 {
-  throw new UnsupportedOperationException();
+  final int minFields=Math.min(this.numFields,other.numFields);
+  final int maxFields=Math.max(this.numFields,other.numFields);
+  final int[] offsets=this.offsets.length >= maxFields ? this.offsets : new int[maxFields];
+  final int[] lengths=this.lengths.length >= maxFields ? this.lengths : new int[maxFields];
+  if (!(this.isModified() || other.isModified())) {
+    final int estimatedLength=this.binaryLen + other.binaryLen;
+    this.serializer.memory=(this.switchBuffer != null && this.switchBuffer.length >= estimatedLength) ? this.switchBuffer : new byte[estimatedLength];
+    this.serializer.position=0;
+    try {
+      for (int i=0; i < minFields; i++) {
+        final int thisOff=this.offsets[i];
+        if (thisOff == NULL_INDICATOR_OFFSET) {
+          final int otherOff=other.offsets[i];
+          if (otherOff == NULL_INDICATOR_OFFSET) {
+            offsets[i]=NULL_INDICATOR_OFFSET;
+          }
+ else {
+            offsets[i]=this.serializer.position;
+            this.serializer.write(other.binaryData,otherOff,other.lengths[i]);
+            lengths[i]=other.lengths[i];
+          }
+        }
+ else {
+          offsets[i]=this.serializer.position;
+          this.serializer.write(this.binaryData,thisOff,this.lengths[i]);
+          lengths[i]=this.lengths[i];
+        }
+      }
+      if (minFields != maxFields) {
+        final PactRecord sourceForRemainder=this.numFields > minFields ? this : other;
+        int begin=-1;
+        int end=-1;
+        int offsetDelta=0;
+        for (int k=minFields; k < maxFields; k++) {
+          final int off=sourceForRemainder.offsets[k];
+          if (off == NULL_INDICATOR_OFFSET) {
+            offsets[k]=NULL_INDICATOR_OFFSET;
+          }
+ else {
+            end=sourceForRemainder.offsets[k] + sourceForRemainder.lengths[k];
+            if (begin == -1) {
+              begin=sourceForRemainder.offsets[k];
+              offsetDelta=this.serializer.position - begin;
+            }
+            offsets[k]=sourceForRemainder.offsets[k] + offsetDelta;
+          }
+        }
+        if (begin != -1) {
+          this.serializer.write(sourceForRemainder.binaryData,begin,end - begin);
+        }
+        if (lengths != sourceForRemainder.lengths) {
+          System.arraycopy(sourceForRemainder.lengths,minFields,lengths,minFields,maxFields - minFields);
+        }
+      }
+    }
+ catch (    Exception ioex) {
+      throw new RuntimeException("Error creating field union of record data" + ioex.getMessage() == null ? "." : ": " + ioex.getMessage(),ioex);
+    }
+  }
+ else {
+    final int estimatedLength=(this.binaryLen > 0 ? this.binaryLen : this.numFields * DEFAULT_FIELD_LEN_ESTIMATE) + (other.binaryLen > 0 ? other.binaryLen : other.numFields * DEFAULT_FIELD_LEN_ESTIMATE);
+    this.serializer.memory=(this.switchBuffer != null && this.switchBuffer.length >= estimatedLength) ? this.switchBuffer : new byte[estimatedLength];
+    this.serializer.position=0;
+    try {
+      for (int i=0; i < minFields; i++) {
+        final int thisOff=this.offsets[i];
+        if (thisOff == NULL_INDICATOR_OFFSET) {
+          final int otherOff=other.offsets[i];
+          if (otherOff == NULL_INDICATOR_OFFSET) {
+            offsets[i]=NULL_INDICATOR_OFFSET;
+          }
+ else           if (otherOff == MODIFIED_INDICATOR_OFFSET) {
+            offsets[i]=this.serializer.position;
+            other.writeFields[i].write(this.serializer);
+            lengths[i]=this.serializer.position - offsets[i];
+          }
+ else {
+            offsets[i]=this.serializer.position;
+            this.serializer.write(other.binaryData,otherOff,other.lengths[i]);
+            lengths[i]=other.lengths[i];
+          }
+        }
+ else         if (thisOff == MODIFIED_INDICATOR_OFFSET) {
+          offsets[i]=this.serializer.position;
+          this.writeFields[i].write(this.serializer);
+          lengths[i]=this.serializer.position - offsets[i];
+        }
+ else {
+          offsets[i]=this.serializer.position;
+          this.serializer.write(this.binaryData,thisOff,this.lengths[i]);
+          lengths[i]=this.lengths[i];
+        }
+      }
+      if (minFields != maxFields) {
+        final PactRecord sourceForRemainder=this.numFields > minFields ? this : other;
+        for (int k=minFields; k < maxFields; k++) {
+          final int off=sourceForRemainder.offsets[k];
+          if (off == NULL_INDICATOR_OFFSET) {
+            offsets[k]=NULL_INDICATOR_OFFSET;
+          }
+ else           if (off == MODIFIED_INDICATOR_OFFSET) {
+            offsets[k]=this.serializer.position;
+            sourceForRemainder.writeFields[k].write(this.serializer);
+            lengths[k]=this.serializer.position - offsets[k];
+          }
+ else {
+            offsets[k]=this.serializer.position;
+            final int len=sourceForRemainder.lengths[k];
+            this.serializer.write(sourceForRemainder.binaryData,off,len);
+            lengths[k]=len;
+          }
+        }
+      }
+    }
+ catch (    Exception ioex) {
+      throw new RuntimeException("Error creating field union of record data" + ioex.getMessage() == null ? "." : ": " + ioex.getMessage(),ioex);
+    }
+  }
+  serializeHeader(this.serializer,offsets,maxFields);
+  this.switchBuffer=this.binaryData;
+  this.binaryData=serializer.memory;
+  this.binaryLen=serializer.position;
+  this.numFields=maxFields;
+  this.offsets=offsets;
+  this.lengths=lengths;
+  this.firstModifiedPos=Integer.MAX_VALUE;
+  if (this.readFields == null || this.readFields.length < maxFields) {
+    final Value[] na=new Value[maxFields];
+    System.arraycopy(this.readFields,0,na,0,this.readFields.length);
+    this.readFields=na;
+  }
+  this.writeFields=(this.writeFields == null || this.writeFields.length < maxFields) ? new Value[maxFields] : this.writeFields;
 }
