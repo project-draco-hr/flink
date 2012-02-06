@@ -1,27 +1,30 @@
 {
-  final ExecutionState state=this.executionState.get();
-  if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
-    updateExecutionState(ExecutionState.CANCELED,null);
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+  final ExecutionState previousState=this.executionState.get();
+  if (updateExecutionState(ExecutionState.CANCELING) != ExecutionState.CANCELING) {
+    if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
+      updateExecutionState(ExecutionState.CANCELED,null);
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    if (previousState == ExecutionState.FINISHED || previousState == ExecutionState.FAILED) {
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    if (previousState != ExecutionState.RUNNING && previousState != ExecutionState.STARTING && previousState != ExecutionState.FINISHING && previousState != ExecutionState.REPLAYING) {
+      updateExecutionState(ExecutionState.CANCELED,null);
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+    }
+    if (this.allocatedResource == null) {
+      final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.NO_INSTANCE);
+      result.setDescription("Assigned instance of vertex " + this.toString() + " is null!");
+      return result;
+    }
+    try {
+      return this.allocatedResource.getInstance().cancelTask(this.vertexID);
+    }
+ catch (    IOException e) {
+      final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.IPC_ERROR);
+      result.setDescription(StringUtils.stringifyException(e));
+      return result;
+    }
   }
-  if (state == ExecutionState.FINISHED || state == ExecutionState.FAILED) {
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
-  }
-  if (state != ExecutionState.RUNNING && state != ExecutionState.STARTING && state != ExecutionState.FINISHING && state != ExecutionState.REPLAYING) {
-    updateExecutionState(ExecutionState.CANCELED,null);
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
-  }
-  if (this.allocatedResource == null) {
-    final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.NO_INSTANCE);
-    result.setDescription("Assigned instance of vertex " + this.toString() + " is null!");
-    return result;
-  }
-  try {
-    return this.allocatedResource.getInstance().cancelTask(this.vertexID);
-  }
- catch (  IOException e) {
-    final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.IPC_ERROR);
-    result.setDescription(StringUtils.stringifyException(e));
-    return result;
-  }
+  return new TaskCancelResult(getID(),ReturnCode.SUCCESS);
 }

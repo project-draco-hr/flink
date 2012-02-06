@@ -3,6 +3,10 @@
   if (executingThread == null) {
     return;
   }
+  if (this.executionState != ExecutionState.RUNNING && this.executionState != ExecutionState.REPLAYING && this.executionState != ExecutionState.FINISHING) {
+    return;
+  }
+  LOG.info((cancel ? "Canceling " : "Killing ") + this.environment.getTaskNameWithIndex());
   if (cancel) {
     this.isCanceled=true;
     executionStateChanged(ExecutionState.CANCELING,null);
@@ -18,15 +22,8 @@
   }
   while (true) {
     executingThread.interrupt();
-    if (cancel) {
-      if (this.executionState == ExecutionState.CANCELED) {
-        break;
-      }
-    }
- else {
-      if (this.executionState == ExecutionState.FAILED) {
-        break;
-      }
+    if (!executingThread.isAlive()) {
+      break;
     }
     try {
       Thread.sleep(100);
@@ -34,5 +31,6 @@
  catch (    InterruptedException e) {
       break;
     }
+    LOG.info((cancel == true ? "Canceling " : "Killing ") + this.environment.getTaskName() + " with state "+ this.executionState);
   }
 }
