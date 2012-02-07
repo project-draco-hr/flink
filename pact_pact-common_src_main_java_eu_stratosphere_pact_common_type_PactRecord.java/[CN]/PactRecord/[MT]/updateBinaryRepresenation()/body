@@ -1,12 +1,11 @@
 {
-  if (!this.modified)   return;
   final int firstModified=this.firstModifiedPos;
-  final int numFields=this.numFields;
-  final int[] offsets=this.offsets;
-  if (this.serializer == null) {
-    this.serializer=new InternalDeSerializer();
-  }
+  if (firstModified == Integer.MAX_VALUE)   return;
   final InternalDeSerializer serializer=this.serializer;
+  final int[] offsets=this.offsets;
+  final int numFields=this.numFields;
+  serializer.memory=this.switchBuffer != null ? this.switchBuffer : (this.binaryLen > 0 ? new byte[this.binaryLen] : new byte[numFields * DEFAULT_FIELD_LEN_ESTIMATE + 1]);
+  serializer.position=0;
   if (numFields > 0) {
     int offset=0;
     if (firstModified > 0) {
@@ -17,100 +16,27 @@
         }
       }
     }
-    serializer.position=offset;
-    if (firstModified > 0) {
-      serializer.memory=this.binaryData == null ? new byte[numFields * DEFAULT_FIELD_LEN] : this.binaryData;
-      try {
-        for (int i=firstModified; i < numFields; i++) {
-          if (offsets[i] == NULL_INDICATOR_OFFSET)           continue;
-          offsets[i]=offset;
-          this.fields[i].write(serializer);
-          int newOffset=serializer.position;
-          this.lengths[i]=newOffset - offset;
-          offset=newOffset;
-        }
+    try {
+      if (offset > 0) {
+        serializer.write(this.binaryData,0,offset);
       }
- catch (      Exception e) {
-        throw new RuntimeException("Error in data type serialization: " + e.getMessage(),e);
+      for (int i=firstModified; i < numFields; i++) {
+        final int co=offsets[i];
+        if (co == NULL_INDICATOR_OFFSET)         continue;
+        offsets[i]=offset;
+        if (co == MODIFIED_INDICATOR_OFFSET)         this.writeFields[i].write(serializer);
+ else         serializer.write(this.binaryData,co,this.lengths[i]);
+        this.lengths[i]=serializer.position - offset;
+        offset=serializer.position;
       }
     }
- else {
-      serializer.memory=this.serializationSwitchBuffer == null ? new byte[numFields * DEFAULT_FIELD_LEN] : this.serializationSwitchBuffer;
-      if (offset > 0 & this.binaryData != null) {
-        System.arraycopy(this.binaryData,0,serializer.memory,0,offset);
-      }
-      try {
-        for (int i=firstModified; i < numFields; i++) {
-          final int co=offsets[i];
-          if (co == NULL_INDICATOR_OFFSET)           continue;
-          offsets[i]=offset;
-          if (co == MODIFIED_INDICATOR_OFFSET)           this.fields[i].write(serializer);
- else           serializer.write(this.binaryData,co,this.lengths[i]);
-          this.lengths[i]=serializer.position - offset;
-          offset=serializer.position;
-        }
-      }
- catch (      Exception e) {
-        throw new RuntimeException("Error in data type serialization: " + e.getMessage(),e);
-      }
-      this.serializationSwitchBuffer=this.binaryData;
-      this.binaryData=serializer.memory;
+ catch (    Exception e) {
+      throw new RuntimeException("Error in data type serialization: " + e.getMessage(),e);
     }
   }
-  try {
-    int slp=serializer.position;
-    if (numFields <= 8) {
-      int mask=0;
-      for (int i=numFields - 1; i > 0; i--) {
-        mask<<=1;
-        if (offsets[i] != NULL_INDICATOR_OFFSET) {
-          slp=serializer.position;
-          serializer.writeValLenIntBackwards(offsets[i]);
-          mask|=0x1;
-        }
-      }
-      mask<<=1;
-      if (offsets[0] != NULL_INDICATOR_OFFSET) {
-        mask|=0x1;
-      }
- else {
-        serializer.position=slp;
-      }
-      serializer.writeByte(mask);
-    }
- else {
-      for (int i=numFields - 1; i > 0; i--) {
-        if (offsets[i] != NULL_INDICATOR_OFFSET) {
-          slp=serializer.position;
-          serializer.writeValLenIntBackwards(offsets[i]);
-        }
-      }
-      if (offsets[0] == NULL_INDICATOR_OFFSET) {
-        serializer.position=slp;
-      }
-      int col=numFields - 1;
-      int mask=0;
-      for (int i=numFields & 0x7; i > 0; i--, col--) {
-        mask<<=1;
-        mask|=(offsets[col] != NULL_INDICATOR_OFFSET) ? 0x1 : 0x0;
-      }
-      serializer.writeByte(mask);
-      for (int i=numFields >>> 3; i > 0; i--) {
-        mask=0;
-        for (int k=0; k < 8; k++, col--) {
-          mask<<=1;
-          mask|=(offsets[col] != NULL_INDICATOR_OFFSET) ? 0x1 : 0x0;
-        }
-        serializer.writeByte(mask);
-      }
-    }
-    serializer.writeValLenIntBackwards(numFields);
-  }
- catch (  Exception e) {
-    throw new RuntimeException("Serialization into binary state failed: " + e.getMessage(),e);
-  }
+  serializeHeader(serializer,offsets,numFields);
+  this.switchBuffer=this.binaryData;
   this.binaryData=serializer.memory;
   this.binaryLen=serializer.position;
   this.firstModifiedPos=Integer.MAX_VALUE;
-  this.modified=false;
 }
