@@ -4,6 +4,7 @@
     pipeline=new ExecutionPipeline();
     vertex.setExecutionPipeline(pipeline);
   }
+  alreadyVisited.add(vertex);
   final RuntimeEnvironment env=vertex.getEnvironment();
   if (forward) {
     final int numberOfOutputGates=env.getNumberOfOutputGates();
@@ -14,10 +15,19 @@
       for (int j=0; j < numberOfOutputChannels; ++j) {
         final AbstractOutputChannel<? extends Record> outputChannel=outputGate.getOutputChannel(j);
         final ExecutionVertex connectedVertex=this.executionGraph.getVertexByChannelID(outputChannel.getConnectedChannelID());
+        boolean recurse=false;
+        if (!alreadyVisited.contains(connectedVertex)) {
+          recurse=true;
+        }
+ else         if (channelType == ChannelType.INMEMORY && !pipeline.equals(connectedVertex.getExecutionPipeline())) {
+          recurse=true;
+        }
         if (channelType == ChannelType.INMEMORY) {
           connectedVertex.setExecutionPipeline(pipeline);
         }
-        reconstructExecutionPipeline(connectedVertex,true);
+        if (recurse) {
+          reconstructExecutionPipeline(connectedVertex,true,alreadyVisited);
+        }
       }
     }
   }
@@ -30,10 +40,19 @@
       for (int j=0; j < numberOfInputChannels; ++j) {
         final AbstractInputChannel<? extends Record> inputChannel=inputGate.getInputChannel(j);
         final ExecutionVertex connectedVertex=this.executionGraph.getVertexByChannelID(inputChannel.getConnectedChannelID());
+        boolean recurse=false;
+        if (!alreadyVisited.contains(connectedVertex)) {
+          recurse=true;
+        }
+ else         if (channelType == ChannelType.INMEMORY && !pipeline.equals(connectedVertex.getExecutionPipeline())) {
+          recurse=true;
+        }
         if (channelType == ChannelType.INMEMORY) {
           connectedVertex.setExecutionPipeline(pipeline);
         }
-        reconstructExecutionPipeline(connectedVertex,false);
+        if (recurse) {
+          reconstructExecutionPipeline(connectedVertex,false,alreadyVisited);
+        }
       }
     }
   }
