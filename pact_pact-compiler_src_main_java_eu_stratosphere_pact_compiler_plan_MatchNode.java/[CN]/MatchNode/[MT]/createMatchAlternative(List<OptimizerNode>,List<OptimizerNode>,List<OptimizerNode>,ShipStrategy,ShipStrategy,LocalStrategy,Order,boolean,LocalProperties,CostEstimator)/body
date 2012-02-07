@@ -41,12 +41,13 @@
   GlobalProperties outGp=new GlobalProperties();
   outGp.setPartitioning(gp1.getPartitioning(),gp1.getPartitionedFields());
   outGp.setOrdering(gp1.getOrdering());
+  int[] keyColumns1=getPactContract().getKeyColumnNumbers(0);
+  int[] keyColumns2=getPactContract().getKeyColumnNumbers(1);
   if (outLpp == null) {
-    int[] keyColumns=getPactContract().getKeyColumnNumbers(0);
     outLp=new LocalProperties();
     if (order != Order.NONE) {
       Ordering ordering=new Ordering();
-      for (      int keyColumn : keyColumns) {
+      for (      int keyColumn : keyColumns1) {
         ordering.appendOrdering(keyColumn,order);
       }
       outLp.setOrdering(ordering);
@@ -54,7 +55,19 @@
  else {
       outLp.setOrdering(null);
     }
-    outLp.setGrouped(grouped,new FieldSet(keyColumns));
+    outLp.setGrouped(grouped,new FieldSet(keyColumns1));
+  }
+  if (gp1.getUniqueFields() != null) {
+    if (gp2.isFieldSetUnique(new FieldSet(keyColumns2))) {
+      List<FieldSet> localUniqueFields=new LinkedList<FieldSet>();
+      List<FieldSet> globalUniqueFields=new LinkedList<FieldSet>();
+      for (      FieldSet uniqueField : gp1.getUniqueFields()) {
+        localUniqueFields.add((FieldSet)uniqueField.clone());
+        globalUniqueFields.add((FieldSet)uniqueField.clone());
+      }
+      outGp.setUniqueFields(globalUniqueFields);
+      outLp.setUniqueFields(localUniqueFields);
+    }
   }
   MatchNode n=new MatchNode(this,preds1,preds2,this.input1,this.input2,outGp,outLp);
   for (  PactConnection c : n.input1) {
@@ -74,11 +87,10 @@
   outGp.setPartitioning(gp2.getPartitioning(),gp2.getPartitionedFields());
   outGp.setOrdering(gp2.getOrdering());
   if (outLpp == null) {
-    int[] keyColumns=getPactContract().getKeyColumnNumbers(1);
     outLp=new LocalProperties();
     if (order != Order.NONE) {
       Ordering ordering=new Ordering();
-      for (      int keyColumn : keyColumns) {
+      for (      int keyColumn : keyColumns2) {
         ordering.appendOrdering(keyColumn,order);
       }
       outLp.setOrdering(ordering);
@@ -86,7 +98,19 @@
  else {
       outLp.setOrdering(null);
     }
-    outLp.setGrouped(grouped,new FieldSet(keyColumns));
+    outLp.setGrouped(grouped,new FieldSet(keyColumns2));
+  }
+  if (gp2.getUniqueFields() != null) {
+    if (gp1.isFieldSetUnique(new FieldSet(keyColumns1))) {
+      List<FieldSet> localUniqueFields=new LinkedList<FieldSet>();
+      List<FieldSet> globalUniqueFields=new LinkedList<FieldSet>();
+      for (      FieldSet uniqueField : gp2.getUniqueFields()) {
+        localUniqueFields.add((FieldSet)uniqueField.clone());
+        globalUniqueFields.add((FieldSet)uniqueField.clone());
+      }
+      outGp.setUniqueFields(globalUniqueFields);
+      outLp.setUniqueFields(localUniqueFields);
+    }
   }
   n=new MatchNode(this,preds1,preds2,input1,input2,outGp,outLp);
   for (  PactConnection c : n.input1) {
