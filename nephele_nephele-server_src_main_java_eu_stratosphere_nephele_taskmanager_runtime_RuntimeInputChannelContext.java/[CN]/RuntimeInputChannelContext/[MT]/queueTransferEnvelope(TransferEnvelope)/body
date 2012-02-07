@@ -1,6 +1,9 @@
 {
   final int sequenceNumber=transferEnvelope.getSequenceNumber();
   AbstractEvent eventToSend=null;
+  if (ReceiverNotFoundEvent.isReceiverNotFoundEvent(transferEnvelope)) {
+    return;
+  }
 synchronized (this.queuedEnvelopes) {
     if (this.destroyCalled) {
       final Buffer buffer=transferEnvelope.getBuffer();
@@ -18,7 +21,10 @@ synchronized (this.queuedEnvelopes) {
         }
       }
  else {
-        eventToSend=new UnexpectedEnvelopeEvent(expectedSequenceNumber);
+        eventToSend=lookForCloseEvent(transferEnvelope);
+        if (eventToSend == null) {
+          eventToSend=new UnexpectedEnvelopeEvent(expectedSequenceNumber - 1);
+        }
       }
       LOG.warn("Input channel " + getChannelID() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
       final Buffer buffer=transferEnvelope.getBuffer();
