@@ -1,0 +1,22 @@
+{
+  if (envelope.getBuffer() == null && envelope.getSequenceNumber() == 0) {
+    final EventList eventList=envelope.getEventList();
+    if (eventList.size() == 1) {
+      final AbstractEvent event=eventList.get(0);
+      if (event instanceof ReceiverNotFoundEvent) {
+        LOG.info("Dropping request to send ReceiverNotFoundEvent as response to ReceiverNotFoundEvent");
+        return;
+      }
+    }
+  }
+  final JobID jobID=envelope.getJobID();
+  final TransferEnvelope transferEnvelope=new TransferEnvelope(0,jobID,receiver);
+  final ReceiverNotFoundEvent unknownReceiverEvent=new ReceiverNotFoundEvent(receiver,envelope.getSequenceNumber());
+  transferEnvelope.addEvent(unknownReceiverEvent);
+  final TransferEnvelopeReceiverList receiverList=getReceiverList(jobID,receiver);
+  if (receiverList == null) {
+    LOG.error("Cannot determine receiver list for source channel ID " + receiver);
+    return;
+  }
+  processEnvelopeEnvelopeWithoutBuffer(transferEnvelope,receiverList);
+}
