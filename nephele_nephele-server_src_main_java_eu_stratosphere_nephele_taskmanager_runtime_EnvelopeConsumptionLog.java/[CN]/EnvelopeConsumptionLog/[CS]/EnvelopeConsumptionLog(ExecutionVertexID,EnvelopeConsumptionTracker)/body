@@ -1,0 +1,29 @@
+{
+  this.vertexID=vertexID;
+  this.tracker=tracker;
+  final String fileName=GlobalConfiguration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH) + File.separator + "cl_"+ this.vertexID;
+  this.logFile=new File(fileName);
+  if (this.logFile.exists()) {
+    final long length=this.logFile.length();
+    if (length % SIZE_OF_INTEGER != 0) {
+      LOG.error("Channel consumption log " + fileName + " appears to be corrupt, discarding it...");
+      this.logFile.delete();
+      this.numberOfInitialLogEntries=0L;
+    }
+ else {
+      this.numberOfInitialLogEntries=length / SIZE_OF_INTEGER;
+    }
+    System.out.println("PREVIOUS FILE FOUND with length " + length);
+  }
+ else {
+    this.numberOfInitialLogEntries=0L;
+  }
+  this.outstandingEnvelopesAsByteBuffer=ByteBuffer.allocate(LOG_WINDOW_SIZE);
+  this.outstandingEnvelopesAsIntBuffer=this.outstandingEnvelopesAsByteBuffer.asIntBuffer();
+  this.announcedEnvelopesAsByteBuffer=ByteBuffer.allocate(LOG_WINDOW_SIZE);
+  this.announcedEnvelopesAsIntBuffer=this.announcedEnvelopesAsByteBuffer.asIntBuffer();
+  this.outstandingEnvelopesAsIntBuffer.limit(0);
+  if (this.numberOfInitialLogEntries > 0) {
+    loadNextOutstandingEnvelopes();
+  }
+}

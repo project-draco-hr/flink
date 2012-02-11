@@ -1,0 +1,50 @@
+{
+  final int entryToTest=toEntry(gateIndex,channelIndex,false);
+  boolean found=false;
+  while (true) {
+    for (int i=this.outstandingEnvelopesAsIntBuffer.position(); i < this.outstandingEnvelopesAsIntBuffer.limit(); ++i) {
+      if (this.outstandingEnvelopesAsIntBuffer.get(i) == entryToTest) {
+        this.outstandingEnvelopesAsIntBuffer.put(i,setDataAvailability(entryToTest,true));
+        found=true;
+        break;
+      }
+    }
+    if (!found) {
+      System.out.println("Entry not found for channel " + channelIndex + " - "+ this.outstandingEnvelopesAsIntBuffer.limit()+ ", "+ this.outstandingEnvelopesAsIntBuffer.capacity());
+      if (this.outstandingEnvelopesAsIntBuffer.limit() == this.outstandingEnvelopesAsIntBuffer.capacity()) {
+        loadNextOutstandingEnvelopes();
+        showOustandingEnvelopeLog();
+        continue;
+      }
+      System.out.println("Adding new entry for channel " + channelIndex + " to index "+ this.outstandingEnvelopesAsIntBuffer.limit());
+      final int newEntry=setDataAvailability(entryToTest,true);
+      final int limit=this.outstandingEnvelopesAsIntBuffer.limit();
+      this.outstandingEnvelopesAsIntBuffer.limit(limit + 1);
+      this.outstandingEnvelopesAsIntBuffer.put(limit,newEntry);
+    }
+    break;
+  }
+  showOustandingEnvelopeLog();
+  int newPosition=this.outstandingEnvelopesAsIntBuffer.position();
+  int count=0;
+  for (int i=this.outstandingEnvelopesAsIntBuffer.position(); i < this.outstandingEnvelopesAsIntBuffer.limit(); ++i) {
+    final int entry=this.outstandingEnvelopesAsIntBuffer.get(i);
+    if (getDataAvailability(entry)) {
+      announce(getInputGate(entry),getInputChannel(entry));
+      newPosition=i + 1;
+      ++count;
+    }
+ else {
+      break;
+    }
+  }
+  this.outstandingEnvelopesAsIntBuffer.position(Math.min(this.outstandingEnvelopesAsIntBuffer.limit(),newPosition));
+  if (count > 0) {
+    System.out.println("Announced " + count + " buffers from log");
+    System.out.println("Initial log entries: " + this.numberOfInitialLogEntries + ", announced "+ this.numberOfAnnouncedEnvelopes);
+    System.out.println("Outstanding buffer: " + this.outstandingEnvelopesAsIntBuffer.remaining());
+  }
+  if (!this.outstandingEnvelopesAsIntBuffer.hasRemaining()) {
+    loadNextOutstandingEnvelopes();
+  }
+}
