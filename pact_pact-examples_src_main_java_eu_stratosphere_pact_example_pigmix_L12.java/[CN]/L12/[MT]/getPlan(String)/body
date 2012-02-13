@@ -1,13 +1,13 @@
 {
-  final int parallelism=args.length > 0 ? Integer.parseInt(args[0]) : 1;
-  final String pageViewsFile="hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/pigmix625k/page_views";
+  final int parallelism=(args != null && args.length > 0) ? Integer.parseInt(args[0]) : 1;
+  final String pageViewsFile="hdfs://marrus.local:50040/user/pig/tests/data/pigmix/page_views";
   FileDataSource pageViews=new FileDataSource(TextInputFormat.class,pageViewsFile,"Read PageViews");
   pageViews.setDegreeOfParallelism(parallelism);
   MapContract projectintoD=new MapContract(ProjectintoD.class,pageViews,"Project into D");
   projectintoD.setDegreeOfParallelism(parallelism);
   ReduceContract highestValuePagePerUser=new ReduceContract(HighestValuePagePerUser.class,PactString.class,0,projectintoD,"HighestValuePagePerUser");
   highestValuePagePerUser.setDegreeOfParallelism(40);
-  FileDataSink sink=new FileDataSink(RecordOutputFormat.class,"hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/result_L12_HighestValuePagePerUser",highestValuePagePerUser,"Result");
+  FileDataSink sink=new FileDataSink(RecordOutputFormat.class,"hdfs://marrus.local:50040/pigmix/result_L12_HighestValuePagePerUser",highestValuePagePerUser,"Result");
   sink.setDegreeOfParallelism(parallelism);
   sink.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,2);
   sink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactString.class);
@@ -16,7 +16,7 @@
   projectintoaleph.setDegreeOfParallelism(parallelism);
   ReduceContract queriesPerAction=new ReduceContract(QueriesPerAction.class,PactString.class,0,projectintoaleph,"QueriesPerAction");
   queriesPerAction.setDegreeOfParallelism(40);
-  FileDataSink querysink=new FileDataSink(RecordOutputFormat.class,"hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/result_L12_QueriesPerAction",queriesPerAction,"Result");
+  FileDataSink querysink=new FileDataSink(RecordOutputFormat.class,"hdfs://marrus.local:50040/pigmix/result_L12_QueriesPerAction",queriesPerAction,"Result");
   querysink.setDegreeOfParallelism(parallelism);
   querysink.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,2);
   querysink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactString.class);
@@ -25,11 +25,15 @@
   projectintoalpha.setDegreeOfParallelism(parallelism);
   ReduceContract totalTimespentPerTerm=new ReduceContract(TotalTimespentPerTerm.class,PactString.class,0,projectintoalpha,"TotalTimespentPerTerm");
   totalTimespentPerTerm.setDegreeOfParallelism(40);
-  FileDataSink timespentsink=new FileDataSink(RecordOutputFormat.class,"hdfs://cloud-7.dima.tu-berlin.de:40010/pigmix/result_L12_TotalTimespentPerTerm",totalTimespentPerTerm,"Result");
+  FileDataSink timespentsink=new FileDataSink(RecordOutputFormat.class,"hdfs://marrus.local:50040/pigmix/result_L12_TotalTimespentPerTerm",totalTimespentPerTerm,"Result");
   timespentsink.setDegreeOfParallelism(parallelism);
   timespentsink.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,2);
   timespentsink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactString.class);
   timespentsink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 1,PactInteger.class);
-  Plan plan=new Plan(sink,"L11 distinct, union and widerow");
+  Collection<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
+  sinks.add(sink);
+  sinks.add(querysink);
+  sinks.add(timespentsink);
+  Plan plan=new Plan(sinks,"L12 multi-store query");
   return plan;
 }
