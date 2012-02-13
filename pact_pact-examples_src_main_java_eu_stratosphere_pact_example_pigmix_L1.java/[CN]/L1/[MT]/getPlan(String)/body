@@ -1,0 +1,17 @@
+{
+  final int parallelism=(args != null && (args != null && args.length > 0)) ? Integer.parseInt(args[0]) : 1;
+  final String pageViewsFile="hdfs://marrus.local:50040/user/pig/tests/data/pigmix/page_views/";
+  FileDataSource pageViews=new FileDataSource(TextInputFormat.class,pageViewsFile,"Read PageViews");
+  pageViews.setDegreeOfParallelism(parallelism);
+  MapContract readPageViews=new MapContract(ReadPageViews.class,pageViews,"Project Page Views");
+  readPageViews.setDegreeOfParallelism(parallelism);
+  ReduceContract group=new ReduceContract(Group.class,PactString.class,0,readPageViews,"Group");
+  group.setDegreeOfParallelism(40);
+  FileDataSink sink=new FileDataSink(RecordOutputFormat.class,"hdfs://marrus.local:50040/pigmix/result_L1",group,"Result");
+  sink.setDegreeOfParallelism(parallelism);
+  sink.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,2);
+  sink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 0,PactString.class);
+  sink.getParameters().setClass(RecordOutputFormat.FIELD_TYPE_PARAMETER_PREFIX + 1,PactInteger.class);
+  Plan plan=new Plan(sink,"L1 Load Page Views");
+  return plan;
+}
