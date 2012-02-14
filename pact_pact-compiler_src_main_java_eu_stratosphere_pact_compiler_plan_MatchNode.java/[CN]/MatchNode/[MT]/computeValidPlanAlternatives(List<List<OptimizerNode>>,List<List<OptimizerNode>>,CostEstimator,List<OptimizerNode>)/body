@@ -28,7 +28,7 @@
  else {
           gp=new GlobalProperties();
         }
-        if (gp.getPartitioning().equals(PartitionProperty.NONE)) {
+        if (!partitioningIsOnRightFields(gp,0) || gp.getPartitioning().equals(PartitionProperty.NONE)) {
           createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ShipStrategy.PARTITION_HASH,estimator);
         }
  else {
@@ -52,27 +52,32 @@
  else {
             gp2=new GlobalProperties();
           }
-          if (gp1.getPartitioning().isComputablyPartitioned()) {
+          if (partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning().isComputablyPartitioned()) {
             ss1=ShipStrategy.FORWARD;
           }
-          if (gp2.getPartitioning().isComputablyPartitioned()) {
-            if ((!gp1.getPartitioning().isPartitioned()) || gp1.getPartitioning().isCompatibleWith(gp2.getPartitioning())) {
+          if (partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning().isComputablyPartitioned()) {
+            if (!partitioningIsOnRightFields(gp1,0) || !gp1.getPartitioning().isComputablyPartitioned()) {
               ss2=ShipStrategy.FORWARD;
             }
  else {
-              if (gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
-                createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.FORWARD,ShipStrategy.PARTITION_HASH,estimator);
+              if (gp1.getPartitioning().isCompatibleWith(gp2.getPartitioning()) && partitioningIsOnSameSubkey(gp1.getPartitionedFields(),gp2.getPartitionedFields())) {
+                ss2=ShipStrategy.FORWARD;
               }
- else               if (gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
-                createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.FORWARD,ShipStrategy.PARTITION_RANGE,estimator);
+ else {
+                if (gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+                  createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.FORWARD,ShipStrategy.PARTITION_HASH,estimator);
+                }
+ else                 if (gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
+                  createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.FORWARD,ShipStrategy.PARTITION_RANGE,estimator);
+                }
+                if (gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+                  createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ShipStrategy.FORWARD,estimator);
+                }
+ else                 if (gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
+                  createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_RANGE,ShipStrategy.FORWARD,estimator);
+                }
+                continue;
               }
-              if (gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
-                createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ShipStrategy.FORWARD,estimator);
-              }
- else               if (gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
-                createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_RANGE,ShipStrategy.FORWARD,estimator);
-              }
-              continue;
             }
           }
           if (ss1 == ShipStrategy.FORWARD) {
@@ -83,10 +88,10 @@
               }
             }
  else {
-              if (gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+              if (partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
                 createLocalAlternatives(outputPlans,predList1,predList2,ss1,ShipStrategy.PARTITION_HASH,estimator);
               }
- else               if (gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
+ else               if (partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
                 createLocalAlternatives(outputPlans,predList1,predList2,ss1,ShipStrategy.PARTITION_RANGE,estimator);
                 createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ShipStrategy.PARTITION_HASH,estimator);
               }
@@ -96,10 +101,10 @@
             }
           }
  else           if (ss2 == ShipStrategy.FORWARD) {
-            if (gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+            if (partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
               createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ss2,estimator);
             }
- else             if (gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
+ else             if (partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) {
               createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_RANGE,ss2,estimator);
               createLocalAlternatives(outputPlans,predList1,predList2,ShipStrategy.PARTITION_HASH,ShipStrategy.PARTITION_HASH,estimator);
             }
@@ -127,7 +132,7 @@ case BROADCAST:
             ss1=ShipStrategy.FORWARD;
           break;
 case FORWARD:
-        if (gp2.getPartitioning().isPartitioned()) {
+        if (partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning().isPartitioned()) {
           if (gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
             ss1=ShipStrategy.PARTITION_HASH;
           }
@@ -143,10 +148,11 @@ case FORWARD:
         }
       break;
 case PARTITION_HASH:
-    ss1=(gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
-  break;
+    int[] keyFields2=getPactContract().getKeyColumnNumbers(1);
+  ss1=(partitioningIsOnSameSubkey(gp1.getPartitionedFields(),keyFields2) && gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
+break;
 case PARTITION_RANGE:
-ss1=(gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
+ss1=(partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
 break;
 default :
 throw new CompilerException("Invalid fixed shipping strategy '" + ss2.name() + "' for match contract '"+ getPactContract().getName()+ "'.");
@@ -172,7 +178,7 @@ case BROADCAST:
 ss2=ShipStrategy.FORWARD;
 break;
 case FORWARD:
-if (gp1.getPartitioning().isPartitioned()) {
+if (partitioningIsOnRightFields(gp1,0) && gp1.getPartitioning().isPartitioned()) {
 if (gp1.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
 ss2=ShipStrategy.PARTITION_HASH;
 }
@@ -188,10 +194,11 @@ ss2=ShipStrategy.BROADCAST;
 }
 break;
 case PARTITION_HASH:
-ss2=(gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
+int[] keyFields1=getPactContract().getKeyColumnNumbers(0);
+ss2=(partitioningIsOnSameSubkey(keyFields1,gp2.getPartitionedFields()) && partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.HASH_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_HASH;
 break;
 case PARTITION_RANGE:
-ss2=(gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
+ss2=(partitioningIsOnRightFields(gp2,1) && gp2.getPartitioning() == PartitionProperty.RANGE_PARTITIONED) ? ShipStrategy.FORWARD : ShipStrategy.PARTITION_RANGE;
 break;
 default :
 throw new CompilerException("Invalid fixed shipping strategy '" + ss1.name() + "' for match contract '"+ getPactContract().getName()+ "'.");
@@ -215,7 +222,7 @@ gp2=PactConnection.getGlobalPropertiesAfterConnection(predList2.get(0),this,ss2)
  else {
 gp2=new GlobalProperties();
 }
-if (gp1.getPartitioning().isComputablyPartitioned() && gp1.getPartitioning() == gp2.getPartitioning()) {
+if (gp1.getPartitioning().isComputablyPartitioned() && gp1.getPartitioning() == gp2.getPartitioning() && partitioningIsOnSameSubkey(gp1.getPartitionedFields(),gp2.getPartitionedFields())) {
 createLocalAlternatives(outputPlans,predList1,predList2,ss1,ss2,estimator);
 }
  else {

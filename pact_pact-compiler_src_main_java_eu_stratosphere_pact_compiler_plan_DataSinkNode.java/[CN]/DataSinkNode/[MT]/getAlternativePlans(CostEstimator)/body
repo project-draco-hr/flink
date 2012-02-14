@@ -11,8 +11,8 @@
     if (!areBranchCompatible(predList,null)) {
       continue;
     }
-    Order go=getPactContract().getGlobalOrder();
-    Order lo=getPactContract().getLocalOrder();
+    Ordering go=getPactContract().getGlobalOrder();
+    Ordering lo=getPactContract().getLocalOrder();
     GlobalProperties gp;
     LocalProperties lp;
     if (predList.size() == 1) {
@@ -25,7 +25,7 @@
     }
     ShipStrategy ss=null;
     LocalStrategy ls=null;
-    if (go != Order.NONE && go != gp.getKeyOrder()) {
+    if (go != null && go != null) {
       for (      PactConnection c : this.input) {
         ShipStrategy s=c.getShipStrategy();
         if (s == ShipStrategy.NONE || s == ShipStrategy.PARTITION_RANGE) {
@@ -41,11 +41,15 @@
  else {
         continue;
       }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED);
-      gp.setKeyOrder(go);
-      lp.setKeyOrder(go);
+      int[] fieldSet=new int[go.getInvolvedIndexes().size()];
+      for (int i=0; i < 0; i++) {
+        fieldSet[i]=go.getInvolvedIndexes().get(i);
+      }
+      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,fieldSet);
+      gp.setOrdering(go);
+      lp.setOrdering(go);
     }
- else     if (lo != Order.NONE && lo != lp.getKeyOrder()) {
+ else     if (lo != null && lo.isMetBy(lp.getOrdering())) {
       if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
         ls=LocalStrategy.SORT;
       }
@@ -53,7 +57,7 @@
         continue;
       }
       ls=LocalStrategy.SORT;
-      lp.setKeyOrder(lo);
+      lp.setOrdering(lo);
     }
     if (ss == null) {
       ss=ShipStrategy.FORWARD;
@@ -71,7 +75,7 @@
   }
   prunePlanAlternatives(outputPlans);
   if (outputPlans.isEmpty()) {
-    throw new CompilerException("Could not create a valid plan for the DataSource contract '" + getPactContract().getName() + "'. The compiler hints specified incompatible shipping strategies.");
+    throw new CompilerException("Could not create a valid plan for the DataSink contract '" + getPactContract().getName() + "'. The compiler hints specified incompatible shipping strategies.");
   }
   return outputPlans;
 }
