@@ -1,5 +1,29 @@
 {
 synchronized (this) {
-    writeAnnouncedEnvelopesBufferToDisk();
+    if (this.announcedEnvelopesAsIntBuffer.position() == 0) {
+      return;
+    }
+  }
+  final EnvelopeConsumptionLog lock=this;
+  final Thread finisherThread=new Thread("Log finisher for " + this.environment.getTaskNameWithIndex()){
+    /** 
+ * {@inheritDoc}
+ */
+    @Override public void run(){
+synchronized (lock) {
+        writeAnnouncedEnvelopesBufferToDisk();
+      }
+    }
+  }
+;
+  finisherThread.start();
+  boolean regularExit=false;
+  while (!regularExit) {
+    try {
+      finisherThread.join();
+      regularExit=true;
+    }
+ catch (    InterruptedException ie) {
+    }
   }
 }
