@@ -1,3 +1,24 @@
 {
-  this.tmpDir=GlobalConfiguration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH).split(":")[0];
+  this.tmpDirs=GlobalConfiguration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH).split(":");
+  final int extendSize=GlobalConfiguration.getConfiguration().getInteger(ConfigConstants.TASKMANAGER_FILECHANNEL_EXTENDSIZE,ConfigConstants.DEFAULT_FILECHANNEL_EXTEND_SIZE);
+  if (extendSize < MIN_EXTEND_SIZE) {
+    LOG.error("Invalid extend size " + extendSize + ". Minimum extend size is "+ MIN_EXTEND_SIZE+ ". Falling back to default extend size of "+ ConfigConstants.DEFAULT_FILECHANNEL_EXTEND_SIZE);
+    this.extendSize=ConfigConstants.DEFAULT_FILECHANNEL_EXTEND_SIZE;
+  }
+ else   if ((extendSize & (extendSize - 1)) != 0) {
+    this.extendSize=Integer.highestOneBit(extendSize);
+    LOG.warn("Changing extend size from " + extendSize + " to "+ this.extendSize+ " to make it a power of two.");
+  }
+ else {
+    this.extendSize=extendSize;
+  }
+  for (int i=0; i < this.tmpDirs.length; i++) {
+    File f=new File(this.tmpDirs[i]);
+    if (!(f.exists() && f.isDirectory() && f.canWrite())) {
+      LOG.error("Temp directory '" + f.getAbsolutePath() + "' is not a writable directory. "+ "Replacing path with default temp directory: "+ ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH);
+      this.tmpDirs[i]=ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH;
+    }
+    this.tmpDirs[i]=this.tmpDirs[i] + File.separator + FILE_BUFFER_PREFIX;
+  }
+  this.fileMap=new ConcurrentHashMap<AbstractID,ChannelWithAccessInfo>(2048,0.8f,64);
 }

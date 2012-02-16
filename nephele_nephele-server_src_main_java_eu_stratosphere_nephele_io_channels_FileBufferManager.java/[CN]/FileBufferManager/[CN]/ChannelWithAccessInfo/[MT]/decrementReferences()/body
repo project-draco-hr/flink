@@ -1,0 +1,37 @@
+{
+  int current=this.referenceCounter.get();
+  while (true) {
+    if (current <= 0) {
+      throw new IllegalStateException("The references to the file were already at zero.");
+    }
+    if (current == 1) {
+      if (this.referenceCounter.compareAndSet(current,Integer.MIN_VALUE)) {
+        current=0;
+        break;
+      }
+    }
+ else     if (this.referenceCounter.compareAndSet(current,current - 1)) {
+      current=current - 1;
+      break;
+    }
+    current=this.referenceCounter.get();
+  }
+  if (current > 0) {
+    return current;
+  }
+ else   if (current == 0) {
+    this.referenceCounter.set(Integer.MIN_VALUE);
+    this.reservedWritePosition.set(Long.MIN_VALUE);
+    try {
+      this.channel.close();
+    }
+ catch (    IOException ioex) {
+      if (FileBufferManager.LOG.isErrorEnabled())       FileBufferManager.LOG.error("Error while closing spill file for file buffers: " + ioex.getMessage(),ioex);
+    }
+    this.file.delete();
+    return current;
+  }
+ else {
+    throw new IllegalStateException("The references to the file were already at zero.");
+  }
+}
