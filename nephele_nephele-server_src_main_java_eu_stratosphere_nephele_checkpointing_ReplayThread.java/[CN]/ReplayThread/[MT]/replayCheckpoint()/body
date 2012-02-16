@@ -14,7 +14,7 @@
       if (this.isCheckpointComplete) {
         throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
       }
-      Thread.sleep(100);
+      Thread.sleep(10);
     }
     FileInputStream fis=null;
     try {
@@ -25,7 +25,18 @@
           deserializer.read(fileChannel);
           final TransferEnvelope transferEnvelope=deserializer.getFullyDeserializedTransferEnvelope();
           if (transferEnvelope != null) {
-            outputEnvelope(transferEnvelope);
+            final ReplayOutputBroker broker=this.outputBrokerMap.get(transferEnvelope.getSource());
+            if (broker == null) {
+              throw new IOException("Cannot find output broker for channel " + transferEnvelope.getSource());
+            }
+            final Buffer srcBuffer=transferEnvelope.getBuffer();
+            if (srcBuffer != null) {
+              final Buffer destBuffer=broker.requestEmptyBufferBlocking(srcBuffer.size());
+              srcBuffer.copyToBuffer(destBuffer);
+              transferEnvelope.setBuffer(destBuffer);
+              srcBuffer.recycleBuffer();
+            }
+            broker.outputEnvelope(transferEnvelope);
           }
         }
  catch (        EOFException eof) {
