@@ -1,14 +1,22 @@
 {
   firstV1.copyTo(this.copy1);
   firstV2.copyTo(this.copy2);
+  final Environment env=this.environment;
+  final OutputCollector oc=(OutputCollector)collector;
+  long r1=firstV1.getBinaryLength();
+  long r2=firstV2.getBinaryLength();
   matchFunction.match(firstV1,firstV2,collector);
+  env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
   SpillingResettableIterator<PactRecord> spillIt=null;
   try {
     this.blockIt.reopen(blockVals);
     while (blockIt.hasNext()) {
       PactRecord nextBlockRec=blockIt.next();
       this.copy1.copyTo(this.instance);
+      r1=this.instance.getBinaryLength();
+      r2=nextBlockRec.getBinaryLength();
       matchFunction.match(this.instance,nextBlockRec,collector);
+      env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
     }
     blockIt.reset();
     final LastRepeatableIterator<PactRecord> repeatableIter;
@@ -24,11 +32,17 @@
     while (repeatableIter.hasNext()) {
       PactRecord nextSpillVal=repeatableIter.next();
       this.copy2.copyTo(this.instance);
+      r1=nextSpillVal.getBinaryLength();
+      r2=this.instance.getBinaryLength();
       matchFunction.match(nextSpillVal,this.instance,collector);
+      env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
       while (blockIt.hasNext()) {
         PactRecord nextBlockRec=blockIt.next();
         nextSpillVal=repeatableIter.repeatLast();
+        r1=nextSpillVal.getBinaryLength();
+        r2=nextBlockRec.getBinaryLength();
         matchFunction.match(nextSpillVal,nextBlockRec,collector);
+        env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
       }
       blockIt.reset();
     }
@@ -40,14 +54,20 @@
       while (blockIt.hasNext()) {
         this.copy1.copyTo(this.instance);
         final PactRecord nextBlockVal=blockIt.next();
+        r1=this.instance.getBinaryLength();
+        r2=nextBlockVal.getBinaryLength();
         matchFunction.match(this.instance,nextBlockVal,collector);
+        env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
       }
       blockIt.reset();
       while (spillIt.hasNext()) {
         PactRecord nextSpillVal=spillIt.next();
         while (blockIt.hasNext()) {
           final PactRecord nextBlockVal=blockIt.next();
+          r1=nextSpillVal.getBinaryLength();
+          r2=nextBlockVal.getBinaryLength();
           matchFunction.match(nextSpillVal,nextBlockVal,collector);
+          env.reportPACTDataStatistics(r1 + r2,oc.getCollectedPactRecordsInBytes());
           if (blockIt.hasNext())           nextSpillVal=spillIt.repeatLast();
         }
         blockIt.reset();
