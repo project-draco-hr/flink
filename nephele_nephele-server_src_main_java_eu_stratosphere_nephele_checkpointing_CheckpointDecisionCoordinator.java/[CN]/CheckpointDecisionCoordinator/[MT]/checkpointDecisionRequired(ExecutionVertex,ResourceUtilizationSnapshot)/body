@@ -1,29 +1,34 @@
 {
   LOG.info("Checkpoint decision for vertex " + vertex + " required");
-synchronized (decidedVertices) {
-    if (!decidedVertices.contains(vertex.getID())) {
-      boolean checkpointDecision=getDecision(vertex,rus);
-      final ExecutionGraph graph=vertex.getExecutionGraph();
-      final Map<AbstractInstance,List<CheckpointDecision>> checkpointDecisions=new HashMap<AbstractInstance,List<CheckpointDecision>>();
-      List<CheckpointDecision> checkpointDecisionList=null;
+  if (!this.decidedVertices.contains(vertex.getID())) {
+    boolean checkpointDecision=getDecision(vertex,rus);
+    final ExecutionGraph graph=vertex.getExecutionGraph();
+    final Map<AbstractInstance,List<CheckpointDecision>> checkpointDecisions=new HashMap<AbstractInstance,List<CheckpointDecision>>();
+    List<CheckpointDecision> checkpointDecisionList=null;
 synchronized (graph) {
-        ExecutionGroupVertex groupVertex=vertex.getGroupVertex();
-        LOG.info("Forcing decision to " + checkpointDecision + " for all of "+ groupVertex.getName());
-        for (int i=0; i < groupVertex.getCurrentNumberOfGroupMembers(); i++) {
-          ExecutionVertex member=groupVertex.getGroupMember(i);
-          AbstractInstance instance=member.getAllocatedResource().getInstance();
-          if (checkpointDecisions.containsKey(instance)) {
-            checkpointDecisionList=checkpointDecisions.get(instance);
-          }
- else {
-            checkpointDecisionList=new SerializableArrayList<CheckpointDecision>();
-          }
-          checkpointDecisionList.add(new CheckpointDecision(member.getID(),checkpointDecision));
-          checkpointDecisions.put(instance,checkpointDecisionList);
-          this.decidedVertices.add(member.getID());
+      ExecutionGroupVertex groupVertex=vertex.getGroupVertex();
+      LOG.info("Forcing decision to " + checkpointDecision + " for all of "+ groupVertex.getName());
+      for (int i=0; i < groupVertex.getCurrentNumberOfGroupMembers(); i++) {
+        ExecutionVertex member=groupVertex.getGroupMember(i);
+        AbstractInstance instance=member.getAllocatedResource().getInstance();
+        if (checkpointDecisions.containsKey(instance)) {
+          checkpointDecisionList=checkpointDecisions.get(instance);
         }
+ else {
+          checkpointDecisionList=new SerializableArrayList<CheckpointDecision>();
+        }
+        checkpointDecisionList.add(new CheckpointDecision(member.getID(),checkpointDecision));
+        checkpointDecisions.put(instance,checkpointDecisionList);
+        this.decidedVertices.add(member.getID());
       }
-      this.decisionPropagator.propagateCheckpointDecisions(checkpointDecisions);
     }
+    this.decisionPropagator.propagateCheckpointDecisions(checkpointDecisions);
+  }
+ else {
+    final List<CheckpointDecision> checkpointDecisionList=new SerializableArrayList<CheckpointDecision>();
+    final Map<AbstractInstance,List<CheckpointDecision>> checkpointDecisions=new HashMap<AbstractInstance,List<CheckpointDecision>>();
+    checkpointDecisionList.add(new CheckpointDecision(vertex.getID(),vertex.getCheckpointState() != CheckpointState.NONE));
+    checkpointDecisions.put(vertex.getAllocatedResource().getInstance(),checkpointDecisionList);
+    this.decisionPropagator.propagateCheckpointDecisions(checkpointDecisions);
   }
 }
