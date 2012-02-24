@@ -6,11 +6,28 @@
     nooc+=environment.getOutputGate(i).getNumberOfOutputChannels();
   }
   this.numberOfConnectedChannels=nooc;
-  this.distributed=CheckpointUtils.createDistributedCheckpoint();
+  final boolean dist=CheckpointUtils.createDistributedCheckpoint();
   this.checkpointingDecision=(ephemeral ? CheckpointingDecisionState.UNDECIDED : CheckpointingDecisionState.CHECKPOINTING);
   this.fileBufferManager=FileBufferManager.getInstance();
   if (LOG.isDebugEnabled())   LOG.debug("Created checkpoint for vertex " + task.getVertexID() + ", state "+ this.checkpointingDecision);
   if (this.checkpointingDecision == CheckpointingDecisionState.CHECKPOINTING) {
     this.task.checkpointStateChanged(CheckpointState.PARTIAL);
+  }
+  if (dist) {
+    final Path p=CheckpointUtils.getDistributedCheckpointPath();
+    System.out.println("Distributed checkpoint path is " + p);
+    if (p == null) {
+      LOG.error("No distributed checkpoint path configured, writing local checkpoints instead");
+      this.checkpointPath=CheckpointUtils.getLocalCheckpointPath();
+      this.distributed=false;
+    }
+ else {
+      this.checkpointPath=p;
+      this.distributed=true;
+    }
+  }
+ else {
+    this.checkpointPath=CheckpointUtils.getLocalCheckpointPath();
+    this.distributed=false;
   }
 }
