@@ -1,25 +1,30 @@
 {
+  System.out.println("Replaying checkpoint for vertex " + this.vertexID);
   final CheckpointDeserializer deserializer=new CheckpointDeserializer(this.vertexID);
+  final Path checkpointPath=this.isCheckpointLocal ? CheckpointUtils.getLocalCheckpointPath() : CheckpointUtils.getDistributedCheckpointPath();
+  if (checkpointPath == null) {
+    throw new IOException("Cannot determine checkpoint path for vertex " + this.vertexID);
+  }
+  final FileSystem fileSystem=checkpointPath.getFileSystem();
   int metaDataIndex=0;
   while (true) {
     if (this.restartRequested.compareAndSet(true,false)) {
       metaDataIndex=0;
     }
-    final File metaDataFile=new File(CheckpointUtils.getCheckpointDirectory() + File.separator + CheckpointUtils.METADATA_PREFIX+ "_"+ this.vertexID+ "_"+ metaDataIndex);
-    while (!metaDataFile.exists()) {
-      final File finalMetaDataFile=new File(CheckpointUtils.getCheckpointDirectory() + File.separator + CheckpointUtils.METADATA_PREFIX+ "_"+ this.vertexID+ "_final");
-      if (finalMetaDataFile.exists()) {
+    final Path metaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_"+ metaDataIndex);
+    while (!fileSystem.exists(metaDataFile)) {
+      final Path finalMetaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_final");
+      if (fileSystem.exists(finalMetaDataFile)) {
         return;
       }
       if (this.isCheckpointComplete) {
         throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
       }
-      Thread.sleep(10);
+      Thread.sleep(100);
     }
-    FileInputStream fis=null;
+    FileChannel fileChannel=null;
     try {
-      fis=new FileInputStream(metaDataFile);
-      final FileChannel fileChannel=fis.getChannel();
+      fileChannel=getFileChannel(fileSystem,metaDataFile);
       while (true) {
         try {
           deserializer.read(fileChannel);
@@ -47,8 +52,8 @@
       }
     }
   finally {
-      if (fis != null) {
-        fis.close();
+      if (fileChannel != null) {
+        fileChannel.close();
       }
     }
   }
