@@ -1,5 +1,5 @@
 {
-  final Buffer buffer=transferEnvelope.getBuffer();
+  Buffer buffer=transferEnvelope.getBuffer();
   if (buffer != null) {
     if (buffer.isBackedByMemory()) {
       final Buffer fileBuffer=BufferFactory.createFromFile(buffer.size(),this.task.getVertexID(),this.fileBufferManager,this.distributed);
@@ -25,6 +25,15 @@
   this.transferEnvelopeSerializer.setTransferEnvelope(transferEnvelope);
   while (this.transferEnvelopeSerializer.write(this.metaDataFileChannel)) {
   }
+  buffer=transferEnvelope.getBuffer();
+  if (buffer != null) {
+    if (this.firstSerializedFileBuffer == null) {
+      this.firstSerializedFileBuffer=buffer;
+    }
+ else {
+      buffer.recycleBuffer();
+    }
+  }
   final EventList eventList=transferEnvelope.getEventList();
   if (eventList != null) {
     final Iterator<AbstractEvent> it=eventList.iterator();
@@ -36,6 +45,9 @@
   }
   ++this.numberOfSerializedTransferEnvelopes;
   if (this.numberOfClosedChannels == this.numberOfConnectedChannels) {
+    if (this.firstSerializedFileBuffer != null) {
+      this.firstSerializedFileBuffer.recycleBuffer();
+    }
     if (this.metaDataFileChannel != null) {
       this.metaDataFileChannel.close();
       renameCheckpointPart();
