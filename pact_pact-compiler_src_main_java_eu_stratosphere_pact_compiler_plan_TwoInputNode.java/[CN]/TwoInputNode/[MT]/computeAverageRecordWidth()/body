@@ -1,0 +1,39 @@
+{
+  CompilerHints hints=getPactContract().getCompilerHints();
+  if (hints.getAvgBytesPerRecord() != -1) {
+    return hints.getAvgBytesPerRecord();
+  }
+  long outputSize=0;
+  long numRecords=0;
+  for (  PactConnection c : this.input1) {
+    OptimizerNode pred=c.getSourcePact();
+    if (pred != null) {
+      if (pred.estimatedOutputSize == -1 || pred.estimatedNumRecords == -1) {
+        outputSize=-1;
+        break;
+      }
+      outputSize+=pred.estimatedOutputSize;
+      numRecords+=pred.estimatedNumRecords;
+    }
+  }
+  double avgWidth=-1;
+  if (outputSize != -1) {
+    avgWidth=outputSize / (double)numRecords;
+    if (avgWidth < 1)     avgWidth=1;
+  }
+  for (  PactConnection c : this.input2) {
+    OptimizerNode pred=c.getSourcePact();
+    if (pred != null) {
+      if (pred.estimatedOutputSize == -1) {
+        return avgWidth;
+      }
+      outputSize+=pred.estimatedOutputSize;
+      numRecords+=pred.estimatedNumRecords;
+    }
+  }
+  if (outputSize != -1) {
+    avgWidth+=outputSize / (double)numRecords;
+    if (avgWidth < 2)     avgWidth=2;
+  }
+  return avgWidth;
+}

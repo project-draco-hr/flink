@@ -163,23 +163,56 @@ this.jsonString.append("\"");
 {
 GlobalProperties gp=visitable.getGlobalProperties();
 this.jsonString.append(",\n\t\t\"global_properties\": [\n");
-addProperty(this.jsonString,"Key-Partitioning",gp.getPartitioning().name(),true);
-addProperty(this.jsonString,"Key-Order",gp.getKeyOrder().name(),false);
-addProperty(this.jsonString,"Key-Uniqueness",gp.isKeyUnique() ? "unique" : "not unique",false);
+addProperty(jsonString,"Partitioning",gp.getPartitioning().name(),true);
+if (gp.getPartitioning() != PartitionProperty.NONE) {
+addProperty(jsonString,"Partitioned on",Arrays.toString(gp.getPartitionedFields()),false);
+}
+if (gp.getOrdering() != null) {
+addProperty(jsonString,"Order",gp.getOrdering().toString(),false);
+}
+ else {
+addProperty(jsonString,"Order","(none)",false);
+}
+if (visitable.getUniqueFields() == null || visitable.getUniqueFields().size() == 0) {
+addProperty(jsonString,"Uniqueness","not unique",false);
+}
+ else {
+addProperty(jsonString,"Uniqueness",visitable.getUniqueFields().toString(),false);
+}
 this.jsonString.append("\n\t\t]");
 }
 {
 LocalProperties lp=visitable.getLocalProperties();
 this.jsonString.append(",\n\t\t\"local_properties\": [\n");
-addProperty(this.jsonString,"Key-Order",lp.getKeyOrder().name(),true);
-addProperty(this.jsonString,"Key-Uniqueness",lp.isKeyUnique() ? "unique" : "not unique",false);
-addProperty(this.jsonString,"Key-Grouping",lp.areKeysGrouped() ? "grouped" : "not grouped",false);
+if (lp.getOrdering() != null) {
+addProperty(jsonString,"Order",lp.getOrdering().toString(),true);
+}
+ else {
+addProperty(jsonString,"Order","(none)",true);
+}
+if (visitable.getUniqueFields() == null || visitable.getUniqueFields().size() == 0) {
+addProperty(jsonString,"Uniqueness","not unique",false);
+}
+ else {
+addProperty(jsonString,"Uniqueness",visitable.getUniqueFields().toString(),false);
+}
+addProperty(jsonString,"Grouping",lp.isGrouped() ? "grouped" : "not grouped",false);
+if (lp.isGrouped()) {
+addProperty(jsonString,"Grouped on",lp.getGroupedFields().toString(),false);
+}
 this.jsonString.append("\n\t\t]");
 }
 this.jsonString.append(",\n\t\t\"properties\": [\n");
 addProperty(this.jsonString,"Est. Cardinality",visitable.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedNumRecords()),true);
-addProperty(this.jsonString,"Est. Key-Cardinality",visitable.getEstimatedKeyCardinality() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedKeyCardinality()),false);
-addProperty(this.jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
+String estCardinality="(unknown)";
+if (visitable.getEstimatedCardinalities().size() > 0) {
+estCardinality="";
+for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Est. Cardinality/fields",estCardinality,false);
+addProperty(jsonString,"Est. Output Size",visitable.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(visitable.getEstimatedOutputSize(),"B"),false);
 this.jsonString.append("\t\t]");
 if (visitable.getNodeCosts() != null) {
 this.jsonString.append(",\n\t\t\"costs\": [\n");
@@ -193,10 +226,24 @@ if (visitable.getPactContract().getCompilerHints() != null) {
 CompilerHints hints=visitable.getPactContract().getCompilerHints();
 CompilerHints defaults=new CompilerHints();
 this.jsonString.append(",\n\t\t\"compiler_hints\": [\n");
-addProperty(this.jsonString,"Key-Cardinality",hints.getKeyCardinality() == defaults.getKeyCardinality() ? "(none)" : formatNumber(hints.getKeyCardinality()),true);
-addProperty(this.jsonString,"Avg. Records/StubCall",String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
-addProperty(this.jsonString,"Avg. Values/Key",hints.getAvgNumValuesPerKey() == defaults.getAvgNumValuesPerKey() ? "(none)" : String.valueOf(hints.getAvgNumValuesPerKey()),false);
-addProperty(this.jsonString,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
+String hintCardinality="(none)";
+if (hints.getDistinctCounts().size() > 0) {
+hintCardinality="";
+for (Entry<FieldSet,Long> entry : visitable.getEstimatedCardinalities().entrySet()) {
+hintCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Cardinality",hintCardinality,true);
+addProperty(jsonString,"Avg. Records/StubCall",hints.getAvgRecordsEmittedPerStubCall() == defaults.getAvgRecordsEmittedPerStubCall() ? "(none)" : String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
+String valuesKey="(none)";
+if (hints.getAvgNumRecordsPerDistinctFields().size() > 0) {
+valuesKey="";
+for (Entry<FieldSet,Float> entry : hints.getAvgNumRecordsPerDistinctFields().entrySet()) {
+valuesKey+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(jsonString,"Avg. Values/Distinct fields",valuesKey,false);
+addProperty(jsonString,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
 this.jsonString.append("\t\t]");
 }
 this.jsonString.append("\n\t},\n");
