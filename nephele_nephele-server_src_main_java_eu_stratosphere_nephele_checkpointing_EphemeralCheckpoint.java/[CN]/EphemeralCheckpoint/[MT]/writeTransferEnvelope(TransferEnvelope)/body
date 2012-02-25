@@ -8,16 +8,20 @@
       buffer.recycleBuffer();
     }
   }
-  if (this.numberOfSerializedTransferEnvelopes % ENVELOPES_PER_META_DATA_FILE == 0) {
-    if (this.fileSystem == null) {
-      this.fileSystem=this.checkpointPath.getFileSystem();
-    }
+  if (this.fileSystem == null) {
+    this.fileSystem=this.checkpointPath.getFileSystem();
+  }
+  if (this.defaultBlockSize < 0L) {
+    this.defaultBlockSize=this.fileSystem.getDefaultBlockSize();
+  }
+  if (this.numberOfBytesPerMetaDataFile > 10L * this.defaultBlockSize) {
     if (this.metaDataFileChannel != null) {
       this.metaDataFileChannel.close();
       this.metaDataFileChannel=null;
       renameCheckpointPart();
       ++this.metaDataSuffix;
     }
+    this.numberOfBytesPerMetaDataFile=0L;
   }
   if (this.metaDataFileChannel == null) {
     this.metaDataFileChannel=getMetaDataFileChannel("_part");
@@ -33,6 +37,7 @@
  else {
       buffer.recycleBuffer();
     }
+    this.numberOfBytesPerMetaDataFile+=buffer.size();
   }
   final EventList eventList=transferEnvelope.getEventList();
   if (eventList != null) {
@@ -43,7 +48,6 @@
       }
     }
   }
-  ++this.numberOfSerializedTransferEnvelopes;
   if (this.numberOfClosedChannels == this.numberOfConnectedChannels) {
     if (this.firstSerializedFileBuffer != null) {
       this.firstSerializedFileBuffer.recycleBuffer();
