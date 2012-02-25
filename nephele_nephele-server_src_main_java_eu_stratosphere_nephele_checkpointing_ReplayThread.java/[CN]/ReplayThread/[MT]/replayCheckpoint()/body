@@ -6,23 +6,24 @@
   }
   final FileSystem fileSystem=checkpointPath.getFileSystem();
   int metaDataIndex=0;
-  while (true) {
-    if (this.restartRequested.compareAndSet(true,false)) {
-      metaDataIndex=0;
-    }
-    final Path metaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_"+ metaDataIndex);
-    while (!fileSystem.exists(metaDataFile)) {
-      final Path finalMetaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_final");
-      if (fileSystem.exists(finalMetaDataFile)) {
-        return;
+  Buffer firstDeserializedFileBuffer=null;
+  FileChannel fileChannel=null;
+  try {
+    while (true) {
+      if (this.restartRequested.compareAndSet(true,false)) {
+        metaDataIndex=0;
       }
-      if (this.isCheckpointComplete) {
-        throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
+      final Path metaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_"+ metaDataIndex);
+      while (!fileSystem.exists(metaDataFile)) {
+        final Path finalMetaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_final");
+        if (fileSystem.exists(finalMetaDataFile)) {
+          return;
+        }
+        if (this.isCheckpointComplete) {
+          throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
+        }
+        Thread.sleep(100);
       }
-      Thread.sleep(100);
-    }
-    FileChannel fileChannel=null;
-    try {
       fileChannel=getFileChannel(fileSystem,metaDataFile);
       while (true) {
         try {
@@ -35,6 +36,9 @@
             }
             final Buffer srcBuffer=transferEnvelope.getBuffer();
             if (srcBuffer != null) {
+              if (firstDeserializedFileBuffer == null) {
+                firstDeserializedFileBuffer=srcBuffer.duplicate();
+              }
               final Buffer destBuffer=broker.requestEmptyBufferBlocking(srcBuffer.size());
               srcBuffer.copyToBuffer(destBuffer);
               transferEnvelope.setBuffer(destBuffer);
@@ -45,15 +49,21 @@
         }
  catch (        EOFException eof) {
           fileChannel.close();
+          fileChannel=null;
           ++metaDataIndex;
           break;
         }
       }
     }
+  }
   finally {
-      if (fileChannel != null) {
-        fileChannel.close();
-      }
+    if (firstDeserializedFileBuffer != null) {
+      firstDeserializedFileBuffer.recycleBuffer();
+      firstDeserializedFileBuffer=null;
+    }
+    if (fileChannel != null) {
+      fileChannel.close();
+      fileChannel=null;
     }
   }
 }
