@@ -22,7 +22,7 @@
         if (this.isCheckpointComplete) {
           throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
         }
-        Thread.sleep(100);
+        Thread.sleep(1000);
       }
       fileChannel=getFileChannel(fileSystem,metaDataFile);
       while (true) {
@@ -38,6 +38,10 @@
             if (srcBuffer != null) {
               if (firstDeserializedFileBuffer == null) {
                 firstDeserializedFileBuffer=srcBuffer.duplicate();
+              }
+              if (transferEnvelope.getSequenceNumber() < broker.getNextEnvelopeToSend()) {
+                srcBuffer.recycleBuffer();
+                continue;
               }
               final Buffer destBuffer=broker.requestEmptyBufferBlocking(srcBuffer.size());
               srcBuffer.copyToBuffer(destBuffer);
