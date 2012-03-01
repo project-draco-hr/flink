@@ -12,7 +12,7 @@
         final ExecutionPipeline pipelineToBeDeployed=groupMember.getExecutionPipeline();
         pipelineToBeDeployed.setAllocatedResource(this.executionVertex.getAllocatedResource());
         pipelineToBeDeployed.updateExecutionState(ExecutionState.ASSIGNED);
-        this.scheduler.deployAssignedVertices(eg);
+        this.scheduler.deployAssignedVertices(groupMember);
         return;
       }
     }
@@ -21,7 +21,7 @@
 synchronized (this.executionVertex.getExecutionGraph()) {
       if (this.scheduler.getVerticesToBeRestarted().remove(this.executionVertex.getID()) != null) {
         this.executionVertex.updateExecutionState(ExecutionState.ASSIGNED,"Restart as part of recovery");
-        this.scheduler.deployAssignedVertices(eg);
+        this.scheduler.deployAssignedVertices(this.executionVertex);
         return;
       }
     }
@@ -31,9 +31,10 @@ synchronized (this.executionVertex.getExecutionGraph()) {
   }
   if (newExecutionState == ExecutionState.FAILED) {
     if (this.executionVertex.decrementRetriesLeftAndCheck()) {
-      if (RecoveryLogic.recover(this.executionVertex,this.scheduler.getVerticesToBeRestarted())) {
+      final Set<ExecutionVertex> assignedVertices=new HashSet<ExecutionVertex>();
+      if (RecoveryLogic.recover(this.executionVertex,this.scheduler.getVerticesToBeRestarted(),assignedVertices)) {
         if (RecoveryLogic.hasInstanceAssigned(this.executionVertex)) {
-          this.scheduler.deployAssignedVertices(eg);
+          this.scheduler.deployAssignedVertices(assignedVertices);
         }
       }
  else {

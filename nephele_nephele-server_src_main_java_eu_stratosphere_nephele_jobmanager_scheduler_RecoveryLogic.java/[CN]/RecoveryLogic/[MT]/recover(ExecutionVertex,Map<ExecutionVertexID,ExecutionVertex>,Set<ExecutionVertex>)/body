@@ -14,6 +14,9 @@ synchronized (eg) {
       final ExecutionVertex vertex=cancelIterator.next();
       if (vertex.compareAndUpdateExecutionState(ExecutionState.FINISHED,getStateToUpdate(vertex))) {
         LOG.info("Vertex " + vertex + " has already finished and will not be canceled");
+        if (vertex.getExecutionState() == ExecutionState.ASSIGNED) {
+          assignedVertices.add(vertex);
+        }
         continue;
       }
       LOG.info(vertex + " is canceled by recovery logic");
@@ -32,9 +35,14 @@ synchronized (eg) {
     LOG.info("Cache invalidation complete");
     final Iterator<ExecutionVertex> checkpointIterator=checkpointsToBeReplayed.iterator();
     while (checkpointIterator.hasNext()) {
-      checkpointIterator.next().updateExecutionState(ExecutionState.ASSIGNED);
+      final ExecutionVertex checkpoint=checkpointIterator.next();
+      checkpoint.updateExecutionState(ExecutionState.ASSIGNED);
+      assignedVertices.add(checkpoint);
     }
     failedVertex.updateExecutionState(getStateToUpdate(failedVertex));
+    if (failedVertex.getExecutionState() == ExecutionState.ASSIGNED) {
+      assignedVertices.add(failedVertex);
+    }
   }
   LOG.info("Recovery FINISHED at " + System.currentTimeMillis());
   return true;
