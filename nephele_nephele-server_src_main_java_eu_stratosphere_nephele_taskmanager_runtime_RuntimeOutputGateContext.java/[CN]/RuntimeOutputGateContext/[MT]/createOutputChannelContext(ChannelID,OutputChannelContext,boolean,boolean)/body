@@ -17,15 +17,19 @@
     throw new IllegalStateException("Channel with ID" + channelID + " is not of type AbstractByteBufferedOutputChannel");
   }
   AbstractByteBufferedOutputChannel<? extends Record> outputChannel=(AbstractByteBufferedOutputChannel<? extends Record>)channel;
-  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain();
-  final IncomingEventQueue incomingEventQueue=AbstractOutputChannelContext.createIncomingEventQueue(forwardingChain);
-  forwardingChain.addForwarder(new RuntimeOutputChannelBroker(this,forwardingChain,incomingEventQueue,outputChannel));
+  final RuntimeDispatcher runtimeDispatcher=new RuntimeDispatcher(this.taskContext.getTransferEnvelopeDispatcher());
+  final SpillingBarrier spillingBarrier=new SpillingBarrier(isReceiverRunning,mergeSpillBuffers,runtimeDispatcher);
+  final ForwardingBarrier forwardingBarrier=new ForwardingBarrier(channelID,spillingBarrier);
   final EphemeralCheckpoint checkpoint=this.taskContext.getEphemeralCheckpoint();
+  RuntimeOutputChannelBroker outputChannelBroker;
   if (checkpoint != null) {
-    forwardingChain.addForwarder(checkpoint);
+    final EphemeralCheckpointForwarder checkpointForwarder=new EphemeralCheckpointForwarder(checkpoint,forwardingBarrier);
+    outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,checkpointForwarder);
   }
-  forwardingChain.addForwarder(new ForwardingBarrier(channelID));
-  forwardingChain.addForwarder(new SpillingBarrier(isReceiverRunning,mergeSpillBuffers));
-  forwardingChain.addForwarder(this.taskContext.getRuntimeDispatcher());
-  return new RuntimeOutputChannelContext(outputChannel,forwardingChain,incomingEventQueue);
+ else {
+    outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,forwardingBarrier);
+  }
+  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain(outputChannelBroker,runtimeDispatcher);
+  outputChannelBroker.setForwardingChain(forwardingChain);
+  return new RuntimeOutputChannelContext(outputChannel,forwardingChain);
 }

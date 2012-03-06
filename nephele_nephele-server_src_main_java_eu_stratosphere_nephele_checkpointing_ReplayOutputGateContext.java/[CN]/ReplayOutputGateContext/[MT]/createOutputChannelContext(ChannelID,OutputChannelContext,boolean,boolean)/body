@@ -2,13 +2,12 @@
   if (previousContext != null) {
     activateForwardingBarrier(previousContext);
   }
-  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain();
-  final IncomingEventQueue incomingEventQueue=AbstractOutputChannelContext.createIncomingEventQueue(forwardingChain);
-  final ReplayOutputBroker outputBroker=new ReplayOutputBroker(this.taskContext,forwardingChain,incomingEventQueue);
-  forwardingChain.addForwarder(outputBroker);
-  forwardingChain.addForwarder(new ForwardingBarrier(channelID));
-  forwardingChain.addForwarder(new SpillingBarrier(isReceiverRunning,mergeSpillBuffers));
-  forwardingChain.addForwarder(this.taskContext.getRuntimeDispatcher());
-  this.taskContext.registerReplayOutputBroker(channelID,outputBroker);
-  return new ReplayOutputChannelContext(null,channelID,forwardingChain,incomingEventQueue,previousContext);
+  final RuntimeDispatcher runtimeDispatcher=new RuntimeDispatcher(this.taskContext.getTransferEnvelopeDispatcher());
+  final SpillingBarrier spillingBarrier=new SpillingBarrier(isReceiverRunning,mergeSpillBuffers,runtimeDispatcher);
+  final ForwardingBarrier forwardingBarrier=new ForwardingBarrier(channelID,spillingBarrier);
+  final ReplayOutputBroker outputChannelBroker=new ReplayOutputBroker(this.taskContext,forwardingBarrier);
+  final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain(outputChannelBroker,runtimeDispatcher);
+  outputChannelBroker.setForwardingChain(forwardingChain);
+  this.taskContext.registerReplayOutputBroker(channelID,outputChannelBroker);
+  return new ReplayOutputChannelContext(null,channelID,forwardingChain,previousContext);
 }
