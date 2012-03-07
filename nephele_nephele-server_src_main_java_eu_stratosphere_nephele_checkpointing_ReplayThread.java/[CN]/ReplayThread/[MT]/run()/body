@@ -1,24 +1,39 @@
 {
-  changeExecutionState(ExecutionState.REPLAYING,null);
-  if (this.executionObserver.isCanceled()) {
-    changeExecutionState(ExecutionState.CANCELED,null);
-    return;
-  }
-  try {
-    replayCheckpoint();
-    if (this.executionObserver.isCanceled()) {
-      throw new InterruptedException();
-    }
-  }
- catch (  Exception e) {
-    e.printStackTrace();
+  while (true) {
+    changeExecutionState(ExecutionState.REPLAYING,null);
     if (this.executionObserver.isCanceled()) {
       changeExecutionState(ExecutionState.CANCELED,null);
+      return;
     }
+    resetAllOutputBroker();
+    try {
+      replayCheckpoint();
+      if (this.executionObserver.isCanceled()) {
+        throw new InterruptedException();
+      }
+    }
+ catch (    Exception e) {
+      if (this.restartRequested.compareAndSet(true,false)) {
+        while (!Thread.currentThread().isInterrupted()) {
+        }
+        Thread.interrupted();
+        continue;
+      }
+      if (this.executionObserver.isCanceled()) {
+        changeExecutionState(ExecutionState.CANCELED,null);
+      }
  else {
-      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+        changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+      }
+      return;
     }
-    return;
+    if (this.restartRequested.compareAndSet(true,false)) {
+      while (!Thread.currentThread().isInterrupted()) {
+      }
+      Thread.interrupted();
+      continue;
+    }
+    break;
   }
   changeExecutionState(ExecutionState.FINISHING,null);
   try {
