@@ -1,0 +1,55 @@
+{
+switch (CheckpointUtils.getCheckpointMode()) {
+case NEVER:
+    return false;
+case ALWAYS:
+  return true;
+case NETWORK:
+return isNetworkTask(task);
+}
+final double CPlower=CheckpointUtils.getCPLower();
+final double CPupper=CheckpointUtils.getCPUpper();
+if (rus.getPactRatio() >= 0.0 && !CheckpointUtils.useAVG()) {
+LOG.info("Ratio = " + rus.getPactRatio());
+if (rus.getPactRatio() <= CPlower) {
+return true;
+}
+if (rus.getPactRatio() >= CPupper) {
+return false;
+}
+}
+ else {
+if (rus.isDam()) {
+LOG.info("is Dam");
+if (rus.getAverageInputRecordSize() != 0) {
+  LOG.info("avg ratio " + rus.getAverageOutputRecordSize() / rus.getAverageInputRecordSize());
+}
+if (rus.getAverageInputRecordSize() != 0 && rus.getAverageOutputRecordSize() / rus.getAverageInputRecordSize() <= CPlower) {
+  return true;
+}
+if (rus.getAverageInputRecordSize() != 0 && rus.getAverageOutputRecordSize() / rus.getAverageInputRecordSize() >= CPupper) {
+  return false;
+}
+}
+ else {
+LOG.info("out " + rus.getTotalOutputAmount() + " in "+ rus.getTotalInputAmount());
+if (rus.getTotalInputAmount() != 0) {
+  LOG.info("Selectivity is " + (double)rus.getTotalOutputAmount() / rus.getTotalInputAmount());
+}
+if (rus.getTotalInputAmount() != 0 && ((double)rus.getTotalOutputAmount() / rus.getTotalInputAmount() <= CPlower)) {
+  LOG.info(task.getEnvironment().getTaskName() + " Checkpoint small selectivity " + ((double)rus.getTotalOutputAmount() / rus.getTotalInputAmount()));
+  return true;
+}
+if (rus.getTotalInputAmount() != 0 && ((double)rus.getTotalOutputAmount() / rus.getTotalInputAmount() >= CPupper)) {
+  LOG.info(task.getEnvironment().getTaskName() + " Checkpoint to large selectivity " + ((double)rus.getTotalOutputAmount() / rus.getTotalInputAmount()));
+  return false;
+}
+}
+}
+if (rus.getUserCPU() >= 90) {
+LOG.info(task.getEnvironment().getTaskName() + "CPU-Bottleneck");
+return true;
+}
+LOG.info("Checkpoint decision false by default");
+return false;
+}

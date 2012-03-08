@@ -1,0 +1,46 @@
+{
+  while (true) {
+    changeExecutionState(ExecutionState.REPLAYING,null);
+    if (this.executionObserver.isCanceled()) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+      return;
+    }
+    resetAllOutputBroker();
+    try {
+      replayCheckpoint();
+      if (this.executionObserver.isCanceled()) {
+        throw new InterruptedException();
+      }
+    }
+ catch (    Exception e) {
+      if (isRestartRequested()) {
+        continue;
+      }
+      if (this.executionObserver.isCanceled()) {
+        changeExecutionState(ExecutionState.CANCELED,null);
+      }
+ else {
+        changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+      }
+      return;
+    }
+    if (isRestartRequested()) {
+      continue;
+    }
+    break;
+  }
+  changeExecutionState(ExecutionState.FINISHING,null);
+  try {
+    waitForAllOutputBrokerToFinish();
+  }
+ catch (  Exception e) {
+    if (this.executionObserver.isCanceled()) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
+    return;
+  }
+  changeExecutionState(ExecutionState.FINISHED,null);
+}

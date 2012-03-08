@@ -1,0 +1,112 @@
+{
+  super(parent,SWT.NONE);
+synchronized (SWTFailureEventTable.class) {
+    if (TASK_ICON == null) {
+      TASK_ICON=loadIcon("/eu/stratosphere/nephele/visualization/swt/taskicon.png");
+    }
+    if (INSTANCE_ICON == null) {
+      INSTANCE_ICON=loadIcon("/eu/stratosphere/nephele/visualization/swt/nodeicon.png");
+    }
+  }
+  this.nameSuggestions=nameSuggestions;
+  setLayout(new FillLayout());
+  this.failureEventTable=new Table(this,style);
+  this.failureEventTable.setHeaderVisible(true);
+  this.failureEventTable.setLinesVisible(true);
+  final TableColumn iconColumn=new TableColumn(this.failureEventTable,SWT.NONE);
+  final TableColumn nameColumn=new TableColumn(this.failureEventTable,SWT.NONE);
+  nameColumn.setText("Name");
+  final TableColumn intervalColumn=new TableColumn(this.failureEventTable,SWT.NONE);
+  intervalColumn.setText("Interval");
+  for (int i=0; i < this.failureEventTable.getColumnCount(); ++i) {
+    if (i == 0) {
+      this.failureEventTable.getColumn(i).setWidth(ICON_COLUMN_WIDTH);
+    }
+ else {
+      this.failureEventTable.getColumn(i).setWidth(TEXT_COLUMN_WIDTH);
+    }
+  }
+  this.failureEventTable.addMouseListener(new MouseAdapter(){
+    @Override public void mouseDoubleClick(    final MouseEvent arg0){
+      final TableItem ti=failureEventTable.getItem(new Point(arg0.x,arg0.y));
+      if (selectedFailurePattern == null) {
+        return;
+      }
+      addOrEditTableItem(ti);
+    }
+  }
+);
+  final Listener sortListener=new Listener(){
+    @Override public void handleEvent(    final Event arg0){
+      final TableColumn sortColumn=failureEventTable.getSortColumn();
+      final TableColumn currentColumn=(TableColumn)arg0.widget;
+      int dir=failureEventTable.getSortDirection();
+      if (sortColumn == currentColumn) {
+        dir=(dir == SWT.UP) ? SWT.DOWN : SWT.UP;
+      }
+ else {
+        failureEventTable.setSortColumn(currentColumn);
+        dir=SWT.UP;
+      }
+      final int direction=dir;
+      final AbstractFailureEvent[] failureEvents=new AbstractFailureEvent[failureEventTable.getItemCount()];
+      for (int i=0; i < failureEventTable.getItemCount(); ++i) {
+        failureEvents[i]=(AbstractFailureEvent)failureEventTable.getItem(i).getData();
+      }
+      Arrays.sort(failureEvents,new Comparator<AbstractFailureEvent>(){
+        @Override public int compare(        final AbstractFailureEvent o1,        AbstractFailureEvent o2){
+          if (o1 == null) {
+            return -1;
+          }
+          if (o2 == null) {
+            return 1;
+          }
+          if (currentColumn == iconColumn) {
+            final int v1=(o1 instanceof VertexFailureEvent) ? 0 : 1;
+            final int v2=(o2 instanceof VertexFailureEvent) ? 0 : 1;
+            return (direction == SWT.UP) ? (v1 - v2) : (v2 - v1);
+          }
+ else           if (currentColumn == nameColumn) {
+            if (direction == SWT.UP) {
+              return String.CASE_INSENSITIVE_ORDER.compare(o1.getName(),o2.getName());
+            }
+ else {
+              return String.CASE_INSENSITIVE_ORDER.compare(o2.getName(),o1.getName());
+            }
+          }
+ else {
+            if (direction == SWT.UP) {
+              return (o1.getInterval() - o2.getInterval());
+            }
+ else {
+              return (o2.getInterval() - o1.getInterval());
+            }
+          }
+        }
+      }
+);
+      failureEventTable.removeAll();
+      for (int i=0; i < failureEvents.length; ++i) {
+        updateTableItem(null,failureEvents[i]);
+      }
+      failureEventTable.setSortColumn(currentColumn);
+      failureEventTable.setSortDirection(direction);
+    }
+  }
+;
+  iconColumn.addListener(SWT.Selection,sortListener);
+  nameColumn.addListener(SWT.Selection,sortListener);
+  intervalColumn.addListener(SWT.Selection,sortListener);
+  this.failureEventTable.addKeyListener(new KeyAdapter(){
+    @Override public void keyReleased(    final KeyEvent arg0){
+      if (arg0.keyCode == SWT.DEL) {
+        removeSelectedTableItems();
+      }
+ else       if (arg0.keyCode == SWT.CR) {
+        addOrEditSelectedTableItems();
+      }
+    }
+  }
+);
+  this.failureEventTable.setMenu(createTableContextMenu());
+}

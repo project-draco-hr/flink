@@ -1,0 +1,73 @@
+{
+  final CheckpointDeserializer deserializer=new CheckpointDeserializer(this.vertexID,!this.isCheckpointLocal);
+  final Path checkpointPath=this.isCheckpointLocal ? CheckpointUtils.getLocalCheckpointPath() : CheckpointUtils.getDistributedCheckpointPath();
+  if (checkpointPath == null) {
+    throw new IOException("Cannot determine checkpoint path for vertex " + this.vertexID);
+  }
+  final FileSystem fileSystem=checkpointPath.getFileSystem();
+  int metaDataIndex=0;
+  Buffer firstDeserializedFileBuffer=null;
+  FileChannel fileChannel=null;
+  try {
+    while (true) {
+      final Path metaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_"+ metaDataIndex);
+      while (!fileSystem.exists(metaDataFile)) {
+        final Path finalMetaDataFile=checkpointPath.suffix(Path.SEPARATOR + CheckpointUtils.METADATA_PREFIX + "_"+ this.vertexID+ "_final");
+        if (fileSystem.exists(finalMetaDataFile)) {
+          return;
+        }
+        if (this.isCheckpointComplete) {
+          throw new FileNotFoundException("Cannot find meta data file " + metaDataIndex + " for checkpoint of vertex "+ this.vertexID);
+        }
+        Thread.sleep(1000);
+      }
+      fileChannel=getFileChannel(fileSystem,metaDataFile);
+      while (true) {
+        try {
+          deserializer.read(fileChannel);
+          final TransferEnvelope transferEnvelope=deserializer.getFullyDeserializedTransferEnvelope();
+          if (transferEnvelope != null) {
+            final ReplayOutputChannelBroker broker=this.outputBrokerMap.get(transferEnvelope.getSource());
+            if (broker == null) {
+              throw new IOException("Cannot find output broker for channel " + transferEnvelope.getSource());
+            }
+            final Buffer srcBuffer=transferEnvelope.getBuffer();
+            if (srcBuffer != null) {
+              if (firstDeserializedFileBuffer == null) {
+                firstDeserializedFileBuffer=srcBuffer.duplicate();
+              }
+              if (transferEnvelope.getSequenceNumber() < broker.getNextEnvelopeToSend()) {
+                srcBuffer.recycleBuffer();
+                continue;
+              }
+              final Buffer destBuffer=broker.requestEmptyBufferBlocking(srcBuffer.size());
+              srcBuffer.copyToBuffer(destBuffer);
+              transferEnvelope.setBuffer(destBuffer);
+              srcBuffer.recycleBuffer();
+            }
+            broker.outputEnvelope(transferEnvelope);
+            if (this.restartRequested.get()) {
+              return;
+            }
+          }
+        }
+ catch (        EOFException eof) {
+          fileChannel.close();
+          fileChannel=null;
+          ++metaDataIndex;
+          break;
+        }
+      }
+    }
+  }
+  finally {
+    if (firstDeserializedFileBuffer != null) {
+      firstDeserializedFileBuffer.recycleBuffer();
+      firstDeserializedFileBuffer=null;
+    }
+    if (fileChannel != null) {
+      fileChannel.close();
+      fileChannel=null;
+    }
+  }
+}

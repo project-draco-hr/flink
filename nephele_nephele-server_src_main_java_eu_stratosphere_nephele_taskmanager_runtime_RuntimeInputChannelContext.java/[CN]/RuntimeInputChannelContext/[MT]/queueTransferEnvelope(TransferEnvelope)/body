@@ -1,0 +1,49 @@
+{
+  final int sequenceNumber=transferEnvelope.getSequenceNumber();
+  AbstractEvent eventToSend=null;
+  if (ReceiverNotFoundEvent.isReceiverNotFoundEvent(transferEnvelope)) {
+    return;
+  }
+synchronized (this.queuedEnvelopes) {
+    if (this.destroyCalled) {
+      final Buffer buffer=transferEnvelope.getBuffer();
+      if (buffer != null) {
+        buffer.recycleBuffer();
+      }
+      return;
+    }
+    final int expectedSequenceNumber=this.lastReceivedEnvelope + 1;
+    if (sequenceNumber != expectedSequenceNumber) {
+      if (sequenceNumber > expectedSequenceNumber) {
+        if (expectedSequenceNumber > 2000) {
+          this.byteBufferedInputChannel.reportIOException(new IOException("Expected data packet " + expectedSequenceNumber + " but received "+ sequenceNumber));
+          this.byteBufferedInputChannel.checkForNetworkEvents();
+        }
+      }
+ else {
+        eventToSend=lookForCloseEvent(transferEnvelope);
+        if (eventToSend == null) {
+          eventToSend=new UnexpectedEnvelopeEvent(expectedSequenceNumber - 1);
+        }
+      }
+      LOG.warn("Input channel " + getChannelName() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
+      final Buffer buffer=transferEnvelope.getBuffer();
+      if (buffer != null) {
+        buffer.recycleBuffer();
+      }
+    }
+ else {
+      this.queuedEnvelopes.add(transferEnvelope);
+      this.lastReceivedEnvelope=sequenceNumber;
+      this.envelopeConsumptionLog.reportEnvelopeAvailability(this.byteBufferedInputChannel);
+    }
+  }
+  if (eventToSend != null) {
+    try {
+      transferEventToOutputChannel(eventToSend);
+    }
+ catch (    Exception e) {
+      LOG.error(StringUtils.stringifyException(e));
+    }
+  }
+}
