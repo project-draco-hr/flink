@@ -1,0 +1,51 @@
+{
+  try {
+    final String forwardClassName=ForwardTask.class.getSimpleName();
+    final File inputFile=ServerTestUtils.createInputFile(limit);
+    final File outputFile=new File(ServerTestUtils.getTempDir());
+    final File jarFile=ServerTestUtils.createJarFile(forwardClassName);
+    final JobGraph jg=new JobGraph("Job Graph 1");
+    final JobFileInputVertex i1=new JobFileInputVertex("Input with broadcast writer",jg);
+    i1.setFileInputClass(BroadcastSourceTask.class);
+    i1.setFilePath(new Path("file://" + inputFile.getAbsolutePath().toString()));
+    JobFileOutputVertex o1=new JobFileOutputVertex("Output 1",jg);
+    o1.setNumberOfSubtasks(receivers);
+    o1.setNumberOfSubtasksPerInstance(receivers);
+    o1.setVertexToShareInstancesWith(i1);
+    o1.setFileOutputClass(FileLineWriter.class);
+    System.out.println(outputFile.getAbsolutePath().toString());
+    o1.setFilePath(new Path("file://" + outputFile.getAbsolutePath().toString()));
+    try {
+      i1.connectTo(o1,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+    }
+ catch (    JobGraphDefinitionException e) {
+      e.printStackTrace();
+    }
+    jg.addJar(new Path("file://" + ServerTestUtils.getTempDir() + File.separator+ forwardClassName+ ".jar"));
+    JobClient jobClient=new JobClient(jg,configuration);
+    try {
+      jobClient.submitJobAndWait();
+    }
+ catch (    JobExecutionException e) {
+      fail(e.getMessage());
+    }
+    final BufferedReader bufferedReader=new BufferedReader(new FileReader(outputFile));
+    for (int i=0; i < limit; i++) {
+      final String number=bufferedReader.readLine();
+      try {
+        assertEquals(i,Integer.parseInt(number));
+      }
+ catch (      NumberFormatException e) {
+        fail(e.getMessage());
+      }
+    }
+    bufferedReader.close();
+    inputFile.delete();
+    outputFile.delete();
+    jarFile.delete();
+  }
+ catch (  IOException ioe) {
+    ioe.printStackTrace();
+    fail(ioe.getMessage());
+  }
+}
