@@ -15,32 +15,33 @@
     System.out.println("Out channel ID: " + c.getID() + " connected channel: "+ c.getConnectedChannelID()+ " target instance: "+ eg.getVertexByChannelID(c.getConnectedChannelID()).getAllocatedResource().getInstance().getInstanceConnectionInfo());
   }
   final LinkedList<TreeNode> treenodes=new LinkedList<TreeNode>();
-  TreeNode actualnode;
-  actualnode=new TreeNode(source);
+  LinkedList<ChannelID> actualLocalTargets=new LinkedList<ChannelID>();
   for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
     AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
     ExecutionVertex targetVertex=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
     if (targetVertex.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(source)) {
-      actualnode.addLocalTarget(actualoutputchannel.getConnectedChannelID());
+      actualLocalTargets.add(actualoutputchannel.getConnectedChannelID());
       iter.remove();
     }
   }
+  TreeNode actualnode=new TreeNode(eg.getVertexByChannelID(sourceChannelID).getAllocatedResource().getInstance(),source,actualLocalTargets);
   treenodes.add(actualnode);
   LinkedList<TreeNode> receivernodes=new LinkedList<TreeNode>();
   while (outputChannels.size() > 0) {
     AbstractOutputChannel<? extends Record> firstChannel=outputChannels.pollFirst();
     ExecutionVertex firstTarget=eg.getVertexByChannelID(firstChannel.getConnectedChannelID());
     InstanceConnectionInfo actualinstance=firstTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo();
-    actualnode=new TreeNode(actualinstance);
-    actualnode.addLocalTarget(firstChannel.getConnectedChannelID());
+    actualLocalTargets=new LinkedList<ChannelID>();
+    actualLocalTargets.add(firstChannel.getConnectedChannelID());
     for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
       AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
       ExecutionVertex actualTarget=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
       if (actualTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(actualinstance)) {
-        actualnode.addLocalTarget(actualoutputchannel.getConnectedChannelID());
+        actualLocalTargets.add(actualoutputchannel.getConnectedChannelID());
         iter.remove();
       }
     }
+    actualnode=new TreeNode(firstTarget.getAllocatedResource().getInstance(),actualinstance,actualLocalTargets);
     receivernodes.add(actualnode);
   }
   if (randomize) {
