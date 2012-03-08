@@ -2,8 +2,13 @@
   Class<? extends PlanAssembler> clazz=null;
   checkJarFile(jarFile);
   try {
-    URL url=jarFile.getAbsoluteFile().toURI().toURL();
-    ClassLoader loader=new URLClassLoader(new URL[]{url},this.getClass().getClassLoader());
+    File[] nestedJars=extractContainedLibaries();
+    URL[] urls=new URL[1 + nestedJars.length];
+    urls[0]=jarFile.getAbsoluteFile().toURI().toURL();
+    for (int i=0; i < nestedJars.length; i++) {
+      urls[i + 1]=nestedJars[i].getAbsoluteFile().toURI().toURL();
+    }
+    ClassLoader loader=new URLClassLoader(urls,this.getClass().getClassLoader());
     clazz=Class.forName(className,true,loader).asSubclass(PlanAssembler.class);
   }
  catch (  MalformedURLException e) {
@@ -14,6 +19,9 @@ catch (  ClassNotFoundException e) {
   }
 catch (  ClassCastException e) {
     throw new ProgramInvocationException("The pact plan assembler class '" + className + "' cannot be cast to PlanAssembler.",e);
+  }
+catch (  IOException ioex) {
+    throw new ProgramInvocationException("The jar file could not be checked for nested jar files: " + ioex.getMessage(),ioex);
   }
 catch (  Throwable t) {
     throw new ProgramInvocationException("An unknown problem ocurred during the instantiation of the " + "program assembler: " + t,t);
