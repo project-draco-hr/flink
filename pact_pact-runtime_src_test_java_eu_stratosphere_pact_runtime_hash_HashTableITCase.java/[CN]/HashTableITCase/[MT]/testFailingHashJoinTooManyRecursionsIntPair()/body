@@ -1,0 +1,59 @@
+{
+  final int REPEATED_VALUE_1=40559;
+  final int REPEATED_VALUE_2=92882;
+  final int REPEATED_VALUE_COUNT=3000000;
+  final int NUM_KEYS=1000000;
+  final int BUILD_VALS_PER_KEY=3;
+  final int PROBE_VALS_PER_KEY=10;
+  MutableObjectIterator<IntPair> build1=new UniformIntPairGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<IntPair> build2=new ConstantsIntPairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  MutableObjectIterator<IntPair> build3=new ConstantsIntPairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<MutableObjectIterator<IntPair>> builds=new ArrayList<MutableObjectIterator<IntPair>>();
+  builds.add(build1);
+  builds.add(build2);
+  builds.add(build3);
+  MutableObjectIterator<IntPair> buildInput=new UnionIterator<IntPair>(builds);
+  MutableObjectIterator<IntPair> probe1=new UniformIntPairGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<IntPair> probe2=new ConstantsIntPairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT);
+  MutableObjectIterator<IntPair> probe3=new ConstantsIntPairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT);
+  List<MutableObjectIterator<IntPair>> probes=new ArrayList<MutableObjectIterator<IntPair>>();
+  probes.add(probe1);
+  probes.add(probe2);
+  probes.add(probe3);
+  MutableObjectIterator<IntPair> probeInput=new UnionIterator<IntPair>(probes);
+  MemoryManager memMan;
+  List<MemorySegment> memSegments;
+  try {
+    memMan=new DefaultMemoryManager(32 * 1024 * 1024);
+    memSegments=memMan.allocateStrict(MEM_OWNER,896,32 * 1024);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  IOManager ioManager=new IOManager();
+  final MutableHashTable<IntPair,IntPair> join=new MutableHashTable<IntPair,IntPair>(this.pairBuildSideAccesssor,this.pairProbeSideAccesssor,this.pairComparator,memSegments,ioManager);
+  join.open(buildInput,probeInput);
+  final IntPair record=new IntPair();
+  try {
+    while (join.nextRecord()) {
+      HashBucketIterator<IntPair,IntPair> buildSide=join.getBuildSideIterator();
+      if (!buildSide.next(record)) {
+        fail("No build side values found for a probe key.");
+      }
+      while (buildSide.next(record))       ;
+    }
+    fail("Hash Join must have failed due to too many recursions.");
+  }
+ catch (  Exception ex) {
+  }
+  join.close();
+  memMan.release(memSegments);
+  ioManager.shutdown();
+  if (!ioManager.isProperlyShutDown()) {
+    fail("I/O manager was not property shut down.");
+  }
+  if (!memMan.verifyEmpty()) {
+    fail("Not all memory was properly released to the memory manager --> Memory Leak.");
+  }
+}
