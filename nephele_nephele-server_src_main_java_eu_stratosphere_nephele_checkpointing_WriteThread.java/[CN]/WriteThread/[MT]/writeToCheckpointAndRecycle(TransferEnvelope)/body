@@ -1,0 +1,111 @@
+{
+  Buffer buffer=transferEnvelope.getBuffer();
+  if (buffer != null) {
+    if (buffer.isBackedByMemory()) {
+      Buffer fileBuffer=null;
+      try {
+        fileBuffer=BufferFactory.createFromFile(buffer.size(),this.vertexID,this.fileBufferManager,this.distributed,false);
+        buffer.copyToBuffer(fileBuffer);
+      }
+ catch (      IOException ioe) {
+        this.ioException=ioe;
+        if (fileBuffer != null) {
+          fileBuffer.recycleBuffer();
+        }
+        recycleTransferEnvelope(transferEnvelope);
+        return false;
+      }
+      transferEnvelope.setBuffer(fileBuffer);
+      buffer.recycleBuffer();
+    }
+  }
+  if (this.fileSystem == null) {
+    try {
+      this.fileSystem=this.checkpointPath.getFileSystem();
+    }
+ catch (    IOException ioe) {
+      this.ioException=ioe;
+      recycleTransferEnvelope(transferEnvelope);
+      return false;
+    }
+  }
+  if (this.defaultBlockSize < 0L) {
+    this.defaultBlockSize=this.fileSystem.getDefaultBlockSize();
+  }
+  if (this.numberOfBytesPerMetaDataFile > 10L * this.defaultBlockSize && !this.distributed) {
+    if (this.metaDataFileChannel != null) {
+      try {
+        this.metaDataFileChannel.close();
+        this.metaDataFileChannel=null;
+        renameCheckpointPart();
+      }
+ catch (      IOException ioe) {
+        this.ioException=ioe;
+        recycleTransferEnvelope(transferEnvelope);
+        return false;
+      }
+      ++this.metaDataSuffix;
+    }
+    this.numberOfBytesPerMetaDataFile=0L;
+  }
+  if (this.metaDataFileChannel == null) {
+    try {
+      this.metaDataFileChannel=getMetaDataFileChannel("_part");
+    }
+ catch (    IOException ioe) {
+      this.ioException=ioe;
+      recycleTransferEnvelope(transferEnvelope);
+      return false;
+    }
+  }
+  this.transferEnvelopeSerializer.setTransferEnvelope(transferEnvelope);
+  try {
+    while (this.transferEnvelopeSerializer.write(this.metaDataFileChannel)) {
+    }
+  }
+ catch (  IOException ioe) {
+    this.ioException=ioe;
+    recycleTransferEnvelope(transferEnvelope);
+    return false;
+  }
+  buffer=transferEnvelope.getBuffer();
+  if (buffer != null) {
+    if (this.firstSerializedFileBuffer == null) {
+      this.firstSerializedFileBuffer=buffer;
+    }
+ else {
+      buffer.recycleBuffer();
+    }
+    this.numberOfBytesPerMetaDataFile+=buffer.size();
+  }
+  final EventList eventList=transferEnvelope.getEventList();
+  if (eventList != null) {
+    final Iterator<AbstractEvent> it=eventList.iterator();
+    while (it.hasNext()) {
+      if (it.next() instanceof ByteBufferedChannelCloseEvent) {
+        ++this.numberOfClosedChannels;
+      }
+    }
+  }
+  if (this.numberOfClosedChannels == this.numberOfConnectedChannels) {
+    if (this.firstSerializedFileBuffer != null) {
+      this.firstSerializedFileBuffer.recycleBuffer();
+    }
+    try {
+      if (this.metaDataFileChannel != null) {
+        this.metaDataFileChannel.close();
+        renameCheckpointPart();
+      }
+      this.metaDataFileChannel=getMetaDataFileChannel(CheckpointUtils.COMPLETED_CHECKPOINT_SUFFIX);
+      this.metaDataFileChannel.write(ByteBuffer.allocate(0));
+      this.metaDataFileChannel.close();
+    }
+ catch (    IOException ioe) {
+      this.ioException=ioe;
+      return false;
+    }
+    LOG.info("Finished persistent checkpoint for vertex " + this.vertexID);
+    return false;
+  }
+  return true;
+}
