@@ -1,7 +1,7 @@
 {
-  final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
-  final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator();
-  while (it.hasNext()) {
+  final List<AllocatedSlice> newlyAllocatedSlicesOfJob=new ArrayList<AllocatedSlice>();
+  final Map<InstanceType,Integer> pendingRequests=new HashMap<InstanceType,Integer>();
+  for (final Iterator<Map.Entry<InstanceType,Integer>> it=instanceRequestMap.getMaximumIterator(); it.hasNext(); ) {
     final Map.Entry<InstanceType,Integer> entry=it.next();
     final int maximumNumberOfInstances=entry.getValue().intValue();
     for (int i=0; i < maximumNumberOfInstances; i++) {
@@ -9,30 +9,45 @@
       final AllocatedSlice slice=getSliceOfType(jobID,entry.getKey());
       if (slice == null) {
         if (i < instanceRequestMap.getMinimumNumberOfInstances(entry.getKey())) {
-          removeAllSlicesOfJob(jobID);
+          for (          final AllocatedSlice sliceToRelease : newlyAllocatedSlicesOfJob) {
+            sliceToRelease.getHostingInstance().removeAllocatedSlice(sliceToRelease.getAllocationID());
+          }
           throw new InstanceException("Could not find a suitable instance");
         }
  else {
           final int numberOfRemainingInstances=maximumNumberOfInstances - i;
           if (numberOfRemainingInstances > 0) {
-            PendingRequestsMap pendingRequests=this.pendingRequestsOfJob.get(jobID);
-            if (pendingRequests == null) {
-              pendingRequests=new PendingRequestsMap();
-              this.pendingRequestsOfJob.put(jobID,pendingRequests);
+            Integer val=pendingRequests.get(entry.getKey());
+            if (val == null) {
+              val=Integer.valueOf(0);
             }
-            pendingRequests.addRequest(entry.getKey(),numberOfRemainingInstances);
+            val=Integer.valueOf(val.intValue() + numberOfRemainingInstances);
+            pendingRequests.put(entry.getKey(),val);
           }
           break;
         }
       }
-      List<AllocatedSlice> allocatedSlices=this.slicesOfJobs.get(jobID);
-      if (allocatedSlices == null) {
-        allocatedSlices=new ArrayList<AllocatedSlice>();
-        this.slicesOfJobs.put(jobID,allocatedSlices);
-      }
-      allocatedSlices.add(slice);
-      allocatedResources.add(new AllocatedResource(slice.getHostingInstance(),slice.getType(),slice.getAllocationID()));
+      newlyAllocatedSlicesOfJob.add(slice);
     }
+  }
+  List<AllocatedSlice> allAllocatedSlicesOfJob=this.slicesOfJobs.get(jobID);
+  if (allAllocatedSlicesOfJob == null) {
+    allAllocatedSlicesOfJob=new ArrayList<AllocatedSlice>();
+    this.slicesOfJobs.put(jobID,allAllocatedSlicesOfJob);
+  }
+  allAllocatedSlicesOfJob.addAll(newlyAllocatedSlicesOfJob);
+  PendingRequestsMap allPendingRequestsOfJob=this.pendingRequestsOfJob.get(jobID);
+  if (allPendingRequestsOfJob == null) {
+    allPendingRequestsOfJob=new PendingRequestsMap();
+    this.pendingRequestsOfJob.put(jobID,allPendingRequestsOfJob);
+  }
+  for (final Iterator<Map.Entry<InstanceType,Integer>> it=pendingRequests.entrySet().iterator(); it.hasNext(); ) {
+    final Map.Entry<InstanceType,Integer> entry=it.next();
+    allPendingRequestsOfJob.addRequest(entry.getKey(),entry.getValue().intValue());
+  }
+  final List<AllocatedResource> allocatedResources=new ArrayList<AllocatedResource>();
+  for (  final AllocatedSlice slice : newlyAllocatedSlicesOfJob) {
+    allocatedResources.add(new AllocatedResource(slice.getHostingInstance(),slice.getType(),slice.getAllocationID()));
   }
   if (this.instanceListener != null) {
     final ClusterInstanceNotifier clusterInstanceNotifier=new ClusterInstanceNotifier(this.instanceListener,jobID,allocatedResources);
