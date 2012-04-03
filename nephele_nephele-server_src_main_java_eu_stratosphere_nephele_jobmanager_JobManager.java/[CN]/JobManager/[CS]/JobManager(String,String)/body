@@ -22,7 +22,6 @@
   this.recommendedClientPollingInterval=GlobalConfiguration.getInteger("jobclient.polling.internval",5);
   this.eventCollector=new EventCollector(this.recommendedClientPollingInterval);
   this.inputSplitManager=new InputSplitManager();
-  this.checkpointDecisionCoordinator=new CheckpointDecisionCoordinator(this);
   final InetSocketAddress rpcServerAddress=new InetSocketAddress(ipcAddress,ipcPort);
   try {
     final int handlerCount=GlobalConfiguration.getInteger("jobmanager.rpc.numhandler",3);
@@ -34,6 +33,7 @@
     System.exit(FAILURERETURNCODE);
   }
   LOG.info("Starting job manager in " + executionMode + " mode");
+  this.jobManagerPlugins=PluginManager.getJobManagerPlugins(this,configDir);
   if ("local".equals(executionMode)) {
     try {
       LibraryCacheManager.setLocalMode();
@@ -81,18 +81,6 @@
  else {
     this.profiler=null;
     LOG.debug("Profiler disabled");
-  }
-  if (GlobalConfiguration.getBoolean("jobmanager.optimizer.enable",false)) {
-    final String optimizerClassName=GlobalConfiguration.getString("jobmanager.optimizer.classname",null);
-    if (optimizerClassName == null) {
-      LOG.error("Cannot find class name for the optimizer");
-      System.exit(FAILURERETURNCODE);
-    }
-    this.optimizer=loadOptimizer(optimizerClassName);
-  }
- else {
-    this.optimizer=null;
-    LOG.debug("Optimizer disabled");
   }
   Runtime.getRuntime().addShutdownHook(new JobManagerCleanUp(this));
 }

@@ -3,7 +3,6 @@
     LOG.error("Method 'deploy' called but list of vertices to be deployed is empty");
     return;
   }
-  final ExecutionGraph eg=verticesToBeDeployed.get(0).getExecutionGraph();
   for (  final ExecutionVertex vertex : verticesToBeDeployed) {
     if (vertex.getExecutionState() != ExecutionState.READY) {
       LOG.error("Expected vertex " + vertex + " to be in state READY but it is in state "+ vertex.getExecutionState());
@@ -23,7 +22,7 @@
       }
       final List<TaskSubmissionWrapper> submissionList=new SerializableArrayList<TaskSubmissionWrapper>();
       for (      final ExecutionVertex vertex : verticesToBeDeployed) {
-        submissionList.add(new TaskSubmissionWrapper(vertex.getID(),vertex.getEnvironment(),vertex.getExecutionGraph().getJobConfiguration(),vertex.constructInitialActiveOutputChannelsSet()));
+        submissionList.add(new TaskSubmissionWrapper(vertex.getID(),vertex.getEnvironment(),vertex.getExecutionGraph().getJobConfiguration(),vertex.getCheckpointState(),vertex.constructInitialActiveOutputChannelsSet()));
         LOG.info("Starting task " + vertex + " on "+ vertex.getAllocatedResource().getInstance());
       }
       List<TaskSubmissionResult> submissionResultList=null;
@@ -56,7 +55,7 @@
             continue;
           }
         }
-        if (tsr.getReturnCode() == AbstractTaskResult.ReturnCode.ERROR) {
+        if (tsr.getReturnCode() != AbstractTaskResult.ReturnCode.SUCCESS) {
           vertex.updateExecutionState(ExecutionState.FAILED,tsr.getDescription());
         }
       }

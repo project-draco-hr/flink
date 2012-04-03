@@ -1,0 +1,131 @@
+{
+  final DocumentBuilderFactory docBuilderFactory=DocumentBuilderFactory.newInstance();
+  docBuilderFactory.setIgnoringComments(true);
+  docBuilderFactory.setNamespaceAware(true);
+  JobFailurePattern jobFailurePattern=null;
+  InputStream inputStream=null;
+  try {
+    inputStream=new FileInputStream(filename);
+    final DocumentBuilder builder=docBuilderFactory.newDocumentBuilder();
+    Document doc=null;
+    Element root=null;
+    doc=builder.parse(inputStream);
+    if (doc == null) {
+      throw new Exception("Document is null");
+    }
+    root=doc.getDocumentElement();
+    if (root == null) {
+      throw new Exception("Root element is null");
+    }
+    if (!"pattern".equals(root.getNodeName())) {
+      throw new Exception("Encountered unknown element " + root.getNodeName());
+    }
+    final NodeList patternChildren=root.getChildNodes();
+    for (int i=0; i < patternChildren.getLength(); ++i) {
+      final Node patternChild=patternChildren.item(i);
+      if (patternChild instanceof org.w3c.dom.Text) {
+        continue;
+      }
+      if (patternChild instanceof Element) {
+        final Element patternElement=(Element)patternChild;
+        if ("name".equals(patternElement.getNodeName())) {
+          final String name=extractValueFromElement(patternElement);
+          if (jobFailurePattern != null) {
+            throw new Exception("Element name detected more than once in the file");
+          }
+          jobFailurePattern=new JobFailurePattern(name);
+          continue;
+        }
+        if ("failures".equals(patternElement.getNodeName())) {
+          if (jobFailurePattern == null) {
+            throw new Exception("Expected pattern name to be stored before the failure events");
+          }
+          final NodeList failuresChildren=patternElement.getChildNodes();
+          for (int j=0; j < failuresChildren.getLength(); ++j) {
+            final Node failuresChild=failuresChildren.item(j);
+            if (failuresChild instanceof org.w3c.dom.Text) {
+              continue;
+            }
+            if (!(failuresChild instanceof Element)) {
+              throw new Exception("Expected type element as child of element 'failures'");
+            }
+            final Element failuresElement=(Element)failuresChild;
+            if (!"failure".equals(failuresElement.getNodeName())) {
+              throw new Exception("Expected element 'failure' as child of element 'failures'");
+            }
+            final String type=failuresElement.getAttribute("type");
+            if (type == null) {
+              throw new Exception("Element 'failure' lacks the attribute 'type'");
+            }
+            final boolean taskFailure=("task".equals(type));
+            String name=null;
+            String interval=null;
+            final NodeList failureChildren=failuresElement.getChildNodes();
+            for (int k=0; k < failureChildren.getLength(); ++k) {
+              final Node failureChild=failureChildren.item(k);
+              if (failureChild instanceof org.w3c.dom.Text) {
+                continue;
+              }
+              if (!(failureChild instanceof Element)) {
+                throw new Exception("Expected type element as child of element 'failure'");
+              }
+              final Element failureElement=(Element)failureChild;
+              if ("name".equals(failureElement.getNodeName())) {
+                name=extractValueFromElement(failureElement);
+              }
+              if ("interval".equals(failureElement.getNodeName())) {
+                interval=extractValueFromElement(failureElement);
+              }
+            }
+            if (name == null) {
+              throw new Exception("Could not find name for failure event " + j);
+            }
+            if (interval == null) {
+              throw new Exception("Could not find interval for failure event " + j);
+            }
+            int iv=0;
+            try {
+              iv=Integer.parseInt(interval);
+            }
+ catch (            NumberFormatException e) {
+              throw new Exception("Interval " + interval + " for failure event "+ j+ " is not an integer number");
+            }
+            if (iv <= 0) {
+              throw new Exception("Interval for failure event " + j + " must be greather than zero, but is "+ iv);
+            }
+            AbstractFailureEvent failureEvent=null;
+            if (taskFailure) {
+              failureEvent=new VertexFailureEvent(name,iv);
+            }
+ else {
+              failureEvent=new InstanceFailureEvent(name,iv);
+            }
+            jobFailurePattern.addEvent(failureEvent);
+          }
+          continue;
+        }
+        throw new Exception("Uncountered unecpted element " + patternElement.getNodeName());
+      }
+ else {
+        throw new Exception("Encountered unexpected child of type " + patternChild.getClass());
+      }
+    }
+  }
+ catch (  Exception e) {
+    final MessageBox messageBox=new MessageBox(this.shell,SWT.ICON_ERROR);
+    messageBox.setText("Cannot Load Failure Pattern");
+    messageBox.setMessage(e.getMessage());
+    messageBox.open();
+    return null;
+  }
+ finally {
+    if (inputStream != null) {
+      try {
+        inputStream.close();
+      }
+ catch (      Exception e) {
+      }
+    }
+  }
+  return jobFailurePattern;
+}
