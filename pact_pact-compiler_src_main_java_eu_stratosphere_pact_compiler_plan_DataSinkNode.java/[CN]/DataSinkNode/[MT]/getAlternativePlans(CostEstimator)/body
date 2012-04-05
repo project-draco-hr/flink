@@ -1,39 +1,22 @@
 {
   List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
-  final int inputSize=this.input.size();
-  @SuppressWarnings("unchecked") List<? extends OptimizerNode>[] inPlans=new List[inputSize];
-  for (int i=0; i < inputSize; ++i) {
-    inPlans[i]=this.input.get(i).getSourcePact().getAlternativePlans(estimator);
-  }
-  List<List<OptimizerNode>> alternativeSubPlanCominations=new ArrayList<List<OptimizerNode>>();
-  getAlternativeSubPlanCombinationsRecursively(inPlans,new ArrayList<OptimizerNode>(0),alternativeSubPlanCominations);
-  for (  List<OptimizerNode> predList : alternativeSubPlanCominations) {
-    if (!areBranchCompatible(predList,null)) {
-      continue;
-    }
+  List<? extends OptimizerNode> subPlans=this.getPredNode().getAlternativePlans(estimator);
+  for (  OptimizerNode subPlan : subPlans) {
     Ordering go=getPactContract().getGlobalOrder();
     Ordering lo=getPactContract().getLocalOrder();
     GlobalProperties gp;
     LocalProperties lp;
-    if (predList.size() == 1) {
-      gp=predList.get(0).getGlobalProperties().createCopy();
-      lp=predList.get(0).getLocalProperties().createCopy();
-    }
- else {
-      gp=new GlobalProperties();
-      lp=new LocalProperties();
-    }
+    gp=subPlan.getGlobalProperties().createCopy();
+    lp=subPlan.getLocalProperties().createCopy();
     ShipStrategy ss=null;
     LocalStrategy ls=null;
-    if (go != null && go != null) {
-      for (      PactConnection c : this.input) {
-        ShipStrategy s=c.getShipStrategy();
-        if (s == ShipStrategy.NONE || s == ShipStrategy.PARTITION_RANGE) {
-          ss=ShipStrategy.PARTITION_RANGE;
-        }
+    if (go != null && lo != null) {
+      ShipStrategy s=this.input.getShipStrategy();
+      if (s == ShipStrategy.NONE || s == ShipStrategy.PARTITION_RANGE) {
+        ss=ShipStrategy.PARTITION_RANGE;
+      }
  else {
-          continue;
-        }
+        continue;
       }
       if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
         ls=LocalStrategy.SORT;
@@ -41,11 +24,7 @@
  else {
         continue;
       }
-      int[] fieldSet=new int[go.getInvolvedIndexes().size()];
-      for (int i=0; i < 0; i++) {
-        fieldSet[i]=go.getInvolvedIndexes().get(i);
-      }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,fieldSet);
+      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,go.getInvolvedFields());
       gp.setOrdering(go);
       lp.setOrdering(go);
     }
@@ -62,10 +41,8 @@
     if (ss == null) {
       ss=ShipStrategy.FORWARD;
     }
-    DataSinkNode ns=new DataSinkNode(this,predList,this.input,gp,lp);
-    for (    PactConnection cc : ns.getInputConnections()) {
-      cc.setShipStrategy(ss);
-    }
+    DataSinkNode ns=new DataSinkNode(this,subPlan,this.input,gp,lp);
+    ns.input.setShipStrategy(ss);
     if (ls == null) {
       ls=LocalStrategy.NONE;
     }
