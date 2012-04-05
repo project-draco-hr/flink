@@ -1,0 +1,36 @@
+{
+  final Thread executingThread=this.environment.getExecutingThread();
+  if (executingThread == null) {
+    return;
+  }
+  if (this.executionState != ExecutionState.RUNNING && this.executionState != ExecutionState.REPLAYING && this.executionState != ExecutionState.FINISHING) {
+    return;
+  }
+  LOG.info((cancel ? "Canceling " : "Killing ") + this.environment.getTaskNameWithIndex());
+  if (cancel) {
+    this.isCanceled=true;
+    executionStateChanged(ExecutionState.CANCELING,null);
+    try {
+      final AbstractInvokable invokable=this.environment.getInvokable();
+      if (invokable != null) {
+        invokable.cancel();
+      }
+    }
+ catch (    Throwable e) {
+      LOG.error(StringUtils.stringifyException(e));
+    }
+  }
+  while (true) {
+    executingThread.interrupt();
+    if (!executingThread.isAlive()) {
+      break;
+    }
+    try {
+      Thread.sleep(100);
+    }
+ catch (    InterruptedException e) {
+      break;
+    }
+    LOG.info((cancel == true ? "Canceling " : "Killing ") + this.environment.getTaskName() + " with state "+ this.executionState);
+  }
+}

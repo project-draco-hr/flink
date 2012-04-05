@@ -1,12 +1,19 @@
 {
-  if (!this.writeMode) {
+  if (!this.writeMode.get()) {
     throw new IOException("Cannot write to buffer, buffer already switched to read mode");
   }
-  final int bytesToCopy=Math.min(src.remaining(),this.byteBuffer.remaining());
-  if (bytesToCopy == 0) {
-    return 0;
+  final int sourceRemaining=src.remaining();
+  final int thisRemaining=this.byteBuffer.remaining();
+  final int excess=sourceRemaining - thisRemaining;
+  if (excess <= 0) {
+    this.byteBuffer.put(src);
+    return sourceRemaining;
   }
-  this.byteBuffer.put(src.array(),src.position(),bytesToCopy);
-  src.position(src.position() + bytesToCopy);
-  return bytesToCopy;
+ else {
+    final int oldLimit=src.limit();
+    src.limit(src.position() + thisRemaining);
+    this.byteBuffer.put(src);
+    src.limit(oldLimit);
+    return thisRemaining;
+  }
 }

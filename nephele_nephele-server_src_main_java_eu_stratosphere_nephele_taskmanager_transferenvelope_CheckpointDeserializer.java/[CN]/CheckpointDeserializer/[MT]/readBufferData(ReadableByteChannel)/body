@@ -1,23 +1,16 @@
 {
   final ByteBuffer tempBuffer=getTempBuffer();
-  if (this.deserializedFileID == null) {
-    this.deserializedFileID=this.fileIDDeserializationBuffer.readData(null,readableByteChannel);
-    if (this.deserializedFileID != null) {
-      tempBuffer.position(0);
-      tempBuffer.limit(8);
-    }
- else {
-      return true;
-    }
+  if (!this.bufferDataSerializationStarted) {
+    tempBuffer.clear();
+    this.bufferDataSerializationStarted=true;
   }
   readableByteChannel.read(tempBuffer);
   if (tempBuffer.hasRemaining()) {
     return true;
   }
   final long offset=byteBufferToLong(tempBuffer);
-  final Buffer fileBuffer=BufferFactory.createFromCheckpoint(getSizeOfBuffer(),this.deserializedFileID,offset,this.ownerID,this.fileBufferManager);
+  final Buffer fileBuffer=BufferFactory.createFromCheckpoint(getSizeOfBuffer(),offset,this.ownerID,this.fileBufferManager,this.distributed);
   setBuffer(fileBuffer);
-  this.fileBufferManager.registerExternalReadableSpillingFile(this.ownerID,this.deserializedFileID);
-  this.deserializedFileID=null;
+  this.bufferDataSerializationStarted=false;
   return false;
 }

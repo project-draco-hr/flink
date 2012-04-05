@@ -1,11 +1,6 @@
 {
-  final InternalJobStatus jobStatus=executionGraph.getJobStatus();
-  if (jobStatus != InternalJobStatus.FINISHED) {
-    LOG.error("removeAllCheckpoints called for an unsuccesfull job, ignoring request");
-  }
-  final List<ExecutionVertex> verticesWithCheckpoints=executionGraph.getVerticesWithCheckpoints();
   final Map<AbstractInstance,SerializableArrayList<ExecutionVertexID>> instanceMap=new HashMap<AbstractInstance,SerializableArrayList<ExecutionVertexID>>();
-  final Iterator<ExecutionVertex> it=verticesWithCheckpoints.iterator();
+  final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(executionGraph,true);
   while (it.hasNext()) {
     final ExecutionVertex vertex=it.next();
     final AllocatedResource allocatedResource=vertex.getAllocatedResource();
@@ -31,11 +26,17 @@
       LOG.error("Cannot remove checkpoint: abstractInstance is null");
       continue;
     }
-    try {
-      abstractInstance.removeCheckpoints(entry.getValue());
+    final Runnable runnable=new Runnable(){
+      @Override public void run(){
+        try {
+          abstractInstance.removeCheckpoints(entry.getValue());
+        }
+ catch (        IOException ioe) {
+          LOG.error(StringUtils.stringifyException(ioe));
+        }
+      }
     }
- catch (    IOException ioe) {
-      LOG.error(StringUtils.stringifyException(ioe));
-    }
+;
+    this.executorService.execute(runnable);
   }
 }
