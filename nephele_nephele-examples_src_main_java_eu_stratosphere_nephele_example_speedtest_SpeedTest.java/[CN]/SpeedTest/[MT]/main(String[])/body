@@ -1,0 +1,118 @@
+{
+  if (args.length < 4) {
+    System.err.println("Insufficient number of arguments. Please provide <job manager address> <amount of data to send in GB> <number of subtasks> <number of subtasks per task> (<use forwarder>)");
+    System.exit(1);
+    return;
+  }
+  final String jobManagerAddress=args[0];
+  int amountOfDataToSend=0;
+  try {
+    amountOfDataToSend=Integer.parseInt(args[1]);
+  }
+ catch (  NumberFormatException e) {
+    System.err.println("Cannot parse amount of data to send. Please provide a positive integer value.");
+    System.exit(1);
+    return;
+  }
+  if (amountOfDataToSend <= 0 || amountOfDataToSend > 1024) {
+    System.err.println("Please provide an integer value between 1 and 1024 indicating the amount of data to send in GB.");
+    System.exit(1);
+    return;
+  }
+  int numberOfSubtasks=0;
+  try {
+    numberOfSubtasks=Integer.parseInt(args[2]);
+  }
+ catch (  NumberFormatException e) {
+    System.err.println("Cannot parse the number of subtasks. Please provide a positive integer value.");
+    System.exit(1);
+    return;
+  }
+  if (numberOfSubtasks <= 0) {
+    System.err.println("Please provide a positive integer value indicating the number of subtasks.");
+    System.exit(1);
+    return;
+  }
+  int numberOfSubtasksPerInstance=0;
+  try {
+    numberOfSubtasksPerInstance=Integer.parseInt(args[3]);
+  }
+ catch (  NumberFormatException e) {
+    System.err.println("Cannot parse the number of subtasks per instance. Please provide a positive integer value.");
+    System.exit(1);
+    return;
+  }
+  if (numberOfSubtasksPerInstance <= 0) {
+    System.err.println("Please provide a positive integer value indicating the number of subtasks per instance.");
+    System.exit(1);
+    return;
+  }
+  boolean useForwarder=false;
+  if (args.length >= 5) {
+    useForwarder=Boolean.parseBoolean(args[4]);
+  }
+  final JobGraph jobGraph=new JobGraph("Nephele Speed Test");
+  final JobGenericInputVertex producer=new JobGenericInputVertex("Speed Test Producer",jobGraph);
+  producer.setInputClass(SpeedTestProducer.class);
+  producer.setNumberOfSubtasks(numberOfSubtasks);
+  producer.setNumberOfSubtasksPerInstance(numberOfSubtasksPerInstance);
+  producer.getConfiguration().setInteger(DATA_VOLUME_CONFIG_KEY,amountOfDataToSend);
+  JobTaskVertex forwarder=null;
+  if (useForwarder) {
+    forwarder=new JobTaskVertex("Speed Test Forwarder",jobGraph);
+    forwarder.setTaskClass(SpeedTestForwarder.class);
+    forwarder.setNumberOfSubtasks(numberOfSubtasks);
+    forwarder.setNumberOfSubtasksPerInstance(numberOfSubtasksPerInstance);
+  }
+  final JobGenericOutputVertex consumer=new JobGenericOutputVertex("Speed Test Consumer",jobGraph);
+  consumer.setOutputClass(SpeedTestConsumer.class);
+  consumer.setNumberOfSubtasks(numberOfSubtasks);
+  consumer.setNumberOfSubtasksPerInstance(numberOfSubtasksPerInstance);
+  producer.setVertexToShareInstancesWith(consumer);
+  if (forwarder != null) {
+    forwarder.setVertexToShareInstancesWith(consumer);
+  }
+  try {
+    if (forwarder == null) {
+      producer.connectTo(consumer,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.BIPARTITE);
+    }
+ else {
+      producer.connectTo(forwarder,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.BIPARTITE);
+      forwarder.connectTo(consumer,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.BIPARTITE);
+    }
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+    System.exit(1);
+    return;
+  }
+  File jarFile=null;
+  try {
+    jarFile=File.createTempFile("speedtest","jar");
+    jarFile.deleteOnExit();
+    final JarFileCreator jfc=new JarFileCreator(jarFile);
+    jfc.addClass(SpeedTest.class);
+    jfc.addClass(SpeedTestProducer.class);
+    jfc.addClass(SpeedTestForwarder.class);
+    jfc.addClass(SpeedTestConsumer.class);
+    jfc.addClass(SpeedTestRecord.class);
+    jfc.createJarFile();
+    jobGraph.addJar(new Path("file://" + jarFile.getAbsolutePath()));
+    final Configuration clientConfiguration=new Configuration();
+    clientConfiguration.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,jobManagerAddress);
+    clientConfiguration.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
+    final JobClient jobClient=new JobClient(jobGraph,clientConfiguration);
+    final long executionTime=jobClient.submitJobAndWait();
+    System.out.print("Job finished with a throughput of " + toMBitPerSecond(amountOfDataToSend,executionTime));
+  }
+ catch (  IOException ioe) {
+    ioe.printStackTrace();
+    System.exit(1);
+    return;
+  }
+catch (  JobExecutionException jee) {
+    jee.printStackTrace();
+    System.exit(1);
+    return;
+  }
+}
