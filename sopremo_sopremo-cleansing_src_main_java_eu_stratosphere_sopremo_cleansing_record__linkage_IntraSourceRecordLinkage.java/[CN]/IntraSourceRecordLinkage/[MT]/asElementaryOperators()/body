@@ -1,0 +1,33 @@
+{
+  SopremoModule module=new SopremoModule(this.getName(),1,1);
+  RecordLinkageInput recordLinkageInput=this.getRecordLinkageInput(0).clone();
+  recordLinkageInput.setSource(module.getInput(0).getSource());
+  EvaluationExpression resultProjection=this.getRecordLinkageInput(0).getResultProjection();
+  if (this.getLinkageMode().ordinal() >= LinkageMode.TRANSITIVE_LINKS.ordinal() && !recordLinkageInput.getResultProjection().equals(recordLinkageInput.getIdProjection()))   recordLinkageInput.setResultProjection(recordLinkageInput.getIdProjection());
+  Operator<?> duplicatePairs;
+  if (this.getAlgorithm() instanceof IntraSourceRecordLinkageAlgorithm)   duplicatePairs=((IntraSourceRecordLinkageAlgorithm)this.getAlgorithm()).getIntraSource(this.getDuplicateCondition(),recordLinkageInput);
+ else   duplicatePairs=this.simulateIntraSource();
+  if (this.getLinkageMode() == LinkageMode.LINKS_ONLY) {
+    module.getOutput(0).setInput(0,duplicatePairs);
+    return module;
+  }
+  ClosureMode closureMode=this.getLinkageMode().getClosureMode();
+  if (closureMode.isCluster())   closureMode=ClosureMode.CLUSTER;
+  TransitiveClosure closure=new TransitiveClosure().withClosureMode(closureMode).withInputs(duplicatePairs);
+  Operator<?> output=closure;
+  if (recordLinkageInput.getResultProjection() != resultProjection) {
+    Replace reverseLookup=new Replace().withDictionaryKeyExtraction(this.getRecordLinkageInput(0).getIdProjection()).withDictionaryValueExtraction(this.getRecordLinkageInput(0).getResultProjection()).withArrayElementsReplacement(true).withInputs(output,module.getInput(0));
+    output=reverseLookup;
+  }
+  if (!this.getLinkageMode().isWithSingles()) {
+    module.getOutput(0).setInput(0,output);
+    return module;
+  }
+  ArraySplit allTuples=new ArraySplit().withInputs(closure).withArrayPath(EvaluationExpression.VALUE).withKeyProjection(new ArrayAccess(0)).withValueProjection(EvaluationExpression.NULL);
+  allTuples.setName("all tuples");
+  Difference singleRecords=new Difference().withInputs(module.getInput(0),allTuples).withIdentityKey(0,this.getRecordLinkageInput(0).getIdProjection()).withValueProjection(0,this.getRecordLinkageInput(0).getResultProjection()).withIdentityKey(1,EvaluationExpression.KEY);
+  singleRecords.setName("singleRecords");
+  final Projection wrappedInArray=new Projection().withValueTransformation(new ArrayCreation(EvaluationExpression.VALUE)).withInputs(singleRecords);
+  module.getOutput(0).setInput(0,new UnionAll().withInputs(wrappedInArray,output));
+  return module;
+}

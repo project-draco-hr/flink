@@ -1,0 +1,24 @@
+{
+  int noKeys=100;
+  int noKeyCnt=10000;
+  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+  MockRecordReader reader=new MockRecordReader();
+  LOG.debug("initializing sortmerger");
+  @SuppressWarnings("unchecked") SortMerger merger=new CombiningUnilateralSortMerger(new TestCountCombiner(),memoryManager,ioManager,64L * 1024 * 1024,64,new Comparator[]{keyComparator},new int[]{0},new Class[]{TestData.Key.class},reader,parentTask,0.7f,true);
+  final PactRecord rec=new PactRecord();
+  rec.setField(1,new PactInteger(1));
+  final TestData.Key key=new TestData.Key();
+  for (int i=0; i < noKeyCnt; i++) {
+    for (int j=0; j < noKeys; j++) {
+      key.setKey(j);
+      rec.setField(0,key);
+      reader.emit(rec);
+    }
+  }
+  reader.close();
+  MutableObjectIterator<PactRecord> iterator=merger.getIterator();
+  PactRecord target=new PactRecord();
+  while (iterator.next(target)) {
+    Assert.assertEquals(noKeyCnt,target.getField(1,PactInteger.class).getValue());
+  }
+}

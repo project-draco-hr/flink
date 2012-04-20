@@ -1,0 +1,34 @@
+{
+  int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String docsInput=(args.length > 1 ? args[1] : "");
+  String ranksInput=(args.length > 2 ? args[2] : "");
+  String visitsInput=(args.length > 3 ? args[3] : "");
+  String output=(args.length > 4 ? args[4] : "");
+  FileDataSource docs=new FileDataSource(LineInFormat.class,docsInput,"Docs Input");
+  docs.setDegreeOfParallelism(noSubTasks);
+  FileDataSource ranks=new FileDataSource(LineInFormat.class,ranksInput,"Ranks input");
+  ranks.setDegreeOfParallelism(noSubTasks);
+  FileDataSource visits=new FileDataSource(LineInFormat.class,visitsInput,"Visits input:q");
+  visits.setDegreeOfParallelism(noSubTasks);
+  MapContract filterDocs=new MapContract(FilterDocs.class,docs,"Filter Docs");
+  filterDocs.setDegreeOfParallelism(noSubTasks);
+  filterDocs.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.15f);
+  filterDocs.getCompilerHints().setAvgBytesPerRecord(60);
+  filterDocs.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  MapContract filterRanks=new MapContract(FilterRanks.class,ranks,"Filter Ranks");
+  filterRanks.setDegreeOfParallelism(noSubTasks);
+  filterRanks.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.25f);
+  filterRanks.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  MapContract filterVisits=new MapContract(FilterVisits.class,visits,"Filter Visits");
+  filterVisits.setDegreeOfParallelism(noSubTasks);
+  filterVisits.getCompilerHints().setAvgBytesPerRecord(60);
+  filterVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.2f);
+  MatchContract joinDocsRanks=new MatchContract(JoinDocRanks.class,PactString.class,0,0,filterDocs,filterRanks,"Join Docs Ranks");
+  joinDocsRanks.setDegreeOfParallelism(noSubTasks);
+  CoGroupContract antiJoinVisits=new CoGroupContract(AntiJoinVisits.class,PactString.class,0,0,joinDocsRanks,filterVisits,"Antijoin DocsVisits");
+  antiJoinVisits.setDegreeOfParallelism(noSubTasks);
+  antiJoinVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.8f);
+  FileDataSink result=new FileDataSink(WebLogAnalysisOutFormat.class,output,antiJoinVisits,"Result");
+  result.setDegreeOfParallelism(noSubTasks);
+  return new Plan(result,"Weblog Analysis");
+}

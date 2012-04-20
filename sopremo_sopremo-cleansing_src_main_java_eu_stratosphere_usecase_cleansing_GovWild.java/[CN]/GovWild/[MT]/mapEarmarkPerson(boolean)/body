@@ -1,0 +1,29 @@
+{
+  if (simulate) {
+    this.inputs[EARMARK][PERSON]=new Source(this.getInternalInputFormat(),String.format("%s/EarmarkPerson.json",this.outputDir));
+    return;
+  }
+  ObjectCreation projection=new ObjectCreation();
+  final BatchAggregationExpression batch=new BatchAggregationExpression();
+  projection.addMapping("id",new GenerateExpression("earmarkPerson%s"));
+  PathExpression first=new PathExpression(batch.add(DefaultFunctions.FIRST),new ObjectAccess("sponsorFirstName"));
+  PathExpression middle=new PathExpression(batch.add(DefaultFunctions.FIRST),new ObjectAccess("sponsorMiddleName"));
+  projection.addMapping("firstName",new TernaryExpression(middle,new MethodCall("format",new ConstantExpression("%s %s"),first,middle),first));
+  projection.addMapping("lastName",new PathExpression(batch.add(DefaultFunctions.FIRST),new TernaryExpression(new ObjectAccess("sponsorLastName"),new ObjectAccess("sponsorLastName"),new ObjectAccess("sponsorFirstName"))));
+  projection.addMapping("enactedFunds",batch.add(DefaultFunctions.SORT,new MethodCall("format",new ConstantExpression("earmark%s"),new ObjectAccess("earmarkId"))));
+  ObjectCreation address=new ObjectCreation();
+  address.addMapping("state",new ObjectAccess("sponsorStateCode"));
+  projection.addMapping("addresses",new MethodCall("distinct",batch.add(DefaultFunctions.ALL,address)));
+  ObjectCreation employment=new ObjectCreation();
+  employment.addMapping("legalEntity",new MethodCall("format",new ConstantExpression("congressLegalEntity%s"),new ObjectAccess("sponsorStateCode")));
+  employment.addMapping("startYear",new ConstantExpression(2008));
+  employment.addMapping("endYear",new ConstantExpression(2008));
+  employment.addMapping("position",new ObjectAccess("sponsorHonorific"));
+  if (this.scrubbed[EARMARK] == null)   this.scrubEarmark(true);
+  ComparativeExpression sponsorCondition=new ComparativeExpression(new ObjectAccess("recordType"),BinaryOperator.EQUAL,new ConstantExpression("C"));
+  Selection sponsors=new Selection().withInputs(this.scrubbed[EARMARK]).withCondition(sponsorCondition);
+  Grouping grouping=new Grouping().withInputs(sponsors).withGroupingKey(new ArrayCreation(new ObjectAccess("sponsorFirstName"),new ObjectAccess("sponsorMiddleName"),new ObjectAccess("sponsorLastName"))).withResultProjection(projection);
+  Operator<?> persons=grouping;
+  this.inputs[EARMARK][PERSON]=persons;
+  this.sinks.add(new Sink(this.getInternalOutputFormat(),String.format("%s/EarmarkPerson.json",this.outputDir)).withInputs(persons));
+}

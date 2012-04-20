@@ -1,0 +1,62 @@
+{
+  final String ordersPath;
+  final String lineitemsPath;
+  final String customersPath;
+  final String nationsPath;
+  final String resultPath;
+  final int degreeOfParallelism;
+  if (args.length < 6) {
+    throw new IllegalArgumentException("Invalid number of parameters");
+  }
+ else {
+    degreeOfParallelism=Integer.parseInt(args[0]);
+    ordersPath=args[1];
+    lineitemsPath=args[2];
+    customersPath=args[3];
+    nationsPath=args[4];
+    resultPath=args[5];
+  }
+  FileDataSource orders=new FileDataSource(IntTupleDataInFormat.class,ordersPath,"Orders");
+  orders.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  orders.setDegreeOfParallelism(degreeOfParallelism);
+  FileDataSource lineitems=new FileDataSource(IntTupleDataInFormat.class,lineitemsPath,"LineItems");
+  lineitems.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  lineitems.setDegreeOfParallelism(degreeOfParallelism);
+  FileDataSource customers=new FileDataSource(IntTupleDataInFormat.class,customersPath,"Customers");
+  customers.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  customers.setDegreeOfParallelism(degreeOfParallelism);
+  FileDataSource nations=new FileDataSource(IntTupleDataInFormat.class,nationsPath,"Nations");
+  nations.setParameter(TextInputFormat.RECORD_DELIMITER,"\n");
+  nations.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract mapO=new MapContract(FilterO.class,"FilterO");
+  mapO.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract mapLi=new MapContract(FilterLI.class,"FilterLi");
+  mapLi.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract projectC=new MapContract(ProjectC.class,"ProjectC");
+  projectC.setDegreeOfParallelism(degreeOfParallelism);
+  MapContract projectN=new MapContract(ProjectN.class,"ProjectN");
+  projectN.setDegreeOfParallelism(degreeOfParallelism);
+  MatchContract joinOL=new MatchContract(JoinOL.class,PactInteger.class,0,0,"JoinOL");
+  joinOL.setDegreeOfParallelism(degreeOfParallelism);
+  MatchContract joinCOL=new MatchContract(JoinCOL.class,PactInteger.class,0,0,"JoinCOL");
+  joinCOL.setDegreeOfParallelism(degreeOfParallelism);
+  MatchContract joinNCOL=new MatchContract(JoinNCOL.class,PactInteger.class,4,0,"JoinNCOL");
+  joinNCOL.setDegreeOfParallelism(degreeOfParallelism);
+  @SuppressWarnings("unchecked") ReduceContract reduce=new ReduceContract(Sum.class,new Class[]{PactInteger.class,PactString.class,PactString.class,PactString.class,PactString.class,PactString.class,PactString.class},new int[]{0,1,3,4,5,6,7},"Reduce");
+  reduce.setDegreeOfParallelism(degreeOfParallelism);
+  FileDataSink result=new FileDataSink(TupleOutputFormat.class,resultPath,"Output");
+  result.setDegreeOfParallelism(degreeOfParallelism);
+  result.setInput(reduce);
+  reduce.setInput(joinNCOL);
+  joinNCOL.setFirstInput(joinCOL);
+  joinNCOL.setSecondInput(projectN);
+  joinCOL.setFirstInput(projectC);
+  joinCOL.setSecondInput(joinOL);
+  joinOL.setFirstInput(mapO);
+  joinOL.setSecondInput(mapLi);
+  projectC.setInput(customers);
+  projectN.setInput(nations);
+  mapLi.setInput(lineitems);
+  mapO.setInput(orders);
+  return new Plan(result,"TPCH Q10");
+}

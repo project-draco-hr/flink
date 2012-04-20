@@ -1,0 +1,31 @@
+{
+  if (KeyGroupedIterator.this.next == null || KeyGroupedIterator.this.nextIsFresh) {
+    return false;
+  }
+  if (this.nextIsUnconsumed) {
+    return true;
+  }
+  try {
+    if (KeyGroupedIterator.this.iterator.next(this.bufferRec)) {
+      PactRecord tmp=this.bufferRec;
+      this.bufferRec=KeyGroupedIterator.this.next;
+      KeyGroupedIterator.this.next=tmp;
+      for (int i=0; i < KeyGroupedIterator.this.keyPositions.length; i++) {
+        Key k=tmp.getField(keyPositions[i],keyClasses[i]);
+        if (!(currentKeys[i].equals(k))) {
+          KeyGroupedIterator.this.nextIsFresh=true;
+          return false;
+        }
+      }
+      this.nextIsUnconsumed=true;
+      return true;
+    }
+ else {
+      KeyGroupedIterator.this.next=null;
+      return false;
+    }
+  }
+ catch (  IOException ioex) {
+    throw new RuntimeException("An error occurred while reading the next record: " + ioex.getMessage(),ioex);
+  }
+}

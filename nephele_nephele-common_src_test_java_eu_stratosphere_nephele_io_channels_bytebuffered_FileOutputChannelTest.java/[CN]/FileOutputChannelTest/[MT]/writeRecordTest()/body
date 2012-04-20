@@ -1,0 +1,34 @@
+{
+  final StringRecord record=new StringRecord("abc");
+  final Decompressor decompressorMock=mock(Decompressor.class);
+  this.uncompressedDataBuffer=mock(Buffer.class);
+  BufferPairResponse bufferPair=new BufferPairResponse(this.uncompressedDataBuffer,this.uncompressedDataBuffer);
+  PowerMockito.mockStatic(CompressionLoader.class);
+  when(CompressionLoader.getDecompressorByCompressionLevel(Matchers.any(CompressionLevel.class),Matchers.any(FileInputChannel.class))).thenReturn(decompressorMock);
+  @SuppressWarnings("unchecked") final OutputGate<StringRecord> outGate=mock(OutputGate.class);
+  final ByteBufferedOutputChannelBroker outputBroker=mock(ByteBufferedOutputChannelBroker.class);
+  when(outputBroker.requestEmptyWriteBuffers()).thenReturn(bufferPair);
+  when(outputBroker.hasDataLeftToTransmit()).thenReturn(true);
+  when(this.serializationBuffer.dataLeftFromPreviousSerialization()).thenReturn(false,false,true,true,false,false);
+  when(this.uncompressedDataBuffer.remaining()).thenReturn(0);
+  FileOutputChannel<StringRecord> fileOutputChannel=new FileOutputChannel<StringRecord>(outGate,1,null,CompressionLevel.NO_COMPRESSION);
+  fileOutputChannel.setByteBufferedOutputChannelBroker(outputBroker);
+  Whitebox.setInternalState(fileOutputChannel,"serializationBuffer",this.serializationBuffer);
+  try {
+    fileOutputChannel.writeRecord(record);
+  }
+ catch (  IOException e) {
+    fail();
+    e.printStackTrace();
+  }
+  fileOutputChannel.requestClose();
+  assertEquals(false,fileOutputChannel.isClosed());
+  when(outputBroker.hasDataLeftToTransmit()).thenReturn(false);
+  assertEquals(true,fileOutputChannel.isClosed());
+  try {
+    fileOutputChannel.writeRecord(record);
+    fail();
+  }
+ catch (  IOException e) {
+  }
+}

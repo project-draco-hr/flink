@@ -1,0 +1,96 @@
+{
+synchronized (this) {
+    if (this.closed) {
+      return;
+    }
+    this.closed=true;
+  }
+  try {
+synchronized (this.iteratorLock) {
+      if (this.iterator == null && this.iteratorException == null) {
+        this.iteratorException=new IOException("The sort-merger has been closed.");
+        this.iteratorLock.notifyAll();
+      }
+    }
+    if (this.readThread != null) {
+      try {
+        this.readThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down reader thread: " + t.getMessage(),t);
+      }
+    }
+    if (this.sortThread != null) {
+      try {
+        this.sortThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down sorter thread: " + t.getMessage(),t);
+      }
+    }
+    if (this.spillThread != null) {
+      try {
+        this.spillThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down spilling thread: " + t.getMessage(),t);
+      }
+    }
+    try {
+      if (this.readThread != null) {
+        this.readThread.join();
+      }
+      if (this.sortThread != null) {
+        this.sortThread.join();
+      }
+      if (this.spillThread != null) {
+        this.spillThread.join();
+      }
+    }
+ catch (    InterruptedException iex) {
+      LOG.debug("Closing of sort/merger was interrupted. " + "The reading/sorting/spilling threads may still be working.",iex);
+    }
+  }
+  finally {
+    try {
+      while (!this.memoryToReleaseAtShutdown.isEmpty()) {
+        try {
+          List<MemorySegment> segments=this.memoryToReleaseAtShutdown.remove(this.memoryToReleaseAtShutdown.size() - 1);
+          this.memoryManager.release(segments);
+        }
+ catch (        Throwable t) {
+        }
+      }
+      this.memoryToReleaseAtShutdown.clear();
+    }
+ catch (    Throwable t) {
+    }
+    try {
+      for (      NormalizedKeySorter<?> sorter : this.sortBuffers) {
+        this.memoryManager.release(sorter.dispose());
+      }
+      this.sortBuffers.clear();
+    }
+ catch (    Throwable t) {
+    }
+    while (!this.openChannels.isEmpty()) {
+      try {
+        BlockChannelAccess<?,?> channel=this.openChannels.remove(this.openChannels.size() - 1);
+        if (!channel.isClosed())         channel.close();
+        channel.deleteChannel();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    for (    Channel.ID channel : this.channelsToDeleteAtShutdown) {
+      try {
+        final File f=new File(channel.getPath());
+        if (f.exists()) {
+          f.delete();
+        }
+      }
+ catch (      Throwable t) {
+      }
+    }
+  }
+}

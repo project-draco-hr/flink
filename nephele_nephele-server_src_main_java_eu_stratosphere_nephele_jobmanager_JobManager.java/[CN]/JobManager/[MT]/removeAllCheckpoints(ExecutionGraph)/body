@@ -1,0 +1,42 @@
+{
+  final Map<AbstractInstance,SerializableArrayList<ExecutionVertexID>> instanceMap=new HashMap<AbstractInstance,SerializableArrayList<ExecutionVertexID>>();
+  final Iterator<ExecutionVertex> it=new ExecutionGraphIterator(executionGraph,true);
+  while (it.hasNext()) {
+    final ExecutionVertex vertex=it.next();
+    final AllocatedResource allocatedResource=vertex.getAllocatedResource();
+    if (allocatedResource == null) {
+      continue;
+    }
+    final AbstractInstance abstractInstance=allocatedResource.getInstance();
+    if (abstractInstance == null) {
+      continue;
+    }
+    SerializableArrayList<ExecutionVertexID> vertexIDs=instanceMap.get(abstractInstance);
+    if (vertexIDs == null) {
+      vertexIDs=new SerializableArrayList<ExecutionVertexID>();
+      instanceMap.put(abstractInstance,vertexIDs);
+    }
+    vertexIDs.add(vertex.getID());
+  }
+  final Iterator<Map.Entry<AbstractInstance,SerializableArrayList<ExecutionVertexID>>> it2=instanceMap.entrySet().iterator();
+  while (it2.hasNext()) {
+    final Map.Entry<AbstractInstance,SerializableArrayList<ExecutionVertexID>> entry=it2.next();
+    final AbstractInstance abstractInstance=entry.getKey();
+    if (abstractInstance == null) {
+      LOG.error("Cannot remove checkpoint: abstractInstance is null");
+      continue;
+    }
+    final Runnable runnable=new Runnable(){
+      @Override public void run(){
+        try {
+          abstractInstance.removeCheckpoints(entry.getValue());
+        }
+ catch (        IOException ioe) {
+          LOG.error(StringUtils.stringifyException(ioe));
+        }
+      }
+    }
+;
+    this.executorService.execute(runnable);
+  }
+}

@@ -1,0 +1,21 @@
+{
+  final ExecutionGraph eg=MockTaskManager.INSTANCE.jobGraphs.get(this.environment.getJobID());
+  if (eg == null) {
+    LOG.error("Cannot find execution graph for ID " + this.environment.getJobID() + " to change state to "+ executionState);
+    return;
+  }
+  final ExecutionVertex vertex=eg.getVertexByID(this.id);
+  if (vertex == null) {
+    LOG.error("Cannot find vertex with ID " + this.id + " of job "+ eg.getJobID()+ " to change state to "+ executionState);
+    return;
+  }
+  final Runnable taskStateChangeRunnable=new Runnable(){
+    @Override public void run(){
+      vertex.updateExecutionState(executionState,optionalMessage);
+    }
+  }
+;
+  ConcurrentUtil.invokeLater(taskStateChangeRunnable);
+  eg.executionStateChanged(this.environment.getJobID(),this.id,executionState,optionalMessage);
+  if (executionState == ExecutionState.CANCELED || executionState == ExecutionState.FINISHED || executionState == ExecutionState.FAILED)   MockTaskManager.this.finishedTasks.add(this.environment);
+}

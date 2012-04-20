@@ -1,0 +1,70 @@
+{
+  Buffer.Input buffer=this.currentBuffer;
+  if (buffer == null) {
+    if (this.inputWrapper.getCurrentInput() != null) {
+      buffer=this.inputWrapper.getCurrentInput();
+      this.currentBuffer=buffer;
+      this.inputWrapper.setCurrentInput(null);
+    }
+ else     if (this.closed) {
+      throw new IllegalStateException("Reader has been closed.");
+    }
+ else     if (this.done) {
+      return false;
+    }
+ else {
+      try {
+        buffer=this.nextBuffer();
+        this.currentBuffer=buffer;
+      }
+ catch (      InterruptedException iex) {
+        throw new IOException("IO channel corrupt. Reader was interrupted getting a new buffer.");
+      }
+    }
+  }
+  if (buffer.read(readable)) {
+    return true;
+  }
+ else {
+    checkErroneous();
+    boolean remainingBytes=buffer.getRemainingBytes() > 0;
+    if (remainingBytes) {
+      this.inputWrapper.setRemainingInput(buffer);
+    }
+    if (!this.allRead) {
+      if (this.requestQueue.isClosed()) {
+        throw new IOException("The reader's IO path has been closed.");
+      }
+      this.requestQueue.add(new BufferReadRequest(this,buffer));
+    }
+ else {
+      this.returnBuffers.add(buffer);
+    }
+    try {
+      buffer=nextBuffer();
+      checkErroneous();
+      if (buffer.getRemainingBytes() == 0) {
+        this.done=true;
+        this.returnBuffers.add(buffer);
+        this.currentBuffer=null;
+        if (remainingBytes) {
+          throw new IOException("Channel ends with an incomplete record.");
+        }
+        return false;
+      }
+      if (remainingBytes) {
+        this.inputWrapper.setCurrentInput(buffer);
+        this.currentBuffer=null;
+        readable.read(this.inputWrapperReader);
+        return true;
+      }
+ else {
+        this.currentBuffer=buffer;
+        return buffer.read(readable);
+      }
+    }
+ catch (    InterruptedException iex) {
+      throw new IOException("IO channel corrupt. Reader was interrupted getting a new buffer.");
+    }
+  }
+}

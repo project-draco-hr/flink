@@ -1,0 +1,18 @@
+{
+  final FailingJobRecord record=new FailingJobRecord();
+  boolean failing=false;
+  final int failAfterRecord=getTaskConfiguration().getInteger(FAILED_AFTER_RECORD_KEY,-1);
+synchronized (FAILED_ONCE) {
+    failing=(getIndexInSubtaskGroup() == getTaskConfiguration().getInteger(FAILURE_INDEX_KEY,-1)) && FAILED_ONCE.add(getEnvironment().getTaskName());
+  }
+  int count=0;
+  while (this.recordReader.next(record)) {
+    this.recordWriter.emit(record);
+    if (count++ == failAfterRecord && failing) {
+      throw new RuntimeException("Runtime exception in " + getEnvironment().getTaskName() + " "+ getIndexInSubtaskGroup());
+    }
+    if (this.isCanceled) {
+      break;
+    }
+  }
+}

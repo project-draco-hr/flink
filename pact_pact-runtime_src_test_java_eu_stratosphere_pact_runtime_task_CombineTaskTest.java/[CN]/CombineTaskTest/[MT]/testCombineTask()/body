@@ -1,0 +1,30 @@
+{
+  int keyCnt=100;
+  int valCnt=20;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new RegularlyGeneratedInputGenerator(keyCnt,valCnt,false),1);
+  super.addOutput(this.outList);
+  CombineTask testTask=new CombineTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
+  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(2);
+  super.getTaskConfig().setLocalStrategyKeyTypes(0,new int[]{0});
+  super.getTaskConfig().setLocalStrategyKeyTypes(new Class[]{PactInteger.class});
+  super.registerTask(testTask,MockCombiningReduceStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ keyCnt,this.outList.size() == keyCnt);
+  for (  PactRecord record : this.outList) {
+    Assert.assertTrue("Incorrect result",record.getField(1,PactInteger.class).getValue() == expSum);
+  }
+  this.outList.clear();
+}

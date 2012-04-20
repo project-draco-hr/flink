@@ -1,0 +1,27 @@
+{
+  ExtendedManagementProtocol jobManagerConnection=null;
+  try {
+    jobManagerConnection=(ExtendedManagementProtocol)RPC.getProxy(ExtendedManagementProtocol.class,this.jobManagerAddress,NetUtils.getSocketFactory());
+    this.instances=jobManagerConnection.getMapOfAvailableInstanceTypes();
+    if (this.instances == null) {
+      throw new IOException("Returned instance map was <null>");
+    }
+  }
+ catch (  Throwable t) {
+    this.error=t;
+  }
+ finally {
+synchronized (this.lock) {
+      this.lock.notifyAll();
+    }
+    if (jobManagerConnection != null) {
+      try {
+        RPC.stopProxy(jobManagerConnection);
+      }
+ catch (      Throwable t) {
+        LOG.error("Could not cleanly shut down connection from compiler to job manager,",t);
+      }
+    }
+    jobManagerConnection=null;
+  }
+}

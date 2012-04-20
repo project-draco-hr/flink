@@ -1,0 +1,25 @@
+{
+  final MapContract mc=((MapNode)mapNode).getPactContract();
+  final JobTaskVertex mapVertex;
+  final TaskConfig mapConfig;
+  if (isChainable(mapNode)) {
+    mapVertex=null;
+    mapConfig=new TaskConfig(new Configuration());
+    this.chainedTasks.put(mapNode,new TaskInChain(ChainedMapTask.class,mapConfig,mc.getName()));
+  }
+ else {
+    mapVertex=new JobTaskVertex(mapNode.getPactContract().getName(),this.jobGraph);
+    mapVertex.setTaskClass(MapTask.class);
+    mapConfig=new TaskConfig(mapVertex.getConfiguration());
+  }
+  mapConfig.setStubClass(mc.getUserCodeClass());
+switch (mapNode.getLocalStrategy()) {
+case NONE:
+    mapConfig.setLocalStrategy(LocalStrategy.NONE);
+  break;
+default :
+throw new CompilerException("Invalid local strategy for 'Map' (" + mapNode.getName() + "): "+ mapNode.getLocalStrategy());
+}
+mapConfig.setStubParameters(mapNode.getPactContract().getParameters());
+return mapVertex;
+}

@@ -1,0 +1,34 @@
+{
+  final SopremoModule sopremoModule=new SopremoModule(this.getName(),2,1);
+  JsonStream input=sopremoModule.getInput(0);
+  JsonStream nullInput=sopremoModule.getInput(1);
+  final GenerateMatrix filledMatrix=new GenerateMatrix().withInputs(input,nullInput);
+  filledMatrix.setNumberOfPartitions(this.numberOfPartitions);
+  Phase1[] phase1=new Phase1[this.numberOfPartitions];
+  Phase2[] phase2=new Phase2[this.numberOfPartitions];
+  Phase3[] phase3=new Phase3[this.numberOfPartitions];
+  UnionAll itOutput[]=new UnionAll[this.numberOfPartitions];
+  for (int i=0; i < this.numberOfPartitions; i++) {
+    JsonStream inputStream=i == 0 ? filledMatrix : phase3[i - 1];
+    phase1[i]=new Phase1().withInputs(inputStream);
+    phase1[i].setIterationStep(i);
+    phase2[i]=new Phase2().withInputs(phase1[i]);
+    phase2[i].setIterationStep(i);
+    phase3[i]=new Phase3().withInputs(phase2[i]);
+    phase3[i].setNumberOfPartitions(i);
+  }
+  final EmitMatrix result;
+  if (this.phase == 1) {
+    result=new EmitMatrix().withInputs(phase1);
+  }
+ else {
+    if (this.phase == 2) {
+      result=new EmitMatrix().withInputs(phase2);
+    }
+ else {
+      result=new EmitMatrix().withInputs(phase3);
+    }
+  }
+  sopremoModule.getOutput(0).setInput(0,result);
+  return sopremoModule;
+}

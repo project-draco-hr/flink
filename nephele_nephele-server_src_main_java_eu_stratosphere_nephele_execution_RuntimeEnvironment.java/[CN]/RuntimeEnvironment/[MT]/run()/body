@@ -1,0 +1,54 @@
+{
+  if (invokable == null) {
+    LOG.fatal("ExecutionEnvironment has no Invokable set");
+  }
+  changeExecutionState(ExecutionState.RUNNING,null);
+  if (this.executionObserver.isCanceled()) {
+    changeExecutionState(ExecutionState.CANCELED,null);
+    return;
+  }
+  try {
+    activateInputChannels();
+    this.invokable.invoke();
+    if (this.executionObserver.isCanceled()) {
+      throw new InterruptedException();
+    }
+  }
+ catch (  Exception e) {
+    if (!this.executionObserver.isCanceled()) {
+      try {
+        this.invokable.cancel();
+      }
+ catch (      Exception e2) {
+        LOG.error(StringUtils.stringifyException(e2));
+      }
+    }
+    releaseAllChannelResources();
+    if (this.executionObserver.isCanceled()) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
+    return;
+  }
+  changeExecutionState(ExecutionState.FINISHING,null);
+  try {
+    closeInputGates();
+    requestAllOutputGatesToClose();
+    waitForInputChannelsToBeClosed();
+    waitForOutputChannelsToBeClosed();
+  }
+ catch (  Exception e) {
+    releaseAllChannelResources();
+    if (this.executionObserver.isCanceled()) {
+      changeExecutionState(ExecutionState.CANCELED,null);
+    }
+ else {
+      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(e));
+    }
+    return;
+  }
+  releaseAllChannelResources();
+  changeExecutionState(ExecutionState.FINISHED,null);
+}

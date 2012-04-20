@@ -1,0 +1,30 @@
+{
+  LOG.info("Receiving multicast receiver request from " + caller + " channel ID: "+ sourceChannelID);
+  if (this.cachedTrees.containsKey(sourceChannelID)) {
+    LOG.info("Replying with cached entry...");
+    return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
+  }
+ else {
+    if (!checkIfAllTargetVerticesExist(caller,jobID,sourceChannelID)) {
+      LOG.info("Received multicast request but not all receivers found.");
+      return ConnectionInfoLookupResponse.createReceiverNotFound();
+    }
+    if (!checkIfAllTargetVerticesReady(caller,jobID,sourceChannelID)) {
+      LOG.info("Received multicast request but not all receivers ready.");
+      return ConnectionInfoLookupResponse.createReceiverNotReady();
+    }
+    LinkedList<TreeNode> treenodes=extractTreeNodes(caller,jobID,sourceChannelID,this.randomized);
+    if (this.usehardcodedtree) {
+      LOG.info("Creating a hard-coded tree topology from file: " + hardcodedtreefilepath);
+      cachedTrees.put(sourceChannelID,createHardCodedTree(treenodes));
+      return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
+    }
+    if (this.usepenalties && this.penaltyfilepath != null) {
+      LOG.info("reading penalty file from: " + this.penaltyfilepath);
+      File f=new File(this.penaltyfilepath);
+      readPenalitesFromFile(f,treenodes);
+    }
+    cachedTrees.put(sourceChannelID,createDefaultTree(treenodes,this.treebranching));
+    return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
+  }
+}

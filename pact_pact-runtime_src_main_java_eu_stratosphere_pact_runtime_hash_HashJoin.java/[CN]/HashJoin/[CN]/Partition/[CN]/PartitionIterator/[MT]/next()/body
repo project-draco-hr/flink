@@ -1,0 +1,27 @@
+{
+  final int pos=this.currentSeg.getPosition();
+  if (pos < this.currentEnd) {
+    this.currentPointer=(((long)this.currentSegNum) << 32) | pos;
+    try {
+      this.record.read(this.currentSeg);
+      this.record.getFieldsInto(this.keyPositions,this.keyHolders);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while deserializing record from spilled buffer. " + "Probably cause: Bad Serialization code.",e);
+    }
+    return true;
+  }
+ else {
+    this.currentSegNum++;
+    if (this.currentSegNum < Partition.this.inMemoryBuffers.size()) {
+      final MemorySegment seg=Partition.this.inMemoryBuffers.get(this.currentSegNum);
+      this.currentSeg=seg.inputView;
+      this.currentSeg.setPosition(PARTITION_BLOCK_HEADER_LEN);
+      this.currentEnd=seg.getInt(PARTITION_BLOCK_SIZE_OFFSET);
+      return next();
+    }
+ else {
+      return false;
+    }
+  }
+}

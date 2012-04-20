@@ -1,0 +1,53 @@
+{
+  TransferEnvelopeReceiverList receiverList=this.receiverCache.get(sourceChannelID);
+  if (receiverList == null) {
+    try {
+      while (true) {
+        if (Thread.currentThread().isInterrupted()) {
+          break;
+        }
+        ConnectionInfoLookupResponse lookupResponse;
+synchronized (this.channelLookupService) {
+          lookupResponse=this.channelLookupService.lookupConnectionInfo(this.localConnectionInfo,jobID,sourceChannelID);
+        }
+        if (lookupResponse.receiverNotFound()) {
+          LOG.error("Cannot find task(s) waiting for data from source channel with ID " + sourceChannelID);
+          break;
+        }
+        if (lookupResponse.receiverNotReady()) {
+          Thread.sleep(500);
+          continue;
+        }
+        if (lookupResponse.receiverReady()) {
+          receiverList=new TransferEnvelopeReceiverList(lookupResponse);
+          break;
+        }
+      }
+    }
+ catch (    Exception e) {
+    }
+  }
+  if (receiverList != null) {
+    this.receiverCache.put(sourceChannelID,receiverList);
+    if (LOG.isDebugEnabled()) {
+      final StringBuilder sb=new StringBuilder();
+      sb.append("Receiver list for source channel ID " + sourceChannelID + " at task manager "+ this.localConnectionInfo+ "\n");
+      if (receiverList.hasLocalReceivers()) {
+        sb.append("\tLocal receivers:\n");
+        final Iterator<ChannelID> it=receiverList.getLocalReceivers().iterator();
+        while (it.hasNext()) {
+          sb.append("\t\t" + it.next() + "\n");
+        }
+      }
+      if (receiverList.hasRemoteReceivers()) {
+        sb.append("Remote receivers:\n");
+        final Iterator<InetSocketAddress> it=receiverList.getRemoteReceivers().iterator();
+        while (it.hasNext()) {
+          sb.append("\t\t" + it.next() + "\n");
+        }
+      }
+      LOG.debug(sb.toString());
+    }
+  }
+  return receiverList;
+}

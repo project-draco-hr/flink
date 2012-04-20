@@ -1,0 +1,38 @@
+{
+  int keyCnt=20;
+  int valCnt=4;
+  super.initEnvironment(1);
+  super.addOutput(new NirvanaOutputList());
+  try {
+    InputFilePreparator.prepareInputFile(new RegularlyGeneratedInputGenerator(keyCnt,valCnt,false),this.tempTestPath,false);
+  }
+ catch (  IOException e1) {
+    Assert.fail("Unable to set-up test input file");
+  }
+  final DataSourceTask testTask=new DataSourceTask();
+  super.registerFileInputTask(testTask,MockDelayingInputFormat.class,"file://" + this.tempTestPath,"\n");
+  Thread taskRunner=new Thread(){
+    @Override public void run(){
+      try {
+        testTask.invoke();
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+        Assert.fail("Task threw exception although it was properly canceled");
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(1,taskRunner,testTask);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+  File tempTestFile=new File(this.tempTestPath);
+  Assert.assertTrue("Temp output file does not exist",tempTestFile.exists());
+}

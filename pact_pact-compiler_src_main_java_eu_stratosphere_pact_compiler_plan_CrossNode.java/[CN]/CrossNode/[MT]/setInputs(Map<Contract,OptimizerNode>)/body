@@ -1,0 +1,42 @@
+{
+  super.setInputs(contractToNode);
+  ShipStrategy firstSS=this.input1.get(0).getShipStrategy();
+  for (  PactConnection c : this.input1) {
+    if (c.getShipStrategy() != firstSS)     throw new CompilerException("Invalid specification of fixed shipping strategies for first input of Cross contract '" + getPactContract().getName() + "' (all shipping strategies must be equal of a single input).");
+  }
+  ShipStrategy secondSS=this.input2.get(0).getShipStrategy();
+  for (  PactConnection c : this.input2) {
+    if (c.getShipStrategy() != secondSS)     throw new CompilerException("Invalid specification of fixed shipping strategies for second input of Cross contract '" + getPactContract().getName() + "' (all shipping strategies must be equal of a single input).");
+  }
+  List<PactConnection> other=null;
+  List<PactConnection> toAdjust=null;
+  if (firstSS != ShipStrategy.NONE) {
+    if (secondSS == ShipStrategy.NONE) {
+      toAdjust=this.input2;
+      other=this.input1;
+    }
+ else {
+      if (!((firstSS == ShipStrategy.BROADCAST && secondSS == ShipStrategy.FORWARD) || (firstSS == ShipStrategy.FORWARD && secondSS == ShipStrategy.BROADCAST) || (firstSS == ShipStrategy.SFR && secondSS == ShipStrategy.SFR))) {
+        throw new CompilerException("Invalid combination of fixed shipping strategies for Cross contract '" + getPactContract().getName() + "'.");
+      }
+    }
+  }
+ else   if (secondSS != ShipStrategy.NONE) {
+    toAdjust=this.input1;
+    other=this.input2;
+  }
+  if (toAdjust != null) {
+    if (other.get(0).getShipStrategy() == ShipStrategy.BROADCAST) {
+      for (      PactConnection c : toAdjust)       c.setShipStrategy(ShipStrategy.FORWARD);
+    }
+ else     if (other.get(0).getShipStrategy() == ShipStrategy.FORWARD) {
+      for (      PactConnection c : toAdjust)       c.setShipStrategy(ShipStrategy.BROADCAST);
+    }
+ else     if (other.get(0).getShipStrategy() == ShipStrategy.SFR) {
+      for (      PactConnection c : toAdjust)       c.setShipStrategy(ShipStrategy.SFR);
+    }
+ else {
+      throw new CompilerException("Invalid shipping strategy for Cross contract '" + getPactContract().getName() + "': "+ other.get(0).getShipStrategy());
+    }
+  }
+}

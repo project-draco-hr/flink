@@ -1,0 +1,22 @@
+{
+  final ReduceContract rc=combineNode.getPactContract();
+  final JobTaskVertex combineVertex;
+  final TaskConfig combineConfig;
+  if (isChainable(combineNode)) {
+    combineVertex=null;
+    combineConfig=new TaskConfig(new Configuration());
+    this.chainedTasks.put(combineNode,new TaskInChain(ChainedCombineTask.class,combineConfig,"Combiner for " + rc.getName()));
+  }
+ else {
+    combineVertex=new JobTaskVertex("Combiner for " + combineNode.getPactContract().getName(),this.jobGraph);
+    combineVertex.setTaskClass(CombineTask.class);
+    combineConfig=new TaskConfig(combineVertex.getConfiguration());
+  }
+  combineConfig.setStubClass(combineNode.getPactContract().getUserCodeClass());
+  combineConfig.setLocalStrategy(LocalStrategy.COMBININGSORT);
+  combineConfig.setLocalStrategyKeyTypes(0,combineNode.getPactContract().getKeyColumnNumbers(0));
+  combineConfig.setLocalStrategyKeyTypes(combineNode.getPactContract().getKeyClasses());
+  assignMemory(combineConfig,combineNode.getMemoryPerTask());
+  combineConfig.setStubParameters(combineNode.getPactContract().getParameters());
+  return combineVertex;
+}

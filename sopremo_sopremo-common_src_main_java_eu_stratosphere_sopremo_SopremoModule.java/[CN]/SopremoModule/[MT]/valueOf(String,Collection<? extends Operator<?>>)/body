@@ -1,0 +1,24 @@
+{
+  final List<Operator<?>> inputs=new ArrayList<Operator<?>>();
+  OneTimeTraverser.INSTANCE.traverse(sinks,OperatorNavigator.INSTANCE,new GraphTraverseListener<Operator<?>>(){
+    @Override public void nodeTraversed(    final Operator<?> node){
+      if (node instanceof Source)       inputs.add(node);
+ else       for (      final JsonStream input : node.getInputs())       if (input == null)       inputs.add(node);
+    }
+  }
+);
+  final SopremoModule module=new SopremoModule(name,inputs.size(),sinks.size());
+  int sinkIndex=0;
+  for (  final Operator<?> sink : sinks) {
+    if (sink instanceof Sink)     module.outputNodes[sinkIndex]=(Sink)sink;
+ else     module.getOutput(sinkIndex).setInput(0,sink);
+    sinkIndex++;
+  }
+  for (int operatorIndex=0, moduleIndex=0; operatorIndex < inputs.size(); operatorIndex++) {
+    final Operator<?> operator=inputs.get(operatorIndex);
+    final List<JsonStream> operatorInputs=new ArrayList<JsonStream>(operator.getInputs());
+    for (int inputIndex=0; inputIndex < operatorInputs.size(); inputIndex++)     if (operatorInputs.get(inputIndex) == null)     operatorInputs.set(inputIndex,module.getInput(moduleIndex++).getOutput(0));
+    operator.setInputs(operatorInputs);
+  }
+  return module;
+}

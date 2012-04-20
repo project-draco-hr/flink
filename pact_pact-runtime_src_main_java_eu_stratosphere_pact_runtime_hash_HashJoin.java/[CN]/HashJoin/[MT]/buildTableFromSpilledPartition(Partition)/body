@@ -1,0 +1,53 @@
+{
+  final int nextRecursionLevel=p.recursionLevel + 1;
+  if (nextRecursionLevel > MAX_RECURSION_DEPTH) {
+    throw new RuntimeException("Hash join exceeded maximum number of recursions, without reducing " + "partitions enough to be memory resident. Probably cause: Too many duplicate keys.");
+  }
+  final Key[] keyHolders=this.keyHolders;
+  final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
+  if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
+    throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
+  }
+  long numBuckets=(p.buildSideRecordCounter * RECORD_TABLE_BYTES) / (HASH_BUCKET_SIZE - BUCKET_HEADER_LENGTH) + 1;
+  final long totalBuffersNeeded=(numBuckets * 2) / (this.bucketsPerSegmentMask + 1) + p.buildSideBlockCounter + 1;
+  if (totalBuffersNeeded < totalBuffersAvailable) {
+    ensureNumBuffersReturned(p.buildSideBlockCounter);
+    final BulkBlockChannelReader reader=this.ioManager.createBulkBlockChannelReader(p.buildSideChannel.getChannelID(),this.availableMemory,p.buildSideBlockCounter);
+    reader.closeAndDelete();
+    final List<MemorySegment> partitionBuffers=reader.getFullSegments();
+    final Partition newPart=new Partition(0,nextRecursionLevel,partitionBuffers,p.buildSideRecordCounter);
+    this.partitionsBeingBuilt.add(newPart);
+    initTable((int)numBuckets,(byte)1);
+    PartitionIterator pIter=newPart.getPartitionIterator(this.buildSideKeyFields,keyHolders);
+    while (pIter.next()) {
+      final int hashCode=hash(keyHolders,nextRecursionLevel);
+      final int posHashCode=hashCode % this.numBuckets;
+      final long pointer=pIter.getPointer();
+      final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+      final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+      final MemorySegment bucket=this.buckets[bucketArrayPos];
+      insertBucketEntry(newPart,bucket,bucketInSegmentPos,hashCode,pointer);
+    }
+  }
+ else {
+    final int avgRecordLenPartition=(int)(((long)p.buildSideBlockCounter) * (this.segmentSize - PARTITION_BLOCK_HEADER_LEN) / p.buildSideRecordCounter);
+    final int bucketCount=(int)(((long)totalBuffersAvailable) * RECORD_TABLE_BYTES / (avgRecordLenPartition + RECORD_OVERHEAD_BYTES));
+    final int splits=(int)(totalBuffersNeeded / totalBuffersAvailable) + 1;
+    final int partitionFanOut=Math.min(10 * splits,MAX_NUM_PARTITIONS);
+    createPartitions(partitionFanOut,nextRecursionLevel);
+    initTable(bucketCount,(byte)partitionFanOut);
+    final List<MemorySegment> segments=new ArrayList<MemorySegment>(2);
+    segments.add(getNextBuffer());
+    segments.add(getNextBuffer());
+    final BlockReaderIterator reader=new BlockReaderIterator(this.ioManager,p.buildSideChannel.getChannelID(),segments,this.availableMemory,p.buildSideBlockCounter);
+    PactRecord rec=new PactRecord();
+    while (reader.next(rec)) {
+      final int hashCode=hashBuildeSideRecord(rec,nextRecursionLevel);
+      insertIntoTable(rec,hashCode);
+    }
+    for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+      Partition part=this.partitionsBeingBuilt.get(i);
+      part.finalizeBuildPhase(this.ioManager,this.currentEnumerator);
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  for (  final Entry<Operator<?>,SopremoModule> operatorModule : this.modules.entrySet()) {
+    final Operator<?> operator=operatorModule.getKey();
+    final SopremoModule module=operatorModule.getValue();
+    final Map<JsonStream,JsonStream> operatorInputToModuleOutput=new IdentityHashMap<JsonStream,JsonStream>();
+    for (int index=0; index < operator.getInputs().size(); index++) {
+      final Operator<?>.Output inputSource=operator.getInput(index).getSource();
+      final SopremoModule inputModule=this.modules.get(inputSource.getOperator());
+      operatorInputToModuleOutput.put(module.getInput(0).getOutput(0),inputModule.getOutput(inputSource.getIndex()).getInput(0));
+    }
+    DependencyAwareGraphTraverser.INSTANCE.traverse(module.getAllOutputs(),OperatorNavigator.INSTANCE,new GraphTraverseListener<Operator<?>>(){
+      @Override public void nodeTraversed(      final Operator<?> innerNode){
+        final List<JsonStream> innerNodeInputs=innerNode.getInputs();
+        for (int index=0; index < innerNodeInputs.size(); index++) {
+          final JsonStream moduleOutput=operatorInputToModuleOutput.get(innerNodeInputs.get(index));
+          if (moduleOutput != null)           innerNodeInputs.set(index,moduleOutput);
+        }
+        innerNode.setInputs(innerNodeInputs);
+      }
+    }
+);
+  }
+}

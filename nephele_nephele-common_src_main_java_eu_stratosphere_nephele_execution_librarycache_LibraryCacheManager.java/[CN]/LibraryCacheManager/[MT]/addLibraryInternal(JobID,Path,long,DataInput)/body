@@ -1,0 +1,24 @@
+{
+  if (size > (long)Integer.MAX_VALUE) {
+    throw new IOException("Submitted jar file " + name + " is too large");
+  }
+  final byte[] buf=new byte[(int)size];
+  in.readFully(buf);
+  md.reset();
+  md.update(buf);
+  final String cacheName=StringUtils.byteToHexString(md.digest()) + ".jar";
+  final Path storePath=new Path(this.libraryCachePath + "/" + cacheName);
+synchronized (this.fs) {
+    if (!fs.exists(storePath)) {
+      final FSDataOutputStream fos=fs.create(storePath,false);
+      fos.write(buf,0,buf.length);
+      fos.close();
+    }
+  }
+synchronized (this.clientPathToCacheName) {
+    final LibraryTranslationKey key=new LibraryTranslationKey(jobID,name);
+    if (!this.clientPathToCacheName.containsKey(key)) {
+      this.clientPathToCacheName.put(key,cacheName);
+    }
+  }
+}

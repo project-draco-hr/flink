@@ -1,0 +1,34 @@
+{
+  JobGraph jobGraph=new JobGraph("Grep Example Job");
+  JobFileInputVertex input=new JobFileInputVertex("Input 1",jobGraph);
+  input.setFileInputClass(FileLineReader.class);
+  input.setFilePath(new Path("file:///Users/casp/test2.txt"));
+  JobTaskVertex task1=new JobTaskVertex("Task 1",jobGraph);
+  task1.setTaskClass(EventSender.class);
+  JobTaskVertex task2=new JobTaskVertex("Task 2",jobGraph);
+  task2.setTaskClass(EventReceiver.class);
+  JobFileOutputVertex output=new JobFileOutputVertex("Output 1",jobGraph);
+  output.setFileOutputClass(FileLineWriter.class);
+  output.setFilePath(new Path("file:///Users/casp/output.txt"));
+  jobGraph.addJar(new Path("file:///Users/casp/EventTask.jar"));
+  jobGraph.addJar(new Path("file:///Users/casp/StringTaskEvent.jar"));
+  try {
+    input.connectTo(task1,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+    task1.connectTo(task2,ChannelType.FILE,CompressionLevel.NO_COMPRESSION);
+    task2.connectTo(output,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+  }
+  Configuration conf=new Configuration();
+  conf.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,"127.0.0.1");
+  conf.setString(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,"6023");
+  try {
+    JobClient jobClient=new JobClient(jobGraph,conf);
+    JobSubmissionResult result=jobClient.submitJob();
+    System.out.println(result.getDescription());
+  }
+ catch (  IOException ioe) {
+    ioe.printStackTrace();
+  }
+}

@@ -1,0 +1,48 @@
+{
+  GlobalProperties gp=source.getGlobalProperties().createCopy();
+  int[] keyFields=null;
+  int inputNum=0;
+  for (  List<PactConnection> connections : target.getIncomingConnections()) {
+    boolean isThisConnection=false;
+    for (    PactConnection connection : connections) {
+      if (connection.getSourcePact().getId() == source.getId()) {
+        if (connection.getScramblePartitionedFields() != null) {
+          keyFields=connection.getScramblePartitionedFields();
+        }
+ else         if (target.getPactContract() instanceof AbstractPact<?>) {
+          keyFields=((AbstractPact<?>)target.getPactContract()).getKeyColumnNumbers(inputNum);
+        }
+        break;
+      }
+    }
+    if (isThisConnection) {
+      break;
+    }
+ else {
+      inputNum++;
+    }
+  }
+switch (shipMode) {
+case BROADCAST:
+    gp.reset();
+  break;
+case PARTITION_RANGE:
+gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,keyFields);
+break;
+case PARTITION_HASH:
+gp.setPartitioning(PartitionProperty.HASH_PARTITIONED,keyFields);
+gp.setOrdering(null);
+break;
+case FORWARD:
+if (source.getDegreeOfParallelism() > target.getDegreeOfParallelism()) {
+gp.setOrdering(null);
+}
+break;
+case NONE:
+throw new CompilerException("Cannot determine properties after connection, id shipping strategy is not set.");
+case SFR:
+default :
+throw new CompilerException("Unsupported shipping strategy: " + shipMode.name());
+}
+return gp;
+}
