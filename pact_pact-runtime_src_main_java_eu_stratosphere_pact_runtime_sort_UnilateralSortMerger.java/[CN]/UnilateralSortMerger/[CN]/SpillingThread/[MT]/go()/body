@@ -1,6 +1,6 @@
 {
-  final List<CircularElement> cache=new ArrayList<CircularElement>();
-  CircularElement element=null;
+  final List<CircularElement<E>> cache=new ArrayList<CircularElement<E>>();
+  CircularElement<E> element=null;
   boolean cacheOnly=false;
   while (isRunning()) {
     try {
@@ -16,7 +16,7 @@
     if (element == SPILLING_MARKER) {
       break;
     }
- else     if (element == SENTINEL) {
+ else     if (element == EOF_MARKER) {
       cacheOnly=true;
       break;
     }
@@ -27,13 +27,13 @@
   }
   if (cacheOnly) {
     if (LOG.isDebugEnabled())     LOG.debug("Initiating in memory merge.");
-    List<MutableObjectIterator<PactRecord>> iterators=new ArrayList<MutableObjectIterator<PactRecord>>(cache.size());
-    for (    CircularElement cached : cache) {
+    List<MutableObjectIterator<E>> iterators=new ArrayList<MutableObjectIterator<E>>(cache.size());
+    for (    CircularElement<E> cached : cache) {
       iterators.add(cached.buffer.getIterator());
     }
     if (LOG.isDebugEnabled())     LOG.debug("Releasing unused sort-buffer memory.");
     releaseSortBuffers();
-    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator(iterators,keyComparators,keyPositions,keyClasses));
+    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,UnilateralSortMerger.this.typeAccessors));
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
@@ -62,7 +62,7 @@
     if (!isRunning()) {
       return;
     }
-    if (element == SENTINEL) {
+    if (element == EOF_MARKER) {
       break;
     }
     Channel.ID channel=enumerator.next();
@@ -92,7 +92,7 @@
     unregisterSegmentsToBeFreedAtShutdown(writeBuffers);
     writeBuffers.clear();
     if (channelIDs.isEmpty()) {
-      setResultIterator(EmptyMutableObjectIterator.<PactRecord>get());
+      setResultIterator(EmptyMutableObjectIterator.<E>get());
     }
  else {
       if (LOG.isDebugEnabled())       LOG.debug("Beginning final merge.");
