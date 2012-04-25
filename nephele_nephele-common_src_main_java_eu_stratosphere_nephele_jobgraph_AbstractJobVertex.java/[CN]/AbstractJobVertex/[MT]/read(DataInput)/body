@@ -15,6 +15,11 @@
     }
     this.vertexToShareInstancesWith=vertexToShareInstancesWith;
   }
+  final ClassLoader cl=LibraryCacheManager.getClassLoader(this.getJobGraph().getJobID());
+  if (cl == null) {
+    throw new IOException("Cannot find class loader for vertex " + getID());
+  }
+  this.configuration=new Configuration(cl);
   this.configuration.read(in);
   final int numForwardEdges=in.readInt();
   final JobVertexID tmpID=new JobVertexID();
@@ -27,9 +32,10 @@
       }
       final ChannelType channelType=EnumUtils.readEnum(in,ChannelType.class);
       final CompressionLevel compressionLevel=EnumUtils.readEnum(in,CompressionLevel.class);
+      final DistributionPattern distributionPattern=EnumUtils.readEnum(in,DistributionPattern.class);
       final int indexOfInputGate=in.readInt();
       try {
-        this.connectTo(jv,channelType,compressionLevel,i,indexOfInputGate);
+        this.connectTo(jv,channelType,compressionLevel,i,indexOfInputGate,distributionPattern);
       }
  catch (      JobGraphDefinitionException e) {
         throw new IOException(StringUtils.stringifyException(e));
@@ -42,10 +48,6 @@
   final boolean isNotNull=in.readBoolean();
   if (!isNotNull) {
     return;
-  }
-  final ClassLoader cl=LibraryCacheManager.getClassLoader(this.getJobGraph().getJobID());
-  if (cl == null) {
-    throw new IOException("Cannot find class loader for vertex " + getID());
   }
   final String className=StringRecord.readString(in);
   try {
