@@ -5,10 +5,10 @@
   Class<?> sourceStub=connection.getSourcePact().getPactContract().getUserCodeClass();
   if (targetDOP == 1) {
     if (sourceDOP == 1) {
-      outputVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+      outputVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
     }
  else {
-      outputVertex.connectTo(inputVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+      outputVertex.connectTo(inputVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
     }
     outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
     inputConfig.addInputShipStrategy(ShipStrategy.FORWARD,inputNumber);
@@ -23,7 +23,7 @@
     sampleVertex.setNumberOfSubtasksPerInstance(sourceIPM);
   }
   sampleConfig.setStubClass(sourceStub);
-  outputVertex.connectTo(sampleVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  outputVertex.connectTo(sampleVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
   outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
   sampleConfig.addInputShipStrategy(ShipStrategy.FORWARD,1);
   TaskConfig histogramConfig;
@@ -46,7 +46,7 @@
   }
   histogramConfig.addInputShipStrategy(ShipStrategy.FORWARD,++this.numberOfHistogramInputs);
   sampleConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-  sampleVertex.connectTo(this.histogramVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  sampleVertex.connectTo(this.histogramVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
   JobTaskVertex partitionVertex=new JobTaskVertex("Range partition - partitioning",this.jobGraph);
   this.auxVertices.add(partitionVertex);
   partitionVertex.setTaskClass(PartitionTask.class);
@@ -62,16 +62,16 @@
   JobTaskVertex tempVertex=generateTempVertex(connection.getSourcePact().getPactContract().getUserCodeClass(),sourceDOP,sourceIPM);
   tempVertex.setVertexToShareInstancesWith(outputVertex);
   TaskConfig tempConfig=new TaskConfig(tempVertex.getConfiguration());
-  outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
   tempConfig.addInputShipStrategy(ShipStrategy.FORWARD,1);
   outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-  tempVertex.connectTo(partitionVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  tempVertex.connectTo(partitionVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
   partitionConfig.addInputShipStrategy(ShipStrategy.FORWARD,2);
   tempConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-  this.histogramVertex.connectTo(partitionVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  this.histogramVertex.connectTo(partitionVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.BIPARTITE);
   partitionConfig.addInputShipStrategy(ShipStrategy.BROADCAST,1);
   histogramConfig.addOutputShipStrategy(ShipStrategy.BROADCAST);
-  partitionVertex.connectTo(inputVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION);
+  partitionVertex.connectTo(inputVertex,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.BIPARTITE);
   inputConfig.addInputShipStrategy(ShipStrategy.PARTITION_RANGE,inputNumber);
   partitionConfig.addOutputShipStrategy(ShipStrategy.PARTITION_RANGE);
 }
