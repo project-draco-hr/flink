@@ -1,5 +1,6 @@
 {
   ChannelType channelType=null;
+  DistributionPattern distributionPattern=null;
 switch (connection.getShipStrategy()) {
 case FORWARD:
 case PARTITION_LOCAL_HASH:
@@ -10,11 +11,13 @@ int targetDOP=connection.getTargetPact().getDegreeOfParallelism();
 int targetInnerDOP=connection.getTargetPact().getInstancesPerMachine();
 int targetNumInstances=(int)Math.ceil((double)targetDOP / (double)targetInnerDOP);
 channelType=sourceNumInstances == targetNumInstances ? ChannelType.INMEMORY : ChannelType.NETWORK;
+distributionPattern=DistributionPattern.POINTWISE;
 break;
 case PARTITION_HASH:
 case BROADCAST:
 case SFR:
 channelType=ChannelType.NETWORK;
+distributionPattern=DistributionPattern.BIPARTITE;
 break;
 default :
 throw new IllegalArgumentException("Unsupported ship-strategy: " + connection.getShipStrategy().name());
@@ -47,7 +50,7 @@ keyTypes=null;
 }
 switch (connection.getTempMode()) {
 case NONE:
-outputVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION);
+outputVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
 if ((keyPositions == null | keyTypes == null) || (keyPositions.length == 0 | keyTypes.length == 0)) {
 outputConfig.addOutputShipStrategy(connection.getShipStrategy());
 }
@@ -60,8 +63,8 @@ case TEMP_SENDER_SIDE:
 int degreeOfParallelism=connection.getSourcePact().getDegreeOfParallelism();
 int instancesPerMachine=connection.getSourcePact().getInstancesPerMachine();
 JobTaskVertex tempVertex=generateTempVertex(connection.getSourcePact().getPactContract().getUserCodeClass(),degreeOfParallelism,instancesPerMachine);
-outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
-tempVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION);
+outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+tempVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
 tempVertex.setVertexToShareInstancesWith(outputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
 outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
@@ -73,8 +76,8 @@ case TEMP_RECEIVER_SIDE:
 degreeOfParallelism=connection.getTargetPact().getDegreeOfParallelism();
 instancesPerMachine=connection.getTargetPact().getInstancesPerMachine();
 tempVertex=generateTempVertex(connection.getSourcePact().getPactContract().getUserCodeClass(),degreeOfParallelism,instancesPerMachine);
-outputVertex.connectTo(tempVertex,channelType,CompressionLevel.NO_COMPRESSION);
-tempVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+outputVertex.connectTo(tempVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
+tempVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
 tempVertex.setVertexToShareInstancesWith(inputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
 outputConfig.addOutputShipStrategy(connection.getShipStrategy());
