@@ -1,5 +1,5 @@
 {
-  final List<CircularElement<E>> cache=new ArrayList<CircularElement<E>>();
+  final Queue<CircularElement<E>> cache=new ArrayDeque<CircularElement<E>>();
   CircularElement<E> element=null;
   boolean cacheOnly=false;
   while (isRunning()) {
@@ -32,22 +32,12 @@
       iterators.add(cached.buffer.getIterator());
     }
     if (LOG.isDebugEnabled())     LOG.debug("Releasing unused sort-buffer memory.");
-    releaseSortBuffers();
-    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,UnilateralSortMerger.this.typeAccessors));
+    disposeSortBuffers(true);
+    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,this.serializer,this.comparator));
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
-  final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
-  final int writeBufferSize=UnilateralSortMerger.this.ioBufferSize;
   List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
-  List<MemorySegment> writeBuffers;
-  try {
-    writeBuffers=this.memoryManager.allocateStrict(UnilateralSortMerger.this.parent,NUM_WRITE_BUFFERS,writeBufferSize);
-    registerSegmentsToBeFreedAtShutdown(writeBuffers);
-  }
- catch (  MemoryAllocationException maex) {
-    throw new IOException("Spilling thread was unable to allocate memory for the channel writer.",maex);
-  }
   while (isRunning()) {
     try {
       element=takeNext(this.queues.spill,cache);
@@ -67,15 +57,15 @@
     }
     Channel.ID channel=enumerator.next();
     channelIDs.add(channel);
-    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,returnQueue);
+    registerChannelToBeRemovedAtShudown(channel);
+    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,this.numWriteBuffersToCluster);
     registerOpenChannelToBeRemovedAtShudown(writer);
-    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,writeBufferSize);
+    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,this.writeMemory,this.memManager.getPageSize());
     if (LOG.isDebugEnabled())     LOG.debug("Spilling buffer " + element.id + ".");
     element.buffer.writeToOutput(output);
     if (LOG.isDebugEnabled())     LOG.debug("Spilled buffer " + element.id + ".");
     output.close();
     unregisterOpenChannelToBeRemovedAtShudown(writer);
-    registerChannelToBeRemovedAtShudown(channel);
     element.buffer.reset();
     this.queues.empty.add(element);
   }
@@ -83,22 +73,20 @@
     LOG.debug("Spilling done.");
     LOG.debug("Releasing sort-buffer memory.");
   }
-  releaseSortBuffers();
+  disposeSortBuffers(false);
   try {
-    while (channelIDs.size() > UnilateralSortMerger.this.maxNumFileHandles) {
-      channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
+    while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
+      channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
     }
-    this.memoryManager.release(writeBuffers);
-    unregisterSegmentsToBeFreedAtShutdown(writeBuffers);
-    writeBuffers.clear();
+    this.memManager.release(this.writeMemory);
+    this.writeMemory.clear();
     if (channelIDs.isEmpty()) {
       setResultIterator(EmptyMutableObjectIterator.<E>get());
     }
  else {
       if (LOG.isDebugEnabled())       LOG.debug("Beginning final merge.");
       List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
-      List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
-      registerSegmentsToBeFreedAtShutdown(allBuffers);
+      getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
       setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size())));
     }
   }

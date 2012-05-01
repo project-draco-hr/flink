@@ -7,8 +7,8 @@ synchronized (this) {
   }
   try {
 synchronized (this.iteratorLock) {
-      if (this.iterator == null && this.iteratorException == null) {
-        this.iteratorException=new IOException("The sort-merger has been closed.");
+      if (this.iteratorException == null) {
+        this.iteratorException=new IOException("The sorter has been closed.");
         this.iteratorLock.notifyAll();
       }
     }
@@ -53,44 +53,23 @@ synchronized (this.iteratorLock) {
   }
   finally {
     try {
-      while (!this.memoryToReleaseAtShutdown.isEmpty()) {
-        try {
-          List<MemorySegment> segments=this.memoryToReleaseAtShutdown.remove(this.memoryToReleaseAtShutdown.size() - 1);
-          this.memoryManager.release(segments);
-        }
- catch (        Throwable t) {
-        }
+      if (!this.writeMemory.isEmpty()) {
+        this.memoryManager.release(this.writeMemory);
       }
-      this.memoryToReleaseAtShutdown.clear();
+      this.writeMemory.clear();
     }
  catch (    Throwable t) {
     }
     try {
-      for (      NormalizedKeySorter<?> sorter : this.sortBuffers) {
-        this.memoryManager.release(sorter.dispose());
+      if (!this.sortReadMemory.isEmpty()) {
+        this.memoryManager.release(this.sortReadMemory);
       }
-      this.sortBuffers.clear();
+      this.sortReadMemory.clear();
     }
  catch (    Throwable t) {
     }
-    while (!this.openChannels.isEmpty()) {
-      try {
-        BlockChannelAccess<?,?> channel=this.openChannels.remove(this.openChannels.size() - 1);
-        if (!channel.isClosed())         channel.close();
-        channel.deleteChannel();
-      }
- catch (      Throwable t) {
-      }
-    }
-    for (    Channel.ID channel : this.channelsToDeleteAtShutdown) {
-      try {
-        final File f=new File(channel.getPath());
-        if (f.exists()) {
-          f.delete();
-        }
-      }
- catch (      Throwable t) {
-      }
+    if (this.spillThread != null) {
+      this.spillThread.closeAndDeleteAllChannels();
     }
   }
 }

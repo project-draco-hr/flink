@@ -14,11 +14,11 @@
     final BulkBlockChannelReader reader=this.ioManager.createBulkBlockChannelReader(p.getBuildSideChannel().getChannelID(),this.availableMemory,p.getBuildSideBlockCount());
     reader.closeAndDelete();
     final List<MemorySegment> partitionBuffers=reader.getFullSegments();
-    final HashPartition<BT,PT> newPart=new HashPartition<BT,PT>(this.buildSideAccessors,this.probeSideAccessors,0,nextRecursionLevel,partitionBuffers,p.getBuildSideRecordCount(),this.segmentSize,p.getLastSegmentLimit());
+    final HashPartition<BT,PT> newPart=new HashPartition<BT,PT>(this.buildSideSerializer,this.probeSideSerializer,0,nextRecursionLevel,partitionBuffers,p.getBuildSideRecordCount(),this.segmentSize,p.getLastSegmentLimit());
     this.partitionsBeingBuilt.add(newPart);
     initTable((int)numBuckets,(byte)1);
-    final HashPartition<BT,PT>.PartitionIterator pIter=newPart.getPartitionIterator();
-    final BT record=this.buildSideAccessors.createInstance();
+    final HashPartition<BT,PT>.PartitionIterator pIter=newPart.getPartitionIterator(this.buildSideComparator);
+    final BT record=this.buildSideSerializer.createInstance();
     while (pIter.next(record)) {
       final int hashCode=hash(pIter.getCurrentHashCode(),nextRecursionLevel);
       final int posHashCode=hashCode % this.numBuckets;
@@ -41,11 +41,11 @@
     segments.add(getNextBuffer());
     final BlockChannelReader inReader=this.ioManager.createBlockChannelReader(p.getBuildSideChannel().getChannelID());
     final ChannelReaderInputView inView=new HeaderlessChannelReaderInputView(inReader,segments,p.getBuildSideBlockCount(),p.getLastSegmentLimit(),false);
-    final ChannelReaderInputViewIterator<BT> inIter=new ChannelReaderInputViewIterator<BT>(inView,this.availableMemory,this.buildSideAccessors);
-    final TypeAccessors<BT> btAccessor=this.buildSideAccessors;
-    final BT rec=btAccessor.createInstance();
+    final ChannelReaderInputViewIterator<BT> inIter=new ChannelReaderInputViewIterator<BT>(inView,this.availableMemory,this.buildSideSerializer);
+    final TypeComparator<BT> btComparator=this.buildSideComparator;
+    final BT rec=this.buildSideSerializer.createInstance();
     while (inIter.next(rec)) {
-      final int hashCode=hash(btAccessor.hash(rec),nextRecursionLevel);
+      final int hashCode=hash(btComparator.hash(rec),nextRecursionLevel);
       insertIntoTable(rec,hashCode);
     }
     for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
