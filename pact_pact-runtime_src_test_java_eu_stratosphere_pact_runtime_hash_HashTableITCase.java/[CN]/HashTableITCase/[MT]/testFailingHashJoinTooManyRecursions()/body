@@ -21,17 +21,14 @@
   probes.add(probe2);
   probes.add(probe3);
   MutableObjectIterator<PactRecord> probeInput=new UnionIterator<PactRecord>(probes);
-  MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
-    memMan=new DefaultMemoryManager(32 * 1024 * 1024);
-    memSegments=memMan.allocateStrict(MEM_OWNER,896,32 * 1024);
+    memSegments=this.memManager.allocatePages(MEM_OWNER,896);
   }
  catch (  MemoryAllocationException maex) {
     fail("Memory for the Join could not be provided.");
     return;
   }
-  IOManager ioManager=new IOManager();
   final MutableHashTable<PactRecord,PactRecord> join=new MutableHashTable<PactRecord,PactRecord>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager);
   join.open(buildInput,probeInput);
   final PactRecord record=new PactRecord();
@@ -48,12 +45,5 @@
  catch (  Exception ex) {
   }
   join.close();
-  memMan.release(memSegments);
-  ioManager.shutdown();
-  if (!ioManager.isProperlyShutDown()) {
-    fail("I/O manager was not property shut down.");
-  }
-  if (!memMan.verifyEmpty()) {
-    fail("Not all memory was properly released to the memory manager --> Memory Leak.");
-  }
+  this.memManager.release(join.getFreedMemory());
 }

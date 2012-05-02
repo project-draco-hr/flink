@@ -4,17 +4,14 @@
   final int PROBE_VALS_PER_KEY=10;
   MutableObjectIterator<IntPair> buildInput=new UniformIntPairGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
   MutableObjectIterator<IntPair> probeInput=new UniformIntPairGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
-  MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
-    memMan=new DefaultMemoryManager(32 * 1024 * 1024);
-    memSegments=memMan.allocateStrict(MEM_OWNER,896,32 * 1024);
+    memSegments=this.memManager.allocatePages(MEM_OWNER,896);
   }
  catch (  MemoryAllocationException maex) {
     fail("Memory for the Join could not be provided.");
     return;
   }
-  IOManager ioManager=new IOManager();
   final MutableHashTable<IntPair,IntPair> join=new MutableHashTable<IntPair,IntPair>(this.pairBuildSideAccesssor,this.pairProbeSideAccesssor,this.pairBuildSideComparator,this.pairProbeSideComparator,this.pairComparator,memSegments,ioManager);
   join.open(buildInput,probeInput);
   final IntPair record=new IntPair();
@@ -27,12 +24,5 @@
   }
   Assert.assertEquals("Wrong number of records in join result.",NUM_KEYS * BUILD_VALS_PER_KEY * PROBE_VALS_PER_KEY,numRecordsInJoinResult);
   join.close();
-  memMan.release(memSegments);
-  ioManager.shutdown();
-  if (!ioManager.isProperlyShutDown()) {
-    fail("I/O manager was not property shut down.");
-  }
-  if (!memMan.verifyEmpty()) {
-    fail("Not all memory was properly released to the memory manager --> Memory Leak.");
-  }
+  this.memManager.release(join.getFreedMemory());
 }

@@ -1,21 +1,17 @@
 {
-  int reqMem=4 * 1024 * 1024;
   final int NUM_BUILD_KEYS=1000000;
   final int NUM_BUILD_VALS=1;
   final int NUM_PROBE_KEYS=20;
   final int NUM_PROBE_VALS=1;
   MutableObjectIterator<PactRecord> buildInput=new UniformPactRecordGenerator(NUM_BUILD_KEYS,NUM_BUILD_VALS,false);
-  MemoryManager memMan;
   List<MemorySegment> memSegments;
   try {
-    memMan=new DefaultMemoryManager(reqMem);
-    memSegments=memMan.allocate(MEM_OWNER,reqMem,64,32 * 1024);
+    memSegments=this.memManager.allocatePages(MEM_OWNER,128);
   }
  catch (  MemoryAllocationException maex) {
     fail("Memory for the Join could not be provided.");
     return;
   }
-  IOManager ioManager=new IOManager();
   final MutableHashTable<PactRecord,PactRecord> join=new MutableHashTable<PactRecord,PactRecord>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager);
   join.open(buildInput,new UniformPactRecordGenerator(NUM_PROBE_KEYS,NUM_PROBE_VALS,true));
   int expectedNumResults=(Math.min(NUM_PROBE_KEYS,NUM_BUILD_KEYS) * NUM_BUILD_VALS) * NUM_PROBE_VALS;
@@ -29,4 +25,5 @@
   }
   Assert.assertEquals("Wrong number of records in join result.",expectedNumResults,numRecordsInJoinResult);
   join.close();
+  this.memManager.release(join.getFreedMemory());
 }
