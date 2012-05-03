@@ -1,6 +1,6 @@
 {
-  final List<CircularElement> cache=new ArrayList<CircularElement>();
-  CircularElement element=null;
+  final Queue<CircularElement<E>> cache=new ArrayDeque<CircularElement<E>>();
+  CircularElement<E> element=null;
   boolean cacheOnly=false;
   while (isRunning()) {
     try {
@@ -11,14 +11,12 @@
         LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
         continue;
       }
- else {
-        return;
-      }
+ else       return;
     }
-    if (element == SPILLING_MARKER) {
+    if (element == spillingMarker()) {
       break;
     }
- else     if (element == SENTINEL) {
+ else     if (element == endMarker()) {
       cacheOnly=true;
       break;
     }
@@ -28,17 +26,17 @@
     return;
   }
   if (cacheOnly) {
-    if (LOG.isDebugEnabled())     LOG.debug("Initiating merge-iterator (in-memory segments).");
-    List<MutableObjectIterator<PactRecord>> iterators=new ArrayList<MutableObjectIterator<PactRecord>>();
-    for (    CircularElement cached : cache) {
+    if (LOG.isDebugEnabled())     LOG.debug("Initiating in memory merge.");
+    List<MutableObjectIterator<E>> iterators=new ArrayList<MutableObjectIterator<E>>(cache.size());
+    for (    CircularElement<E> cached : cache) {
       iterators.add(cached.buffer.getIterator());
     }
     if (LOG.isDebugEnabled())     LOG.debug("Releasing unused sort-buffer memory.");
-    releaseSortBuffers();
-    MutableObjectIterator<PactRecord> resIter=iterators.size() == 1 ? iterators.get(0) : new MergeIterator(iterators,keyComparators,keyPositions,keyClasses);
+    disposeSortBuffers(true);
+    MutableObjectIterator<E> resIter=iterators.isEmpty() ? EmptyMutableObjectIterator.<E>get() : iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,this.serializer,this.comparator);
     if (CombiningUnilateralSortMerger.this.combineLastMerge) {
-      KeyGroupedIterator iter=new KeyGroupedIterator(resIter,keyPositions,keyClasses);
-      setResultIterator(new CombiningIterator(combineStub,iter));
+      KeyGroupedIterator<E> iter=new KeyGroupedIterator<E>(resIter,this.serializer,this.comparator2);
+      setResultIterator(new CombiningIterator<E>(CombiningUnilateralSortMerger.this.combineStub,iter,this.serializer));
     }
  else {
       setResultIterator(resIter);
@@ -46,17 +44,7 @@
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
-  final LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
-  final int writeBufferSize=CombiningUnilateralSortMerger.this.ioBufferSize;
-  List<Channel.ID> channelIDs=new ArrayList<Channel.ID>();
-  List<MemorySegment> writeBuffers;
-  try {
-    writeBuffers=this.memoryManager.allocateStrict(CombiningUnilateralSortMerger.this.parent,NUM_WRITE_BUFFERS,writeBufferSize);
-    registerSegmentsToBeFreedAtShutdown(writeBuffers);
-  }
- catch (  MemoryAllocationException maex) {
-    throw new IOException("Spilling thread was unable to allocate memory for the channel writer.",maex);
-  }
+  List<ChannelWithBlockCount> channelIDs=new ArrayList<ChannelWithBlockCount>();
   while (isRunning()) {
     try {
       element=takeNext(this.queues.spill,cache);
@@ -66,26 +54,25 @@
         LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
         continue;
       }
- else {
-        return;
-      }
+ else       return;
     }
     if (!isRunning()) {
       return;
     }
-    if (element == SENTINEL) {
+    if (element == endMarker()) {
       break;
     }
-    final Channel.ID channel=enumerator.next();
-    channelIDs.add(channel);
+    Channel.ID channel=enumerator.next();
+    registerChannelToBeRemovedAtShudown(channel);
     if (LOG.isDebugEnabled())     LOG.debug("Creating temp file " + channel.toString() + '.');
-    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,returnQueue);
+    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channel,this.numWriteBuffersToCluster);
     registerOpenChannelToBeRemovedAtShudown(writer);
-    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,writeBufferSize);
+    final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,this.writeMemory,this.memManager.getPageSize());
     if (LOG.isDebugEnabled())     LOG.debug("Combining buffer " + element.id + '.');
-    final NormalizedKeySorter<PactRecord> buffer=element.buffer;
-    final CombineValueIterator iter=new CombineValueIterator(buffer);
-    final WriterCollector collector=new WriterCollector(output);
+    final NormalizedKeySorter<E> buffer=element.buffer;
+    final CombineValueIterator<E> iter=new CombineValueIterator<E>(buffer,this.serializer.createInstance());
+    final WriterCollector<E> collector=new WriterCollector<E>(output,this.serializer);
+    final GenericReducer<E,?> combineStub=CombiningUnilateralSortMerger.this.combineStub;
     int i=0;
     int stop=buffer.size() - 1;
     try {
@@ -113,7 +100,7 @@
     if (LOG.isDebugEnabled())     LOG.debug("Combined and spilled buffer " + element.id + ".");
     output.close();
     unregisterOpenChannelToBeRemovedAtShudown(writer);
-    registerChannelToBeRemovedAtShudown(channel);
+    channelIDs.add(new ChannelWithBlockCount(channel,output.getBlockCount()));
     element.buffer.reset();
     this.queues.empty.add(element);
   }
@@ -121,33 +108,27 @@
     LOG.debug("Spilling done.");
     LOG.debug("Releasing sort-buffer memory.");
   }
-  releaseSortBuffers();
-  try {
-    while (channelIDs.size() > CombiningUnilateralSortMerger.this.maxNumFileHandles) {
-      channelIDs=mergeChannelList(channelIDs,writeBuffers,this.readMemSize);
-    }
-    this.memoryManager.release(writeBuffers);
-    unregisterSegmentsToBeFreedAtShutdown(writeBuffers);
-    writeBuffers.clear();
-    if (channelIDs.isEmpty()) {
-      setResultIterator(EmptyMutableObjectIterator.<PactRecord>get());
+  disposeSortBuffers(false);
+  while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
+    channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
+  }
+  this.memManager.release(this.writeMemory);
+  this.writeMemory.clear();
+  if (channelIDs.isEmpty()) {
+    setResultIterator(EmptyMutableObjectIterator.<E>get());
+  }
+ else {
+    if (LOG.isDebugEnabled())     LOG.debug("Beginning final merge.");
+    List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
+    getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
+    final MergeIterator<E> mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size()));
+    if (CombiningUnilateralSortMerger.this.combineLastMerge) {
+      KeyGroupedIterator<E> iter=new KeyGroupedIterator<E>(mergeIterator,this.serializer,this.comparator2);
+      setResultIterator(new CombiningIterator<E>(CombiningUnilateralSortMerger.this.combineStub,iter,this.serializer));
     }
  else {
-      List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
-      List<MemorySegment> allBuffers=getSegmentsForReaders(readBuffers,this.readMemSize,channelIDs.size());
-      registerSegmentsToBeFreedAtShutdown(allBuffers);
-      final MergeIterator mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size()));
-      if (CombiningUnilateralSortMerger.this.combineLastMerge) {
-        KeyGroupedIterator iter=new KeyGroupedIterator(mergeIterator,keyPositions,keyClasses);
-        setResultIterator(new CombiningIterator(combineStub,iter));
-      }
- else {
-        setResultIterator(mergeIterator);
-      }
+      setResultIterator(mergeIterator);
     }
   }
- catch (  MemoryAllocationException maex) {
-    throw new IOException("Merging of sorted runs failed, because the memory for the I/O channels could not be allocated.",maex);
-  }
-  if (LOG.isDebugEnabled())   LOG.debug("Spilling thread done.");
+  if (LOG.isDebugEnabled())   LOG.debug("Spilling and merging thread done.");
 }

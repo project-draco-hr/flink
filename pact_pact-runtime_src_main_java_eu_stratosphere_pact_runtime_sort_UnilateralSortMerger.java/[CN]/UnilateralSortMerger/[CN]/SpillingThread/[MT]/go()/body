@@ -33,7 +33,7 @@
     }
     if (LOG.isDebugEnabled())     LOG.debug("Releasing unused sort-buffer memory.");
     disposeSortBuffers(true);
-    setResultIterator(iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,this.serializer,this.comparator));
+    setResultIterator(iterators.isEmpty() ? EmptyMutableObjectIterator.<E>get() : iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,this.serializer,this.comparator));
     return;
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
@@ -74,24 +74,19 @@
     LOG.debug("Releasing sort-buffer memory.");
   }
   disposeSortBuffers(false);
-  try {
-    while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
-      channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
-    }
-    this.memManager.release(this.writeMemory);
-    this.writeMemory.clear();
-    if (channelIDs.isEmpty()) {
-      setResultIterator(EmptyMutableObjectIterator.<E>get());
-    }
- else {
-      if (LOG.isDebugEnabled())       LOG.debug("Beginning final merge.");
-      List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
-      getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
-      setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size())));
-    }
+  while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
+    channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
   }
- catch (  MemoryAllocationException maex) {
-    throw new IOException("Merging of sorted runs failed, because the memory for the I/O channels could not be allocated.",maex);
+  this.memManager.release(this.writeMemory);
+  this.writeMemory.clear();
+  if (channelIDs.isEmpty()) {
+    setResultIterator(EmptyMutableObjectIterator.<E>get());
+  }
+ else {
+    if (LOG.isDebugEnabled())     LOG.debug("Beginning final merge.");
+    List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
+    getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
+    setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size())));
   }
   if (LOG.isDebugEnabled())   LOG.debug("Spilling and merging thread done.");
 }

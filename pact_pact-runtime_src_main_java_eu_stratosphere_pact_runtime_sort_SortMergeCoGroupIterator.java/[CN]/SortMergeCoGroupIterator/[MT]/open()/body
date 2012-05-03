@@ -1,33 +1,28 @@
 {
-  returnStatus=ReturnStatus.RETURN_NONE;
-  matchStatus=MatchStatus.NONE_REMAINED;
-  final Comparator<Key> keyComparator=new KeyComparator();
-  @SuppressWarnings("unchecked") final Comparator<Key>[] comparators=(Comparator<Key>[])new Comparator[this.keyClasses.length];
-  for (int i=0; i < comparators.length; i++) {
-    comparators[i]=keyComparator;
-  }
+  this.returnStatus=ReturnStatus.RETURN_NONE;
+  this.matchStatus=MatchStatus.NONE_REMAINED;
   if (this.localStrategy == LocalStrategy.SORT_BOTH_MERGE || this.localStrategy == LocalStrategy.SORT_FIRST_MERGE) {
-    this.sortMerger1=new UnilateralSortMerger(this.memoryManager,this.ioManager,this.memoryPerChannel,this.fileHandlesPerChannel,comparators,this.firstKeyPositions,this.keyClasses,this.reader1,this.parentTask,this.spillingThreshold);
+    this.sortMerger1=new UnilateralSortMerger<T1>(this.memoryManager,this.ioManager,this.reader1,this.parentTask,this.serializer1,this.comparator1,this.memoryPerChannel,this.fileHandlesPerChannel,this.spillingThreshold);
   }
   if (this.localStrategy == LocalStrategy.SORT_BOTH_MERGE || this.localStrategy == LocalStrategy.SORT_SECOND_MERGE) {
-    this.sortMerger2=new UnilateralSortMerger(this.memoryManager,this.ioManager,this.memoryPerChannel,this.fileHandlesPerChannel,comparators,this.secondKeyPositions,this.keyClasses,this.reader2,this.parentTask,this.spillingThreshold);
+    this.sortMerger2=new UnilateralSortMerger<T2>(this.memoryManager,this.ioManager,this.reader2,this.parentTask,this.serializer2,this.comparator2,this.memoryPerChannel,this.fileHandlesPerChannel,this.spillingThreshold);
   }
 switch (this.localStrategy) {
 case SORT_BOTH_MERGE:
-    this.iterator1=new KeyGroupedIterator(sortMerger1.getIterator(),this.firstKeyPositions,this.keyClasses);
-  this.iterator2=new KeyGroupedIterator(sortMerger2.getIterator(),this.secondKeyPositions,this.keyClasses);
+    this.iterator1=new KeyGroupedIterator<T1>(this.sortMerger1.getIterator(),this.serializer1,this.comparator1.duplicate());
+  this.iterator2=new KeyGroupedIterator<T2>(this.sortMerger2.getIterator(),this.serializer2,this.comparator2.duplicate());
 break;
 case SORT_FIRST_MERGE:
-this.iterator1=new KeyGroupedIterator(sortMerger1.getIterator(),this.firstKeyPositions,this.keyClasses);
-this.iterator2=new KeyGroupedIterator(reader2,this.secondKeyPositions,this.keyClasses);
+this.iterator1=new KeyGroupedIterator<T1>(this.sortMerger1.getIterator(),this.serializer1,this.comparator1.duplicate());
+this.iterator2=new KeyGroupedIterator<T2>(this.reader2,this.serializer2,this.comparator2.duplicate());
 break;
 case SORT_SECOND_MERGE:
-this.iterator1=new KeyGroupedIterator(reader1,this.firstKeyPositions,this.keyClasses);
-this.iterator2=new KeyGroupedIterator(sortMerger2.getIterator(),this.secondKeyPositions,this.keyClasses);
+this.iterator1=new KeyGroupedIterator<T1>(this.reader1,this.serializer1,this.comparator1.duplicate());
+this.iterator2=new KeyGroupedIterator<T2>(this.sortMerger2.getIterator(),this.serializer2,this.comparator2.duplicate());
 break;
 case MERGE:
-this.iterator1=new KeyGroupedIterator(reader1,this.firstKeyPositions,this.keyClasses);
-this.iterator2=new KeyGroupedIterator(reader2,this.secondKeyPositions,this.keyClasses);
+this.iterator1=new KeyGroupedIterator<T1>(this.reader1,this.serializer1,this.comparator1.duplicate());
+this.iterator2=new KeyGroupedIterator<T2>(this.reader2,this.serializer2,this.comparator2.duplicate());
 break;
 default :
 throw new RuntimeException("Unsupported Local Strategy in SortMergeCoGroupIterator: " + this.localStrategy);
