@@ -5,21 +5,14 @@
   if (this.noMoreBlocks) {
     return false;
   }
-  collectAllBuffers(this.emptySegments);
-  this.bufferCurrentlyFilled=new Buffer.Output(this.emptySegments.remove(this.emptySegments.size() - 1));
-  if (this.leftOver) {
-    this.next=this.leftOverRecord;
-    this.leftOver=false;
+  super.nextBlock();
+  if (this.leftOverReturned) {
+    this.input.next(this.leftOverRecord);
+    this.leftOverReturned=false;
   }
- else   if (this.input.next(this.leftOverRecord)) {
-    this.next=this.leftOverRecord;
+  if (!writeNextRecord(this.leftOverRecord)) {
+    throw new IOException("BlockResettableIterator could not serialize record into fresh memory block: " + "Record is too large.");
   }
- else {
-    this.noMoreBlocks=true;
-    return false;
-  }
-  if (!this.bufferCurrentlyFilled.write(this.next)) {
-    throw new IOException("BlockResettableIterator: " + "Could not serialize element into fresh block buffer - element is too large.");
-  }
+  this.readPhase=false;
   return true;
 }
