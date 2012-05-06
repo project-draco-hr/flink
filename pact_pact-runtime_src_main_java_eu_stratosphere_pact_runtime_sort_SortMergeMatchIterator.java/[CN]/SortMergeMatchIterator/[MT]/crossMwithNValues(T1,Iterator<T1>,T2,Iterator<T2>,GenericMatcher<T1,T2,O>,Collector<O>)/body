@@ -1,63 +1,65 @@
 {
   this.serializer1.copyTo(firstV1,this.copy1);
-  this.serializer2.copyTo(firstV2,this.copy2);
-  matchFunction.match(firstV1,firstV2,collector);
-  SpillingResettableIterator<PactRecord> spillIt=null;
+  this.serializer2.copyTo(firstV2,this.blockHeadCopy);
+  matchFunction.match(this.copy1,firstV2,collector);
+  SpillingResettableIterator<T1> spillIt=null;
   try {
     this.blockIt.reopen(blockVals);
-    while (blockIt.hasNext()) {
-      PactRecord nextBlockRec=blockIt.next();
-      this.copy1.copyTo(this.instance);
-      matchFunction.match(this.instance,nextBlockRec,collector);
+    while (this.blockIt.hasNext()) {
+      final T2 nextBlockRec=this.blockIt.next();
+      this.serializer1.copyTo(firstV1,this.copy1);
+      matchFunction.match(this.copy1,nextBlockRec,collector);
     }
-    blockIt.reset();
-    final LastRepeatableIterator<PactRecord> repeatableIter;
-    boolean spillingRequired=blockIt.hasFurtherInput();
+    this.blockIt.reset();
+    final Iterator<T1> leftSideIter;
+    final boolean spillingRequired=this.blockIt.hasFurtherInput();
     if (spillingRequired) {
-      spillIt=new SpillingResettableIterator<PactRecord>(this.memoryManager,this.ioManager,spillVals,new PactRecord(),SpillingResettableIterator.MIN_TOTAL_MEMORY,this.parentTask);
-      repeatableIter=spillIt;
+      spillIt=new SpillingResettableIterator<T1>(spillVals,this.serializer1,this.memoryManager,this.ioManager,this.memoryForSpillingIterator);
+      leftSideIter=spillIt;
       spillIt.open();
+      this.serializer1.copyTo(firstV1,this.spillHeadCopy);
     }
  else {
-      repeatableIter=new PactRecordRepeatableIterator(spillVals);
+      leftSideIter=spillVals;
     }
-    while (repeatableIter.hasNext()) {
-      PactRecord nextSpillVal=repeatableIter.next();
-      this.copy2.copyTo(this.instance);
-      matchFunction.match(nextSpillVal,this.instance,collector);
-      while (blockIt.hasNext()) {
-        PactRecord nextBlockRec=blockIt.next();
-        nextSpillVal=repeatableIter.repeatLast();
-        matchFunction.match(nextSpillVal,nextBlockRec,collector);
+    while (leftSideIter.hasNext()) {
+      final T1 nextSpillVal=leftSideIter.next();
+      this.serializer1.copyTo(nextSpillVal,this.copy1);
+      this.serializer2.copyTo(this.blockHeadCopy,this.copy2);
+      matchFunction.match(this.copy1,this.copy2,collector);
+      while (this.blockIt.hasNext()) {
+        T2 nextBlockRec=this.blockIt.next();
+        this.serializer1.copyTo(nextSpillVal,this.copy1);
+        matchFunction.match(this.copy1,nextBlockRec,collector);
       }
-      blockIt.reset();
+      this.blockIt.reset();
     }
     if (!spillingRequired) {
       return;
     }
-    while (blockIt.nextBlock()) {
+    while (this.blockIt.nextBlock()) {
       spillIt.reset();
-      while (blockIt.hasNext()) {
-        this.copy1.copyTo(this.instance);
-        final PactRecord nextBlockVal=blockIt.next();
-        matchFunction.match(this.instance,nextBlockVal,collector);
+      while (this.blockIt.hasNext()) {
+        this.serializer1.copyTo(this.spillHeadCopy,this.copy1);
+        final T2 nextBlockVal=blockIt.next();
+        matchFunction.match(this.copy1,nextBlockVal,collector);
       }
-      blockIt.reset();
+      this.blockIt.reset();
       while (spillIt.hasNext()) {
-        PactRecord nextSpillVal=spillIt.next();
-        while (blockIt.hasNext()) {
-          final PactRecord nextBlockVal=blockIt.next();
-          matchFunction.match(nextSpillVal,nextBlockVal,collector);
-          if (blockIt.hasNext())           nextSpillVal=spillIt.repeatLast();
+        final T1 nextSpillVal=spillIt.next();
+        while (this.blockIt.hasNext()) {
+          final T2 nextBlockVal=this.blockIt.next();
+          this.serializer1.copyTo(nextSpillVal,this.copy1);
+          matchFunction.match(this.copy1,nextBlockVal,collector);
         }
-        blockIt.reset();
+        this.blockIt.reset();
       }
       spillIt.reset();
     }
   }
   finally {
     if (spillIt != null) {
-      spillIt.close();
+      this.memoryForSpillingIterator.addAll(spillIt.close());
     }
   }
 }
