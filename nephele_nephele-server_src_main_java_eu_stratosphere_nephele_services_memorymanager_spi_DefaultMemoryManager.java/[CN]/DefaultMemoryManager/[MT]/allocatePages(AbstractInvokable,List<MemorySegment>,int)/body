@@ -1,4 +1,27 @@
 {
-  final ArrayList<MemorySegment> mem=allocatePages(owner,numPages);
-  target.addAll(mem);
+  if (owner == null) {
+    throw new IllegalAccessError("The memory owner must not be null.");
+  }
+  if (target instanceof ArrayList) {
+    ((ArrayList<MemorySegment>)target).ensureCapacity(numPages);
+  }
+synchronized (this.lock) {
+    if (this.isShutDown) {
+      throw new IllegalStateException("Memory manager has been shut down.");
+    }
+    if (numPages > this.freeSegments.size()) {
+      throw new MemoryAllocationException("Could not allocate " + numPages + " pages. Only "+ this.freeSegments.size()+ " pages are remaining.");
+    }
+    Set<DefaultMemorySegment> segmentsForOwner=this.allocatedSegments.get(owner);
+    if (segmentsForOwner == null) {
+      segmentsForOwner=new HashSet<DefaultMemorySegment>(4 * numPages / 3 + 1);
+      this.allocatedSegments.put(owner,segmentsForOwner);
+    }
+    for (int i=numPages; i > 0; i--) {
+      byte[] buffer=this.freeSegments.poll();
+      final DefaultMemorySegment segment=new DefaultMemorySegment(owner,buffer,0,this.pageSize);
+      target.add(segment);
+      segmentsForOwner.add(segment);
+    }
+  }
 }
