@@ -1,0 +1,30 @@
+{
+  final int numOutputs=config.getNumOutputs();
+  final int numChained=config.getNumberOfChainedStubs();
+  if (numChained > 0) {
+    if (numOutputs != 1 || config.getOutputShipStrategy(0) != ShipStrategy.FORWARD) {
+      throw new RuntimeException("Plan Generation Bug: Found a chained stub that is not connected via an only forward connection.");
+    }
+    Collector<PactRecord> previous=null;
+    for (int i=numChained - 1; i >= 0; --i) {
+      final ChainedTask<PactRecord,PactRecord> ct;
+      try {
+        @SuppressWarnings("unchecked") Class<? extends ChainedTask<PactRecord,PactRecord>> ctc=(Class<? extends ChainedTask<PactRecord,PactRecord>>)(Class<?>)config.getChainedTask(i);
+        ct=ctc.newInstance();
+      }
+ catch (      Exception ex) {
+        throw new RuntimeException("Could not instantiate chained task driver.",ex);
+      }
+      final TaskConfig chainedStubConf=config.getChainedStubConfig(i);
+      final String taskName=config.getChainedTaskName(i);
+      if (i == numChained - 1) {
+        previous=getOutputCollector(nepheleTask,chainedStubConf,cl,chainedStubConf.getNumOutputs());
+      }
+      ct.setup(chainedStubConf,taskName,nepheleTask,cl,previous);
+      chainedTasksTarget.add(0,ct);
+      previous=ct;
+    }
+    return previous;
+  }
+  return getOutputCollector(nepheleTask,config,cl,numOutputs);
+}
