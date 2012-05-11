@@ -1,0 +1,23 @@
+{
+  if (args.length != 3) {
+    this.degreeOfParallelism=1;
+    this.lineItemInputPath="";
+    this.outputPath="";
+  }
+ else {
+    this.degreeOfParallelism=Integer.parseInt(args[0]);
+    this.lineItemInputPath=args[1];
+    this.outputPath=args[2];
+  }
+  FileDataSource lineItems=new FileDataSource(IntTupleDataInFormat.class,this.lineItemInputPath,"LineItems");
+  lineItems.setDegreeOfParallelism(this.degreeOfParallelism);
+  FileDataSink result=new FileDataSink(StringTupleDataOutFormat.class,this.outputPath,"Output");
+  result.setDegreeOfParallelism(this.degreeOfParallelism);
+  MapContract lineItemFilter=new MapContract(LineItemFilter.class,"LineItem Filter");
+  lineItemFilter.setDegreeOfParallelism(this.degreeOfParallelism);
+  ReduceContract groupByReturnFlag=new ReduceContract(GroupByReturnFlag.class,PactString.class,0,"groupyBy");
+  lineItemFilter.addInput(lineItems);
+  groupByReturnFlag.addInput(lineItemFilter);
+  result.addInput(groupByReturnFlag);
+  return new Plan(result,"TPC-H 1");
+}

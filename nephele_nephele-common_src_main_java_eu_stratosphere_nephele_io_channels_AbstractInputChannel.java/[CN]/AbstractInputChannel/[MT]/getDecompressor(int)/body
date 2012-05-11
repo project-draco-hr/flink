@@ -1,0 +1,40 @@
+{
+  if (getCompressionLevel() == CompressionLevel.NO_COMPRESSION)   throw new CompressionException("CompressionLevel is set to NO_COMPRESSION");
+  String configurationKey=null;
+switch (this.getType()) {
+case FILE:
+    configurationKey="channel.file.decompressor";
+  break;
+case NETWORK:
+configurationKey="channel.network.decompressor";
+break;
+}
+if (configurationKey == null) throw new CompressionException("Cannot determine configuration key for the channel type " + this.getType());
+String className=GlobalConfiguration.getString(configurationKey,null);
+if (className == null) throw new CompressionException("Configuration does not contain an entry for key " + configurationKey);
+Class<? extends Decompressor> decompressionClass=null;
+try {
+decompressionClass=(Class<? extends Decompressor>)Class.forName(className);
+}
+ catch (ClassNotFoundException e) {
+throw new CompressionException("Cannot find decompressor class: " + StringUtils.stringifyException(e));
+}
+Constructor<? extends Decompressor> constructor=null;
+try {
+constructor=decompressionClass.getConstructor(int.class,CompressionLevel.class);
+}
+ catch (SecurityException e) {
+throw new CompressionException(StringUtils.stringifyException(e));
+}
+catch (NoSuchMethodException e) {
+throw new CompressionException("Cannot find matching constructor for decompression class: " + StringUtils.stringifyException(e));
+}
+Decompressor decompressor=null;
+try {
+decompressor=constructor.newInstance(bufferSize,getCompressionLevel());
+}
+ catch (Exception e) {
+throw new CompressionException(StringUtils.stringifyException(e));
+}
+return decompressor;
+}

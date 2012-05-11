@@ -1,0 +1,21 @@
+{
+  this.deserializationBuffer.clear();
+  if (this.uncompressedDataBuffer != null) {
+    releasedConsumedReadBuffer();
+  }
+  if (this.getType() == ChannelType.NETWORK) {
+    if (!this.brokerAggreedToCloseChannel) {
+      while (!this.brokerAggreedToCloseChannel) {
+        requestReadBuffersFromBroker();
+        if (this.uncompressedDataBuffer != null || this.compressedDataBuffer != null) {
+          releasedConsumedReadBuffer();
+        }
+        Thread.sleep(500);
+      }
+    }
+  }
+  final ChannelType type=getType();
+  if (type == ChannelType.NETWORK || type == ChannelType.INMEMORY) {
+    transferEvent(new ByteBufferedChannelCloseEvent());
+  }
+}

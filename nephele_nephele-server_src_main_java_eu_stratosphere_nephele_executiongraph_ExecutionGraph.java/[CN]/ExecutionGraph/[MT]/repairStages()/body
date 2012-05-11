@@ -1,0 +1,74 @@
+{
+  final Map<ExecutionGroupVertex,Integer> stageNumbers=new HashMap<ExecutionGroupVertex,Integer>();
+  ExecutionGroupVertexIterator it=new ExecutionGroupVertexIterator(this,true,-1);
+  while (it.hasNext()) {
+    final ExecutionGroupVertex groupVertex=it.next();
+    int precedingNumber=0;
+    if (stageNumbers.containsKey(groupVertex)) {
+      precedingNumber=stageNumbers.get(groupVertex).intValue();
+    }
+ else {
+      stageNumbers.put(groupVertex,Integer.valueOf(precedingNumber));
+    }
+    for (int i=0; i < groupVertex.getNumberOfForwardLinks(); i++) {
+      final ExecutionGroupEdge edge=groupVertex.getForwardEdge(i);
+      if (!stageNumbers.containsKey(edge.getTargetVertex())) {
+        if (edge.getChannelType() != ChannelType.FILE) {
+          stageNumbers.put(edge.getTargetVertex(),Integer.valueOf(precedingNumber));
+        }
+ else {
+          stageNumbers.put(edge.getTargetVertex(),Integer.valueOf(precedingNumber + 1));
+        }
+      }
+ else {
+        final int stageNumber=stageNumbers.get(edge.getTargetVertex()).intValue();
+        if (edge.getChannelType() != ChannelType.FILE) {
+          if (stageNumber != precedingNumber) {
+            stageNumbers.put(edge.getTargetVertex(),(int)Math.max(precedingNumber,stageNumber));
+          }
+        }
+ else {
+          if (stageNumber != (precedingNumber + 1)) {
+            stageNumbers.put(edge.getTargetVertex(),(int)Math.max(precedingNumber + 1,stageNumber));
+          }
+        }
+      }
+    }
+  }
+  it=new ExecutionGroupVertexIterator(this,false,-1);
+  while (it.hasNext()) {
+    final ExecutionGroupVertex groupVertex=it.next();
+    final int succeedingNumber=stageNumbers.get(groupVertex);
+    for (int i=0; i < groupVertex.getNumberOfBackwardLinks(); i++) {
+      final ExecutionGroupEdge edge=groupVertex.getBackwardEdge(i);
+      final int stageNumber=stageNumbers.get(edge.getSourceVertex());
+      if (edge.getChannelType() == ChannelType.FILE) {
+        if (stageNumber < (succeedingNumber - 1)) {
+          stageNumbers.put(edge.getSourceVertex(),Integer.valueOf(succeedingNumber - 1));
+        }
+      }
+ else {
+        if (stageNumber != succeedingNumber) {
+          LOG.error(edge.getSourceVertex() + " and " + edge.getTargetVertex()+ " are assigned to different stages although not connected by a file channel");
+        }
+      }
+    }
+  }
+  this.stages.clear();
+  final Iterator<Map.Entry<ExecutionGroupVertex,Integer>> it2=stageNumbers.entrySet().iterator();
+  while (it2.hasNext()) {
+    final Map.Entry<ExecutionGroupVertex,Integer> entry=it2.next();
+    final ExecutionGroupVertex groupVertex=entry.getKey();
+    final int stageNumber=entry.getValue().intValue();
+    while (this.stages.size() <= stageNumber) {
+      this.stages.add(null);
+    }
+    ExecutionStage executionStage=this.stages.get(stageNumber);
+    if (executionStage == null) {
+      executionStage=new ExecutionStage(this,stageNumber);
+      this.stages.set(stageNumber,executionStage);
+    }
+    executionStage.addStageMember(groupVertex);
+    groupVertex.setExecutionStage(executionStage);
+  }
+}

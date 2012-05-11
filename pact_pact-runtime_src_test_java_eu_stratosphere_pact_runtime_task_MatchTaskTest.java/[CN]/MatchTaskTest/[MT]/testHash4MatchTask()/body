@@ -1,0 +1,30 @@
+{
+  int keyCnt1=20;
+  int valCnt1=20;
+  int keyCnt2=20;
+  int valCnt2=1;
+  super.initEnvironment(6 * 1024 * 1024);
+  super.addInput(new UniformPactRecordGenerator(keyCnt1,valCnt1,false),1);
+  super.addInput(new UniformPactRecordGenerator(keyCnt2,valCnt2,false),2);
+  super.addOutput(this.outList);
+  MatchTask<PactRecord,PactRecord,PactRecord> testTask=new MatchTask<PactRecord,PactRecord,PactRecord>();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.HYBRIDHASH_SECOND);
+  super.getTaskConfig().setMemorySize(6 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(4);
+  final int[] keyPos1=new int[]{0};
+  final int[] keyPos2=new int[]{0};
+  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
+  PactRecordComparatorFactory.writeComparatorSetupToConfig(super.getTaskConfig().getConfiguration(),super.getTaskConfig().getPrefixForInputParameters(0),keyPos1,keyClasses);
+  PactRecordComparatorFactory.writeComparatorSetupToConfig(super.getTaskConfig().getConfiguration(),super.getTaskConfig().getPrefixForInputParameters(1),keyPos2,keyClasses);
+  super.registerTask(testTask,MockMatchStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expCnt=valCnt1 * valCnt2 * Math.min(keyCnt1,keyCnt2);
+  Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ expCnt,this.outList.size() == expCnt);
+  this.outList.clear();
+}

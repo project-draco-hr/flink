@@ -1,0 +1,110 @@
+{
+  final MutableObjectIterator<E> reader=this.reader;
+  final E current=this.readTarget;
+  E leftoverRecord=null;
+  CircularElement<E> element=null;
+  long bytesUntilSpilling=this.startSpillingBytes;
+  boolean done=false;
+  if (bytesUntilSpilling < 1) {
+    bytesUntilSpilling=0;
+    this.queues.sort.add(UnilateralSortMerger.<E>spillingMarker());
+  }
+  while (!done && isRunning()) {
+    while (element == null) {
+      try {
+        element=this.queues.empty.take();
+      }
+ catch (      InterruptedException iex) {
+        if (isRunning()) {
+          LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
+        }
+ else {
+          return;
+        }
+      }
+    }
+    final NormalizedKeySorter<E> buffer=element.buffer;
+    if (!buffer.isEmpty()) {
+      throw new IOException("New buffer is not empty.");
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Retrieved empty read buffer " + element.id + ".");
+    }
+    if (leftoverRecord != null) {
+      if (!buffer.write(leftoverRecord)) {
+        throw new IOException("Record could not be written to empty buffer: Serialized record exceeds buffer capacity.");
+      }
+      leftoverRecord=null;
+    }
+    if (bytesUntilSpilling > 0 && buffer.getCapacity() >= bytesUntilSpilling) {
+      boolean fullBuffer=false;
+      while (isRunning() && reader.next(current)) {
+        if (!buffer.write(current)) {
+          leftoverRecord=current;
+          fullBuffer=true;
+          break;
+        }
+        if (bytesUntilSpilling - buffer.getOccupancy() <= 0) {
+          bytesUntilSpilling=0;
+          final CircularElement<E> SPILLING_MARKER=spillingMarker();
+          this.queues.sort.add(SPILLING_MARKER);
+          break;
+        }
+      }
+      if (fullBuffer) {
+        if (bytesUntilSpilling > 0) {
+          bytesUntilSpilling-=buffer.getCapacity();
+          if (bytesUntilSpilling <= 0) {
+            bytesUntilSpilling=0;
+            final CircularElement<E> SPILLING_MARKER=spillingMarker();
+            this.queues.sort.add(SPILLING_MARKER);
+          }
+        }
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
+        }
+        this.queues.sort.add(element);
+        element=null;
+        continue;
+      }
+    }
+ else     if (bytesUntilSpilling > 0) {
+      bytesUntilSpilling-=buffer.getCapacity();
+      if (bytesUntilSpilling <= 0) {
+        bytesUntilSpilling=0;
+        final CircularElement<E> SPILLING_MARKER=spillingMarker();
+        this.queues.sort.add(SPILLING_MARKER);
+      }
+    }
+    while (isRunning() && reader.next(current)) {
+      if (!buffer.write(current)) {
+        leftoverRecord=current;
+        break;
+      }
+    }
+    if (leftoverRecord != null) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Emitting full buffer from reader thread: " + element.id + ".");
+      }
+    }
+ else {
+      done=true;
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Emitting final buffer from reader thread: " + element.id + ".");
+      }
+    }
+    if (!buffer.isEmpty()) {
+      this.queues.sort.add(element);
+    }
+ else {
+      this.queues.empty.add(element);
+    }
+    element=null;
+  }
+  if (!isRunning()) {
+    return;
+  }
+  final CircularElement<E> EOF_MARKER=endMarker();
+  this.queues.sort.add(EOF_MARKER);
+  LOG.debug("Reading thread done.");
+}

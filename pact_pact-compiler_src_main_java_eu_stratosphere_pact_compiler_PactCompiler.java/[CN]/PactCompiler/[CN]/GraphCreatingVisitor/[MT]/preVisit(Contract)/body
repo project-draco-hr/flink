@@ -1,0 +1,47 @@
+{
+  if (this.con2node.containsKey(c)) {
+    return false;
+  }
+  OptimizerNode n=null;
+  if (c instanceof GenericDataSink) {
+    DataSinkNode dsn=new DataSinkNode((GenericDataSink)c);
+    this.sinks.add(dsn);
+    n=dsn;
+  }
+ else   if (c instanceof GenericDataSource) {
+    DataSourceNode dsn=new DataSourceNode((GenericDataSource<?>)c);
+    this.sources.add(dsn);
+    n=dsn;
+  }
+ else   if (c instanceof MapContract) {
+    n=new MapNode((MapContract)c);
+  }
+ else   if (c instanceof ReduceContract) {
+    n=new ReduceNode((ReduceContract)c);
+  }
+ else   if (c instanceof MatchContract) {
+    n=new MatchNode((MatchContract)c);
+  }
+ else   if (c instanceof CoGroupContract) {
+    n=new CoGroupNode((CoGroupContract)c);
+  }
+ else   if (c instanceof CrossContract) {
+    n=new CrossNode((CrossContract)c);
+  }
+ else {
+    throw new IllegalArgumentException("Unknown contract type.");
+  }
+  this.con2node.put(c,n);
+  int par=c.getDegreeOfParallelism();
+  par=par >= 1 ? par : this.defaultParallelism;
+  if (n.getDegreeOfParallelism() < 1) {
+    n.setDegreeOfParallelism(par);
+  }
+  int tasksPerInstance=1;
+  if (this.maxMachines > 0) {
+    int p=n.getDegreeOfParallelism();
+    tasksPerInstance=(p / this.maxMachines) + (p % this.maxMachines == 0 ? 0 : 1);
+  }
+  n.setInstancesPerMachine(tasksPerInstance);
+  return true;
+}

@@ -1,0 +1,24 @@
+{
+  int keyCnt=100;
+  int valCnt=20;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false),1);
+  super.addOutput(this.outList);
+  ReduceTask<PactRecord,PactRecord> testTask=new ReduceTask<PactRecord,PactRecord>();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT);
+  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(4);
+  final int[] keyPos=new int[]{0};
+  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
+  PactRecordComparatorFactory.writeComparatorSetupToConfig(super.getTaskConfig().getConfiguration(),super.getTaskConfig().getPrefixForInputParameters(0),keyPos,keyClasses);
+  super.registerTask(testTask,MockFailingReduceStub.class);
+  boolean stubFailed=false;
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    stubFailed=true;
+  }
+  Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
+  this.outList.clear();
+}

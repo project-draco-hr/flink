@@ -1,0 +1,44 @@
+{
+  final ExecutionGraph eg=this.executionVertex.getExecutionGraph();
+  if (newExecutionState == ExecutionState.FINISHING) {
+    final ExecutionPipeline pipeline=this.executionVertex.getExecutionPipeline();
+    if (!pipeline.isFinishing()) {
+      return;
+    }
+    final ExecutionGroupVertex groupVertex=this.executionVertex.getGroupVertex();
+    for (int i=0; i < groupVertex.getCurrentNumberOfGroupMembers(); ++i) {
+      final ExecutionVertex groupMember=groupVertex.getGroupMember(i);
+      if (groupMember.getExecutionState() == ExecutionState.SCHEDULED) {
+        final ExecutionPipeline pipelineToBeDeployed=groupMember.getExecutionPipeline();
+        pipelineToBeDeployed.setAllocatedResource(this.executionVertex.getAllocatedResource());
+        pipelineToBeDeployed.updateExecutionState(ExecutionState.ASSIGNED);
+        this.scheduler.deployAssignedVertices(groupMember);
+        return;
+      }
+    }
+  }
+  if (newExecutionState == ExecutionState.CANCELED || newExecutionState == ExecutionState.FINISHED) {
+synchronized (this.executionVertex.getExecutionGraph()) {
+      if (this.scheduler.getVerticesToBeRestarted().remove(this.executionVertex.getID()) != null) {
+        this.executionVertex.updateExecutionState(ExecutionState.ASSIGNED,"Restart as part of recovery");
+        this.scheduler.deployAssignedVertices(this.executionVertex);
+        return;
+      }
+    }
+  }
+  if (newExecutionState == ExecutionState.FINISHED || newExecutionState == ExecutionState.CANCELED || newExecutionState == ExecutionState.FAILED) {
+    this.scheduler.checkAndReleaseAllocatedResource(eg,this.executionVertex.getAllocatedResource());
+  }
+  if (newExecutionState == ExecutionState.FAILED) {
+    if (this.executionVertex.decrementRetriesLeftAndCheck()) {
+      final Set<ExecutionVertex> assignedVertices=new HashSet<ExecutionVertex>();
+      if (RecoveryLogic.recover(this.executionVertex,this.scheduler.getVerticesToBeRestarted(),assignedVertices)) {
+        if (RecoveryLogic.hasInstanceAssigned(this.executionVertex)) {
+          this.scheduler.deployAssignedVertices(assignedVertices);
+        }
+      }
+ else {
+      }
+    }
+  }
+}

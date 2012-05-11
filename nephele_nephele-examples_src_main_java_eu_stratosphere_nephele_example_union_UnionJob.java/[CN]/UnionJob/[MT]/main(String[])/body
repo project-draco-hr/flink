@@ -1,0 +1,54 @@
+{
+  final JobGraph unionGraph=new JobGraph("Union Job");
+  final JobFileInputVertex input1=new JobFileInputVertex("Input 1",unionGraph);
+  input1.setFileInputClass(ProducerTask.class);
+  input1.setFilePath(new Path("file:///tmp/"));
+  final JobFileInputVertex input2=new JobFileInputVertex("Input 2",unionGraph);
+  input2.setFileInputClass(ProducerTask.class);
+  input2.setFilePath(new Path("file:///tmp/"));
+  final JobTaskVertex union=new JobTaskVertex("Union",unionGraph);
+  union.setTaskClass(UnionTask.class);
+  final JobFileOutputVertex output=new JobFileOutputVertex("Output",unionGraph);
+  output.setFileOutputClass(ConsumerTask.class);
+  output.setFilePath(new Path("file:///tmp/"));
+  try {
+    input1.connectTo(union,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+    input2.connectTo(union,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+    union.connectTo(output,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION);
+  }
+ catch (  JobGraphDefinitionException e) {
+    e.printStackTrace();
+    return;
+  }
+  final File jarFile=new File("/tmp/unionJob.jar");
+  final JarFileCreator jarFileCreator=new JarFileCreator(jarFile);
+  jarFileCreator.addClass(ProducerTask.class);
+  jarFileCreator.addClass(UnionTask.class);
+  jarFileCreator.addClass(ConsumerTask.class);
+  try {
+    jarFileCreator.createJarFile();
+  }
+ catch (  IOException ioe) {
+    ioe.printStackTrace();
+    if (jarFile.exists()) {
+      jarFile.delete();
+    }
+    return;
+  }
+  input1.setVertexToShareInstancesWith(output);
+  input2.setVertexToShareInstancesWith(output);
+  union.setVertexToShareInstancesWith(output);
+  unionGraph.addJar(new Path("file://" + jarFile.getAbsolutePath()));
+  final Configuration conf=new Configuration();
+  conf.setString("jobmanager.rpc.address","localhost");
+  try {
+    final JobClient jobClient=new JobClient(unionGraph,conf);
+    jobClient.submitJobAndWait();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+  if (jarFile.exists()) {
+    jarFile.delete();
+  }
+}

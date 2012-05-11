@@ -1,0 +1,24 @@
+{
+  final int numSegments=MEMORY_SIZE / MEMORY_PAGE_SIZE;
+  final List<MemorySegment> memory=this.memoryManager.allocatePages(new DummyInvokable(),numSegments);
+  NormalizedKeySorter<PactRecord> sorter=newSortBuffer(memory);
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+  PactRecord record=new PactRecord();
+  do {
+    generator.next(record);
+  }
+ while (sorter.write(record));
+  generator.reset();
+  MutableObjectIterator<PactRecord> iter=sorter.getIterator();
+  PactRecord readTarget=new PactRecord();
+  while (iter.next(readTarget)) {
+    generator.next(record);
+    Key rk=readTarget.getField(0,Key.class);
+    Key gk=record.getField(0,Key.class);
+    Value rv=readTarget.getField(1,Value.class);
+    Value gv=record.getField(1,Value.class);
+    Assert.assertEquals("The re-read key is wrong",gk,rk);
+    Assert.assertEquals("The re-read value is wrong",gv,rv);
+  }
+  this.memoryManager.release(sorter.dispose());
+}

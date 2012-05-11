@@ -1,0 +1,84 @@
+{
+synchronized (this.jobSubmitClient) {
+    final JobSubmissionResult submissionResult=this.jobSubmitClient.submitJob(this.jobGraph);
+    if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
+      LOG.error("ERROR: " + submissionResult.getDescription());
+      throw new JobExecutionException(submissionResult.getDescription(),false);
+    }
+    Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
+  }
+  long sleep=0;
+  try {
+    final IntegerRecord interval=this.jobSubmitClient.getRecommendedPollingInterval();
+    sleep=interval.getValue() * 1000;
+  }
+ catch (  IOException ioe) {
+    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+    throw ioe;
+  }
+  try {
+    Thread.sleep(sleep / 2);
+  }
+ catch (  InterruptedException e) {
+    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+    logErrorAndRethrow(StringUtils.stringifyException(e));
+  }
+  long startTimestamp=-1;
+  while (true) {
+    if (Thread.interrupted()) {
+      logErrorAndRethrow("Job client has been interrupted");
+    }
+    JobProgressResult jobProgressResult=null;
+    try {
+      jobProgressResult=getJobProgress();
+    }
+ catch (    IOException ioe) {
+      Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+      throw ioe;
+    }
+    if (jobProgressResult == null) {
+      logErrorAndRethrow("Returned job progress is unexpectedly null!");
+    }
+    if (jobProgressResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
+      logErrorAndRethrow("Could not retrieve job progress: " + jobProgressResult.getDescription());
+    }
+    final Iterator<AbstractEvent> it=jobProgressResult.getEvents();
+    while (it.hasNext()) {
+      final AbstractEvent event=it.next();
+      if (this.lastProcessedEventSequenceNumber >= event.getSequenceNumber()) {
+        continue;
+      }
+      System.out.println(event.toString());
+      this.lastProcessedEventSequenceNumber=event.getSequenceNumber();
+      if (event instanceof JobEvent) {
+        final JobEvent jobEvent=(JobEvent)event;
+        final JobStatus jobStatus=jobEvent.getCurrentJobStatus();
+        if (jobStatus == JobStatus.SCHEDULED) {
+          startTimestamp=jobEvent.getTimestamp();
+        }
+        if (jobStatus == JobStatus.FINISHED) {
+          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+          final long jobDuration=jobEvent.getTimestamp() - startTimestamp;
+          System.out.println("Job duration (in ms): " + jobDuration);
+          return jobDuration;
+        }
+ else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
+          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
+          LOG.info(jobEvent.getOptionalMessage());
+          if (jobStatus == JobStatus.CANCELED) {
+            throw new JobExecutionException(jobEvent.getOptionalMessage(),true);
+          }
+ else {
+            throw new JobExecutionException(jobEvent.getOptionalMessage(),false);
+          }
+        }
+      }
+    }
+    try {
+      Thread.sleep(sleep);
+    }
+ catch (    InterruptedException e) {
+      logErrorAndRethrow(StringUtils.stringifyException(e));
+    }
+  }
+}

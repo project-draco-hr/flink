@@ -1,0 +1,65 @@
+{
+  int pos=begin + len - 2;
+  int numFields=data[begin + len - 1] & 0xFF;
+  if (numFields >= MAX_BIT) {
+    int shift=7;
+    int curr;
+    numFields=numFields & 0x7f;
+    while ((curr=data[pos--]) >= MAX_BIT) {
+      numFields|=(curr & 0x7f) << shift;
+      shift+=7;
+    }
+    numFields|=curr << shift;
+  }
+  this.numFields=numFields;
+  if (this.offsets == null || this.offsets.length < numFields) {
+    this.offsets=new int[numFields];
+  }
+  if (this.lengths == null || this.lengths.length < numFields) {
+    this.lengths=new int[numFields];
+  }
+  if (this.readFields == null || this.readFields.length < numFields) {
+    this.readFields=new Value[numFields];
+  }
+  if (this.writeFields == null || this.writeFields.length < numFields) {
+    this.writeFields=new Value[numFields];
+  }
+  final int beginMasks=pos;
+  final int fieldsBy8=(numFields >>> 3) + ((numFields & 0x7) == 0 ? 0 : 1);
+  pos=beginMasks - fieldsBy8;
+  int lastNonNullField=-1;
+  for (int field=0, chunk=0; chunk < fieldsBy8; chunk++) {
+    int mask=data[beginMasks - chunk];
+    for (int i=0; i < 8 && field < numFields; i++, field++) {
+      if ((mask & 0x1) == 0x1) {
+        if (lastNonNullField >= 0) {
+          int start=data[pos--] & 0xff;
+          if (start >= MAX_BIT) {
+            int shift=7;
+            int curr;
+            start=start & 0x7f;
+            while ((curr=data[pos--] & 0xff) >= MAX_BIT) {
+              start|=(curr & 0x7f) << shift;
+              shift+=7;
+            }
+            start|=curr << shift;
+          }
+          this.offsets[field]=start + begin;
+          this.lengths[lastNonNullField]=start + begin - this.offsets[lastNonNullField];
+        }
+ else {
+          this.offsets[field]=begin;
+        }
+        lastNonNullField=field;
+      }
+ else {
+        this.offsets[field]=NULL_INDICATOR_OFFSET;
+      }
+      mask>>=1;
+    }
+  }
+  if (lastNonNullField >= 0) {
+    this.lengths[lastNonNullField]=pos - this.offsets[lastNonNullField] + 1;
+  }
+  this.firstModifiedPos=Integer.MAX_VALUE;
+}

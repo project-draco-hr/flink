@@ -1,0 +1,31 @@
+{
+  int keyCnt=100;
+  int valCnt=20;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false),1);
+  super.addOutput(this.outList);
+  ReduceTask<PactRecord,PactRecord> testTask=new ReduceTask<PactRecord,PactRecord>();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
+  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(4);
+  final int[] keyPos=new int[]{0};
+  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
+  PactRecordComparatorFactory.writeComparatorSetupToConfig(super.getTaskConfig().getConfiguration(),super.getTaskConfig().getPrefixForInputParameters(0),keyPos,keyClasses);
+  super.registerTask(testTask,MockCombiningReduceStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ keyCnt,this.outList.size() == keyCnt);
+  for (  PactRecord record : this.outList) {
+    Assert.assertTrue("Incorrect result",record.getField(1,PactInteger.class).getValue() == expSum - record.getField(0,PactInteger.class).getValue());
+  }
+  this.outList.clear();
+}

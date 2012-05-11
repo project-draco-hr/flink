@@ -1,0 +1,129 @@
+{
+  if (n.getIncomingConnections() == null) {
+    throw new CompilerException("Cannot compute costs on operator before incoming connections are set.");
+  }
+  List<PactConnection> primConn=null;
+  List<PactConnection> secConn=null;
+{
+    List<List<PactConnection>> conns=n.getIncomingConnections();
+    if (conns.size() > 0) {
+      primConn=conns.get(0);
+    }
+    if (conns.size() > 1) {
+      secConn=conns.get(1);
+    }
+  }
+  Costs globCost=new Costs();
+  Costs locCost=new Costs();
+  if (primConn != null && primConn.size() > 0) {
+switch (primConn.get(0).getShipStrategy()) {
+case NONE:
+      throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for the first input.");
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+    globCost.setNetworkCost(0);
+  globCost.setSecondaryStorageCost(0);
+break;
+case PARTITION_HASH:
+for (PactConnection c : primConn) getHashPartitioningCost(c,globCost);
+break;
+case PARTITION_RANGE:
+getRangePartitionCost(primConn,globCost);
+break;
+case BROADCAST:
+for (PactConnection c : primConn) getBroadcastCost(c,globCost);
+break;
+case SFR:
+throw new CompilerException("Symmetric-Fragment-And-Replicate Strategy currently not supported.");
+default :
+throw new CompilerException("Unknown shipping strategy for first input: " + primConn.get(0).getShipStrategy().name());
+}
+}
+ else {
+globCost.setNetworkCost(0);
+globCost.setSecondaryStorageCost(0);
+}
+if (secConn != null && secConn.size() > 0) {
+Costs secCost=new Costs();
+switch (secConn.get(0).getShipStrategy()) {
+case NONE:
+throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for the second input.");
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+secCost.setNetworkCost(0);
+secCost.setSecondaryStorageCost(0);
+break;
+case PARTITION_HASH:
+for (PactConnection c : secConn) getHashPartitioningCost(c,secCost);
+break;
+case PARTITION_RANGE:
+getRangePartitionCost(secConn,secCost);
+break;
+case BROADCAST:
+for (PactConnection c : secConn) getBroadcastCost(c,secCost);
+break;
+case SFR:
+throw new CompilerException("Symmetric-Fragment-And-Replicate Strategy currently not supported.");
+default :
+throw new CompilerException("Unknown shipping strategy for second input: " + secConn.get(0).getShipStrategy().name());
+}
+globCost.addCosts(secCost);
+}
+locCost.setNetworkCost(0);
+switch (n.getLocalStrategy()) {
+case NONE:
+locCost.setNetworkCost(0);
+locCost.setSecondaryStorageCost(0);
+break;
+case COMBININGSORT:
+case SORT:
+getLocalSortCost(n,primConn,locCost);
+break;
+case SORT_BOTH_MERGE:
+getLocalDoubleSortMergeCost(n,primConn,secConn,locCost);
+break;
+case SORT_FIRST_MERGE:
+getLocalSingleSortMergeCost(n,primConn,secConn,locCost);
+break;
+case SORT_SECOND_MERGE:
+getLocalSingleSortMergeCost(n,secConn,primConn,locCost);
+break;
+case MERGE:
+getLocalMergeCost(n,primConn,secConn,locCost);
+break;
+case SORT_SELF_NESTEDLOOP:
+getLocalSortSelfNestedLoopCost(n,primConn,10,locCost);
+break;
+case SELF_NESTEDLOOP:
+getLocalSelfNestedLoopCost(n,primConn,10,locCost);
+break;
+case HYBRIDHASH_FIRST:
+getHybridHashCosts(n,primConn,secConn,locCost);
+break;
+case HYBRIDHASH_SECOND:
+getHybridHashCosts(n,secConn,primConn,locCost);
+break;
+case MMHASH_FIRST:
+getMainMemHashCosts(n,primConn,secConn,locCost);
+break;
+case MMHASH_SECOND:
+getMainMemHashCosts(n,secConn,primConn,locCost);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+getBlockNestedLoopsCosts(n,primConn,secConn,BlockResettableMutableObjectIterator.MIN_BUFFER_SIZE,locCost);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+getBlockNestedLoopsCosts(n,secConn,primConn,BlockResettableMutableObjectIterator.MIN_BUFFER_SIZE,locCost);
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+getStreamedNestedLoopsCosts(n,primConn,secConn,128 * 1024,locCost);
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+getStreamedNestedLoopsCosts(n,secConn,primConn,128 * 1024,locCost);
+break;
+default :
+throw new CompilerException("Unknown local strategy: " + n.getLocalStrategy().name());
+}
+globCost.addCosts(locCost);
+n.setCosts(globCost);
+}

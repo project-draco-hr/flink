@@ -1,0 +1,125 @@
+{
+  if (job == null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Submitted job is null!");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Submitted job " + job.getName() + " is not null");
+  }
+  AbstractJobVertex jv=job.findVertexWithNullEdges();
+  if (jv != null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Vertex " + jv.getName() + " has at least one null edge");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Submitted job " + job.getName() + " has no null edges");
+  }
+  if (!job.isWeaklyConnected()) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not weakly connected");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("The graph of job " + job.getName() + " is weakly connected");
+  }
+  if (!job.isAcyclic()) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not a DAG");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("The graph of job " + job.getName() + " is acyclic");
+  }
+  jv=job.areVertexDegreesCorrect();
+  if (jv != null) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Degree of vertex " + jv.getName() + " is incorrect");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("All vertices of job " + job.getName() + " have the correct degree");
+  }
+  if (!job.isInstanceDependencyChainAcyclic()) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"The dependency chain for instance sharing contains a cycle");
+    return result;
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("The dependency chain for instance sharing is acyclic");
+  }
+  boolean jobRunsWithProfiling=false;
+  if (this.profiler != null && job.getJobConfiguration().getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+    jobRunsWithProfiling=true;
+  }
+  Iterator<JobManagerPlugin> it=this.jobManagerPlugins.values().iterator();
+  while (it.hasNext()) {
+    final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping job graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
+    final JobGraph inputJob=job;
+    job=plugin.rewriteJobGraph(inputJob);
+    if (job == null) {
+      if (LOG.isWarnEnabled()) {
+        LOG.warn("Plugin " + plugin + " set job graph to null, reverting changes...");
+      }
+      job=inputJob;
+    }
+    if (job != inputJob && LOG.isDebugEnabled()) {
+      LOG.debug("Plugin " + plugin + " rewrote job graph");
+    }
+  }
+  LOG.info("Creating initial execution graph from job graph " + job.getName());
+  ExecutionGraph eg=null;
+  try {
+    eg=new ExecutionGraph(job,this.instanceManager);
+  }
+ catch (  GraphConversionException gce) {
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,gce.getMessage());
+    return result;
+  }
+  it=this.jobManagerPlugins.values().iterator();
+  while (it.hasNext()) {
+    final JobManagerPlugin plugin=it.next();
+    if (plugin.requiresProfiling() && !jobRunsWithProfiling) {
+      LOG.debug("Skipping execution graph rewrite by plugin " + plugin + " because job "+ job.getJobID()+ " will not be executed with profiling");
+      continue;
+    }
+    final ExecutionGraph inputGraph=eg;
+    eg=plugin.rewriteExecutionGraph(inputGraph);
+    if (eg == null) {
+      LOG.warn("Plugin " + plugin + " set execution graph to null, reverting changes...");
+      eg=inputGraph;
+    }
+    if (eg != inputGraph) {
+      LOG.debug("Plugin " + plugin + " rewrote execution graph");
+    }
+  }
+  if (this.eventCollector != null) {
+    this.eventCollector.registerJob(eg,jobRunsWithProfiling);
+  }
+  if (jobRunsWithProfiling) {
+    this.profiler.registerProfilingJob(eg);
+    if (this.eventCollector != null) {
+      this.profiler.registerForProfilingData(eg.getJobID(),this.eventCollector);
+    }
+    it=this.jobManagerPlugins.values().iterator();
+    while (it.hasNext()) {
+      final ProfilingListener listener=it.next().getProfilingListener(eg.getJobID());
+      if (listener != null) {
+        this.profiler.registerForProfilingData(eg.getJobID(),listener);
+      }
+    }
+  }
+  this.inputSplitManager.registerJob(eg);
+  eg.registerJobStatusListener(this);
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Scheduling job " + job.getName());
+  }
+  try {
+    this.scheduler.schedulJob(eg);
+  }
+ catch (  SchedulingException e) {
+    unregisterJob(eg);
+    JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,e.getMessage());
+    return result;
+  }
+  return new JobSubmissionResult(AbstractJobResult.ReturnCode.SUCCESS,null);
+}

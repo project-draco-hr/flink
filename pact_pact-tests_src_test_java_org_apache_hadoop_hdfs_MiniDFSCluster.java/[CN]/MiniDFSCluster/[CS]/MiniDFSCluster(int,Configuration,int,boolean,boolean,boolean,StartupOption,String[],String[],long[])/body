@@ -1,0 +1,34 @@
+{
+  this.conf=conf;
+  try {
+    UserGroupInformation.setCurrentUGI(UnixUserGroupInformation.login(conf));
+  }
+ catch (  LoginException e) {
+    IOException ioe=new IOException();
+    ioe.initCause(e);
+    throw ioe;
+  }
+  base_dir=new File(System.getProperty("test.build.data","build/test/data"),"dfs/");
+  data_dir=new File(base_dir,"data");
+  FileSystem.setDefaultUri(conf,"hdfs://localhost:" + Integer.toString(nameNodePort));
+  conf.set("dfs.http.address","127.0.0.1:0");
+  if (manageNameDfsDirs) {
+    conf.set("dfs.name.dir",new File(base_dir,"name1").getPath() + "," + new File(base_dir,"name2").getPath());
+    conf.set("fs.checkpoint.dir",new File(base_dir,"namesecondary1").getPath() + "," + new File(base_dir,"namesecondary2").getPath());
+  }
+  int replication=conf.getInt("dfs.replication",3);
+  conf.setInt("dfs.replication",Math.min(replication,numDataNodes));
+  conf.setInt("dfs.safemode.extension",0);
+  conf.setInt("dfs.namenode.decommission.interval",3);
+  if (format) {
+    if (data_dir.exists() && !FileUtil.fullyDelete(data_dir)) {
+      throw new IOException("Cannot remove data directory: " + data_dir);
+    }
+    NameNode.format(conf);
+  }
+  String[] args=(operation == null || operation == StartupOption.FORMAT || operation == StartupOption.REGULAR) ? new String[]{} : new String[]{"-" + operation.toString()};
+  conf.setClass("topology.node.switch.mapping.impl",StaticMapping.class,DNSToSwitchMapping.class);
+  nameNode=NameNode.createNameNode(args,conf);
+  startDataNodes(conf,numDataNodes,manageDataDfsDirs,operation,racks,hosts,simulatedCapacities);
+  waitClusterUp();
+}

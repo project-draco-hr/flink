@@ -1,0 +1,26 @@
+{
+  final Class<? extends TypeSerializerFactory<IT>> serializerFactoryClass;
+  try {
+    serializerFactoryClass=this.config.getSerializerFactoryForInput(0,this.userCodeClassLoader);
+  }
+ catch (  ClassNotFoundException cnfex) {
+    throw new RuntimeException("The serializer factory noted in the configuration could not be loaded.",cnfex);
+  }
+  final TypeSerializerFactory<IT> serializerFactory;
+  if (serializerFactoryClass == null) {
+    @SuppressWarnings("unchecked") TypeSerializerFactory<IT> ps=(TypeSerializerFactory<IT>)PactRecordSerializerFactory.get();
+    serializerFactory=ps;
+  }
+ else {
+    @SuppressWarnings("unchecked") Class<TypeSerializerFactory<IT>> clazz=(Class<TypeSerializerFactory<IT>>)(Class<?>)TypeSerializerFactory.class;
+    serializerFactory=InstantiationUtil.instantiate(serializerFactoryClass,clazz);
+  }
+  this.inputTypeSerializer=serializerFactory.getSerializer();
+  if (serializerFactory.getDataType().equals(PactRecord.class)) {
+    @SuppressWarnings("unchecked") MutableObjectIterator<IT> it=(MutableObjectIterator<IT>)new PactRecordNepheleReaderIterator(new MutableRecordReader<PactRecord>(this));
+    this.reader=it;
+  }
+ else {
+    this.reader=new NepheleReaderIterator<IT>(new MutableRecordReader<DeserializationDelegate<IT>>(this),this.inputTypeSerializer);
+  }
+}

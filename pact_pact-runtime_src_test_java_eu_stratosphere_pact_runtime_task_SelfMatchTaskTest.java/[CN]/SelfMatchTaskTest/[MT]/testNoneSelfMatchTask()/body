@@ -1,0 +1,37 @@
+{
+  int keyCnt=100;
+  int valCnt=5;
+  super.initEnvironment(3 * 1024 * 1024);
+  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true),1);
+  super.addOutput(this.outList);
+  SelfMatchTask testTask=new SelfMatchTask();
+  super.getTaskConfig().setLocalStrategy(LocalStrategy.SELF_NESTEDLOOP);
+  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
+  super.getTaskConfig().setNumFilehandles(4);
+  super.getTaskConfig().setLocalStrategyKeyTypes(0,new int[]{0});
+  super.getTaskConfig().setLocalStrategyKeyTypes(new Class[]{PactInteger.class});
+  super.registerTask(testTask,MockMatchStub.class);
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expCnt=keyCnt * (valCnt * valCnt);
+  Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ expCnt,this.outList.size() == expCnt);
+  HashMap<Integer,Integer> keyValCntMap=new HashMap<Integer,Integer>(keyCnt);
+  for (  PactRecord record : this.outList) {
+    Integer key=record.getField(0,PactInteger.class).getValue();
+    if (!keyValCntMap.containsKey(key)) {
+      keyValCntMap.put(key,1);
+    }
+ else {
+      keyValCntMap.put(key,keyValCntMap.get(key) + 1);
+    }
+  }
+  for (  Integer key : keyValCntMap.keySet()) {
+    Assert.assertTrue("Invalid value count. Value count was: " + keyValCntMap.get(key) + " Expected was "+ (valCnt * valCnt),keyValCntMap.get(key) == (valCnt * valCnt));
+  }
+  this.outList.clear();
+}

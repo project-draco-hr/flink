@@ -1,0 +1,28 @@
+{
+  if (segment == null || segment.isFreed() || !(segment instanceof DefaultMemorySegment)) {
+    return;
+  }
+  final DefaultMemorySegment defSeg=(DefaultMemorySegment)segment;
+  final AbstractInvokable owner=defSeg.owner;
+synchronized (this.lock) {
+    if (this.isShutDown) {
+      throw new IllegalStateException("Memory manager has been shut down.");
+    }
+    try {
+      Set<DefaultMemorySegment> segsForOwner=this.allocatedSegments.get(owner);
+      if (segsForOwner != null) {
+        segsForOwner.remove(defSeg);
+        if (segsForOwner.isEmpty()) {
+          this.allocatedSegments.remove(owner);
+        }
+      }
+    }
+ catch (    Throwable t) {
+      LOG.error("Error removing book-keeping reference to allocated memory segment.",t);
+    }
+ finally {
+      byte[] buffer=defSeg.destroy();
+      this.freeSegments.add(buffer);
+    }
+  }
+}

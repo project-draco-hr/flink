@@ -1,0 +1,32 @@
+{
+  this.file.createNewFile();
+  FileLineWriter writer=new FileLineWriter();
+  Whitebox.setInternalState(writer,"environment",this.environment);
+  Whitebox.setInternalState(writer,"input",this.recordReader);
+  when(this.environment.getTaskConfiguration()).thenReturn(this.conf);
+  when(this.conf.getString("outputPath",null)).thenReturn(this.file.toURI().toString());
+  when(this.recordReader.hasNext()).thenReturn(true,true,true,false);
+  StringRecord in=new StringRecord("abc");
+  try {
+    when(this.recordReader.next()).thenReturn(in);
+  }
+ catch (  IOException e) {
+    fail();
+    e.printStackTrace();
+  }
+catch (  InterruptedException e) {
+    fail();
+    e.printStackTrace();
+  }
+  writer.invoke();
+  final FileInputSplit split=new FileInputSplit(0,new Path(this.file.toURI().toString()),0,this.file.length(),null);
+  when(this.environment.getInputSplitProvider()).thenReturn(this.inputSplitProvider);
+  when(this.inputSplitProvider.getNextInputSplit()).thenReturn(split,(FileInputSplit)null);
+  FileLineReader reader=new FileLineReader();
+  Whitebox.setInternalState(reader,"environment",this.environment);
+  Whitebox.setInternalState(reader,"output",this.recordWriter);
+  StringRecord record=mock(StringRecord.class);
+  whenNew(StringRecord.class).withNoArguments().thenReturn(record);
+  reader.invoke();
+  verify(record,times(3)).set(in.getBytes());
+}

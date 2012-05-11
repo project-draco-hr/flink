@@ -1,0 +1,36 @@
+{
+  int keyCnt=100;
+  int valCnt=20;
+  this.outList=new ArrayList<PactRecord>();
+  try {
+    InputFilePreparator.prepareInputFile(new UniformPactRecordGenerator(keyCnt,valCnt,false),this.tempTestPath,true);
+  }
+ catch (  IOException e1) {
+    Assert.fail("Unable to set-up test input file");
+  }
+  super.initEnvironment(1024 * 1024);
+  super.addOutput(this.outList);
+  DataSourceTask<PactRecord> testTask=new DataSourceTask<PactRecord>();
+  super.registerFileInputTask(testTask,MockInputFormat.class,"file://" + this.tempTestPath,"\n");
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    System.err.println(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+  Assert.assertTrue("Invalid output size. Expected: " + (keyCnt * valCnt) + " Actual: "+ this.outList.size(),this.outList.size() == keyCnt * valCnt);
+  HashMap<Integer,HashSet<Integer>> keyValueCountMap=new HashMap<Integer,HashSet<Integer>>(keyCnt);
+  for (  PactRecord kvp : this.outList) {
+    int key=kvp.getField(0,PactInteger.class).getValue();
+    int val=kvp.getField(1,PactInteger.class).getValue();
+    if (!keyValueCountMap.containsKey(key)) {
+      keyValueCountMap.put(key,new HashSet<Integer>());
+    }
+    keyValueCountMap.get(key).add(val);
+  }
+  Assert.assertTrue("Invalid key count in out file. Expected: " + keyCnt + " Actual: "+ keyValueCountMap.keySet().size(),keyValueCountMap.keySet().size() == keyCnt);
+  for (  Integer mapKey : keyValueCountMap.keySet()) {
+    Assert.assertTrue("Invalid value count for key: " + mapKey + ". Expected: "+ valCnt+ " Actual: "+ keyValueCountMap.get(mapKey).size(),keyValueCountMap.get(mapKey).size() == valCnt);
+  }
+}

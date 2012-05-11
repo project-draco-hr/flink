@@ -1,0 +1,25 @@
+{
+  this.config=new TaskConfig(getTaskConfiguration());
+  @SuppressWarnings("unchecked") Class<InputFormat<OT,InputSplit>> superClass=(Class<InputFormat<OT,InputSplit>>)(Class<?>)InputFormat.class;
+  this.format=AbstractPactTask.instantiateUserCode(this.config,cl,superClass);
+  try {
+    final Class<? extends TypeSerializerFactory<OT>> serializerFactoryClass=this.config.getSerializerFactoryForOutput(cl);
+    if (serializerFactoryClass == null) {
+      @SuppressWarnings("unchecked") TypeSerializer<OT> ps=(TypeSerializer<OT>)PactRecordSerializer.get();
+      this.serializer=ps;
+    }
+ else {
+      TypeSerializerFactory<OT> serializerFactory=InstantiationUtil.instantiate(serializerFactoryClass,TypeSerializerFactory.class);
+      this.serializer=serializerFactory.getSerializer();
+    }
+  }
+ catch (  ClassNotFoundException cnfex) {
+    throw new RuntimeException("The class registered as output serializer factory could not be loaded.",cnfex);
+  }
+  try {
+    this.format.configure(this.config.getStubParameters());
+  }
+ catch (  Throwable t) {
+    throw new RuntimeException("The user defined 'configure()' method caused an error: " + t.getMessage(),t);
+  }
+}

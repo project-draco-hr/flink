@@ -1,0 +1,38 @@
+{
+  final Iterator<FileInputSplit> splitIterator=getFileInputSplits();
+  FileRecord fr=null;
+  while (splitIterator.hasNext()) {
+    final FileInputSplit split=splitIterator.next();
+    final long start=split.getStart();
+    final long end=start + split.getLength();
+    if (buffer == null || buffer.length < end - start) {
+      buffer=new byte[(int)(end - start)];
+    }
+    if (fr == null || fr.getFileName().compareTo(split.getPath().getName()) != 0) {
+      if (fr != null) {
+        try {
+          output.emit(fr);
+        }
+ catch (        InterruptedException e) {
+          LOG.error(e);
+        }
+      }
+      fr=new FileRecord(split.getPath().getName());
+    }
+    final FileSystem fs=FileSystem.get(split.getPath().toUri());
+    final FSDataInputStream fdis=fs.open(split.getPath());
+    fdis.seek(split.getStart());
+    int read=fdis.read(buffer,0,buffer.length);
+    if (read == -1)     continue;
+    fr.append(buffer,0,read);
+    if (read != end - start) {
+      System.err.println("Unexpected number of bytes read! Expected: " + (end - start) + " Read: "+ read);
+    }
+  }
+  if (fr != null)   try {
+    output.emit(fr);
+  }
+ catch (  InterruptedException e) {
+    LOG.error(e);
+  }
+}
