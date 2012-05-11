@@ -31,27 +31,17 @@ break;
 if (availableMemory < strategyMinMem) {
 throw new RuntimeException("The SelfMatch task was initialized with too little memory for local strategy " + config.getLocalStrategy() + " : "+ availableMemory+ " bytes."+ "Required is at least "+ strategyMinMem+ " bytes.");
 }
-memoryManager=getEnvironment().getMemoryManager();
-ioManager=getEnvironment().getIOManager();
-keyPositions=this.config.getLocalStrategyKeyPositions(0);
-keyClasses=this.config.getLocalStrategyKeyClasses(this.userCodeClassLoader);
-if (keyPositions == null || keyClasses == null) {
-throw new Exception("The key positions and types are not specified for the SelfMatchTask.");
-}
-if (keyPositions.length != keyClasses.length) {
-throw new Exception("The number of key positions and types does not match in the configuration");
-}
-final Comparator<Key>[] comparators=new Comparator[keyPositions.length];
-final KeyComparator kk=new KeyComparator();
-for (int i=0; i < comparators.length; i++) {
-comparators[i]=kk;
-}
+final MemoryManager memoryManager=getEnvironment().getMemoryManager();
+final IOManager ioManager=getEnvironment().getIOManager();
+final MutableObjectIterator<IT> in=getInput(0);
+this.serializer=getInputSerializer(0);
+this.comparator=getInputComparator(0);
 switch (ls) {
 case SELF_NESTEDLOOP:
-closeableInput=new SimpleCloseableInputProvider<PactRecord>(inputs[0]);
+this.closeableInput=new SimpleCloseableInputProvider<IT>(in);
 break;
 case SORT_SELF_NESTEDLOOP:
-closeableInput=new UnilateralSortMerger(memoryManager,ioManager,(long)(availableMemory * (1.0 - MEMORY_SHARE_RATIO)),maxFileHandles,comparators,keyPositions,keyClasses,inputs[0],this,spillThreshold);
+this.closeableInput=new UnilateralSortMerger<IT>(memoryManager,ioManager,in,this,this.serializer,this.comparator.duplicate(),availableMemory,maxFileHandles,spillThreshold);
 break;
 default :
 throw new RuntimeException("Invalid local strategy provided for SelfMatchTask: " + config.getLocalStrategy());

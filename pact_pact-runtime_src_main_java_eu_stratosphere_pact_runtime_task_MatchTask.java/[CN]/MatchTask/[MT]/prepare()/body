@@ -27,6 +27,21 @@ final TypeSerializer<IT1> serializer1=getInputSerializer(0);
 final TypeSerializer<IT2> serializer2=getInputSerializer(1);
 final TypeComparator<IT1> comparator1=getInputComparator(0);
 final TypeComparator<IT2> comparator2=getInputComparator(1);
+final TypePairComparatorFactory<IT1,IT2> pairComparatorFactory;
+try {
+final Class<? extends TypePairComparatorFactory<IT1,IT2>> factoryClass=this.config.getPairComparatorFactory(this.userCodeClassLoader);
+if (factoryClass == null) {
+@SuppressWarnings("unchecked") TypePairComparatorFactory<IT1,IT2> pactRecordFactory=(TypePairComparatorFactory<IT1,IT2>)PactRecordPairComparatorFactory.get();
+pairComparatorFactory=pactRecordFactory;
+}
+ else {
+@SuppressWarnings("unchecked") final Class<TypePairComparatorFactory<IT1,IT2>> clazz=(Class<TypePairComparatorFactory<IT1,IT2>>)(Class<?>)TypePairComparatorFactory.class;
+pairComparatorFactory=InstantiationUtil.instantiate(factoryClass,clazz);
+}
+}
+ catch (ClassNotFoundException cnfex) {
+throw new Exception("The class registered as TypePairComparatorFactory cloud not be loaded.",cnfex);
+}
 final MemoryManager memoryManager=getEnvironment().getMemoryManager();
 final IOManager ioManager=getEnvironment().getIOManager();
 switch (ls) {
@@ -34,13 +49,13 @@ case SORT_BOTH_MERGE:
 case SORT_FIRST_MERGE:
 case SORT_SECOND_MERGE:
 case MERGE:
-this.matchIterator=new SortMergeMatchIterator(memoryManager,ioManager,this.inputs[0],this.inputs[1],keyPositions1,keyPositions2,keyClasses,availableMemory,maxFileHandles,spillThreshold,ls,this);
+this.matchIterator=new SortMergeMatchIterator<IT1,IT2,OT>(in1,in2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator12(comparator1,comparator2),memoryManager,ioManager,availableMemory,maxFileHandles,spillThreshold,ls,this);
 break;
 case HYBRIDHASH_FIRST:
-this.matchIterator=new BuildFirstHashMatchIterator(this.inputs[0],this.inputs[1],keyPositions1,keyPositions2,keyClasses,memoryManager,ioManager,this,availableMemory);
+this.matchIterator=new BuildFirstHashMatchIterator<IT1,IT2,OT>(in1,in2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator21(comparator1,comparator2),memoryManager,ioManager,this,availableMemory);
 break;
 case HYBRIDHASH_SECOND:
-this.matchIterator=new BuildSecondHashMatchIterator(this.inputs[0],this.inputs[1],keyPositions2,keyPositions1,keyClasses,memoryManager,ioManager,this,availableMemory);
+this.matchIterator=new BuildSecondHashMatchIterator<IT1,IT2,OT>(in1,in2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator12(comparator1,comparator2),memoryManager,ioManager,this,availableMemory);
 break;
 default :
 throw new Exception("Unsupported local strategy for MatchTask: " + ls.name());

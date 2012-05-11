@@ -1,0 +1,29 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(getLogString("Running Cross with Block-Nested-Loops: " + "First input is outer (blocking) side, second input is inner (spilling) side."));
+  }
+  final MutableObjectIterator<T1> in1=getInput(0);
+  final MutableObjectIterator<T2> in2=getInput(1);
+  final TypeSerializer<T1> serializer1=getInputSerializer(0);
+  final TypeSerializer<T2> serializer2=getInputSerializer(1);
+  final BlockResettableMutableObjectIterator<T1> blockVals=new BlockResettableMutableObjectIterator<T1>(this.memManager,in1,serializer1,this.memForBlockSide,this);
+  this.blockIter=blockVals;
+  final SpillingResettableMutableObjectIterator<T2> spillVals=new SpillingResettableMutableObjectIterator<T2>(in2,serializer2,this.memManager,getEnvironment().getIOManager(),this.memForSpillingSide,this);
+  this.spillIter=spillVals;
+  final T1 val1=serializer1.createInstance();
+  final T2 val2=serializer2.createInstance();
+  final T2 val2Copy=serializer2.createInstance();
+  final GenericCrosser<T1,T2,OT> crosser=this.stub;
+  final Collector<OT> collector=this.output;
+  do {
+    while (this.running && spillVals.next(val2)) {
+      while (blockVals.next(val1)) {
+        serializer2.copyTo(val2,val2Copy);
+        crosser.cross(val1,val2Copy,collector);
+      }
+      blockVals.reset();
+    }
+    spillVals.reset();
+  }
+ while (this.running && blockVals.nextBlock());
+}
