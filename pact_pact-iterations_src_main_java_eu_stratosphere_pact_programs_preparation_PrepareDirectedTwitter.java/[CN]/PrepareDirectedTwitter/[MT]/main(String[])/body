@@ -1,0 +1,23 @@
+{
+  if (args.length != 5) {
+    System.out.println("Not correct parameters");
+    System.exit(-1);
+  }
+  final int dop=Integer.valueOf(args[0]);
+  final String input=args[1];
+  final String output=args[2];
+  final int spi=Integer.valueOf(args[3]);
+  final int baseMemory=Integer.valueOf(args[4]);
+  final Class<? extends Key> keyType=PactLong.class;
+  JobGraph graph=new JobGraph("Bulk PageRank Broadcast -- Optimized Twitter");
+  JobInputVertex sourceVertex=createInput(TwitterLinkInput.class,input,graph,dop,spi);
+  JobTaskVertex adjList=createTask(CreateAdjList.class,graph,dop,spi);
+  adjList.setVertexToShareInstancesWith(sourceVertex);
+  setMemorySize(adjList,baseMemory / 2);
+  setReduceInformation(adjList,new int[]{0},new Class[]{keyType});
+  JobOutputVertex sinkVertex=createOutput(AdjListOutput.class,output,graph,dop,spi);
+  sinkVertex.setVertexToShareInstancesWith(sourceVertex);
+  connectJobVertices(ShipStrategy.PARTITION_HASH,sourceVertex,adjList,new int[]{0},new Class[]{keyType});
+  connectJobVertices(ShipStrategy.FORWARD,adjList,sinkVertex,null,null);
+  submit(graph,getConfiguration());
+}

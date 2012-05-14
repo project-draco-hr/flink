@@ -1,0 +1,32 @@
+{
+  LazyTransitiveClosureEntry state=new LazyTransitiveClosureEntry();
+  ComponentUpdate probe=new ComponentUpdate();
+  int countUpdated=0;
+  int countUnchanged=0;
+  while (iter.next(probe)) {
+    LazyHashBucketIterator<Value,ComponentUpdate> tableIter=table.getLazyMatchesFor(probe);
+    if (tableIter.next(state)) {
+      long oldCid=state.getCid();
+      long updateCid=probe.getCid();
+      if (updateCid < oldCid) {
+        state.setCid(updateCid);
+        int numNeighbours=state.getNumNeighbors();
+        long[] neighbourIds=state.getNeighbors();
+        update.setCid(updateCid);
+        for (int i=0; i < numNeighbours; i++) {
+          update.setVid(neighbourIds[i]);
+          output.collect(update);
+        }
+        countUpdated++;
+      }
+ else {
+        countUnchanged++;
+      }
+    }
+    if (tableIter.next(state)) {
+      throw new RuntimeException("there should only be one");
+    }
+  }
+  sendCounter("iteration.match.updated",countUpdated);
+  sendCounter("iteration.match.unchanged",countUnchanged);
+}

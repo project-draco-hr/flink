@@ -1,0 +1,43 @@
+{
+  int numInputs=getNumberOfInputs();
+  @SuppressWarnings("unchecked") final MutableObjectIterator<Value>[] inputs=new MutableObjectIterator[numInputs];
+  @SuppressWarnings("unchecked") final TypeAccessorsV2<? extends Value>[] accessors=new TypeAccessorsV2[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    final ShipStrategy shipStrategy=config.getInputShipStrategy(i);
+    DistributionPattern dp=null;
+switch (shipStrategy) {
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+case PARTITION_LOCAL_RANGE:
+      dp=new PointwiseDistributionPattern();
+    break;
+case PARTITION_HASH:
+case PARTITION_RANGE:
+case BROADCAST:
+case SFR:
+  dp=new BipartiteDistributionPattern();
+break;
+default :
+throw new RuntimeException("Invalid input ship strategy provided for input " + i + ": "+ shipStrategy.name());
+}
+inputs[i]=new RecordReaderIterator(new MutableRecordReader<Value>(this,dp));
+@SuppressWarnings("unchecked") Class<? extends TypeAccessorsV2<? extends Value>> clsAccessor=(Class<? extends TypeAccessorsV2<? extends Value>>)getRuntimeConfiguration().getClass(TYPE + i,PactRecordAccessorsV2.class);
+try {
+if (clsAccessor == PactRecordAccessorsV2.class) {
+int[] pos=config.getLocalStrategyKeyPositions(i);
+Class<? extends Key>[] clss=config.getLocalStrategyKeyClasses(classLoader);
+pos=pos != null ? pos : new int[]{};
+clss=clss != null ? clss : new Class[]{};
+accessors[i]=new PactRecordAccessorsV2(pos,clss);
+}
+ else {
+accessors[i]=clsAccessor.newInstance();
+}
+}
+ catch (Exception e) {
+throw new RuntimeException("Error instantiating accessor",e);
+}
+}
+this.accessors=accessors;
+this.inputs=inputs;
+}

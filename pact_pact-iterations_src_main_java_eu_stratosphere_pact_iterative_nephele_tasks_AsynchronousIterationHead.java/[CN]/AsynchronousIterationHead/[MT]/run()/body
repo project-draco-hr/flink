@@ -1,0 +1,20 @@
+{
+  OutputCollectorV2 innerOutput=new OutputCollectorV2();
+  RecordWriter<Value>[] innerWriters=getIterationRecordWriters();
+  for (  RecordWriter<Value> writer : innerWriters) {
+    innerOutput.addWriter(writer);
+  }
+  OutputCollectorV2 taskOutput=new OutputCollectorV2();
+  taskOutput.addWriter(output.getWriters().get(0));
+  OutputGate<? extends Record>[] iterStateGates=getIterationOutputGates();
+  int segmentSize=1024 * 1024;
+  List<MemorySegment> updateMemory=memoryManager.allocateStrict(this,(int)(updateBufferSize / segmentSize),segmentSize);
+  SerializedPassthroughUpdateBuffer buffer=new SerializedPassthroughUpdateBuffer(updateMemory,segmentSize);
+  BackTrafficQueueStore.getInstance().addStructures(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup());
+  BackTrafficQueueStore.getInstance().publishUpdateBuffer(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup(),buffer);
+  AbstractIterativeTask.publishState(ChannelState.OPEN,iterStateGates);
+  MutableObjectIterator<Value> input=inputs[0];
+  processInput(new WrappedIterator(input,getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup()),innerOutput);
+  AbstractIterativeTask.publishState(ChannelState.CLOSED,iterStateGates);
+  finished=true;
+}

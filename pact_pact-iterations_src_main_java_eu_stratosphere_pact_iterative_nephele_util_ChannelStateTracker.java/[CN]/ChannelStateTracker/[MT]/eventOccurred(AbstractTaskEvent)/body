@@ -1,0 +1,43 @@
+{
+  ChannelStateEvent evt=(ChannelStateEvent)event;
+  ChannelState evtState=evt.getState();
+  if (nextState == null) {
+    nextState=evtState;
+    if (nextState == ChannelState.OPEN) {
+      state=nextState;
+      stateChanged=true;
+    }
+    nextStateCount=1;
+  }
+ else   if (nextState == evtState) {
+    nextStateCount++;
+  }
+ else {
+    if (nextState == ChannelState.OPEN && evtState == ChannelState.CLOSED) {
+      waitingStates.add(evtState);
+    }
+ else {
+      throw new RuntimeException("Expected next state is " + nextState + " but channel changed to "+ state);
+    }
+  }
+  if (nextStateCount == numChannels) {
+    state=nextState;
+    if (waitingStates.isEmpty()) {
+      nextState=null;
+    }
+ else {
+      nextStateCount=waitingStates.size();
+      nextState=waitingStates.poll();
+      if (nextState != ChannelStateEvent.ChannelState.CLOSED) {
+        throw new RuntimeException("Impossible ");
+      }
+      waitingStates.clear();
+    }
+    if (state != ChannelState.OPEN) {
+      stateChanged=true;
+    }
+  }
+  if (isChanged()) {
+    throw new StateChangeException(state);
+  }
+}

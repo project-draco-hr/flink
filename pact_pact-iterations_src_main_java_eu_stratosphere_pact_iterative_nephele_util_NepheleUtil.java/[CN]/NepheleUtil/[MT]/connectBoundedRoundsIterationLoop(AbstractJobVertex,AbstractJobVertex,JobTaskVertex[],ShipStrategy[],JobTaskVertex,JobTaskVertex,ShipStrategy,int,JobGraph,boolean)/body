@@ -1,0 +1,39 @@
+{
+  int dop=iterationInput.getNumberOfSubtasks();
+  int spi=iterationInput.getNumberOfSubtasksPerInstance();
+  iterationHead.getConfiguration().setBoolean(IterationHead.FIXED_POINT_TERMINATOR,false);
+  iterationHead.getConfiguration().setInteger(IterationHead.NUMBER_OF_ITERATIONS,numRounds);
+  JobTaskVertex iterationTail;
+  if (async) {
+    iterationTail=createTask(AsynchronousIterationTail.class,graph,dop,spi);
+  }
+ else {
+    iterationTail=createTask(IterationTail.class,graph,dop,spi);
+  }
+  iterationTail.setVertexToShareInstancesWith(iterationInput);
+  JobTaskVertex iterationStateSynchronizer=createTask(IterationStateSynchronizer.class,graph,1);
+  iterationStateSynchronizer.setVertexToShareInstancesWith(iterationInput);
+  JobTaskVertex counter=createTask(CounterTask.class,graph,1);
+  counter.setVertexToShareInstancesWith(iterationInput);
+  JobOutputVertex dummySinkA=createDummyOutput(graph,1);
+  dummySinkA.setVertexToShareInstancesWith(iterationInput);
+  JobOutputVertex dummySinkB=createDummyOutput(graph,1);
+  dummySinkB.setVertexToShareInstancesWith(iterationInput);
+  connectJobVertices(iterationInputShipStrategy,iterationInput,iterationHead,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,iterationHead,iterationOutput,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,iterationHead,iterationTail,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationTail,iterationStateSynchronizer,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationHead,iterationStateSynchronizer,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationHead,counter,null,null);
+  if (!(innerLoopStarts == null && innerLoopEnd == null)) {
+    for (int i=0; i < innerLoopStarts.length; i++) {
+      connectJobVertices(innerStartStrategies[i],iterationHead,innerLoopStarts[i],null,null);
+    }
+    connectJobVertices(iterationInputShipStrategy,innerLoopEnd,iterationTail,null,null);
+  }
+ else {
+    connectJobVertices(iterationInputShipStrategy,iterationHead,iterationTail,null,null);
+  }
+  connectJobVertices(ShipStrategy.FORWARD,iterationStateSynchronizer,dummySinkA,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,counter,dummySinkB,null,null);
+}

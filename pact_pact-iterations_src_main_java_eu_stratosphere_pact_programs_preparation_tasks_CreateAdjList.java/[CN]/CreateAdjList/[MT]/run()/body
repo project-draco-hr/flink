@@ -1,0 +1,35 @@
+{
+  RecordWriter<Value> listWriter=output.getWriters().get(0);
+  MutableObjectIterator typelessIter=inputs[0];
+  try {
+    sorter=new UnilateralSortMerger(memoryManager,ioManager,memorySize,128,comparators,keyPos,keyClasses,typelessIter,this,0.8f);
+  }
+ catch (  Exception ex) {
+    System.out.println(ex);
+    System.out.flush();
+    throw new Exception("Error creating sorter",ex);
+  }
+  KeyGroupedIterator iter=new KeyGroupedIterator(sorter.getIterator(),keyPos,keyClasses);
+  long[] values=new long[10];
+  PactRecord nodeAdjList=new PactRecord();
+  PactLong neighbourId=new PactLong();
+  LongList adjList=new LongList();
+  while (iter.nextKey()) {
+    Key nodeId=iter.getKeys()[0];
+    nodeAdjList.setField(0,nodeId);
+    ValuesIterator valueIter=iter.getValues();
+    int counter=0;
+    while (valueIter.hasNext()) {
+      if (counter >= values.length) {
+        long[] newBuffer=new long[(int)(values.length * 1.5)];
+        System.arraycopy(values,0,newBuffer,0,values.length);
+        values=newBuffer;
+      }
+      values[counter]=valueIter.next().getField(1,neighbourId).getValue();
+      counter++;
+    }
+    adjList.setList(values,counter);
+    nodeAdjList.setField(1,adjList);
+    listWriter.emit(nodeAdjList);
+  }
+}

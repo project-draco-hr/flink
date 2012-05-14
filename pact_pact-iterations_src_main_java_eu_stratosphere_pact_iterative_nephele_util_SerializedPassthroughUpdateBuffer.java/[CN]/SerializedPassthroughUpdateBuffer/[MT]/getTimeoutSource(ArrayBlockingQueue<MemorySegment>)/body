@@ -1,0 +1,53 @@
+{
+  final SerializedPassthroughUpdateBuffer buffer=this;
+  return new MemorySegmentSource(){
+    int count=0;
+    SerializedPassthroughUpdateBuffer buf=buffer;
+    @Override public MemorySegment nextSegment(){
+      if (SerializedPassthroughUpdateBuffer.this.closed && source.isEmpty()) {
+        return null;
+      }
+ else {
+        try {
+          MemorySegment seg;
+          if (count < 2) {
+            seg=source.take();
+          }
+ else {
+            seg=source.poll();
+          }
+          if (seg == null) {
+synchronized (buf) {
+              if (buf.getCount() > 0) {
+                buf.writeEnd.flush();
+                seg=source.take();
+              }
+ else {
+                if (!blocks) {
+                  blocks=true;
+                }
+                buf.wait(5000);
+                if (buf.getCount() > 0) {
+                  buf.writeEnd.flush();
+                  seg=source.take();
+                }
+ else {
+                  return null;
+                }
+              }
+            }
+          }
+          count++;
+          return seg;
+        }
+ catch (        InterruptedException e) {
+          throw new RuntimeException("FifoBuffer was interrupted waiting next memory segment.");
+        }
+catch (        IOException e) {
+          throw new RuntimeException("Boooo");
+        }
+      }
+    }
+  }
+;
+}

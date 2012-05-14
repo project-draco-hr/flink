@@ -1,0 +1,29 @@
+{
+  int dop=iterationInput.getNumberOfSubtasks();
+  int spi=iterationInput.getNumberOfSubtasksPerInstance();
+  iterationHead.getConfiguration().setBoolean(IterationHead.FIXED_POINT_TERMINATOR,true);
+  JobTaskVertex iterationTail=createTask(IterationTail.class,graph,dop,spi);
+  iterationTail.setVertexToShareInstancesWith(iterationInput);
+  JobTaskVertex iterationStateSynchronizer=createTask(IterationStateSynchronizer.class,graph,1);
+  iterationStateSynchronizer.setVertexToShareInstancesWith(iterationInput);
+  JobTaskVertex terminationDeciderTask=createTask(IterationTerminationChecker.class,graph,1);
+  terminationDeciderTask.setVertexToShareInstancesWith(iterationInput);
+  terminationDeciderTask.getConfiguration().setClass(IterationTerminationChecker.TERMINATION_DECIDER,decider);
+  JobOutputVertex dummySinkA=createDummyOutput(graph,1);
+  dummySinkA.setVertexToShareInstancesWith(iterationInput);
+  JobOutputVertex dummySinkB=createDummyOutput(graph,1);
+  dummySinkB.setVertexToShareInstancesWith(iterationInput);
+  connectJobVertices(iterationInputShipStrategy,iterationInput,iterationHead,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,iterationHead,iterationOutput,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,terminationDataVertex,terminationDeciderTask,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,iterationHead,iterationTail,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationTail,iterationStateSynchronizer,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationHead,iterationStateSynchronizer,null,null);
+  connectJobVertices(ShipStrategy.BROADCAST,iterationHead,terminationDeciderTask,null,null);
+  for (  JobTaskVertex innerLoopStart : innerLoopStarts) {
+    connectJobVertices(ShipStrategy.FORWARD,iterationHead,innerLoopStart,null,null);
+  }
+  connectJobVertices(iterationInputShipStrategy,innerLoopEnd,iterationTail,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,iterationStateSynchronizer,dummySinkA,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,terminationDeciderTask,dummySinkB,null,null);
+}
