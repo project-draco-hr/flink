@@ -1,0 +1,30 @@
+{
+  MutableObjectIterator<Value> input=inputs[0];
+  ChannelStateTracker stateListener=stateListeners[0];
+  List<PactRecord> values=new ArrayList<PactRecord>();
+  while (true) {
+    try {
+      PactRecord rec=new PactRecord();
+      boolean success=input.next(rec);
+      if (success) {
+        values.add(rec);
+      }
+ else {
+        break;
+      }
+    }
+ catch (    StateChangeException ex) {
+      if (stateListener.isChanged() && stateListener.getState() == ChannelState.CLOSED) {
+        boolean terminate=decider.decide(values.iterator());
+        values.clear();
+        if (terminate) {
+          getEnvironment().getInputGate(1).publishEvent(new ChannelStateEvent(ChannelState.TERMINATED));
+        }
+ else {
+          getEnvironment().getInputGate(1).publishEvent(new ChannelStateEvent(ChannelState.CLOSED));
+        }
+      }
+    }
+  }
+  output.close();
+}

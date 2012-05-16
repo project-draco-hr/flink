@@ -1,0 +1,34 @@
+{
+  if (args.length != 5) {
+    System.out.println("Not correct parameters");
+    System.exit(-1);
+  }
+  final int dop=Integer.valueOf(args[0]);
+  final String input=args[1];
+  final String output=args[2];
+  final int spi=Integer.valueOf(args[3]);
+  final int baseMemory=Integer.valueOf(args[4]);
+  JobGraph graph=new JobGraph("Bulk PageRank Broadcast -- Optimized Twitter");
+  JobInputVertex sourceVertex=createInput(AdjacencyListInput.class,input,graph,dop,spi);
+  JobTaskVertex vertexRankContrib=createTask(VertexNeighbourContribCreatorNativeType.class,graph,dop,spi);
+  vertexRankContrib.setVertexToShareInstancesWith(sourceVertex);
+  JobTaskVertex initialRankAssigner=createTask(InitialRankAssigner.class,graph,dop,spi);
+  initialRankAssigner.setVertexToShareInstancesWith(sourceVertex);
+  JobTaskVertex tmpTask=createTask(VertexRankTempTask.class,graph,dop,spi);
+  tmpTask.setVertexToShareInstancesWith(sourceVertex);
+  setMemorySize(tmpTask,baseMemory * 1 / 9);
+  JobTaskVertex contribMatch=createTask(VertexRankMatchingBuildCaching.class,graph,dop,spi);
+  contribMatch.setVertexToShareInstancesWith(sourceVertex);
+  setMemorySize(contribMatch,baseMemory * 6 / 9);
+  JobTaskVertex rankReduce=createTask(RankReduceTask.class,graph,dop,spi);
+  rankReduce.setVertexToShareInstancesWith(sourceVertex);
+  setMemorySize(rankReduce,baseMemory * 2 / 9);
+  JobOutputVertex sinkVertex=createOutput(RankOutput.class,output,graph,dop,spi);
+  sinkVertex.setVertexToShareInstancesWith(sourceVertex);
+  connectJobVertices(ShipStrategy.FORWARD,sourceVertex,initialRankAssigner,null,null);
+  connectJobVertices(ShipStrategy.PARTITION_HASH,initialRankAssigner,tmpTask,null,null);
+  connectJobVertices(ShipStrategy.FORWARD,sourceVertex,vertexRankContrib,null,null);
+  connectBoundedRoundsIterationLoop(tmpTask,sinkVertex,new JobTaskVertex[]{rankReduce},new ShipStrategy[]{ShipStrategy.PARTITION_HASH},rankReduce,contribMatch,ShipStrategy.FORWARD,21,graph,false);
+  connectJobVertices(ShipStrategy.PARTITION_HASH,vertexRankContrib,contribMatch,null,null);
+  submit(graph,getConfiguration());
+}

@@ -1,0 +1,26 @@
+{
+  MutableObjectIterator<Value> input=inputs[0];
+  ChannelStateTracker stateListener=stateListeners[0];
+  PactRecord rec=new PactRecord();
+  while (true) {
+    try {
+      start=System.nanoTime();
+      boolean success=input.next(rec);
+      if (success) {
+        throw new RuntimeException("Received record");
+      }
+ else {
+        break;
+      }
+    }
+ catch (    StateChangeException ex) {
+      if (stateListener.isChanged() && stateListener.getState() == ChannelState.CLOSED) {
+        LOG.info("Finnished Step: " + count + " in "+ (System.nanoTime() - start) / 1000000 + "");
+        count++;
+        getEnvironment().getInputGate(1).publishEvent(new ChannelStateEvent(ChannelState.CLOSED));
+      }
+    }
+  }
+  inputs[1].next(rec);
+  output.close();
+}

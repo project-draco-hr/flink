@@ -1,0 +1,53 @@
+{
+  LazyTransitiveClosureEntry state=new LazyTransitiveClosureEntry();
+  ComponentUpdate probe=new ComponentUpdate();
+  PactRecord update=new PactRecord();
+  PactLong vid=new PactLong();
+  PactLong cid=new PactLong();
+  AsynchronousPartialSorterCollector sorter=new AsynchronousPartialSorterCollector(memoryManager,ioManager,sortMem,comparators,keyPos,keyClasses,this);
+  this.inputCollector=sorter.getInputCollector();
+  this.combinerThread=new CombinerThread(sorter,keyPos,keyClasses,this.stub,new PactRecordToUpdateCollector(output));
+  this.combinerThread.start();
+  int countUpdated=0;
+  int countUnchanged=0;
+  int countPreCombine=0;
+  while (iter.next(probe)) {
+    LazyHashBucketIterator<Value,ComponentUpdate> tableIter=table.getLazyMatchesFor(probe);
+    if (tableIter.next(state)) {
+      long oldCid=state.getCid();
+      long updateCid=probe.getCid();
+      if (updateCid < oldCid) {
+        state.setCid(updateCid);
+        int numNeighbours=state.getNumNeighbors();
+        long[] neighbourIds=state.getNeighbors();
+        cid.setValue(updateCid);
+        update.setField(1,cid);
+        for (int i=0; i < numNeighbours; i++) {
+          vid.setValue(neighbourIds[i]);
+          update.setField(0,vid);
+          countPreCombine++;
+          inputCollector.collect(update);
+        }
+        countUpdated++;
+      }
+ else {
+        countUnchanged++;
+      }
+    }
+    if (tableIter.next(state)) {
+      throw new RuntimeException("there should only be one");
+    }
+  }
+  inputCollector.close();
+  while (this.combinerThread.isAlive()) {
+    try {
+      this.combinerThread.join();
+    }
+ catch (    InterruptedException iex) {
+    }
+  }
+  sorter.close();
+  sendCounter("iteration.match.updated",countUpdated);
+  sendCounter("iteration.match.unchanged",countUnchanged);
+  sendCounter("iteration.combine.inputCount",countPreCombine);
+}

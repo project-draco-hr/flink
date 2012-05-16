@@ -1,0 +1,28 @@
+{
+  if (this.requestsRemaining > 0) {
+    this.requestsRemaining--;
+    this.spilledBufferSource.readBlock(current);
+  }
+ else {
+    this.emptyBufferTarget.add(current);
+  }
+  if (this.spilledBuffersRemaining > 0) {
+    this.spilledBuffersRemaining--;
+    try {
+      return this.spilledBufferSource.getReturnQueue().take();
+    }
+ catch (    InterruptedException iex) {
+      throw new RuntimeException("Read End was interrupted while waiting for spilled buffer.");
+    }
+  }
+ else   if (this.fullBufferSource.size() > 0) {
+    return this.fullBufferSource.removeFirst();
+  }
+ else {
+    clear();
+    if (this.spilledBufferSource != null) {
+      this.spilledBufferSource.closeAndDelete();
+    }
+    throw new EOFException();
+  }
+}

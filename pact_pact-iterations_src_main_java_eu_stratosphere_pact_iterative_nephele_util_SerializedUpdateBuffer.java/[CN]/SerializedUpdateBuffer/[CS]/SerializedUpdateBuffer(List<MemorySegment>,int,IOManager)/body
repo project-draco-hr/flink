@@ -1,0 +1,20 @@
+{
+  super(memSegments.remove(memSegments.size() - 1),segmentSize,HEADER_LENGTH);
+  this.totalNumBuffers=memSegments.size() + 1;
+  if (this.totalNumBuffers < 3) {
+    throw new IllegalArgumentException("SerializedUpdateBuffer needs at least 3 memory segments.");
+  }
+  this.emptyBuffers=new LinkedBlockingQueue<MemorySegment>(this.totalNumBuffers);
+  this.fullBuffers=new ArrayDeque<MemorySegment>(64);
+  this.emptyBuffers.addAll(memSegments);
+  int threshold=(int)((1 - SPILL_THRESHOLD) * this.totalNumBuffers);
+  this.numSegmentsSpillingThreshold=threshold > 0 ? threshold : 0;
+  this.minBuffersForWriteEnd=Math.max(2,Math.min(16,this.totalNumBuffers / 2));
+  this.minBuffersForSpilledReadEnd=Math.max(1,Math.min(16,this.totalNumBuffers / 4));
+  if (this.minBuffersForSpilledReadEnd + this.minBuffersForWriteEnd > this.totalNumBuffers) {
+    throw new RuntimeException("BUG: Unfulfillable memory assignment.");
+  }
+  this.ioManager=ioManager;
+  this.channelEnumerator=ioManager.createChannelEnumerator();
+  this.readEnds=new ArrayList<ReadEnd>();
+}

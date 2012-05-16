@@ -1,0 +1,29 @@
+{
+  if (firstRound) {
+    firstRound=false;
+    stateIterator=new SpillingResettableMutableObjectIteratorV2<Value>(memoryManager,ioManager,inputs[1],(TypeAccessorsV2<Value>)accessors[1],memorySize,this);
+    stateIterator.open();
+  }
+  stateIterator.reset();
+  VertexNeighbourPartial state=new VertexNeighbourPartial();
+  VertexPageRank pageRank=new VertexPageRank();
+  VertexPageRank result=new VertexPageRank();
+  while (iterationIter.next(pageRank))   ;
+  MutableHashTable<Value,VertexNeighbourPartial> table=ParallelVertexRankMatchBuild.tables.get(iteration).duplicate(((TypeComparator)new VertexRankMatchBuild.MatchComparator()));
+  while (stateIterator.next(state)) {
+    HashBucketIterator<Value,VertexNeighbourPartial> tableIter=table.getMatchesFor(state);
+    while (tableIter.next(pageRank)) {
+      double rank=pageRank.getRank();
+      double partial=state.getPartial();
+      if (Double.isNaN(rank * partial)) {
+        LOG.info("NAN: " + pageRank.getVid() + "::"+ rank+ " // "+ pageRank.getRank()+ "::"+ state.getPartial());
+      }
+ else {
+        result.setVid(state.getNid());
+        result.setRank(rank * partial);
+        output.collect(result);
+      }
+    }
+  }
+  iteration++;
+}

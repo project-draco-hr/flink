@@ -1,0 +1,27 @@
+{
+  final ChannelType channelType;
+  final DistributionPattern pattern;
+switch (shipStrategy) {
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+    channelType=ChannelType.INMEMORY;
+  pattern=DistributionPattern.POINTWISE;
+break;
+case PARTITION_HASH:
+case PARTITION_RANGE:
+case BROADCAST:
+channelType=ChannelType.NETWORK;
+pattern=DistributionPattern.BIPARTITE;
+break;
+default :
+throw new IllegalArgumentException("Unsupported ship-strategy: " + shipStrategy.name());
+}
+TaskConfig outputConfig=new TaskConfig(outputVertex.getConfiguration());
+outputVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,pattern);
+outputConfig.addOutputShipStrategy(shipStrategy);
+if (!(keyPos == null || keyTypes == null || keyPos.length == 0 || keyTypes.length == 0)) {
+final int numOutputs=outputConfig.getNumOutputs();
+PactRecordComparatorFactory.writeComparatorSetupToConfig(outputConfig.getConfiguration(),outputConfig.getPrefixForOutputParameters(numOutputs),keyPos,keyTypes);
+}
+System.out.println(outputVertex.getName() + " --> " + inputVertex.getName()+ "::"+ channelType);
+}

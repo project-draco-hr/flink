@@ -1,0 +1,60 @@
+{
+  TransitiveClosureEntry state=new TransitiveClosureEntry();
+  ComponentUpdateFlag probe=new ComponentUpdateFlag();
+  PactRecord update=new PactRecord();
+  PactLong vid=new PactLong();
+  PactLong cid=new PactLong();
+  PactBoolean updated=new PactBoolean();
+  AsynchronousPartialSorterCollector sorter=new AsynchronousPartialSorterCollector(memoryManager,ioManager,sortMem,comparators,keyPos,keyClasses,this);
+  this.inputCollector=sorter.getInputCollector();
+  this.combinerThread=new CombinerThread(sorter,keyPos,keyClasses,this.stub,new PactRecordToUpdateCollector(output));
+  this.combinerThread.start();
+  int preCombineCount=0;
+  while (iter.next(probe)) {
+    if (probe.isUpdated()) {
+      HashBucketIterator<Value,ComponentUpdateFlag> tableIter=table.getMatchesFor(probe);
+      if (tableIter.next(state)) {
+        long updateCid=probe.getCid();
+        int numNeighbours=state.getNumNeighbors();
+        long[] neighbourIds=state.getNeighbors();
+        cid.setValue(updateCid);
+        update.setField(1,cid);
+        updated.setValue(false);
+        update.setField(2,updated);
+        vid.setValue(probe.getVid());
+        update.setField(0,vid);
+        inputCollector.collect(update);
+        updated.setValue(true);
+        update.setField(2,updated);
+        for (int i=0; i < numNeighbours; i++) {
+          vid.setValue(neighbourIds[i]);
+          update.setField(0,vid);
+          preCombineCount++;
+          inputCollector.collect(update);
+        }
+      }
+      if (tableIter.next(state)) {
+        throw new RuntimeException("there should only be one");
+      }
+    }
+ else {
+      vid.setValue(probe.getVid());
+      update.setField(0,vid);
+      cid.setValue(probe.getCid());
+      update.setField(1,cid);
+      updated.setValue(false);
+      update.setField(2,updated);
+      inputCollector.collect(update);
+    }
+  }
+  this.sendCounter("iteration.combine.inputCount",preCombineCount);
+  inputCollector.close();
+  while (this.combinerThread.isAlive()) {
+    try {
+      this.combinerThread.join();
+    }
+ catch (    InterruptedException iex) {
+    }
+  }
+  sorter.close();
+}
