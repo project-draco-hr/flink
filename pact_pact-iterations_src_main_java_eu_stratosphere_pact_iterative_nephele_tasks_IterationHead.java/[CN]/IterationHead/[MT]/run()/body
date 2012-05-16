@@ -8,11 +8,11 @@
   taskOutput.addWriter(output.getWriters().get(0));
   OutputGate<? extends Record>[] iterStateGates=getIterationOutputGates();
   LOG.info("Update memory: " + updateBufferSize + ", numSegments: "+ (int)(updateBufferSize / MEMORY_SEGMENT_SIZE));
-  List<MemorySegment> updateMemory=memoryManager.allocateStrict(this,(int)(updateBufferSize / MEMORY_SEGMENT_SIZE),MEMORY_SEGMENT_SIZE);
-  SerializedUpdateBuffer buffer=new SerializedUpdateBuffer(updateMemory,MEMORY_SEGMENT_SIZE,ioManager);
+  List<MemorySegment> updateMemory=getEnvironment().getMemoryManager().allocateStrict(this,(int)(updateBufferSize / MEMORY_SEGMENT_SIZE),MEMORY_SEGMENT_SIZE);
+  SerializedUpdateBuffer buffer=new SerializedUpdateBuffer(updateMemory,MEMORY_SEGMENT_SIZE,getEnvironment().getIOManager());
   BackTrafficQueueStore.getInstance().addStructures(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup());
   BackTrafficQueueStore.getInstance().publishUpdateBuffer(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup(),buffer);
-  AbstractIterativeTask.publishState(ChannelState.OPEN,iterStateGates);
+  publishState(ChannelState.OPEN,iterStateGates);
   if (LOG.isInfoEnabled()) {
     LOG.info(constructLogString("Starting Iteration: -1",getEnvironment().getTaskName(),this));
   }
@@ -22,9 +22,9 @@
   processInput(statsIter,statsOutputCollector);
   sendCounter("iter.received.messages",statsIter.getCount());
   sendCounter("iter.send.messages",statsOutputCollector.getCount());
-  AbstractIterativeTask.publishState(ChannelState.CLOSED,iterStateGates);
+  publishState(ChannelState.CLOSED,iterStateGates);
   int iterationCounter=0;
-  SerializedUpdateBuffer updatesBuffer=null;
+  SerializedUpdateBuffer updatesBuffer;
   while (true) {
     try {
       updatesBuffer=(SerializedUpdateBuffer)BackTrafficQueueStore.getInstance().receiveIterationEnd(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup());
@@ -49,12 +49,12 @@
         }
         statsIter=new CountingIterator(new DeserializingIterator(updatesBuffer.switchBuffers()));
         BackTrafficQueueStore.getInstance().publishUpdateBuffer(getEnvironment().getJobID(),getEnvironment().getIndexInSubtaskGroup(),buffer);
-        AbstractIterativeTask.publishState(ChannelState.OPEN,iterStateGates);
+        publishState(ChannelState.OPEN,iterStateGates);
         statsOutputCollector=new CountingOutputCollector(innerOutput);
         processUpdates(statsIter,statsOutputCollector);
         sendCounter("iter.received.messages",statsIter.getCount());
         sendCounter("iter.send.messages",statsOutputCollector.getCount());
-        AbstractIterativeTask.publishState(ChannelState.CLOSED,iterStateGates);
+        publishState(ChannelState.CLOSED,iterStateGates);
         updatesBuffer=null;
         iterationCounter++;
       }
@@ -66,6 +66,6 @@
   finish(new DeserializingIterator(updatesBuffer.switchBuffers()),taskOutput);
   if (updatesBuffer != null) {
   }
-  memoryManager.release(updateMemory);
+  getEnvironment().getMemoryManager().release(updateMemory);
   finished=true;
 }

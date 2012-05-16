@@ -1,0 +1,18 @@
+{
+  if (args.length != 3) {
+    System.exit(-1);
+  }
+  final int dop=Integer.parseInt(args[0]);
+  final String input=args[1];
+  final String output=args[2];
+  JobGraph graph=new JobGraph("Iterative Test");
+  JobInputVertex sourceVertex=NepheleUtil.createInput(EdgeInput.class,input,graph,dop);
+  JobTaskVertex iterationStart=NepheleUtil.createTask(DummyIterationHead.class,graph,dop);
+  iterationStart.setVertexToShareInstancesWith(sourceVertex);
+  JobTaskVertex forward=NepheleUtil.createTask(DummyIterativeForward.class,graph,dop);
+  forward.setVertexToShareInstancesWith(sourceVertex);
+  JobOutputVertex sinkVertex=NepheleUtil.createOutput(EdgeOutput.class,output,graph,dop);
+  sinkVertex.setVertexToShareInstancesWith(sourceVertex);
+  NepheleUtil.connectBoundedRoundsIterationLoop(sourceVertex,sinkVertex,new JobTaskVertex[]{forward},forward,iterationStart,ShipStrategy.FORWARD,100,graph);
+  NepheleUtil.submit(graph,NepheleUtil.getConfiguration());
+}
