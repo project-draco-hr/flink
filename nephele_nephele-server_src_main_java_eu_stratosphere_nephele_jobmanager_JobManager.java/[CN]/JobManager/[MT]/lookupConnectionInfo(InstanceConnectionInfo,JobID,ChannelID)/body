@@ -25,7 +25,9 @@
       return ConnectionInfoLookupResponse.createReceiverFoundAndReady(connectedChannelID);
     }
  else {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+      final InstanceConnectionInfo ici=assignedInstance.getInstanceConnectionInfo();
+      final InetSocketAddress isa=new InetSocketAddress(ici.getAddress(),ici.getDataPort());
+      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(new RemoteReceiver(isa,0));
     }
   }
   if (outputChannel.isBroadcastChannel()) {
@@ -53,7 +55,15 @@
       return ConnectionInfoLookupResponse.createReceiverFoundAndReady(outputChannel.getConnectedChannelID());
     }
  else {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(assignedInstance.getInstanceConnectionInfo());
+      final InstanceConnectionInfo ici=assignedInstance.getInstanceConnectionInfo();
+      final InetSocketAddress isa=new InetSocketAddress(ici.getAddress(),ici.getDataPort());
+      final AbstractInputChannel<? extends Record> inputChannel=eg.getInputChannelByID(outputChannel.getConnectedChannelID());
+      if (inputChannel == null) {
+        LOG.error("Cannot find input channel with ID " + outputChannel.getConnectedChannelID());
+        return ConnectionInfoLookupResponse.createReceiverNotReady();
+      }
+      final int connectionID=targetVertex.getGroupVertex().getBackwardEdge(inputChannel.getInputGate().getIndex()).getConnectionID();
+      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(new RemoteReceiver(isa,connectionID));
     }
   }
 }
