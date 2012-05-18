@@ -1,53 +1,53 @@
 {
-  for (int i=this.readEnds.size() - 1; i >= 0; --i) {
-    final ReadEnd re=this.readEnds.get(i);
+  for (int i=readEnds.size() - 1; i >= 0; --i) {
+    final ReadEnd re=readEnds.get(i);
     if (re.disposeIfDone()) {
-      this.readEnds.remove(i);
+      readEnds.remove(i);
     }
   }
   final MemorySegment current=getCurrentSegment();
   current.putInt(0,getCurrentPositionInSegment());
-  this.fullBuffers.addLast(current);
+  fullBuffers.addLast(current);
   final ReadEnd readEnd;
-  if (this.numBuffersSpilled == 0 && this.emptyBuffers.size() >= this.minBuffersForWriteEnd) {
-    readEnd=new ReadEnd(this.fullBuffers.removeFirst(),this.emptyBuffers,this.fullBuffers,null,null,this.segmentSize,0);
+  if (numBuffersSpilled == 0 && emptyBuffers.size() >= minBuffersForWriteEnd) {
+    readEnd=new ReadEnd(fullBuffers.removeFirst(),emptyBuffers,fullBuffers,null,null,segmentSize,0);
   }
  else {
-    int toSpill=Math.min(this.minBuffersForSpilledReadEnd + this.minBuffersForWriteEnd - this.emptyBuffers.size(),this.fullBuffers.size());
+    int toSpill=Math.min(minBuffersForSpilledReadEnd + minBuffersForWriteEnd - emptyBuffers.size(),fullBuffers.size());
     if (toSpill > 0) {
-      if (this.currentWriter == null) {
-        this.currentWriter=this.ioManager.createBlockChannelWriter(this.channelEnumerator.next(),this.emptyBuffers);
+      if (currentWriter == null) {
+        currentWriter=ioManager.createBlockChannelWriter(channelEnumerator.next(),emptyBuffers);
       }
       for (int i=0; i < toSpill; i++) {
-        this.currentWriter.writeBlock(this.fullBuffers.removeFirst());
+        currentWriter.writeBlock(fullBuffers.removeFirst());
       }
-      this.numBuffersSpilled+=toSpill;
+      numBuffersSpilled+=toSpill;
     }
-    this.currentWriter.close();
-    final BlockChannelReader reader=this.ioManager.createBlockChannelReader(this.currentWriter.getChannelID());
-    final ArrayList<MemorySegment> readSegments=new ArrayList<MemorySegment>();
+    currentWriter.close();
+    final BlockChannelReader reader=ioManager.createBlockChannelReader(currentWriter.getChannelID());
+    final ArrayList<MemorySegment> readSegments=Lists.newArrayList();
     try {
-      while (readSegments.size() < this.minBuffersForSpilledReadEnd) {
-        readSegments.add(this.emptyBuffers.take());
+      while (readSegments.size() < minBuffersForSpilledReadEnd) {
+        readSegments.add(emptyBuffers.take());
       }
       MemorySegment firstSeg=readSegments.remove(readSegments.size() - 1);
       reader.readBlock(firstSeg);
       firstSeg=reader.getReturnQueue().take();
-      readEnd=new ReadEnd(firstSeg,this.emptyBuffers,this.fullBuffers,reader,readSegments,this.segmentSize,this.numBuffersSpilled - 1);
+      readEnd=new ReadEnd(firstSeg,emptyBuffers,fullBuffers,reader,readSegments,segmentSize,numBuffersSpilled - 1);
     }
  catch (    InterruptedException iex) {
       throw new RuntimeException("SerializedUpdateBuffer was interrupted while reclaiming memory by spilling.");
     }
   }
-  this.fullBuffers=new ArrayDeque<MemorySegment>(64);
-  this.currentWriter=null;
-  this.numBuffersSpilled=0;
+  fullBuffers=new ArrayDeque<MemorySegment>(64);
+  currentWriter=null;
+  numBuffersSpilled=0;
   try {
     seekOutput(emptyBuffers.take(),HEADER_LENGTH);
   }
  catch (  InterruptedException iex) {
     throw new RuntimeException("SerializedUpdateBuffer was interrupted while reclaiming memory by spilling.");
   }
-  this.readEnds.add(readEnd);
+  readEnds.add(readEnd);
   return readEnd;
 }
