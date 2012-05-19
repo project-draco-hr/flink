@@ -1,12 +1,26 @@
 {
   while (!this.isInterrupted()) {
+synchronized (this.pendingReadEventSubscribeRequests) {
+      while (!this.pendingReadEventSubscribeRequests.isEmpty()) {
+        final SelectionKey canceledKey=this.pendingReadEventSubscribeRequests.poll();
+        final IncomingConnection incomingConnection=(IncomingConnection)canceledKey.attachment();
+        final SocketChannel socketChannel=(SocketChannel)canceledKey.channel();
+        try {
+          final SelectionKey newKey=socketChannel.register(this.selector,SelectionKey.OP_READ);
+          newKey.attach(incomingConnection);
+        }
+ catch (        ClosedChannelException e) {
+          incomingConnection.reportTransmissionProblem(canceledKey,e);
+        }
+      }
+    }
     try {
-      selector.select(500);
+      this.selector.select(500);
     }
  catch (    IOException e) {
       LOG.error(e);
     }
-    final Iterator<SelectionKey> iter=selector.selectedKeys().iterator();
+    final Iterator<SelectionKey> iter=this.selector.selectedKeys().iterator();
     while (iter.hasNext()) {
       final SelectionKey key=iter.next();
       iter.remove();
