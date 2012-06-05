@@ -1,0 +1,32 @@
+{
+  Iterator<Map.Entry<AbstractJobVertex,ExecutionVertex>> it=vertexMap.entrySet().iterator();
+  while (it.hasNext()) {
+    final Map.Entry<AbstractJobVertex,ExecutionVertex> entry=it.next();
+    final AbstractJobVertex sjv=entry.getKey();
+    final ExecutionVertex sev=entry.getValue();
+    final ExecutionGroupVertex sgv=sev.getGroupVertex();
+    if (sjv.getNumberOfForwardConnections() != sgv.getEnvironment().getNumberOfOutputGates()) {
+      throw new GraphConversionException("Job and execution vertex " + sjv.getName() + " have different number of outputs");
+    }
+    if (sjv.getNumberOfBackwardConnections() != sgv.getEnvironment().getNumberOfInputGates()) {
+      throw new GraphConversionException("Job and execution vertex " + sjv.getName() + " have different number of inputs");
+    }
+    for (int i=0; i < sjv.getNumberOfForwardConnections(); ++i) {
+      final boolean isBroadcast=sgv.getEnvironment().getOutputGate(i).isBroadcast();
+      final JobEdge edge=sjv.getForwardConnection(i);
+      final AbstractJobVertex tjv=edge.getConnectedVertex();
+      final ExecutionVertex tev=vertexMap.get(tjv);
+      final ExecutionGroupVertex tgv=tev.getGroupVertex();
+      final ChannelType channelType=edge.getChannelType();
+      final CompressionLevel compressionLevel=edge.getCompressionLevel();
+      final DistributionPattern distributionPattern=edge.getDistributionPattern();
+      final boolean userDefinedChannelType=(channelType != null);
+      final boolean userDefinedCompressionLevel=(compressionLevel != null);
+      final ExecutionGroupEdge groupEdge=sgv.wireTo(tgv,edge.getIndexOfInputGate(),i,channelType,userDefinedChannelType,compressionLevel,userDefinedCompressionLevel,distributionPattern,isBroadcast);
+      final ExecutionGate outputGate=new ExecutionGate(sev,groupEdge,false);
+      sev.insertOutputGate(i,outputGate);
+      final ExecutionGate inputGate=new ExecutionGate(tev,groupEdge,true);
+      tev.insertInputGate(edge.getIndexOfInputGate(),inputGate);
+    }
+  }
+}

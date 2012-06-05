@@ -1,11 +1,13 @@
 {
   final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
-  final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
-  final OutputGate<? extends Record> broadcastgate=outputChannel.getOutputGate();
+  final ExecutionEdge outputChannel=eg.getEdgeByID(sourceChannelID);
+  final ExecutionGate broadcastGate=outputChannel.getOutputGate();
   List<ExecutionVertex> verticesToDeploy=null;
-  for (  AbstractOutputChannel<? extends Record> c : broadcastgate.getOutputChannels()) {
-    if (c.isBroadcastChannel()) {
-      ExecutionVertex targetVertex=eg.getVertexByChannelID(c.getConnectedChannelID());
+  final int numberOfOutputChannels=broadcastGate.getNumberOfEdges();
+  for (int i=0; i < numberOfOutputChannels; ++i) {
+    final ExecutionEdge c=broadcastGate.getEdge(i);
+    if (c.isBroadcast()) {
+      final ExecutionVertex targetVertex=c.getInputGate().getVertex();
       if (targetVertex.getExecutionState() == ExecutionState.ASSIGNED) {
         if (verticesToDeploy == null) {
           verticesToDeploy=new ArrayList<ExecutionVertex>();
