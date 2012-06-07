@@ -2,8 +2,12 @@
   final SopremoModule module=new SopremoModule(this.getName(),1,1);
   final Source basketSource=module.getInput(0);
   final RoundRobinAnnotator annotator=new RoundRobinAnnotator().withInputs(basketSource);
-  annotator.setMaxAnnotation(10);
-  final FindUnaryFrequentItemSets unaryItemSets=new FindUnaryFrequentItemSets().withInputs(annotator);
-  module.getOutput(0).setInputs(unaryItemSets);
+  annotator.setMaxAnnotation(this.parallelism - 1);
+  final int localMinSupport=this.minSupport / this.parallelism;
+  final LocalAPriori aPriori=new LocalAPriori().withInputs(annotator);
+  aPriori.setMinSupport(localMinSupport);
+  aPriori.setMaxSetSize(this.maxSetSize);
+  final MatchFrequentItemsets matchFrequentItemsets=new MatchFrequentItemsets().withInputs(aPriori,basketSource);
+  module.getOutput(0).setInput(0,matchFrequentItemsets);
   return module.asElementary();
 }
