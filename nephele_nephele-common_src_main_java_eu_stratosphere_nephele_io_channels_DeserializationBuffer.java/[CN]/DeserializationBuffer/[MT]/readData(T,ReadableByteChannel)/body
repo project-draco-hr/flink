@@ -1,35 +1,50 @@
 {
+  final int len;
   if (this.recordLength < 0) {
     if (readableByteChannel.read(this.lengthBuf) == -1 && this.propagateEndOfStream) {
       if (this.lengthBuf.position() == 0) {
         throw new EOFException();
       }
  else {
-        throw new IOException("Deserilization error: Expected to read " + this.lengthBuf.remaining() + " more bytes of length information from the stream!");
+        throw new IOException("Deserialization error: Expected to read " + this.lengthBuf.remaining() + " more bytes of length information from the stream!");
       }
     }
     if (this.lengthBuf.hasRemaining()) {
       return null;
     }
-    this.recordLength=byteArrayToInt(lengthBuf.array());
-    if (this.tempBuffer == null) {
-      tempBuffer=ByteBuffer.allocate(recordLength);
-    }
-    if (this.tempBuffer.capacity() < recordLength) {
-      tempBuffer=ByteBuffer.allocate(recordLength);
+    len=this.lengthBuf.getInt(0);
+    this.lengthBuf.clear();
+    if (this.tempBuffer.capacity() < len) {
+      this.tempBuffer=ByteBuffer.allocate(len);
+      this.tempBuffer.order(ByteOrder.BIG_ENDIAN);
+      this.deserializationWrapper.set(this.tempBuffer);
     }
     this.tempBuffer.position(0);
-    this.tempBuffer.limit(this.recordLength);
+    this.tempBuffer.limit(len);
   }
-  if (readableByteChannel.read(tempBuffer) == -1 && this.propagateEndOfStream) {
+ else {
+    len=this.recordLength;
+  }
+  if (readableByteChannel.read(this.tempBuffer) == -1 && this.propagateEndOfStream) {
     throw new IOException("Deserilization error: Expected to read " + this.tempBuffer.remaining() + " more bytes from stream!");
   }
   if (this.tempBuffer.hasRemaining()) {
+    this.recordLength=len;
     return null;
   }
-  this.deserializationBuffer.reset(tempBuffer.array(),this.recordLength);
-  final T record=deserializer.deserialize(target,this.deserializationBuffer);
-  this.recordLength=-1;
-  this.lengthBuf.clear();
-  return record;
+ else {
+    this.recordLength=-1;
+  }
+  this.tempBuffer.position(0);
+  this.tempBuffer.limit(len);
+  if (target == null) {
+    target=instantiateTarget();
+  }
+  try {
+    target.read(this.deserializationWrapper);
+    return target;
+  }
+ catch (  BufferUnderflowException buex) {
+    throw new EOFException();
+  }
 }
