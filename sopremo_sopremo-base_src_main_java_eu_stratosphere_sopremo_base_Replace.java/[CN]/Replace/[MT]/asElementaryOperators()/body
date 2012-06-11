@@ -1,13 +1,20 @@
 {
   final SopremoModule sopremoModule=new SopremoModule(this.getName(),2,1);
+  EvaluationExpression defaultExpression=this.defaultExpression == KEEP_VALUE ? this.replaceExpression : this.defaultExpression;
   if (this.arrayElementsReplacement) {
+    final ArraySplit arraySplit=new ArraySplit().withArrayPath(this.replaceExpression).withSplitProjection(ArraySplit.ResultField.Element,ArraySplit.ResultField.Index,ArraySplit.ResultField.Array).withInputs(sopremoModule.getInput(0));
+    Replace replacedElements=new Replace().withInputs(arraySplit,sopremoModule.getInput(1)).withDefaultExpression(this.defaultExpression).withDictionaryValueExtraction(dictionaryValueExtraction).withDictionaryKeyExtraction(dictionaryKeyExtraction).withReplaceExpression(new ArrayAccess(0));
+    final AssembleArray arrayDictionary=new AssembleArray().withInputs(replacedElements);
+    final Replace arrayLookup=new Replace().withInputs(sopremoModule.getInput(0),arrayDictionary).withReplaceExpression(this.replaceExpression);
+    Selection emptyArrays=new Selection().withCondition(new UnaryExpression(this.replaceExpression,true)).withInputs(sopremoModule.getInput(0));
+    sopremoModule.getOutput(0).setInput(0,new UnionAll().withInputs(arrayLookup,emptyArrays));
   }
  else {
-    ElementaryOperator<?> replaceAtom;
-    if (this.defaultExpression == FILTER_RECORDS)     replaceAtom=new StrictReplace().withInputKeyExtractor(this.replaceExpression);
- else     replaceAtom=new ReplaceWithDefaultValue().withDefaultExpression(this.defaultExpression).withInputKeyExtractor(this.replaceExpression);
-    replaceAtom.setKeyExpressions(Arrays.asList(new PathExpression(new InputSelection(0),getReplaceExpression()),new PathExpression(new InputSelection(1),getDictionaryKeyExtraction())));
+    ReplaceBase<?> replaceAtom;
+    if (defaultExpression == FILTER_RECORDS)     replaceAtom=new StrictReplace();
+ else     replaceAtom=new ReplaceWithDefaultValue().withDefaultExpression(this.defaultExpression);
+    replaceAtom.withInputs(sopremoModule.getInputs()).withReplaceExpression(this.replaceExpression).withDictionaryValueExtraction(this.dictionaryValueExtraction).withKeyExpressions(0,getReplaceExpression()).withKeyExpressions(1,getDictionaryKeyExtraction());
     sopremoModule.getOutput(0).setInput(0,replaceAtom.withInputs(sopremoModule.getInput(0),sopremoModule.getInput(1)));
   }
-  return sopremoModule;
+  return sopremoModule.asElementary();
 }
