@@ -2,19 +2,13 @@
   int noSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
   String edgeInput=(args.length > 1 ? args[1] : "");
   String output=(args.length > 2 ? args[2] : "");
-  int waves=(args.length > 3 ? Integer.parseInt(args[3]) : 1);
   FileDataSource edges=new FileDataSource(EdgeInFormat.class,edgeInput,"BTC Edges");
-  edges.setDegreeOfParallelism(noSubTasks);
-  MatchContract buildTriads=new MatchContract(BuildTriads.class,PactString.class,0,0,"Build Triads");
-  buildTriads.getParameters().setString("selfMatch.crossMode","TRIANGLE_CROSS_EXCL_DIAG");
-  buildTriads.setDegreeOfParallelism(noSubTasks * waves);
+  ReduceContract buildTriads=new ReduceContract(BuildTriads.class,PactString.class,0,"Build Triads");
   @SuppressWarnings("unchecked") MatchContract closeTriads=new MatchContract(CloseTriads.class,new Class[]{PactString.class,PactString.class},new int[]{1,2},new int[]{0,1},"Close Triads");
   closeTriads.setParameter("INPUT_LEFT_SHIP_STRATEGY","SHIP_REPARTITION");
   closeTriads.setParameter("INPUT_RIGHT_SHIP_STRATEGY","SHIP_REPARTITION");
   closeTriads.setParameter("LOCAL_STRATEGY","LOCAL_STRATEGY_HASH_BUILD_SECOND");
-  closeTriads.setDegreeOfParallelism(noSubTasks * waves);
   FileDataSink triangles=new FileDataSink(RecordOutputFormat.class,output,"Output");
-  triangles.setDegreeOfParallelism(noSubTasks);
   triangles.getParameters().setString(RecordOutputFormat.RECORD_DELIMITER_PARAMETER,"\n");
   triangles.getParameters().setString(RecordOutputFormat.FIELD_DELIMITER_PARAMETER," ");
   triangles.getParameters().setInteger(RecordOutputFormat.NUM_FIELDS_PARAMETER,3);
@@ -24,7 +18,8 @@
   triangles.setInput(closeTriads);
   closeTriads.setSecondInput(edges);
   closeTriads.setFirstInput(buildTriads);
-  buildTriads.setFirstInput(edges);
-  buildTriads.setSecondInput(edges);
-  return new Plan(triangles,"Enumerate Triangles");
+  buildTriads.setInput(edges);
+  Plan plan=new Plan(triangles,"Enumerate Triangles");
+  plan.setDefaultParallelism(noSubTasks);
+  return plan;
 }

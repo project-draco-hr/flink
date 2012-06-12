@@ -1,13 +1,19 @@
 {
   if (LOG.isDebugEnabled())   LOG.debug(getLogString("Start registering input and output"));
-  ClassLoader cl;
+  if (this.userCodeClassLoader == null) {
+    try {
+      this.userCodeClassLoader=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    }
+ catch (    IOException ioe) {
+      throw new RuntimeException("Usercode ClassLoader could not be obtained for job: " + getEnvironment().getJobID(),ioe);
+    }
+  }
+  initInputFormat(this.userCodeClassLoader);
   try {
-    cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    initOutputs(this.userCodeClassLoader);
   }
- catch (  IOException ioe) {
-    throw new RuntimeException("Usercode ClassLoader could not be obtained for job: " + getEnvironment().getJobID(),ioe);
+ catch (  Exception ex) {
+    throw new RuntimeException("The initialization of the DataSource's outputs caused an error: " + ex.getMessage(),ex);
   }
-  initInputFormat(cl);
-  initOutputs(cl);
   if (LOG.isDebugEnabled())   LOG.debug(getLogString("Finished registering input and output"));
 }

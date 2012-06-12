@@ -1,14 +1,19 @@
 {
+  if (this.userCodeClassLoader == null) {
+    try {
+      this.userCodeClassLoader=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    }
+ catch (    IOException ioe) {
+      throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
+    }
+  }
   this.config=new TaskConfig(getTaskConfiguration());
   try {
-    ClassLoader cl=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
-    Class<? extends OutputFormat> formatClass=this.config.getStubClass(OutputFormat.class,cl);
+    @SuppressWarnings("unchecked") final Class<? extends OutputFormat<IT>> clazz=(Class<? extends OutputFormat<IT>>)(Class<?>)OutputFormat.class;
+    final Class<? extends OutputFormat<IT>> formatClass=this.config.getStubClass(clazz,this.userCodeClassLoader);
     this.format=InstantiationUtil.instantiate(formatClass,OutputFormat.class);
   }
- catch (  IOException ioe) {
-    throw new RuntimeException("Library cache manager could not be instantiated.",ioe);
-  }
-catch (  ClassNotFoundException cnfe) {
+ catch (  ClassNotFoundException cnfe) {
     throw new RuntimeException("OutputFormat implementation class was not found.",cnfe);
   }
 catch (  ClassCastException ccex) {

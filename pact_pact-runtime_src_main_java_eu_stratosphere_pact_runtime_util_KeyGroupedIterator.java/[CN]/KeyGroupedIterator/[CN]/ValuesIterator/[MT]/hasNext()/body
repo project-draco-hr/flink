@@ -1,27 +1,28 @@
 {
-  if (KeyGroupedIterator.this.next == null || KeyGroupedIterator.this.nextIsFresh) {
+  if (KeyGroupedIterator.this.current == null || KeyGroupedIterator.this.lookAheadHasNext) {
     return false;
   }
-  if (this.nextIsUnconsumed) {
+  if (this.currentIsUnconsumed) {
     return true;
   }
   try {
-    if (KeyGroupedIterator.this.iterator.next(this.bufferRec)) {
-      PactRecord tmp=this.bufferRec;
-      this.bufferRec=KeyGroupedIterator.this.next;
-      KeyGroupedIterator.this.next=tmp;
-      for (int i=0; i < KeyGroupedIterator.this.keyPositions.length; i++) {
-        Key k=tmp.getField(keyPositions[i],keyClasses[i]);
-        if (!(currentKeys[i].equals(k))) {
-          KeyGroupedIterator.this.nextIsFresh=true;
-          return false;
-        }
+    if (KeyGroupedIterator.this.iterator.next(this.staging)) {
+      if (this.comparator.equalToReference(this.staging)) {
+        final E tmp=this.staging;
+        this.staging=KeyGroupedIterator.this.current;
+        KeyGroupedIterator.this.current=tmp;
+        this.currentIsUnconsumed=true;
+        return true;
       }
-      this.nextIsUnconsumed=true;
-      return true;
+ else {
+        KeyGroupedIterator.this.lookAheadHasNext=true;
+        KeyGroupedIterator.this.lookahead=this.staging;
+        this.staging=KeyGroupedIterator.this.current;
+        return false;
+      }
     }
  else {
-      KeyGroupedIterator.this.next=null;
+      KeyGroupedIterator.this.done=true;
       return false;
     }
   }
