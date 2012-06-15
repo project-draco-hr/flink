@@ -7,8 +7,12 @@
     final ChannelID localReceiver=localReceivers.get(0);
     final ChannelContext cc=this.registeredChannels.get(localReceiver);
     if (cc == null) {
-      sendReceiverNotFoundEvent(transferEnvelope,localReceiver);
-      recycleBuffer(transferEnvelope);
+      try {
+        sendReceiverNotFoundEvent(transferEnvelope,localReceiver);
+      }
+  finally {
+        recycleBuffer(transferEnvelope);
+      }
       return;
     }
     if (!cc.isInputChannel()) {
@@ -18,52 +22,66 @@
     return;
   }
   final Buffer srcBuffer=transferEnvelope.getBuffer();
-  if (receiverList.hasLocalReceivers()) {
-    final List<ChannelID> localReceivers=receiverList.getLocalReceivers();
-    for (    final ChannelID localReceiver : localReceivers) {
-      final ChannelContext cc=this.registeredChannels.get(localReceiver);
-      if (cc == null) {
-        sendReceiverNotFoundEvent(transferEnvelope,localReceiver);
-        continue;
-      }
-      if (!cc.isInputChannel()) {
-        LOG.error("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
-        continue;
-      }
-      final InputChannelContext inputChannelContext=(InputChannelContext)cc;
-      Buffer destBuffer=null;
-      try {
-        destBuffer=inputChannelContext.requestEmptyBufferBlocking(srcBuffer.size());
-        srcBuffer.copyToBuffer(destBuffer);
-      }
- catch (      Exception e) {
-        LOG.error(StringUtils.stringifyException(e));
-        if (destBuffer != null) {
-          destBuffer.recycleBuffer();
-        }
-        continue;
-      }
-      final TransferEnvelope dup=transferEnvelope.duplicateWithoutBuffer();
-      dup.setBuffer(destBuffer);
-      inputChannelContext.queueTransferEnvelope(dup);
-    }
-  }
-  if (receiverList.hasRemoteReceivers()) {
-    final List<RemoteReceiver> remoteReceivers=receiverList.getRemoteReceivers();
-    for (    final RemoteReceiver remoteReceiver : remoteReceivers) {
-      TransferEnvelope dup=null;
-      try {
-        dup=transferEnvelope.duplicate();
-      }
- catch (      Exception e) {
-        LOG.error(StringUtils.stringifyException(e));
-        if (dup != null) {
-          recycleBuffer(dup);
+  try {
+    if (receiverList.hasLocalReceivers()) {
+      final List<ChannelID> localReceivers=receiverList.getLocalReceivers();
+      for (      final ChannelID localReceiver : localReceivers) {
+        final ChannelContext cc=this.registeredChannels.get(localReceiver);
+        if (cc == null) {
+          sendReceiverNotFoundEvent(transferEnvelope,localReceiver);
           continue;
         }
+        if (!cc.isInputChannel()) {
+          LOG.error("Local receiver " + localReceiver + " is not an input channel, but is supposed to accept a buffer");
+          continue;
+        }
+        final InputChannelContext inputChannelContext=(InputChannelContext)cc;
+        Buffer destBuffer=null;
+        try {
+          destBuffer=inputChannelContext.requestEmptyBufferBlocking(srcBuffer.size());
+          srcBuffer.copyToBuffer(destBuffer);
+        }
+ catch (        InterruptedException e) {
+          if (destBuffer != null) {
+            destBuffer.recycleBuffer();
+          }
+          throw e;
+        }
+catch (        IOException e) {
+          if (destBuffer != null) {
+            destBuffer.recycleBuffer();
+          }
+          throw e;
+        }
+        final TransferEnvelope dup=transferEnvelope.duplicateWithoutBuffer();
+        dup.setBuffer(destBuffer);
+        inputChannelContext.queueTransferEnvelope(dup);
       }
-      this.networkConnectionManager.queueEnvelopeForTransfer(remoteReceiver,dup);
+    }
+    if (receiverList.hasRemoteReceivers()) {
+      final List<RemoteReceiver> remoteReceivers=receiverList.getRemoteReceivers();
+      for (      final RemoteReceiver remoteReceiver : remoteReceivers) {
+        TransferEnvelope dup=null;
+        try {
+          dup=transferEnvelope.duplicate();
+        }
+ catch (        InterruptedException e) {
+          if (dup != null) {
+            recycleBuffer(dup);
+          }
+          throw e;
+        }
+catch (        IOException e) {
+          if (dup != null) {
+            recycleBuffer(dup);
+          }
+          throw e;
+        }
+        this.networkConnectionManager.queueEnvelopeForTransfer(remoteReceiver,dup);
+      }
     }
   }
-  srcBuffer.recycleBuffer();
+  finally {
+    srcBuffer.recycleBuffer();
+  }
 }
