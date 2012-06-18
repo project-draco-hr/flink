@@ -1,0 +1,53 @@
+{
+  for (int i=readEnds.size() - 1; i >= 0; --i) {
+    final ReadEnd re=readEnds.get(i);
+    if (re.disposeIfDone()) {
+      readEnds.remove(i);
+    }
+  }
+  final MemorySegment current=getCurrentSegment();
+  current.putInt(0,getCurrentPositionInSegment());
+  fullBuffers.addLast(current);
+  final ReadEnd readEnd;
+  if (numBuffersSpilled == 0 && emptyBuffers.size() >= minBuffersForWriteEnd) {
+    readEnd=new ReadEnd(fullBuffers.removeFirst(),emptyBuffers,fullBuffers,null,null,segmentSize,0);
+  }
+ else {
+    int toSpill=Math.min(minBuffersForSpilledReadEnd + minBuffersForWriteEnd - emptyBuffers.size(),fullBuffers.size());
+    if (toSpill > 0) {
+      if (currentWriter == null) {
+        currentWriter=ioManager.createBlockChannelWriter(channelEnumerator.next(),emptyBuffers);
+      }
+      for (int i=0; i < toSpill; i++) {
+        currentWriter.writeBlock(fullBuffers.removeFirst());
+      }
+      numBuffersSpilled+=toSpill;
+    }
+    currentWriter.close();
+    final BlockChannelReader reader=ioManager.createBlockChannelReader(currentWriter.getChannelID());
+    final ArrayList<MemorySegment> readSegments=Lists.newArrayList();
+    try {
+      while (readSegments.size() < minBuffersForSpilledReadEnd) {
+        readSegments.add(emptyBuffers.take());
+      }
+      MemorySegment firstSeg=readSegments.remove(readSegments.size() - 1);
+      reader.readBlock(firstSeg);
+      firstSeg=reader.getReturnQueue().take();
+      readEnd=new ReadEnd(firstSeg,emptyBuffers,fullBuffers,reader,readSegments,segmentSize,numBuffersSpilled - 1);
+    }
+ catch (    InterruptedException iex) {
+      throw new RuntimeException("SerializedUpdateBuffer was interrupted while reclaiming memory by spilling.");
+    }
+  }
+  fullBuffers=new ArrayDeque<MemorySegment>(64);
+  currentWriter=null;
+  numBuffersSpilled=0;
+  try {
+    seekOutput(emptyBuffers.take(),HEADER_LENGTH);
+  }
+ catch (  InterruptedException iex) {
+    throw new RuntimeException("SerializedUpdateBuffer was interrupted while reclaiming memory by spilling.");
+  }
+  readEnds.add(readEnd);
+  return readEnd;
+}
