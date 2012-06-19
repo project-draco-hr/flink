@@ -1,0 +1,62 @@
+{
+  if (LOG.isInfoEnabled())   LOG.info(formatLogString("Start PACT code."));
+  try {
+    this.driver.setup(this);
+  }
+ catch (  Throwable t) {
+    throw new Exception("The pact driver setup for '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
+  }
+  boolean stubOpen=false;
+  this.running=true;
+  try {
+    try {
+      this.driver.prepare();
+    }
+ catch (    Throwable t) {
+      throw new Exception("The data preparation for task '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
+    }
+    RegularPactTask.openChainedTasks(this.chainedTasks,this);
+    try {
+      Configuration stubConfig=this.config.getStubParameters();
+      stubConfig.setInteger("pact.parallel.task.id",this.getEnvironment().getIndexInSubtaskGroup());
+      stubConfig.setInteger("pact.parallel.task.count",this.getEnvironment().getCurrentNumberOfSubtasks());
+      if (this.getEnvironment().getTaskName() != null) {
+        stubConfig.setString("pact.parallel.task.name",this.getEnvironment().getTaskName());
+      }
+      this.stub.open(stubConfig);
+      stubOpen=true;
+    }
+ catch (    Throwable t) {
+      throw new Exception("The user defined 'open()' method caused an exception: " + t.getMessage(),t);
+    }
+    this.driver.run();
+    if (this.running) {
+      this.stub.close();
+      stubOpen=false;
+    }
+    this.output.close();
+    RegularPactTask.closeChainedTasks(this.chainedTasks,this);
+  }
+ catch (  Exception ex) {
+    if (stubOpen) {
+      try {
+        this.stub.close();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    RegularPactTask.cancelChainedTasks(this.chainedTasks);
+    if (this.running) {
+      RegularPactTask.logAndThrowException(ex,this);
+    }
+  }
+ finally {
+    this.driver.cleanup();
+  }
+  if (this.running) {
+    if (LOG.isInfoEnabled())     LOG.info(formatLogString("Finished PACT code."));
+  }
+ else {
+    if (LOG.isWarnEnabled())     LOG.warn(formatLogString("PACT code cancelled."));
+  }
+}
