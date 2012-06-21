@@ -1,42 +1,44 @@
 {
   final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
-  final AbstractOutputChannel<? extends Record> outputChannel=eg.getOutputChannelByID(sourceChannelID);
-  final OutputGate<? extends Record> broadcastgate=outputChannel.getOutputGate();
-  final LinkedList<AbstractOutputChannel<? extends Record>> outputChannels=new LinkedList<AbstractOutputChannel<? extends Record>>();
-  for (  AbstractOutputChannel<? extends Record> c : broadcastgate.getOutputChannels()) {
-    if (c.isBroadcastChannel()) {
+  final ExecutionEdge outputChannel=eg.getEdgeByID(sourceChannelID);
+  final ExecutionGate broadcastGate=outputChannel.getOutputGate();
+  final LinkedList<ExecutionEdge> outputChannels=new LinkedList<ExecutionEdge>();
+  final int numberOfOutputChannels=broadcastGate.getNumberOfEdges();
+  for (int i=0; i < numberOfOutputChannels; ++i) {
+    final ExecutionEdge c=broadcastGate.getEdge(i);
+    if (c.isBroadcast()) {
       outputChannels.add(c);
     }
   }
-  final LinkedList<TreeNode> treenodes=new LinkedList<TreeNode>();
+  final LinkedList<TreeNode> treeNodes=new LinkedList<TreeNode>();
   LinkedList<ChannelID> actualLocalTargets=new LinkedList<ChannelID>();
-  for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
-    AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
-    ExecutionVertex targetVertex=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
+  for (Iterator<ExecutionEdge> iter=outputChannels.iterator(); iter.hasNext(); ) {
+    final ExecutionEdge actualOutputChannel=iter.next();
+    final ExecutionVertex targetVertex=actualOutputChannel.getInputGate().getVertex();
     if (targetVertex.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(source)) {
-      actualLocalTargets.add(actualoutputchannel.getConnectedChannelID());
+      actualLocalTargets.add(actualOutputChannel.getInputChannelID());
       iter.remove();
     }
   }
-  TreeNode actualnode=new TreeNode(eg.getVertexByChannelID(sourceChannelID).getAllocatedResource().getInstance(),source,actualLocalTargets);
-  treenodes.add(actualnode);
+  TreeNode actualNode=new TreeNode(eg.getVertexByChannelID(sourceChannelID).getAllocatedResource().getInstance(),source,actualLocalTargets);
+  treeNodes.add(actualNode);
   LinkedList<TreeNode> receivernodes=new LinkedList<TreeNode>();
   while (outputChannels.size() > 0) {
-    AbstractOutputChannel<? extends Record> firstChannel=outputChannels.pollFirst();
-    ExecutionVertex firstTarget=eg.getVertexByChannelID(firstChannel.getConnectedChannelID());
-    InstanceConnectionInfo actualinstance=firstTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo();
+    final ExecutionEdge firstChannel=outputChannels.pollFirst();
+    final ExecutionVertex firstTarget=firstChannel.getInputGate().getVertex();
+    final InstanceConnectionInfo actualInstance=firstTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo();
     actualLocalTargets=new LinkedList<ChannelID>();
-    actualLocalTargets.add(firstChannel.getConnectedChannelID());
-    for (Iterator<AbstractOutputChannel<? extends Record>> iter=outputChannels.iterator(); iter.hasNext(); ) {
-      AbstractOutputChannel<? extends Record> actualoutputchannel=iter.next();
-      ExecutionVertex actualTarget=eg.getVertexByChannelID(actualoutputchannel.getConnectedChannelID());
-      if (actualTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(actualinstance)) {
-        actualLocalTargets.add(actualoutputchannel.getConnectedChannelID());
+    actualLocalTargets.add(firstChannel.getInputChannelID());
+    for (Iterator<ExecutionEdge> iter=outputChannels.iterator(); iter.hasNext(); ) {
+      final ExecutionEdge actualOutputChannel=iter.next();
+      final ExecutionVertex actualTarget=actualOutputChannel.getInputGate().getVertex();
+      if (actualTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(actualInstance)) {
+        actualLocalTargets.add(actualOutputChannel.getInputChannelID());
         iter.remove();
       }
     }
-    actualnode=new TreeNode(firstTarget.getAllocatedResource().getInstance(),actualinstance,actualLocalTargets);
-    receivernodes.add(actualnode);
+    actualNode=new TreeNode(firstTarget.getAllocatedResource().getInstance(),actualInstance,actualLocalTargets);
+    receivernodes.add(actualNode);
   }
   if (randomize) {
     Collections.shuffle(receivernodes);
@@ -44,6 +46,6 @@
  else {
     Collections.sort(receivernodes);
   }
-  treenodes.addAll(receivernodes);
-  return treenodes;
+  treeNodes.addAll(receivernodes);
+  return treeNodes;
 }
