@@ -1,8 +1,19 @@
 {
   final int numInputs=this.getInputOperators().size();
   final ElementarySopremoModule module=new ElementarySopremoModule(this.getName(),numInputs,1);
-  final List<Operator<?>> inputs=new ArrayList<Operator<?>>();
-  for (int index=0; index < numInputs; index++)   inputs.add(new Projection().withTransformation(this.getValueProjection(index)).withInputs(module.getInput(index)));
-  module.getOutput(0).setInput(0,this.createElementaryOperations(inputs));
-  return module;
+  Operator<?> output;
+switch (numInputs) {
+case 0:
+    throw new IllegalStateException("No input given for grouping");
+case 1:
+  output=new GroupProjection(this.resultProjection.remove(InputSelection.class)).withKeyExpression(0,getGroupingKey(0)).withInputs(Arrays.asList(module.getInputs()));
+break;
+case 2:
+output=new CoGroupProjection(this.resultProjection).withKeyExpression(0,getGroupingKey(0)).withKeyExpression(1,getGroupingKey(1)).withInputs(Arrays.asList(module.getInputs()));
+break;
+default :
+throw new IllegalStateException("More than two sources are not supported");
+}
+module.getOutput(0).setInput(0,output);
+return module;
 }
