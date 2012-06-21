@@ -1,29 +1,36 @@
 {
   final int numInputs=this.getInputs().size();
   final SopremoModule module=new SopremoModule(this.toString(),numInputs,1);
-  List<TwoSourceJoin> joins;
-  if (this.joinCondition instanceof AndExpression)   joins=this.getInitialJoinOrder((AndExpression)this.joinCondition,module);
- else   joins=Arrays.asList(this.getTwoSourceJoinForExpression(this.joinCondition,module));
-  if (joins.size() > 1) {
-    final List<JsonStream> inputs=new ArrayList<JsonStream>();
-    for (int index=0; index < numInputs; index++) {
-      inputs.add(OperatorUtil.positionEncode(module.getInput(index),index,numInputs));
-    }
-    for (    final TwoSourceJoin twoSourceJoin : joins) {
-      List<JsonStream> operatorInputs=twoSourceJoin.getInputs();
-      final List<JsonStream> actualInputs=new ArrayList<JsonStream>(operatorInputs.size());
-      List<Source> moduleInput=Arrays.asList(module.getInputs());
-      for (int index=0; index < operatorInputs.size(); index++) {
-        final int inputIndex=moduleInput.indexOf(operatorInputs.get(index).getSource().getOperator());
-        actualInputs.add(inputs.get(inputIndex).getSource());
-      }
-      for (int index=0; index < operatorInputs.size(); index++) {
-        final int inputIndex=moduleInput.indexOf(operatorInputs.get(index).getSource().getOperator());
-        inputs.set(inputIndex,twoSourceJoin);
-      }
-      twoSourceJoin.setInputs(actualInputs);
-    }
-  }
-  module.getOutput(0).setInput(0,new Projection().withTransformation(this.resultProjection).withInputs(joins.get(joins.size() - 1)));
-  return module.asElementary();
+switch (this.binaryConditions.size()) {
+case 0:
+    throw new IllegalStateException("No join condition specified");
+case 1:
+  final TwoSourceJoin join=new TwoSourceJoin().withInputs(module.getInputs()).withCondition(this.binaryConditions.get(0)).withResultProjection(getResultProjection());
+module.getOutput(0).setInput(0,join);
+break;
+default :
+List<TwoSourceJoin> joins=this.getInitialJoinOrder(module);
+final List<JsonStream> inputs=new ArrayList<JsonStream>();
+for (int index=0; index < numInputs; index++) {
+inputs.add(OperatorUtil.positionEncode(module.getInput(index),index,numInputs));
+}
+for (final TwoSourceJoin twoSourceJoin : joins) {
+List<JsonStream> operatorInputs=twoSourceJoin.getInputs();
+final List<JsonStream> actualInputs=new ArrayList<JsonStream>(operatorInputs.size());
+List<Source> moduleInput=Arrays.asList(module.getInputs());
+for (int index=0; index < operatorInputs.size(); index++) {
+final int inputIndex=moduleInput.indexOf(operatorInputs.get(index).getSource().getOperator());
+actualInputs.add(inputs.get(inputIndex).getSource());
+}
+for (int index=0; index < operatorInputs.size(); index++) {
+final int inputIndex=moduleInput.indexOf(operatorInputs.get(index).getSource().getOperator());
+inputs.set(inputIndex,twoSourceJoin);
+}
+twoSourceJoin.setInputs(actualInputs);
+twoSourceJoin.setResultProjection(new AggregationExpression(new ArrayUnion()));
+}
+final TwoSourceJoin lastJoin=joins.get(joins.size() - 1);
+module.getOutput(0).setInput(0,new Projection().withInputs(lastJoin).withTransformation(getResultProjection()));
+}
+return module.asElementary();
 }
