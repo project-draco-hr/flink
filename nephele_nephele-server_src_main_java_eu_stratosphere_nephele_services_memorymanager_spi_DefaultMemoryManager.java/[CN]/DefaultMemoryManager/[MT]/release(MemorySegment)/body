@@ -1,15 +1,15 @@
 {
-  if (segment == null || segment.isFree()) {
+  if (segment == null || segment.isFreed() || !(segment instanceof DefaultMemorySegment)) {
     return;
   }
   final DefaultMemorySegment defSeg=(DefaultMemorySegment)segment;
-  final AbstractInvokable owner=defSeg.getSegmentDescriptor().owner;
+  final AbstractInvokable owner=defSeg.owner;
 synchronized (this.lock) {
-    if (isShutDown) {
+    if (this.isShutDown) {
       throw new IllegalStateException("Memory manager has been shut down.");
     }
     try {
-      ArrayList<DefaultMemorySegment> segsForOwner=this.allocatedSegments.get(owner);
+      Set<DefaultMemorySegment> segsForOwner=this.allocatedSegments.get(owner);
       if (segsForOwner != null) {
         segsForOwner.remove(defSeg);
         if (segsForOwner.isEmpty()) {
@@ -21,7 +21,8 @@ synchronized (this.lock) {
       LOG.error("Error removing book-keeping reference to allocated memory segment.",t);
     }
  finally {
-      internalRelease(defSeg);
+      byte[] buffer=defSeg.destroy();
+      this.freeSegments.add(buffer);
     }
   }
 }

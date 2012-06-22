@@ -1,13 +1,13 @@
 {
-  final MutableObjectIterator<PactRecord> reader=this.reader;
-  final PactRecord current=new PactRecord();
-  PactRecord leftoverRecord=null;
-  CircularElement element=null;
+  final MutableObjectIterator<E> reader=this.reader;
+  final E current=this.readTarget;
+  E leftoverRecord=null;
+  CircularElement<E> element=null;
   long bytesUntilSpilling=this.startSpillingBytes;
   boolean done=false;
   if (bytesUntilSpilling < 1) {
     bytesUntilSpilling=0;
-    this.queues.sort.add(SPILLING_MARKER);
+    this.queues.sort.add(UnilateralSortMerger.<E>spillingMarker());
   }
   while (!done && isRunning()) {
     while (element == null) {
@@ -23,7 +23,7 @@
         }
       }
     }
-    final NormalizedKeySorter<PactRecord> buffer=element.buffer;
+    final NormalizedKeySorter<E> buffer=element.buffer;
     if (!buffer.isEmpty()) {
       throw new IOException("New buffer is not empty.");
     }
@@ -46,6 +46,7 @@
         }
         if (bytesUntilSpilling - buffer.getOccupancy() <= 0) {
           bytesUntilSpilling=0;
+          final CircularElement<E> SPILLING_MARKER=spillingMarker();
           this.queues.sort.add(SPILLING_MARKER);
           break;
         }
@@ -55,6 +56,7 @@
           bytesUntilSpilling-=buffer.getCapacity();
           if (bytesUntilSpilling <= 0) {
             bytesUntilSpilling=0;
+            final CircularElement<E> SPILLING_MARKER=spillingMarker();
             this.queues.sort.add(SPILLING_MARKER);
           }
         }
@@ -70,6 +72,7 @@
       bytesUntilSpilling-=buffer.getCapacity();
       if (bytesUntilSpilling <= 0) {
         bytesUntilSpilling=0;
+        final CircularElement<E> SPILLING_MARKER=spillingMarker();
         this.queues.sort.add(SPILLING_MARKER);
       }
     }
@@ -101,6 +104,7 @@
   if (!isRunning()) {
     return;
   }
-  this.queues.sort.add(SENTINEL);
+  final CircularElement<E> EOF_MARKER=endMarker();
+  this.queues.sort.add(EOF_MARKER);
   LOG.debug("Reading thread done.");
 }

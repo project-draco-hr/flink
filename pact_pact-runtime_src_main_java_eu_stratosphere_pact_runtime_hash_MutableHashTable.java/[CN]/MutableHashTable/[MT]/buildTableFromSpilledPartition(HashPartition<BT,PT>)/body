@@ -1,0 +1,56 @@
+{
+  final int nextRecursionLevel=p.getRecursionLevel() + 1;
+  if (nextRecursionLevel > MAX_RECURSION_DEPTH) {
+    throw new RuntimeException("Hash join exceeded maximum number of recursions, without reducing " + "partitions enough to be memory resident. Probably cause: Too many duplicate keys.");
+  }
+  final int totalBuffersAvailable=this.availableMemory.size() + this.writeBehindBuffersAvailable;
+  if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
+    throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
+  }
+  long numBuckets=(p.getBuildSideRecordCount() * RECORD_TABLE_BYTES) / (HASH_BUCKET_SIZE - BUCKET_HEADER_LENGTH) + 1;
+  final long totalBuffersNeeded=(numBuckets * 2) / (this.bucketsPerSegmentMask + 1) + p.getBuildSideBlockCount() + 1;
+  if (totalBuffersNeeded < totalBuffersAvailable) {
+    ensureNumBuffersReturned(p.getBuildSideBlockCount());
+    final BulkBlockChannelReader reader=this.ioManager.createBulkBlockChannelReader(p.getBuildSideChannel().getChannelID(),this.availableMemory,p.getBuildSideBlockCount());
+    reader.closeAndDelete();
+    final List<MemorySegment> partitionBuffers=reader.getFullSegments();
+    final HashPartition<BT,PT> newPart=new HashPartition<BT,PT>(this.buildSideSerializer,this.probeSideSerializer,0,nextRecursionLevel,partitionBuffers,p.getBuildSideRecordCount(),this.segmentSize,p.getLastSegmentLimit());
+    this.partitionsBeingBuilt.add(newPart);
+    initTable((int)numBuckets,(byte)1);
+    final HashPartition<BT,PT>.PartitionIterator pIter=newPart.getPartitionIterator(this.buildSideComparator);
+    final BT record=this.buildSideSerializer.createInstance();
+    while (pIter.next(record)) {
+      final int hashCode=hash(pIter.getCurrentHashCode(),nextRecursionLevel);
+      final int posHashCode=hashCode % this.numBuckets;
+      final long pointer=pIter.getPointer();
+      final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+      final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+      final MemorySegment bucket=this.buckets[bucketArrayPos];
+      insertBucketEntry(newPart,bucket,bucketInSegmentPos,hashCode,pointer);
+    }
+  }
+ else {
+    final int avgRecordLenPartition=(int)(((long)p.getBuildSideBlockCount()) * this.segmentSize / p.getBuildSideRecordCount());
+    final int bucketCount=(int)(((long)totalBuffersAvailable) * RECORD_TABLE_BYTES / (avgRecordLenPartition + RECORD_OVERHEAD_BYTES));
+    final int splits=(int)(totalBuffersNeeded / totalBuffersAvailable) + 1;
+    final int partitionFanOut=Math.min(10 * splits,MAX_NUM_PARTITIONS);
+    createPartitions(partitionFanOut,nextRecursionLevel);
+    initTable(bucketCount,(byte)partitionFanOut);
+    final List<MemorySegment> segments=new ArrayList<MemorySegment>(2);
+    segments.add(getNextBuffer());
+    segments.add(getNextBuffer());
+    final BlockChannelReader inReader=this.ioManager.createBlockChannelReader(p.getBuildSideChannel().getChannelID());
+    final ChannelReaderInputView inView=new HeaderlessChannelReaderInputView(inReader,segments,p.getBuildSideBlockCount(),p.getLastSegmentLimit(),false);
+    final ChannelReaderInputViewIterator<BT> inIter=new ChannelReaderInputViewIterator<BT>(inView,this.availableMemory,this.buildSideSerializer);
+    final TypeComparator<BT> btComparator=this.buildSideComparator;
+    final BT rec=this.buildSideSerializer.createInstance();
+    while (inIter.next(rec)) {
+      final int hashCode=hash(btComparator.hash(rec),nextRecursionLevel);
+      insertIntoTable(rec,hashCode);
+    }
+    for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+      HashPartition<BT,PT> part=this.partitionsBeingBuilt.get(i);
+      part.finalizeBuildPhase(this.ioManager,this.currentEnumerator,this.writeBehindBuffers);
+    }
+  }
+}
