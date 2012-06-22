@@ -1,28 +1,18 @@
 {
   final int numInputs=this.getInputOperators().size();
   final ElementarySopremoModule module=new ElementarySopremoModule(this.getName(),numInputs,1);
-  List<JsonStream> inputs=new ArrayList<JsonStream>();
-  for (int index=0; index < numInputs; index++)   inputs.add(OperatorUtil.positionEncode(module.getInput(index),index,numInputs));
   Operator<?> output;
 switch (numInputs) {
 case 0:
     throw new IllegalStateException("No input given for grouping");
 case 1:
-  output=new GroupProjection(this.resultProjection).withKeyExpression(0,new PathExpression(new InputSelection(0),getGroupingKey(0))).withInputs(inputs);
+  output=new GroupProjection(this.resultProjection.remove(InputSelection.class)).withKeyExpression(0,getGroupingKey(0)).withInputs(Arrays.asList(module.getInputs()));
 break;
 case 2:
-output=new CoGroupProjection(this.resultProjection).withKeyExpression(0,getGroupingKey(0)).withKeyExpression(1,getGroupingKey(1)).withInputs(inputs);
+output=new CoGroupProjection(this.resultProjection).withKeyExpression(0,getGroupingKey(0)).withKeyExpression(1,getGroupingKey(1)).withInputs(Arrays.asList(module.getInputs()));
 break;
 default :
-List<EvaluationExpression> keyExpressions=new ArrayList<EvaluationExpression>();
-for (int index=0; index < numInputs; index++) {
-inputs.add(OperatorUtil.positionEncode(module.getInput(index),index,numInputs));
-keyExpressions.add(new PathExpression(new InputSelection(index),getGroupingKey(index)));
-}
-final UnionAll union=new UnionAll().withInputs(inputs);
-final PathExpression projection=new PathExpression(new AggregationExpression(new ArrayUnion()),this.resultProjection);
-output=new GroupProjection(projection).withInputs(union);
-break;
+throw new IllegalStateException("More than two sources are not supported");
 }
 module.getOutput(0).setInput(0,output);
 return module;
