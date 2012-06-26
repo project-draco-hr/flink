@@ -1,0 +1,22 @@
+{
+  final File file=File.createTempFile("jsonInputFormatTest",null);
+  file.delete();
+  final OutputStreamWriter jsonWriter=new OutputStreamWriter(new FileOutputStream(file));
+  jsonWriter.write("{\"array\": [{\"id\": 1}, {\"id\": 2}, {\"id\": 3}, {\"id\": 4}, {\"id\": 5}]}");
+  jsonWriter.close();
+  Configuration config=new Configuration();
+  SopremoUtil.serialize(config,IOConstants.SCHEMA,SCHEMA);
+  final JsonInputFormat inputFormat=FormatUtil.openInput(JsonInputFormat.class,file.toURI().toString(),config);
+  final PactRecord record=new PactRecord();
+  if (!inputFormat.reachedEnd())   if (!inputFormat.nextRecord(record))   Assert.fail("one value expected expected: " + SCHEMA.recordToJson(record,null));
+  if (!inputFormat.reachedEnd()) {
+    Assert.assertTrue("no more values but reachedEnd did not return false",inputFormat.nextRecord(record));
+    Assert.fail("value unexpected: " + SCHEMA.recordToJson(record,null));
+  }
+  final IJsonNode arrayNode=((IObjectNode)SCHEMA.recordToJson(record,null)).get("array");
+  Assert.assertNotNull("could not find top level node",arrayNode);
+  for (int index=1; index <= 5; index++) {
+    Assert.assertNotNull("could not find array element " + index,((IArrayNode)arrayNode).get(index - 1));
+    Assert.assertEquals("other order expected",index,((IntNode)((IObjectNode)((IArrayNode)arrayNode).get(index - 1)).get("id")).getIntValue());
+  }
+}
