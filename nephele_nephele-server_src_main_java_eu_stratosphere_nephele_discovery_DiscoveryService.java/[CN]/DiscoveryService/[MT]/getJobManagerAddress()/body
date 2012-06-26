@@ -1,4 +1,6 @@
 {
+  final int magicNumber=GlobalConfiguration.getInteger(MAGICNUMBER_KEY,DEFAULT_MAGICNUMBER);
+  final int discoveryPort=GlobalConfiguration.getInteger(DISCOVERYPORT_KEY,DEFAULT_DISCOVERYPORT);
   InetSocketAddress jobManagerAddress=null;
   DatagramSocket socket=null;
   try {
@@ -11,10 +13,10 @@
     socket.setSoTimeout(CLIENTSOCKETTIMEOUT);
     final DatagramPacket responsePacket=new DatagramPacket(new byte[RESPONSE_PACKET_SIZE],RESPONSE_PACKET_SIZE);
     for (int retries=0; retries < DISCOVERFAILURERETRIES; retries++) {
-      final DatagramPacket lookupRequest=createJobManagerLookupRequestPacket();
+      final DatagramPacket lookupRequest=createJobManagerLookupRequestPacket(magicNumber);
       for (      InetAddress broadcast : targetAddresses) {
         lookupRequest.setAddress(broadcast);
-        lookupRequest.setPort(DISCOVERYPORT);
+        lookupRequest.setPort(discoveryPort);
         LOG.debug("Sending discovery request to " + lookupRequest.getSocketAddress());
         socket.send(lookupRequest);
       }
@@ -25,7 +27,7 @@
         LOG.debug("Timeout wainting for discovery reply. Retrying...");
         continue;
       }
-      if (!isPacketForUs(responsePacket)) {
+      if (!isPacketForUs(responsePacket,magicNumber)) {
         LOG.debug("Received packet which is not destined to this Nephele setup");
         continue;
       }
