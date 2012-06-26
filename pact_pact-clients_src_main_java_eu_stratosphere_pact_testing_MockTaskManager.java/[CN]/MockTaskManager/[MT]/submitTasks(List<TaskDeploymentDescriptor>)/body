@@ -1,0 +1,32 @@
+{
+  final List<TaskSubmissionResult> submissionResultList=new SerializableArrayList<TaskSubmissionResult>();
+  final Map<ExecutionVertexID,RuntimeEnvironment> tasksToStart=new LinkedHashMap<ExecutionVertexID,RuntimeEnvironment>();
+  for (  final TaskDeploymentDescriptor tdd : tasks) {
+    final ExecutionVertexID vertexID=tdd.getVertexID();
+    RuntimeEnvironment environment;
+    try {
+      final ExecutionGraph executionGraph=jobGraphs.get(tdd.getJobID());
+      final ExecutionVertex vertex=executionGraph.getVertexByID(vertexID);
+      environment=new RuntimeEnvironment(tdd,this.memoryManager,this.ioManager,new MockInputSplitProvider(this.inputSplitManager,vertex));
+    }
+ catch (    Throwable t) {
+      final TaskSubmissionResult result=new TaskSubmissionResult(vertexID,AbstractTaskResult.ReturnCode.DEPLOYMENT_ERROR);
+      result.setDescription(StringUtils.stringifyException(t));
+      LOG.error(result.getDescription());
+      submissionResultList.add(result);
+      continue;
+    }
+    TaskObserver observer=new TaskObserver(vertexID,environment);
+    environment.setExecutionObserver(observer);
+    this.channelManager.registerChannels(environment);
+    this.runningTasks.put(vertexID,environment);
+    this.observers.put(environment,observer);
+    tasksToStart.put(vertexID,environment);
+  }
+  for (  final Entry<ExecutionVertexID,RuntimeEnvironment> task : tasksToStart.entrySet()) {
+    final Thread thread=task.getValue().getExecutingThread();
+    thread.start();
+    submissionResultList.add(new TaskSubmissionResult(task.getKey(),AbstractTaskResult.ReturnCode.SUCCESS));
+  }
+  return submissionResultList;
+}
