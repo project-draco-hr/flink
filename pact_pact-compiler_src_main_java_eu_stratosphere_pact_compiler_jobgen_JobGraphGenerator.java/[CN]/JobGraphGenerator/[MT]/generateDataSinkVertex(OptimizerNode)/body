@@ -4,15 +4,13 @@
   JobOutputVertex sinkVertex=new JobOutputVertex(sinkNode.getPactContract().getName(),this.jobGraph);
   sinkVertex.setOutputClass(DataSinkTask.class);
   sinkVertex.getConfiguration().setInteger(DataSinkTask.DEGREE_OF_PARALLELISM_KEY,sinkNode.getDegreeOfParallelism());
-  if (sinkNode.getLocalProperties().getOrdering() != null) {
-    sinkVertex.getConfiguration().setString(DataSinkTask.SORT_ORDER,sinkNode.getLocalProperties().getOrdering().getOrder(0).name());
-  }
- else {
-    sinkVertex.getConfiguration().setString(DataSinkTask.SORT_ORDER,Order.NONE.name());
-  }
   TaskConfig sinkConfig=new TaskConfig(sinkVertex.getConfiguration());
   sinkConfig.setStubClass(sinkContract.getUserCodeClass());
   sinkConfig.setStubParameters(sinkContract.getParameters());
+  if (sNode.getLocalStrategy() == LocalStrategy.SORT) {
+    assignMemory(sinkConfig,sinkNode.getMemoryPerTask());
+    PactRecordComparatorFactory.writeComparatorSetupToConfig(sinkConfig.getConfiguration(),sinkConfig.getPrefixForInputParameters(0),sNode.getPactContract().getLocalOrder().getFieldPositions(),sNode.getPactContract().getLocalOrder().getTypes());
+  }
 switch (sinkNode.getLocalStrategy()) {
 case NONE:
     sinkConfig.setLocalStrategy(LocalStrategy.NONE);
@@ -23,6 +21,5 @@ break;
 default :
 throw new CompilerException("Invalid local strategy for 'DataSink' (" + sinkNode.getName() + "): "+ sinkNode.getLocalStrategy());
 }
-assignMemory(sinkConfig,sinkNode.getMemoryPerTask());
 return sinkVertex;
 }
