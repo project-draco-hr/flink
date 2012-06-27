@@ -1,52 +1,55 @@
 {
-  ExecutionState previousState=this.executionState.get();
-  int retry=1000;
-  while (previousState == ExecutionState.STARTING) {
-    if (--retry == 0) {
-      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
-    }
-    try {
-      Thread.sleep(1);
-    }
- catch (    InterruptedException ie) {
-      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
-    }
-    previousState=this.executionState.get();
-  }
-  if (previousState == ExecutionState.CANCELED) {
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
-  }
-  if (previousState == ExecutionState.FAILED) {
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
-  }
-  if (previousState == ExecutionState.FINISHED) {
-    return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
-  }
-  if (updateExecutionState(ExecutionState.CANCELING) != ExecutionState.CANCELING) {
-    if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
-      updateExecutionState(ExecutionState.CANCELED,null);
+  while (true) {
+    final ExecutionState previousState=this.executionState.get();
+    if (previousState == ExecutionState.CANCELED) {
       return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
     }
-    if (previousState == ExecutionState.FINISHED || previousState == ExecutionState.FAILED) {
+    if (previousState == ExecutionState.FAILED) {
       return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
     }
-    if (previousState != ExecutionState.RUNNING && previousState != ExecutionState.STARTING && previousState != ExecutionState.FINISHING && previousState != ExecutionState.REPLAYING) {
-      updateExecutionState(ExecutionState.CANCELED,null);
+    if (previousState == ExecutionState.FINISHED) {
       return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
     }
-    if (this.allocatedResource == null) {
-      final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.NO_INSTANCE);
-      result.setDescription("Assigned instance of vertex " + this.toString() + " is null!");
-      return result;
+    if (previousState == ExecutionState.CANCELING) {
+      return new TaskCancelResult(getID(),ReturnCode.SUCCESS);
     }
-    try {
-      return this.allocatedResource.getInstance().cancelTask(this.vertexID);
+    if (previousState == ExecutionState.STARTING) {
+      int retry=2000;
+      while (this.executionState.get() == ExecutionState.STARTING) {
+        if (--retry == 0) {
+          return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
+        }
+        try {
+          Thread.sleep(1);
+        }
+ catch (        InterruptedException ie) {
+          return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
+        }
+      }
+      continue;
     }
- catch (    IOException e) {
-      final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.IPC_ERROR);
-      result.setDescription(StringUtils.stringifyException(e));
-      return result;
+    if (compareAndUpdateExecutionState(previousState,ExecutionState.CANCELING)) {
+      if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
+        updateExecutionState(ExecutionState.CANCELED,null);
+        return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+      }
+      if (previousState != ExecutionState.RUNNING && previousState != ExecutionState.FINISHING && previousState != ExecutionState.REPLAYING) {
+        updateExecutionState(ExecutionState.CANCELED,null);
+        return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
+      }
+      if (this.allocatedResource == null) {
+        final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.NO_INSTANCE);
+        result.setDescription("Assigned instance of vertex " + this.toString() + " is null!");
+        return result;
+      }
+      try {
+        return this.allocatedResource.getInstance().cancelTask(this.vertexID);
+      }
+ catch (      IOException e) {
+        final TaskCancelResult result=new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.IPC_ERROR);
+        result.setDescription(StringUtils.stringifyException(e));
+        return result;
+      }
     }
   }
-  return new TaskCancelResult(getID(),ReturnCode.SUCCESS);
 }
