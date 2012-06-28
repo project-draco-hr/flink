@@ -1,22 +1,29 @@
 {
   boolean inFirstIteration=true;
   final BlockingBackChannel backChannel=retrieveBackChannel();
-  listenToEndOfSuperstep(new Callback(){
-    @Override public void execute(){
-      System.out.println("Tail: received endOfSuperstep [" + System.currentTimeMillis() + "]");
+  listenToEndOfSuperstep(new Callback<EndOfSuperstepEvent>(){
+    @Override public void execute(    EndOfSuperstepEvent event){
+      System.out.println("Tail: received endOfSuperstep [" + System.currentTimeMillis() + "] ["+ Thread.currentThread().getId()+ "]");
       backChannel.notifyOfEndOfSuperstep();
     }
   }
 );
+  listenToTermination(new Callback<TerminationEvent>(){
+    @Override public void execute(    TerminationEvent event) throws Exception {
+      System.out.println("Tail: received termination [" + System.currentTimeMillis() + "] ["+ Thread.currentThread().getId()+ "]");
+      terminated=true;
+    }
+  }
+);
   output=new DataOutputCollector<OT>(backChannel.getWriteEnd(),createOutputTypeSerializer());
-  while (numIterations < 3) {
-    System.out.println("Tail: starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+  while (!terminated) {
+    System.out.println("Tail: starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "] ["+ Thread.currentThread().getId()+ "]");
     if (!inFirstIteration) {
       reinstantiateDriver();
       inFirstIteration=false;
     }
     super.invoke();
-    System.out.println("Tail: finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    System.out.println("Tail: finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "] ["+ Thread.currentThread().getId()+ "]");
     numIterations++;
   }
 }
