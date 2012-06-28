@@ -1,0 +1,34 @@
+{
+  int degreeOfParallelism=1;
+  JobGraph jobGraph=new JobGraph();
+  JobInputVertex input=new JobInputVertex("FileInput",jobGraph);
+  Class<AbstractInputTask<?>> clazz=(Class<AbstractInputTask<?>>)(Class<?>)DataSourceTask.class;
+  input.setInputClass(clazz);
+  input.setNumberOfSubtasks(degreeOfParallelism);
+  TaskConfig inputConfig=new TaskConfig(input.getConfiguration());
+  inputConfig.setStubClass(TextInputFormat.class);
+  inputConfig.setLocalStrategy(TaskConfig.LocalStrategy.NONE);
+  inputConfig.setStubParameter(FileInputFormat.FILE_PARAMETER_KEY,"file:///home/ssc/Desktop/i.txt");
+  JobTaskVertex head=createTask(BulkIterationHeadPactTask.class,"BulkIterationHead",jobGraph,degreeOfParallelism);
+  TaskConfig headConfig=new TaskConfig(head.getConfiguration());
+  headConfig.setDriver(MapDriver.class);
+  headConfig.setStubClass(PlusOneMapStub.class);
+  headConfig.setMemorySize(10 * MEGABYTE);
+  JobTaskVertex tail=createTask(BulkIterationTailPactTask.class,"BulkIterationTail",jobGraph,degreeOfParallelism);
+  TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
+  tailConfig.setDriver(MapDriver.class);
+  tailConfig.setStubClass(TimesTwoMapStub.class);
+  JobOutputVertex output=createFileOutput(jobGraph,"FinalOutput",degreeOfParallelism);
+  TaskConfig outputConfig=new TaskConfig(output.getConfiguration());
+  outputConfig.setStubClass(PlayOutFormat.class);
+  outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,"file:///tmp/stratosphere/iterations");
+  JobOutputVertex tailBlindOutput=createFakeOutput(jobGraph,"FakeTailOutput",degreeOfParallelism);
+  connectLocal(input,head,inputConfig);
+  connectLocal(head,tail,headConfig);
+  connectLocal(head,output,headConfig);
+  connectLocal(tail,tailBlindOutput,tailConfig);
+  head.setVertexToShareInstancesWith(tail);
+  GlobalConfiguration.loadConfiguration("/home/ssc/Entwicklung/projects/stratosphere-iterations/stratosphere-dist/src/main/stratosphere-bin/conf");
+  Configuration conf=GlobalConfiguration.getConfiguration();
+  submit(jobGraph,conf);
+}
