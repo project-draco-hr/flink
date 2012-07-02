@@ -1,21 +1,25 @@
 {
   int numIterations=0;
   BlockingBackChannel backChannel=initBackChannel();
+  Broker<SuperstepBarrier> superstepBarrierBroker=SuperstepBarrierBroker.instance();
   TypeSerializer serializer=getInputSerializer(ITERATION_INPUT);
   output=(Collector<OT>)iterationCollector();
-  while (numIterations < 2) {
-    System.out.println("Head: starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+  while (numIterations < 3) {
+    log.info("Head: starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
     if (numIterations > 0) {
       reinstantiateDriver();
     }
+    SuperstepBarrier superstepBarrier=superstepBarrierBroker.get(identifier());
     super.invoke();
-    sendEventToAllIterationOutputs(new EndOfSuperstepEvent());
+    sendEventToAllIterationOutputsAndSync(new EndOfSuperstepEvent());
     DataInputView superStepResult=backChannel.getReadEndAfterSuperstepEnded();
-    System.out.println("Head: finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    log.info("finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    log.info("waiting for other works in iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    superstepBarrier.waitForOthers();
     feedBackSuperstepResult(superStepResult,serializer);
     numIterations++;
   }
-  sendEventToAllIterationOutputs(new TerminationEvent());
-  System.out.println("Head: streaming out final result [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+  sendEventToAllIterationOutputsAndSync(new TerminationEvent());
+  log.info("streaming out final result [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
   streamOutFinalOutput();
 }

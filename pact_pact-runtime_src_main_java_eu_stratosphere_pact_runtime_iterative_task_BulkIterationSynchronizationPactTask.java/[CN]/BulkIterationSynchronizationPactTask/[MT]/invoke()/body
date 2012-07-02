@@ -1,22 +1,27 @@
 {
   listenToEndOfSuperstep(new Callback<EndOfSuperstepEvent>(){
     @Override public void execute(    EndOfSuperstepEvent event) throws Exception {
-      propagateEvent(event);
+      log.info("received endOfSuperStep [" + System.currentTimeMillis() + "]");
+      superstepBarrier.signalWorkerDone();
     }
   }
 );
   listenToTermination(new Callback<TerminationEvent>(){
     @Override public void execute(    TerminationEvent event) throws Exception {
-      propagateEvent(event);
+      log.info("received termination [" + System.currentTimeMillis() + "]");
       terminated=true;
     }
   }
 );
+  Broker<SuperstepBarrier> superstepBarrierBroker=SuperstepBarrierBroker.instance();
+  int numSubtasks=getEnvironment().getCurrentNumberOfSubtasks();
   while (!terminated) {
     log.info("starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
     if (numIterations > 0) {
       reinstantiateDriver();
     }
+    superstepBarrier=new SuperstepBarrier(numSubtasks);
+    superstepBarrierBroker.handIn(identifier(),superstepBarrier);
     super.invoke();
     log.info("finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
     numIterations++;
