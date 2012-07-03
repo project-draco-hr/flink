@@ -1,16 +1,14 @@
 {
-  List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
-  List<? extends OptimizerNode> subPlans=this.getPredNode().getAlternativePlans(estimator);
+  final Ordering po=getPactContract().getPartitionOrdering();
+  final Ordering lo=getPactContract().getLocalOrder();
+  final List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
+  final List<? extends OptimizerNode> subPlans=this.getPredNode().getAlternativePlans(estimator);
   for (  OptimizerNode subPlan : subPlans) {
-    Ordering go=getPactContract().getGlobalOrder();
-    Ordering lo=getPactContract().getLocalOrder();
-    GlobalProperties gp;
-    LocalProperties lp;
-    gp=subPlan.getGlobalProperties().createCopy();
-    lp=subPlan.getLocalProperties().createCopy();
-    ShipStrategy ss=null;
-    LocalStrategy ls=null;
-    if (go != null && lo != null) {
+    final GlobalProperties gp=subPlan.getGlobalProperties().createCopy();
+    final LocalProperties lp=subPlan.getLocalProperties().createCopy();
+    final ShipStrategy ss;
+    final LocalStrategy ls;
+    if (po != null && !po.isMetBy(gp.getOrdering())) {
       ShipStrategy s=this.input.getShipStrategy();
       if (s == ShipStrategy.NONE || s == ShipStrategy.PARTITION_RANGE) {
         ss=ShipStrategy.PARTITION_RANGE;
@@ -18,34 +16,26 @@
  else {
         continue;
       }
-      if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
-        ls=LocalStrategy.SORT;
-      }
- else {
-        continue;
-      }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,go.getInvolvedFields());
-      gp.setOrdering(go);
-      lp.setOrdering(go);
+      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,po.getInvolvedIndexes());
+      gp.setOrdering(po);
     }
- else     if (lo != null && lo.isMetBy(lp.getOrdering())) {
+ else {
+      ss=ShipStrategy.FORWARD;
+    }
+    if (lo != null && !lo.isMetBy(lp.getOrdering())) {
       if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
         ls=LocalStrategy.SORT;
       }
  else {
         continue;
       }
-      ls=LocalStrategy.SORT;
       lp.setOrdering(lo);
     }
-    if (ss == null) {
-      ss=ShipStrategy.FORWARD;
+ else {
+      ls=LocalStrategy.NONE;
     }
     DataSinkNode ns=new DataSinkNode(this,subPlan,this.input,gp,lp);
     ns.input.setShipStrategy(ss);
-    if (ls == null) {
-      ls=LocalStrategy.NONE;
-    }
     ns.setLocalStrategy(ls);
     estimator.costOperator(ns);
     outputPlans.add(ns);
