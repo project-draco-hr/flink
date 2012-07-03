@@ -14,19 +14,12 @@
       return new TaskCancelResult(getID(),ReturnCode.SUCCESS);
     }
     if (previousState == ExecutionState.STARTING) {
-      int retry=2000;
-      while (this.executionState.get() == ExecutionState.STARTING) {
-        if (--retry == 0) {
-          return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
-        }
-        try {
-          Thread.sleep(1);
-        }
- catch (        InterruptedException ie) {
-          return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.ILLEGAL_STATE);
-        }
+      this.cancelRequested.set(true);
+      if (this.executionState.get() != ExecutionState.STARTING) {
+        this.cancelRequested.set(false);
+        continue;
       }
-      continue;
+      return new TaskCancelResult(getID(),AbstractTaskResult.ReturnCode.SUCCESS);
     }
     if (compareAndUpdateExecutionState(previousState,ExecutionState.CANCELING)) {
       if (this.groupVertex.getStageNumber() != this.executionGraph.getIndexOfCurrentExecutionStage()) {
