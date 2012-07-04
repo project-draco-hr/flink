@@ -1,22 +1,28 @@
 {
   List<Contract> children=((SingleInputContract<?>)getPactContract()).getInputs();
-  for (  Contract child : children) {
-    OptimizerNode predNode=contractToNode.get(child);
-    PactConnection conn=new PactConnection(predNode,this);
-    this.setInConn(conn);
-    predNode.addOutConn(conn);
-    Configuration conf=getPactContract().getParameters();
-    String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
-    if (shipStrategy != null) {
-      if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
-        conn.setShipStrategy(ShipStrategy.FORWARD);
-      }
- else       if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
-        conn.setShipStrategy(ShipStrategy.PARTITION_HASH);
-      }
+  OptimizerNode pred;
+  if (children.size() == 1) {
+    pred=contractToNode.get(children.get(0));
+  }
  else {
-        throw new CompilerException("Invalid hint for the shipping strategy of a single input connection: " + shipStrategy);
-      }
+    pred=new UnionNode(getPactContract(),children,contractToNode);
+    pred.SetId(this.id);
+    this.id++;
+  }
+  PactConnection conn=new PactConnection(pred,this);
+  this.setInConn(conn);
+  pred.addOutConn(conn);
+  Configuration conf=getPactContract().getParameters();
+  String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
+  if (shipStrategy != null) {
+    if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
+      conn.setShipStrategy(ShipStrategy.FORWARD);
+    }
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
+      conn.setShipStrategy(ShipStrategy.PARTITION_HASH);
+    }
+ else {
+      throw new CompilerException("Invalid hint for the shipping strategy of a single input connection: " + shipStrategy);
     }
   }
 }
