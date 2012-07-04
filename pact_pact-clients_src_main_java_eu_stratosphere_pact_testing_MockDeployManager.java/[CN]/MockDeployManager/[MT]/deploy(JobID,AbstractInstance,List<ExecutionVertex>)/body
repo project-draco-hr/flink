@@ -1,0 +1,29 @@
+{
+  for (  final ExecutionVertex vertex : verticesToBeDeployed)   vertex.updateExecutionState(ExecutionState.STARTING,null);
+  final Runnable deploymentRunnable=new Runnable(){
+    /** 
+ * {@inheritDoc}
+ */
+    @Override public void run(){
+      final List<TaskDeploymentDescriptor> submissionList=new SerializableArrayList<TaskDeploymentDescriptor>();
+      for (      final ExecutionVertex vertex : verticesToBeDeployed) {
+        submissionList.add(vertex.constructDeploymentDescriptor());
+      }
+      List<TaskSubmissionResult> submissionResultList=null;
+      try {
+        submissionResultList=instance.submitTasks(submissionList);
+      }
+ catch (      final IOException ioe) {
+        for (        final ExecutionVertex vertex : verticesToBeDeployed)         Assert.fail(ioe.getMessage() + " @ " + vertex);
+        return;
+      }
+      int count=0;
+      for (      final TaskSubmissionResult tsr : submissionResultList) {
+        ExecutionVertex vertex=verticesToBeDeployed.get(count++);
+        if (tsr.getReturnCode() != AbstractTaskResult.ReturnCode.SUCCESS)         vertex.updateExecutionState(ExecutionState.FAILED,tsr.getDescription());
+      }
+    }
+  }
+;
+  ConcurrentUtil.invokeLater(deploymentRunnable);
+}

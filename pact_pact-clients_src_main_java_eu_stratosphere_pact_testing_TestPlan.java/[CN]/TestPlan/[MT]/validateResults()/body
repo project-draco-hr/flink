@@ -1,0 +1,21 @@
+{
+  for (  final FileDataSink sinkContract : this.getDataSinks()) {
+    TestRecords expectedValues=this.expectedOutputs.get(sinkContract);
+    if (sinkContract.getFormatClass() == SequentialOutputFormat.class && expectedValues != null && expectedValues.isInitialized()) {
+      final TestRecords actualValues=new TestRecords();
+      actualValues.fromFile(SequentialInputFormat.class,sinkContract.getFilePath());
+      FuzzyValueMatcher fuzzyMatcher=this.getFuzzyMatcher(sinkContract);
+      Int2ObjectMap<List<ValueSimilarity<?>>> similarityMap=this.getFuzzySimilarityIndexMap(sinkContract);
+      if (similarityMap == null)       similarityMap=Int2ObjectMaps.EMPTY_MAP;
+      if (!this.getFuzzySimilarityIndexMap(ALL_SINKS).isEmpty())       similarityMap=this.mergeSimilarityIndices(similarityMap);
+      try {
+        actualValues.assertEquals(expectedValues,fuzzyMatcher,similarityMap);
+      }
+ catch (      AssertionError e) {
+        AssertionError assertionError=new AssertionError(sinkContract.getName() + ": " + e.getMessage());
+        assertionError.initCause(e.getCause());
+        throw assertionError;
+      }
+    }
+  }
+}
