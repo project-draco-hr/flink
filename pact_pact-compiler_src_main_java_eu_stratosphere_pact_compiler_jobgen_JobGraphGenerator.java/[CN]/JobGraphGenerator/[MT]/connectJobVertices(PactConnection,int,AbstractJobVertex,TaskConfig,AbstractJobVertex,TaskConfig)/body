@@ -64,11 +64,12 @@ keyTypes=null;
 keyPositions=null;
 keyTypes=null;
 }
-final TaskConfig configForOutpuShipStrategy;
+final TaskConfig configForOutputShipStrategy;
 switch (connection.getTempMode()) {
 case NONE:
 outputVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
-configForOutpuShipStrategy=outputConfig;
+configForOutputShipStrategy=outputConfig;
+outputConfig.addInputToGroup(inputNumber);
 break;
 case TEMP_SENDER_SIDE:
 int degreeOfParallelism=connection.getSourcePact().getDegreeOfParallelism();
@@ -79,7 +80,9 @@ tempVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,dis
 tempVertex.setVertexToShareInstancesWith(outputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
 outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-configForOutpuShipStrategy=tempConfig;
+configForOutputShipStrategy=tempConfig;
+outputConfig.addInputToGroup(inputNumber);
+tempConfig.addInputToGroup(1);
 break;
 case TEMP_RECEIVER_SIDE:
 degreeOfParallelism=connection.getTargetPact().getDegreeOfParallelism();
@@ -90,21 +93,23 @@ tempVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRE
 tempVertex.setVertexToShareInstancesWith(inputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
 tempConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
-configForOutpuShipStrategy=outputConfig;
+configForOutputShipStrategy=outputConfig;
+outputConfig.addInputToGroup(inputNumber);
+tempConfig.addInputToGroup(1);
 break;
 default :
 throw new CompilerException("Invalid connection temp mode: " + connection.getTempMode());
 }
-configForOutpuShipStrategy.addOutputShipStrategy(connection.getShipStrategy());
+configForOutputShipStrategy.addOutputShipStrategy(connection.getShipStrategy());
 if (!(keyPositions == null || keyTypes == null || keyPositions.length == 0 || keyTypes.length == 0)) {
-final int outputNum=configForOutpuShipStrategy.getNumOutputs() - 1;
-configForOutpuShipStrategy.setComparatorFactoryForOutput(PactRecordComparatorFactory.class,outputNum);
-PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutpuShipStrategy.getConfiguration(),configForOutpuShipStrategy.getPrefixForOutputParameters(outputNum),keyPositions,keyTypes);
+final int outputNum=configForOutputShipStrategy.getNumOutputs() - 1;
+configForOutputShipStrategy.setComparatorFactoryForOutput(PactRecordComparatorFactory.class,outputNum);
+PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutputShipStrategy.getConfiguration(),configForOutputShipStrategy.getPrefixForOutputParameters(outputNum),keyPositions,keyTypes);
 }
 if (targetContract instanceof GenericDataSink) {
 final DataDistribution distri=((GenericDataSink)targetContract).getDataDistribution();
 if (distri != null) {
-configForOutpuShipStrategy.setOutputDataDistribution(distri);
+configForOutputShipStrategy.setOutputDataDistribution(distri);
 }
 }
 }
