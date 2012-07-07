@@ -1,0 +1,25 @@
+{
+  List<? extends OptimizerNode> alternativesAtLevel=inputs.get(index);
+  for (  OptimizerNode alternative : alternativesAtLevel) {
+    newInputs.push(alternative);
+    FieldList newPartitionedFieldsInCommon=partitionedFieldsInCommon;
+    GlobalProperties gpForInput=PactConnection.getGlobalPropertiesAfterConnection(alternative,this,ShipStrategy.FORWARD);
+    if (index == 0 && gpForInput.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+      newPartitionedFieldsInCommon=gpForInput.getPartitionedFields();
+    }
+ else     if (gpForInput.getPartitioning() != PartitionProperty.HASH_PARTITIONED || gpForInput.getPartitionedFields().equals(partitionedFieldsInCommon) == false) {
+      newPartitionedFieldsInCommon=null;
+    }
+    if (index < inputs.size() - 1) {
+      calcAlternatives(target,newInputs,index + 1,inputs,newPartitionedFieldsInCommon);
+    }
+ else {
+      GlobalProperties gp=new GlobalProperties();
+      if (newPartitionedFieldsInCommon != null) {
+        gp.setPartitioning(PartitionProperty.HASH_PARTITIONED,newPartitionedFieldsInCommon);
+      }
+      target.add(new UnionNode(this,newInputs,gp,new LocalProperties()));
+    }
+    newInputs.pop();
+  }
+}
