@@ -1,5 +1,5 @@
 {
-  List<? extends OptimizerNode> alternativesAtLevel=inputs.get(index);
+  List<? extends OptimizerNode> alternativesAtLevel=alternativesForInputs.get(index);
   for (  OptimizerNode alternative : alternativesAtLevel) {
     Map<OptimizerNode,OptimizerNode> newBranchPlan=new HashMap<OptimizerNode,OptimizerNode>(branchPlan);
     boolean isCompatible=true;
@@ -18,7 +18,7 @@
       }
     }
     if (isCompatible) {
-      newInputs.push(alternative);
+      subplanStack.push(alternative);
       FieldList newPartitionedFieldsInCommon=partitionedFieldsInCommon;
       GlobalProperties gpForInput=alternative.getGlobalProperties();
       if (index == 0 && gpForInput.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
@@ -27,19 +27,19 @@
  else       if (gpForInput.getPartitioning() != PartitionProperty.HASH_PARTITIONED || gpForInput.getPartitionedFields().equals(partitionedFieldsInCommon) == false) {
         newPartitionedFieldsInCommon=null;
       }
-      if (index < inputs.size() - 1) {
-        calcAlternatives(target,newInputs,index + 1,inputs,newPartitionedFieldsInCommon,newBranchPlan);
+      if (index < alternativesForInputs.size() - 1) {
+        calcAlternatives(target,subplanStack,index + 1,alternativesForInputs,newPartitionedFieldsInCommon,newBranchPlan);
       }
  else {
         GlobalProperties gp=new GlobalProperties();
         if (newPartitionedFieldsInCommon != null) {
           gp.setPartitioning(PartitionProperty.HASH_PARTITIONED,newPartitionedFieldsInCommon);
         }
-        UnionNode unionNode=new UnionNode(this,newInputs,gp,new LocalProperties());
+        UnionNode unionNode=new UnionNode(this,subplanStack,gp,new LocalProperties());
         unionNode.branchPlan=newBranchPlan;
         target.add(unionNode);
       }
-      newInputs.pop();
+      subplanStack.pop();
     }
   }
 }
