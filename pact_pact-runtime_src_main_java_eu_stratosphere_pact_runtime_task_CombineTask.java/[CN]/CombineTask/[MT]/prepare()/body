@@ -11,20 +11,12 @@ if (availableMemory < strategyMinMem) {
 throw new RuntimeException("The Combine task was initialized with too little memory for local strategy " + config.getLocalStrategy() + " : "+ availableMemory+ " bytes."+ "Required is at least "+ strategyMinMem+ " bytes.");
 }
 final MemoryManager memoryManager=getEnvironment().getMemoryManager();
-final IOManager ioManager=getEnvironment().getIOManager();
-this.keyPositions=this.config.getLocalStrategyKeyPositions(0);
-this.keyClasses=this.config.getLocalStrategyKeyClasses(this.userCodeClassLoader);
-if (this.keyPositions == null || this.keyClasses == null) {
-throw new Exception("The key positions and types are not specified for the CombineTask.");
-}
-@SuppressWarnings("unchecked") final Comparator<Key>[] comparators=new Comparator[keyPositions.length];
-final KeyComparator kk=new KeyComparator();
-for (int i=0; i < comparators.length; i++) {
-comparators[i]=kk;
-}
+final MutableObjectIterator<T> in=getInput(0);
+this.serializer=getInputSerializer(0);
+this.comparator=getInputComparator(0);
 switch (ls) {
 case COMBININGSORT:
-input=new AsynchronousPartialSorter(memoryManager,ioManager,availableMemory,comparators,keyPositions,keyClasses,inputs[0],this);
+input=new AsynchronousPartialSorter<T>(memoryManager,in,this,this.serializer,this.comparator.duplicate(),availableMemory);
 break;
 default :
 throw new RuntimeException("Invalid local strategy provided for CombineTask.");

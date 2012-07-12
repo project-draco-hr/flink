@@ -1,0 +1,51 @@
+{
+  final ProbeIterator<PT> probeIter=this.probeIterator;
+  final TypeComparator<PT> probeAccessors=this.probeSideComparator;
+  PT next;
+  while ((next=probeIter.next()) != null) {
+    final int hash=hash(probeAccessors.hash(next),this.currentRecursionDepth);
+    final int posHashCode=hash % this.numBuckets;
+    final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+    final int bucketInSegmentOffset=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+    final MemorySegment bucket=this.buckets[bucketArrayPos];
+    final int partitionNumber=bucket.get(bucketInSegmentOffset + HEADER_PARTITION_OFFSET);
+    final HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(partitionNumber);
+    if (p.isInMemory()) {
+      this.recordComparator.setReference(next);
+      this.bucketIterator.set(bucket,p.overflowSegments,p,hash,bucketInSegmentOffset);
+      return true;
+    }
+ else {
+      p.insertIntoProbeBuffer(next);
+    }
+  }
+  int buffersAvailable=0;
+  for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+    HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(i);
+    buffersAvailable+=p.finalizeProbePhase(this.availableMemory,this.partitionsPending);
+  }
+  this.partitionsBeingBuilt.clear();
+  this.writeBehindBuffersAvailable+=buffersAvailable;
+  releaseTable();
+  if (this.currentSpilledProbeSide != null) {
+    this.currentSpilledProbeSide.closeAndDelete();
+    this.currentSpilledProbeSide=null;
+  }
+  if (!this.partitionsPending.isEmpty()) {
+    final HashPartition<BT,PT> p=this.partitionsPending.get(0);
+    buildTableFromSpilledPartition(p);
+    LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+    this.currentSpilledProbeSide=this.ioManager.createBlockChannelReader(p.getProbeSideChannel().getChannelID(),returnQueue);
+    List<MemorySegment> memory=new ArrayList<MemorySegment>();
+    memory.add(getNextBuffer());
+    memory.add(getNextBuffer());
+    ChannelReaderInputViewIterator<PT> probeReader=new ChannelReaderInputViewIterator<PT>(this.currentSpilledProbeSide,returnQueue,memory,this.availableMemory,this.probeSideSerializer,p.getProbeSideBlockCount());
+    this.probeIterator.set(probeReader);
+    this.partitionsPending.remove(0);
+    this.currentRecursionDepth=p.getRecursionLevel() + 1;
+    return nextRecord();
+  }
+ else {
+    return false;
+  }
+}

@@ -5,7 +5,7 @@
   if (vertex.compareAndUpdateExecutionState(ExecutionState.ASSIGNED,ExecutionState.READY)) {
     final AbstractInstance instance=vertex.getAllocatedResource().getInstance();
     if (instance instanceof DummyInstance) {
-      LOG.error("Inconsistency: Vertex " + vertex.getName() + "("+ vertex.getEnvironment().getIndexInSubtaskGroup()+ "/"+ vertex.getEnvironment().getCurrentNumberOfSubtasks()+ ") is about to be deployed on a DummyInstance");
+      LOG.error("Inconsistency: Vertex " + vertex + " is about to be deployed on a DummyInstance");
     }
     List<ExecutionVertex> verticesForInstance=verticesToBeDeployed.get(instance);
     if (verticesForInstance == null) {
@@ -14,10 +14,9 @@
     }
     verticesForInstance.add(vertex);
   }
-  final RuntimeEnvironment env=vertex.getEnvironment();
-  final int numberOfOutputGates=env.getNumberOfOutputGates();
+  final int numberOfOutputGates=vertex.getNumberOfOutputGates();
   for (int i=0; i < numberOfOutputGates; ++i) {
-    final OutputGate<? extends Record> outputGate=env.getOutputGate(i);
+    final ExecutionGate outputGate=vertex.getOutputGate(i);
     boolean deployTarget;
 switch (outputGate.getChannelType()) {
 case FILE:
@@ -33,10 +32,10 @@ default :
 throw new IllegalStateException("Unknown channel type");
 }
 if (deployTarget) {
-final int numberOfOutputChannels=outputGate.getNumberOfOutputChannels();
+final int numberOfOutputChannels=outputGate.getNumberOfEdges();
 for (int j=0; j < numberOfOutputChannels; ++j) {
-final AbstractOutputChannel<? extends Record> outputChannel=outputGate.getOutputChannel(j);
-final ExecutionVertex connectedVertex=vertex.getExecutionGraph().getVertexByChannelID(outputChannel.getConnectedChannelID());
+final ExecutionEdge outputChannel=outputGate.getEdge(j);
+final ExecutionVertex connectedVertex=outputChannel.getInputGate().getVertex();
 findVerticesToBeDeployed(connectedVertex,verticesToBeDeployed,alreadyVisited);
 }
 }

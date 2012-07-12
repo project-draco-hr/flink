@@ -1,71 +1,38 @@
 {
-  if (this.nextElement == null) {
-    if (this.bufferCurrentlyRead != null) {
-      if (this.bufferCurrentlyRead.read(this.stagingElement)) {
-        this.nextElement=this.stagingElement;
-        return true;
-      }
- else {
-        this.consumedBuffers.add(this.bufferCurrentlyRead);
-        if (this.fullBuffers.isEmpty()) {
-          this.bufferCurrentlyRead=null;
-          return false;
-        }
- else {
-          this.bufferCurrentlyRead=this.fullBuffers.remove(0);
-          if (this.bufferCurrentlyRead.read(this.stagingElement)) {
-            this.nextElement=this.stagingElement;
-            return true;
-          }
- else {
-            throw new RuntimeException("BlockResettableIterator: " + "BUG - Could not de-serialize element newly obtaint input block buffer.");
-          }
-        }
-      }
-    }
- else     if (this.bufferCurrentlyFilled != null) {
-      if (this.input.hasNext()) {
-        PactRecord next=this.input.next();
-        if (this.bufferCurrentlyFilled.write(next)) {
-          this.nextElement=next;
+  try {
+    if (this.nextElement == null) {
+      if (this.readPhase) {
+        if (getNextRecord(this.stagingElement)) {
+          this.nextElement=this.stagingElement;
           return true;
         }
  else {
-          final int fillPosition=this.bufferCurrentlyFilled.getPosition();
-          final MemorySegment seg=this.bufferCurrentlyFilled.dispose();
-          this.bufferCurrentlyFilled=null;
-          final Buffer.Input in=new Buffer.Input(seg);
-          in.reset(fillPosition);
-          this.consumedBuffers.add(in);
-          if (this.emptySegments.isEmpty()) {
-            this.leftOverElement=next;
-            return false;
-          }
- else {
-            this.bufferCurrentlyFilled=new Buffer.Output(this.emptySegments.remove(this.emptySegments.size() - 1));
-            if (this.bufferCurrentlyFilled.write(next)) {
-              this.nextElement=next;
-              return true;
-            }
- else {
-              throw new RuntimeException("BlockResettableIterator: " + "Could not serialize element into fresh block buffer - element is too large.");
-            }
-          }
+          return false;
         }
       }
  else {
-        this.noMoreBlocks=true;
-        return false;
+        if (this.input.hasNext()) {
+          final T next=this.input.next();
+          if (writeNextRecord(next)) {
+            this.nextElement=next;
+            return true;
+          }
+ else {
+            this.leftOverElement=next;
+            return false;
+          }
+        }
+ else {
+          this.noMoreBlocks=true;
+          return false;
+        }
       }
     }
  else {
-      if (this.closed) {
-        throw new IllegalStateException("Iterator was closed.");
-      }
-      return false;
+      return true;
     }
   }
- else {
-    return true;
+ catch (  IOException ioex) {
+    throw new RuntimeException("Error (de)serializing record in block resettable iterator.",ioex);
   }
 }

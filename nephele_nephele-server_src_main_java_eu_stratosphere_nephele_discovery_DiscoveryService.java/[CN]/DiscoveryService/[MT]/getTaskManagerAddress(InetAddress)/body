@@ -1,4 +1,6 @@
 {
+  final int magicNumber=GlobalConfiguration.getInteger(MAGICNUMBER_KEY,DEFAULT_MAGICNUMBER);
+  final int discoveryPort=GlobalConfiguration.getInteger(DISCOVERYPORT_KEY,DEFAULT_DISCOVERYPORT);
   InetAddress taskManagerAddress=null;
   DatagramSocket socket=null;
   try {
@@ -7,9 +9,9 @@
     socket.setSoTimeout(CLIENTSOCKETTIMEOUT);
     final DatagramPacket responsePacket=new DatagramPacket(new byte[RESPONSE_PACKET_SIZE],RESPONSE_PACKET_SIZE);
     for (int retries=0; retries < DISCOVERFAILURERETRIES; retries++) {
-      final DatagramPacket addressRequest=createTaskManagerAddressRequestPacket();
+      final DatagramPacket addressRequest=createTaskManagerAddressRequestPacket(magicNumber);
       addressRequest.setAddress(jobManagerAddress);
-      addressRequest.setPort(DISCOVERYPORT);
+      addressRequest.setPort(discoveryPort);
       LOG.debug("Sending Task Manager address request to " + addressRequest.getSocketAddress());
       socket.send(addressRequest);
       try {
@@ -19,7 +21,7 @@
         LOG.warn("Timeout wainting for task manager address reply. Retrying...");
         continue;
       }
-      if (!isPacketForUs(responsePacket)) {
+      if (!isPacketForUs(responsePacket,magicNumber)) {
         LOG.warn("Received packet which is not destined to this Nephele setup");
         continue;
       }
