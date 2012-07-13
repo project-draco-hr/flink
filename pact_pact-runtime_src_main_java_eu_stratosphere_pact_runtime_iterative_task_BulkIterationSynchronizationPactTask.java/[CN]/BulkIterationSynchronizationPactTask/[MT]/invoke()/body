@@ -1,28 +1,22 @@
 {
-  listenToEndOfSuperstep(new Callback<EndOfSuperstepEvent>(){
-    @Override public void execute(    EndOfSuperstepEvent event) throws Exception {
-      log.info("received endOfSuperStep [" + System.currentTimeMillis() + "]");
-      superstepBarrier.signalWorkerDone();
-    }
-  }
-);
+  final AtomicInteger nonTerminatedHeadsCounter=new AtomicInteger(numberOfConnectedHeads());
   listenToTermination(new Callback<TerminationEvent>(){
     @Override public void execute(    TerminationEvent event) throws Exception {
-      log.info("received termination [" + System.currentTimeMillis() + "]");
-      terminated=true;
+      int numNonTerminatedHeads=nonTerminatedHeadsCounter.decrementAndGet();
+      if (numNonTerminatedHeads == 0) {
+        terminated=true;
+      }
     }
   }
 );
-  Broker<SuperstepBarrier> superstepBarrierBroker=SuperstepBarrierBroker.instance();
-  int numSubtasks=getEnvironment().getCurrentNumberOfSubtasks();
   while (!terminated) {
     log.info("starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
     if (numIterations > 0) {
       reinstantiateDriver();
     }
-    superstepBarrier=new SuperstepBarrier(numSubtasks);
-    superstepBarrierBroker.handIn(identifier(),superstepBarrier);
     super.invoke();
+    log.info("signaling that all workers are done in iteration [" + numIterations + "] "+ "["+ System.currentTimeMillis()+ "]");
+    signalAllWorkersDone();
     log.info("finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
     numIterations++;
   }
