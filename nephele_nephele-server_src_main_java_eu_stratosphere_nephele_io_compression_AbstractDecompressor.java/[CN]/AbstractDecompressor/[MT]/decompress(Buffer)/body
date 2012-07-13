@@ -1,0 +1,25 @@
+{
+  setCompressedDataBuffer(compressedData);
+  setUncompressedDataBuffer(this.bufferProvider.lockCompressionBuffer());
+  if (this.uncompressedDataBuffer.position() > 0) {
+    throw new IllegalStateException("Uncompressed data buffer is expected to be empty");
+  }
+  this.uncompressedDataBuffer.clear();
+  final int result=decompressBytesDirect(SIZE_LENGTH);
+  if (result < 0) {
+    throw new IOException("Compression libary returned error-code: " + result);
+  }
+  if (this.uncompressedBuffer.isInWriteMode()) {
+    this.uncompressedDataBuffer.position(result);
+    this.uncompressedBuffer.finishWritePhase();
+  }
+ else {
+    this.uncompressedDataBuffer.position(0);
+    this.uncompressedDataBuffer.limit(result);
+  }
+  final Buffer uncompressedBuffer=this.uncompressedBuffer;
+  this.bufferProvider.releaseCompressionBuffer(this.compressedBuffer);
+  setCompressedDataBuffer(null);
+  setUncompressedDataBuffer(null);
+  return uncompressedBuffer;
+}
