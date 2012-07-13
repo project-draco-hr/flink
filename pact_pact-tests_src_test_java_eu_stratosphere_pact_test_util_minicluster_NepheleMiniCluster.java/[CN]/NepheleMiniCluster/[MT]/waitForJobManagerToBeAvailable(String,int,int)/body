@@ -1,0 +1,35 @@
+{
+  final InetSocketAddress address=new InetSocketAddress(hostname,port);
+  ExtendedManagementProtocol jobManagerConnection=null;
+  try {
+    jobManagerConnection=(ExtendedManagementProtocol)RPC.getProxy(ExtendedManagementProtocol.class,address,NetUtils.getSocketFactory());
+    Map<InstanceType,InstanceTypeDescription> map=null;
+    final long startTime=System.currentTimeMillis();
+    do {
+      try {
+        map=jobManagerConnection.getMapOfAvailableInstanceTypes();
+        if (map != null && map.size() > 0) {
+          break;
+        }
+      }
+ catch (      Exception e) {
+      }
+      Thread.sleep(500);
+    }
+ while ((System.currentTimeMillis() - startTime) < timeoutMillies);
+  }
+ catch (  Throwable t) {
+    LOG.error(t);
+    throw new IOException("Waiting for JobManager to come up failed.",t);
+  }
+ finally {
+    if (jobManagerConnection != null) {
+      try {
+        RPC.stopProxy(jobManagerConnection);
+      }
+ catch (      Throwable t) {
+        LOG.error("Could not cleanly shut down connection from compiler to job manager,",t);
+      }
+    }
+  }
+}
