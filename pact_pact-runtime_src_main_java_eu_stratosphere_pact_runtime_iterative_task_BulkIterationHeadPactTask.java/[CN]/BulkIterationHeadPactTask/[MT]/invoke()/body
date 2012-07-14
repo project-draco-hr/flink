@@ -6,7 +6,9 @@
   TypeSerializer serializer=getInputSerializer(ITERATION_INPUT);
   output=(Collector<OT>)iterationCollector();
   while (numIterations < 3) {
-    log.info("Head: starting iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + numIterations + "]"));
+    }
     if (numIterations > 0) {
       reinstantiateDriver();
     }
@@ -15,15 +17,22 @@
     EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
     sendEventToAllIterationOutputs(endOfSuperstepEvent);
     DataInputView superStepResult=backChannel.getReadEndAfterSuperstepEnded();
-    log.info("finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
-    log.info("waiting for other workers in iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + numIterations + "]"));
+    }
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("waiting for other workers in iteration [" + numIterations + "]"));
+    }
     sendEventToSync(endOfSuperstepEvent);
     barrier.waitForOtherWorkers();
     feedBackSuperstepResult(superStepResult,serializer);
     numIterations++;
   }
-  sendEventToAllIterationOutputs(new TerminationEvent());
-  sendEventToSync(new TerminationEvent());
-  log.info("streaming out final result [" + numIterations + "] ["+ System.currentTimeMillis()+ "]");
+  TerminationEvent terminationEvent=new TerminationEvent();
+  sendEventToAllIterationOutputs(terminationEvent);
+  sendEventToSync(terminationEvent);
+  if (log.isInfoEnabled()) {
+    log.info(formatLogString("streaming out final result after [" + numIterations + "] iterations"));
+  }
   streamOutFinalOutput();
 }
