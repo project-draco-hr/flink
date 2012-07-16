@@ -1,0 +1,35 @@
+{
+  final TaskConfig config=new TaskConfig(GlobalConfiguration.getConfiguration());
+  this.assignMemory(config,10);
+  final long totalMemory=config.getMemorySize();
+  final int numFileHandles=config.getNumFilehandles();
+  try {
+    final StringBuilder testName=new StringBuilder();
+    StackTraceElement[] stackTrace=new Throwable().getStackTrace();
+    for (int index=stackTrace.length - 1; index > 0; index--)     if (stackTrace[index].getClassName().contains("Test"))     testName.append(stackTrace[index].toString());
+    AbstractTask parentTask=new AbstractTask(){
+      @Override public String toString(){
+        return "TestPair Sorter " + testName;
+      }
+      @Override public void registerInputOutput(){
+      }
+      @Override public void invoke() throws Exception {
+      }
+    }
+;
+    if (info == null)     return inputFileIterator;
+    @SuppressWarnings("unchecked") final PactRecordComparator pactRecordComparator=new PactRecordComparator(info.sortKeys.toIntArray(),info.keyClasses.toArray(new Class[0]));
+    final UnilateralSortMerger<PactRecord> sortMerger=new UnilateralSortMerger<PactRecord>(MockTaskManager.INSTANCE.getMemoryManager(),MockTaskManager.INSTANCE.getIoManager(),new TestPairsReader(inputFileIterator),parentTask,PactRecordSerializer.get(),pactRecordComparator,totalMemory,numFileHandles,0.7f);
+    this.closableManager.add(sortMerger);
+    return new ImmutableRecordIterator(sortMerger.getIterator());
+  }
+ catch (  final MemoryAllocationException mae) {
+    throw new RuntimeException("MemoryManager is not able to provide the required amount of memory for ReduceTask",mae);
+  }
+catch (  final IOException ioe) {
+    throw new RuntimeException("IOException caught when obtaining SortMerger for ReduceTask",ioe);
+  }
+catch (  final InterruptedException iex) {
+    throw new RuntimeException("InterruptedException caught when obtaining iterator over sorted data.",iex);
+  }
+}

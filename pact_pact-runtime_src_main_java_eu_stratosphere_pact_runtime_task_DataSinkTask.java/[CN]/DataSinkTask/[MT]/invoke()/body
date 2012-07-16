@@ -1,9 +1,36 @@
 {
   if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
-  final MutableObjectIterator<IT> reader=this.reader;
-  final OutputFormat<IT> format=this.format;
-  final IT record=this.inputTypeSerializer.createInstance();
+  final UnilateralSortMerger<IT> sorter;
+  if (this.config.getLocalStrategy() == LocalStrategy.SORT) {
+    final Class<? extends TypeComparatorFactory<IT>> comparatorFactoryClass=this.config.getComparatorFactoryForInput(0,this.userCodeClassLoader);
+    final TypeComparatorFactory<IT> comparatorFactory;
+    if (comparatorFactoryClass == null) {
+      @SuppressWarnings("unchecked") TypeComparatorFactory<IT> cf=(TypeComparatorFactory<IT>)PactRecordComparatorFactory.get();
+      comparatorFactory=cf;
+    }
+ else {
+      comparatorFactory=InstantiationUtil.instantiate(comparatorFactoryClass,TypeComparatorFactory.class);
+    }
+    TypeComparator<IT> comparator;
+    try {
+      comparator=comparatorFactory.createComparator(getTaskConfiguration(),this.config.getPrefixForInputParameters(0),this.userCodeClassLoader);
+    }
+ catch (    ClassNotFoundException cnfex) {
+      throw new Exception("The instantiation of the type comparator from factory '" + comparatorFactory.getClass().getName() + "' failed. A referenced class from the user code could not be loaded.");
+    }
+    final long availableMemory=this.config.getMemorySize();
+    final int maxFileHandles=this.config.getNumFilehandles();
+    final float spillThreshold=this.config.getSortSpillingTreshold();
+    sorter=new UnilateralSortMerger<IT>(getEnvironment().getMemoryManager(),getEnvironment().getIOManager(),this.reader,this,this.inputTypeSerializer,comparator,availableMemory,maxFileHandles,spillThreshold);
+    this.reader=sorter.getIterator();
+  }
+ else {
+    sorter=null;
+  }
   try {
+    final MutableObjectIterator<IT> reader=this.reader;
+    final OutputFormat<IT> format=this.format;
+    final IT record=this.inputTypeSerializer.createInstance();
     if (this.taskCanceled) {
       return;
     }
@@ -43,6 +70,9 @@
  catch (      Throwable t) {
         if (LOG.isWarnEnabled())         LOG.warn(getLogString("Error closing the ouput format."),t);
       }
+    }
+    if (sorter != null) {
+      sorter.close();
     }
   }
   if (!this.taskCanceled) {
