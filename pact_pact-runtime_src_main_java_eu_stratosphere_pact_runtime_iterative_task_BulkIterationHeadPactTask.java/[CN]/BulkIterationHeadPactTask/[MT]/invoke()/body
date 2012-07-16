@@ -1,0 +1,38 @@
+{
+  int numIterations=0;
+  BlockingBackChannel backChannel=initBackChannel();
+  final SuperstepBarrier barrier=new SuperstepBarrier();
+  eventualOutputs.get(eventualOutputs.size() - 2).subscribeToEvent(barrier,AllWorkersDoneEvent.class);
+  TypeSerializer serializer=getInputSerializer(ITERATION_INPUT);
+  output=(Collector<OT>)iterationCollector();
+  while (numIterations < 3) {
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + numIterations + "]"));
+    }
+    if (numIterations > 0) {
+      reinstantiateDriver();
+    }
+    barrier.setup();
+    super.invoke();
+    EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
+    sendEventToAllIterationOutputs(endOfSuperstepEvent);
+    DataInputView superStepResult=backChannel.getReadEndAfterSuperstepEnded();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + numIterations + "]"));
+    }
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("waiting for other workers in iteration [" + numIterations + "]"));
+    }
+    sendEventToSync(endOfSuperstepEvent);
+    barrier.waitForOtherWorkers();
+    feedBackSuperstepResult(superStepResult,serializer);
+    numIterations++;
+  }
+  TerminationEvent terminationEvent=new TerminationEvent();
+  sendEventToAllIterationOutputs(terminationEvent);
+  sendEventToSync(terminationEvent);
+  if (log.isInfoEnabled()) {
+    log.info(formatLogString("streaming out final result after [" + numIterations + "] iterations"));
+  }
+  streamOutFinalOutput();
+}

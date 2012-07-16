@@ -1,0 +1,27 @@
+{
+  final BlockingBackChannel backChannel=retrieveBackChannel();
+  listenToTermination(new Callback<TerminationEvent>(){
+    @Override public void execute(    TerminationEvent event) throws Exception {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("received termination"));
+      }
+      terminated=true;
+    }
+  }
+);
+  output=new DataOutputCollector<OT>(backChannel.getWriteEnd(),createOutputTypeSerializer());
+  while (!terminated) {
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + numIterations + "]"));
+    }
+    if (numIterations > 0) {
+      reinstantiateDriver();
+    }
+    super.invoke();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + numIterations + "]"));
+    }
+    backChannel.notifyOfEndOfSuperstep();
+    numIterations++;
+  }
+}

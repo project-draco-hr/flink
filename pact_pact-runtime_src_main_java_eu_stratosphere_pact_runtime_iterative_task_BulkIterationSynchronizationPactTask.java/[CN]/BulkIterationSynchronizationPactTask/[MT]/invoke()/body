@@ -1,0 +1,29 @@
+{
+  final AtomicInteger nonTerminatedHeadsCounter=new AtomicInteger(getTaskConfig().getNumberOfIterationInputs());
+  listenToTermination(new Callback<TerminationEvent>(){
+    @Override public void execute(    TerminationEvent event) throws Exception {
+      int numNonTerminatedHeads=nonTerminatedHeadsCounter.decrementAndGet();
+      if (numNonTerminatedHeads == 0) {
+        terminated=true;
+      }
+    }
+  }
+);
+  while (!terminated) {
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + numIterations + "]"));
+    }
+    if (numIterations > 0) {
+      reinstantiateDriver();
+    }
+    super.invoke();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("signaling that all workers are done in iteration [" + numIterations + "]"));
+    }
+    signalAllWorkersDone();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + numIterations + "] ["+ System.currentTimeMillis()+ "]"));
+    }
+    numIterations++;
+  }
+}
