@@ -1,5 +1,14 @@
 {
-  setCompressedDataBuffer(compressedData);
+  boolean tmpBufferUsed=false;
+  if (!compressedData.isBackedByMemory()) {
+    tmpBufferUsed=true;
+    final MemoryBuffer tmpBuffer=this.bufferProvider.lockTemporaryBuffer();
+    tmpBuffer.reset(this.bufferProvider.getMaximumBufferSize());
+    compressedData.copyToBuffer(tmpBuffer);
+    compressedData.recycleBuffer();
+    compressedData=tmpBuffer;
+  }
+  setCompressedDataBuffer((MemoryBuffer)compressedData);
   setUncompressedDataBuffer(this.bufferProvider.lockCompressionBuffer());
   if (this.uncompressedDataBuffer.position() > 0) {
     throw new IllegalStateException("Uncompressed data buffer is expected to be empty");
@@ -17,9 +26,25 @@
     this.uncompressedDataBuffer.position(0);
     this.uncompressedDataBuffer.limit(result);
   }
-  final Buffer uncompressedBuffer=this.uncompressedBuffer;
+  Buffer uncompressedBuffer=this.uncompressedBuffer;
   this.bufferProvider.releaseCompressionBuffer(this.compressedBuffer);
   setCompressedDataBuffer(null);
   setUncompressedDataBuffer(null);
+  if (tmpBufferUsed) {
+    final MemoryBuffer memBuffer=(MemoryBuffer)uncompressedBuffer;
+    final ByteBuffer bb=memBuffer.getByteBuffer();
+    uncompressedBuffer=BufferFactory.createFromMemory(bb.remaining(),bb,new MemoryBufferPoolConnector(){
+      /** 
+ * {@inheritDoc}
+ */
+      @Override public void recycle(      final ByteBuffer byteBuffer){
+        bufferProvider.releaseTemporaryBuffer(memBuffer);
+      }
+    }
+);
+    bb.position(bb.limit());
+    bb.limit(bb.capacity());
+    uncompressedBuffer.finishWritePhase();
+  }
   return uncompressedBuffer;
 }
