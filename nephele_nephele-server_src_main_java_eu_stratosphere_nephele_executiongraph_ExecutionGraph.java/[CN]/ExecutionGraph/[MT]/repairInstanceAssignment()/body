@@ -2,14 +2,14 @@
   Iterator<ExecutionVertex> it=new ExecutionGraphIterator(this,true);
   while (it.hasNext()) {
     final ExecutionVertex sourceVertex=it.next();
-    for (int i=0; i < sourceVertex.getEnvironment().getNumberOfOutputGates(); i++) {
-      final OutputGate<? extends Record> outputGate=sourceVertex.getEnvironment().getOutputGate(i);
-      for (int j=0; j < outputGate.getNumberOfOutputChannels(); j++) {
-        final AbstractOutputChannel<? extends Record> outputChannel=outputGate.getOutputChannel(j);
-        final ChannelType channelType=outputChannel.getType();
-        if (channelType == ChannelType.FILE || channelType == ChannelType.INMEMORY) {
-          final ExecutionVertex targetVertex=getVertexByChannelID(outputChannel.getConnectedChannelID());
-          targetVertex.setAllocatedResource(sourceVertex.getAllocatedResource());
+    for (int i=0; i < sourceVertex.getNumberOfOutputGates(); ++i) {
+      final ExecutionGate outputGate=sourceVertex.getOutputGate(i);
+      final ChannelType channelType=outputGate.getChannelType();
+      if (channelType == ChannelType.FILE || channelType == ChannelType.INMEMORY) {
+        final int numberOfOutputChannels=outputGate.getNumberOfEdges();
+        for (int j=0; j < numberOfOutputChannels; ++j) {
+          final ExecutionEdge outputChannel=outputGate.getEdge(j);
+          outputChannel.getInputGate().getVertex().setAllocatedResource(sourceVertex.getAllocatedResource());
         }
       }
     }
@@ -17,14 +17,14 @@
   it=new ExecutionGraphIterator(this,false);
   while (it.hasNext()) {
     final ExecutionVertex targetVertex=it.next();
-    for (int i=0; i < targetVertex.getEnvironment().getNumberOfInputGates(); i++) {
-      final InputGate<? extends Record> inputGate=targetVertex.getEnvironment().getInputGate(i);
-      for (int j=0; j < inputGate.getNumberOfInputChannels(); j++) {
-        final AbstractInputChannel<? extends Record> inputChannel=inputGate.getInputChannel(j);
-        final ChannelType channelType=inputChannel.getType();
-        if (channelType == ChannelType.FILE || channelType == ChannelType.INMEMORY) {
-          final ExecutionVertex sourceVertex=getVertexByChannelID(inputChannel.getConnectedChannelID());
-          sourceVertex.setAllocatedResource(targetVertex.getAllocatedResource());
+    for (int i=0; i < targetVertex.getNumberOfInputGates(); ++i) {
+      final ExecutionGate inputGate=targetVertex.getInputGate(i);
+      final ChannelType channelType=inputGate.getChannelType();
+      if (channelType == ChannelType.FILE || channelType == ChannelType.INMEMORY) {
+        final int numberOfInputChannels=inputGate.getNumberOfEdges();
+        for (int j=0; j < numberOfInputChannels; ++j) {
+          final ExecutionEdge inputChannel=inputGate.getEdge(j);
+          inputChannel.getOutputGate().getVertex().setAllocatedResource(targetVertex.getAllocatedResource());
         }
       }
     }

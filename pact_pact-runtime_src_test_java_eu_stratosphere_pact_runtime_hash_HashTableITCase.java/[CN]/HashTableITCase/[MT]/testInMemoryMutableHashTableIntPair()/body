@@ -1,0 +1,29 @@
+{
+  final int NUM_KEYS=100000;
+  final int BUILD_VALS_PER_KEY=3;
+  final int PROBE_VALS_PER_KEY=10;
+  MutableObjectIterator<IntPair> buildInput=new UniformIntPairGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<IntPair> probeInput=new UniformIntPairGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  List<MemorySegment> memSegments;
+  try {
+    memSegments=this.memManager.allocatePages(MEM_OWNER,896);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  final IOManager ioManager=new IOManager();
+  final MutableHashTable<IntPair,IntPair> join=new MutableHashTable<IntPair,IntPair>(this.pairBuildSideAccesssor,this.pairProbeSideAccesssor,this.pairBuildSideComparator,this.pairProbeSideComparator,this.pairComparator,memSegments,ioManager);
+  join.open(buildInput,probeInput);
+  final IntPair record=new IntPair();
+  int numRecordsInJoinResult=0;
+  while (join.nextRecord()) {
+    HashBucketIterator<IntPair,IntPair> buildSide=join.getBuildSideIterator();
+    while (buildSide.next(record)) {
+      numRecordsInJoinResult++;
+    }
+  }
+  Assert.assertEquals("Wrong number of records in join result.",NUM_KEYS * BUILD_VALS_PER_KEY * PROBE_VALS_PER_KEY,numRecordsInJoinResult);
+  join.close();
+  this.memManager.release(join.getFreedMemory());
+}

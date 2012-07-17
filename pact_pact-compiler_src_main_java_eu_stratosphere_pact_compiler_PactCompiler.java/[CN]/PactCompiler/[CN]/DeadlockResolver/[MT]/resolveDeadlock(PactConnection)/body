@@ -6,37 +6,35 @@
     duplicateDataSource.setDegreeOfParallelism(sourcePact.getDegreeOfParallelism());
     duplicateDataSource.setInstancesPerMachine(sourcePact.getInstancesPerMachine());
     PactConnection newConn=new PactConnection(conn,duplicateDataSource,targetPact);
-    sourcePact.getOutgoingConnections().remove(conn);
-    duplicateDataSource.addOutgoingConnection(newConn);
+    sourcePact.getOutConns().remove(conn);
+    duplicateDataSource.addOutConn(newConn);
     if (targetPact instanceof SingleInputNode) {
-      ((SingleInputNode)targetPact).addInputConnection(newConn);
+      ((SingleInputNode)targetPact).setInConn(newConn);
     }
  else     if (targetPact instanceof TwoInputNode) {
-      if (((TwoInputNode)targetPact).getFirstInputConnection() == conn) {
-        ((TwoInputNode)targetPact).setFirstInputConnection(newConn);
+      if (((TwoInputNode)targetPact).getFirstInConn() == conn) {
+        ((TwoInputNode)targetPact).setFirstInConn(newConn);
       }
  else {
-        ((TwoInputNode)targetPact).setSecondInputConnection(newConn);
+        ((TwoInputNode)targetPact).setSecondInConn(newConn);
       }
     }
   }
  else   if (sourcePact.getIncomingConnections().size() > 1) {
     conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
   }
- else   if (sourcePact.getOutgoingConnections().size() > 1) {
+ else   if (sourcePact.getOutConns().size() > 1) {
     conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
   }
  else {
-    List<PactConnection> predConn=sourcePact.getIncomingConnections().get(0);
-    for (    PactConnection c : predConn) {
-      long curSize=sourcePact.getEstimatedOutputSize();
-      long predSize=c.getSourcePact().getEstimatedOutputSize();
-      if (curSize < predSize) {
-        conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
-      }
+    PactConnection predConn=sourcePact.getIncomingConnections().get(0);
+    long curSize=sourcePact.getEstimatedOutputSize();
+    long predSize=predConn.getSourcePact().getEstimatedOutputSize();
+    if (curSize < predSize) {
+      conn.setTempMode(TempMode.TEMP_RECEIVER_SIDE);
+    }
  else {
-        resolveDeadlock(c);
-      }
+      resolveDeadlock(predConn);
     }
   }
 }

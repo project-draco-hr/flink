@@ -1,0 +1,18 @@
+{
+  final TypeComparator<PT> probeAccessors=this.probeSideComparator;
+  final int hash=hash(probeAccessors.hash(record),this.currentRecursionDepth);
+  final int posHashCode=hash % this.numBuckets;
+  final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+  final int bucketInSegmentOffset=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+  final MemorySegment bucket=this.buckets[bucketArrayPos];
+  final int partitionNumber=bucket.get(bucketInSegmentOffset + HEADER_PARTITION_OFFSET);
+  final HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(partitionNumber);
+  if (p.isInMemory()) {
+    this.recordComparator.setReference(record);
+    this.lazyBucketIterator.set(bucket,p.overflowSegments,p,hash,bucketInSegmentOffset);
+    return this.lazyBucketIterator;
+  }
+ else {
+    throw new IllegalStateException("Method is not applicable to partially spilled hash tables.");
+  }
+}
