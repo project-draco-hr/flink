@@ -1,20 +1,52 @@
 {
-  CheckpointState ics=CheckpointState.UNDECIDED;
-  boolean hasFileChannels=false;
-  for (int i=0; i < this.forwardLinks.size(); ++i) {
-    if (this.forwardLinks.get(i).getChannelType() == ChannelType.FILE) {
-      hasFileChannels=true;
-      break;
-    }
+  final CheckpointMode cpm=CheckpointUtils.getCheckpointMode();
+  if (cpm == CheckpointMode.ALWAYS) {
+    return CheckpointState.PARTIAL;
   }
-  if (hasFileChannels) {
-    ics=CheckpointState.PARTIAL;
+ else   if (cpm == CheckpointMode.NEVER) {
+    for (int i=0; i < this.forwardLinks.size(); ++i) {
+      if (this.forwardLinks.get(i).getChannelType() == ChannelType.FILE) {
+        return CheckpointState.PARTIAL;
+      }
+    }
+    final ForceCheckpoint forcedCheckpoint=this.environment.getInvokable().getClass().getAnnotation(ForceCheckpoint.class);
+    if (forcedCheckpoint == null) {
+      return CheckpointState.NONE;
+    }
+    if (forcedCheckpoint.checkpoint()) {
+      return CheckpointState.PARTIAL;
+    }
+    return CheckpointState.NONE;
+  }
+ else   if (cpm == CheckpointMode.NETWORK) {
+    for (int i=0; i < this.forwardLinks.size(); ++i) {
+      final ChannelType channelType=this.forwardLinks.get(i).getChannelType();
+      if (channelType == ChannelType.FILE || channelType == ChannelType.NETWORK) {
+        return CheckpointState.PARTIAL;
+      }
+    }
+    final ForceCheckpoint forcedCheckpoint=this.environment.getInvokable().getClass().getAnnotation(ForceCheckpoint.class);
+    if (forcedCheckpoint == null) {
+      return CheckpointState.NONE;
+    }
+    if (forcedCheckpoint.checkpoint()) {
+      return CheckpointState.PARTIAL;
+    }
+    return CheckpointState.NONE;
   }
  else {
-    ForceCheckpoint forcedCheckpoint=this.environment.getInvokable().getClass().getAnnotation(ForceCheckpoint.class);
-    if (forcedCheckpoint != null) {
-      ics=forcedCheckpoint.checkpoint() ? CheckpointState.PARTIAL : CheckpointState.NONE;
+    for (int i=0; i < this.forwardLinks.size(); ++i) {
+      if (this.forwardLinks.get(i).getChannelType() == ChannelType.FILE) {
+        return CheckpointState.PARTIAL;
+      }
     }
+    final ForceCheckpoint forcedCheckpoint=this.environment.getInvokable().getClass().getAnnotation(ForceCheckpoint.class);
+    if (forcedCheckpoint == null) {
+      return CheckpointState.UNDECIDED;
+    }
+    if (forcedCheckpoint.checkpoint()) {
+      return CheckpointState.PARTIAL;
+    }
+    return CheckpointState.NONE;
   }
-  return ics;
 }
