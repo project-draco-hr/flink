@@ -1,6 +1,7 @@
 {
   final int numInputs=this.driver.getNumberOfInputs();
   final MutableObjectIterator<?>[] inputs=new MutableObjectIterator[numInputs];
+  final MutableReader<?>[] inputReaders=new MutableReader[numInputs];
   final TypeSerializer<?>[] inputSerializers=new TypeSerializer[numInputs];
   final TypeComparator<?>[] inputComparators=this.driver.requiresComparatorOnInput() ? new TypeComparator[numInputs] : null;
   final TypeComparator<?>[] secondarySortComparators=this.driver.requiresComparatorOnInput() ? new TypeComparator[numInputs] : null;
@@ -17,10 +18,13 @@
     final int groupSize=this.config.getGroupSize(i + 1);
     if (groupSize < 2) {
       if (serializerFactory.getDataType() == PactRecord.class) {
-        inputs[i]=new PactRecordNepheleReaderIterator(new MutableRecordReader<PactRecord>(this),readerInterruptionBehavior());
+        final MutableRecordReader<PactRecord> reader=new MutableRecordReader<PactRecord>(this);
+        inputReaders[i]=reader;
+        inputs[i]=new PactRecordNepheleReaderIterator(reader,readerInterruptionBehavior());
       }
  else {
         final MutableRecordReader<DeserializationDelegate<?>> reader=new MutableRecordReader<DeserializationDelegate<?>>(this);
+        inputReaders[i]=reader;
         @SuppressWarnings({"unchecked","rawtypes"}) final MutableObjectIterator<?> iter=new NepheleReaderIterator(reader,inputSerializers[i],readerInterruptionBehavior());
         inputs[i]=iter;
       }
@@ -31,7 +35,9 @@
         for (int j=0; j < groupSize; ++j) {
           readers[j]=new MutableRecordReader<PactRecord>(this);
         }
-        inputs[i]=new PactRecordNepheleReaderIterator(new MutableUnionRecordReader<PactRecord>(readers),readerInterruptionBehavior());
+        final MutableUnionRecordReader<PactRecord> reader=new MutableUnionRecordReader<PactRecord>(readers);
+        inputReaders[i]=reader;
+        inputs[i]=new PactRecordNepheleReaderIterator(reader,readerInterruptionBehavior());
       }
  else {
         @SuppressWarnings("unchecked") MutableRecordReader<DeserializationDelegate<?>>[] readers=new MutableRecordReader[groupSize];
@@ -39,6 +45,7 @@
           readers[j]=new MutableRecordReader<DeserializationDelegate<?>>(this);
         }
         final MutableUnionRecordReader<DeserializationDelegate<?>> reader=new MutableUnionRecordReader<DeserializationDelegate<?>>(readers);
+        inputReaders[i]=reader;
         @SuppressWarnings({"unchecked","rawtypes"}) final MutableObjectIterator<?> iter=new NepheleReaderIterator(reader,inputSerializers[i],readerInterruptionBehavior());
         inputs[i]=iter;
       }
@@ -62,6 +69,7 @@
     }
   }
   this.inputs=inputs;
+  this.inputReaders=inputReaders;
   this.inputSerializers=inputSerializers;
   this.inputComparators=inputComparators;
   this.secondarySortComparators=secondarySortComparators;

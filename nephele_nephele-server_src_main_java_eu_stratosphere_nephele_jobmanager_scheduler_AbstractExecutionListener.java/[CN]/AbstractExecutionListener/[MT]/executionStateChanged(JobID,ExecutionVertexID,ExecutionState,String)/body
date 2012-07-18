@@ -18,8 +18,11 @@
     }
   }
   if (newExecutionState == ExecutionState.CANCELED || newExecutionState == ExecutionState.FINISHED) {
-synchronized (this.executionVertex.getExecutionGraph()) {
+synchronized (eg) {
       if (this.scheduler.getVerticesToBeRestarted().remove(this.executionVertex.getID()) != null) {
+        if (eg.getJobStatus() == InternalJobStatus.FAILING) {
+          return;
+        }
         this.executionVertex.updateExecutionState(ExecutionState.ASSIGNED,"Restart as part of recovery");
         this.scheduler.deployAssignedVertices(this.executionVertex);
         return;
@@ -38,6 +41,14 @@ synchronized (this.executionVertex.getExecutionGraph()) {
         }
       }
  else {
+synchronized (eg) {
+          final Iterator<ExecutionVertex> it=this.scheduler.getVerticesToBeRestarted().values().iterator();
+          while (it.hasNext()) {
+            if (eg.equals(it.next().getExecutionGraph())) {
+              it.remove();
+            }
+          }
+        }
       }
     }
   }
