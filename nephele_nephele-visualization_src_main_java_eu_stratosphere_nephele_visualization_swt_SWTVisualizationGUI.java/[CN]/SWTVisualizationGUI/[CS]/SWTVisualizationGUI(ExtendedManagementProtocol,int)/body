@@ -22,119 +22,160 @@
   jobGroup.setLayout(new FillLayout());
   this.jobTree=new Tree(jobGroup,SWT.SINGLE | SWT.BORDER);
   this.jobTree.addSelectionListener(this);
-  this.jobTabFolder=new CTabFolder(horizontalSash,SWT.TOP);
-  this.jobTabFolder.addSelectionListener(this);
-  horizontalSash.setWeights(new int[]{2,8});
-  this.menuBar=new Menu(this.shell,SWT.BAR);
-  final MenuItem fileMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
-  fileMenuItem.setText("&File");
-  final Menu fileMenu=new Menu(this.shell,SWT.DROP_DOWN);
-  fileMenuItem.setMenu(fileMenu);
-  final MenuItem fileExitItem=new MenuItem(fileMenu,SWT.PUSH);
-  fileExitItem.setText("E&xit");
-  fileExitItem.addSelectionListener(new SelectionAdapter(){
-    @Override public void widgetSelected(    SelectionEvent arg0){
-      shell.close();
-      display.dispose();
-    }
-  }
-);
-  final MenuItem jobMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
-  jobMenuItem.setText("&Job");
-  final Menu jobMenu=new Menu(this.shell,SWT.DROP_DOWN);
-  jobMenuItem.setMenu(jobMenu);
-  final MenuItem cancelJobItem=new MenuItem(jobMenu,SWT.PUSH);
-  cancelJobItem.setText("&Cancel job");
-  cancelJobItem.addSelectionListener(new SelectionAdapter(){
-    @Override public void widgetSelected(    SelectionEvent arg0){
-      cancelJob();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  final MenuItem debuggingMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
-  debuggingMenuItem.setText("&Debugging");
-  final Menu debuggingMenu=new Menu(this.shell,SWT.DROP_DOWN);
-  debuggingMenuItem.setMenu(debuggingMenu);
-  final MenuItem debuggingLBUItem=new MenuItem(debuggingMenu,SWT.PUSH);
-  debuggingLBUItem.setText("&Log buffer utilization");
-  debuggingLBUItem.addSelectionListener(new SelectionAdapter(){
-    @Override public void widgetSelected(    final SelectionEvent arg0){
-      logBufferUtilization();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  new MenuItem(debuggingMenu,SWT.SEPARATOR);
-  final MenuItem debuggingAFPItem=new MenuItem(debuggingMenu,SWT.CHECK);
-  debuggingAFPItem.setText("&Apply failure patterns");
-  debuggingAFPItem.setSelection(this.applyFailurePatterns);
-  debuggingAFPItem.addSelectionListener(new SelectionAdapter(){
-    public void widgetSelected(    final SelectionEvent arg0){
-      applyFailurePatterns=debuggingAFPItem.getSelection();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  final MenuItem debuggingMFPItem=new MenuItem(debuggingMenu,SWT.PUSH);
-  debuggingMFPItem.setText("&Manage failure patterns...");
-  debuggingMFPItem.addSelectionListener(new SelectionAdapter(){
-    public void widgetSelected(    final SelectionEvent arg0){
-      manageFailurePatterns();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  final MenuItem helpMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
-  helpMenuItem.setText("&Help");
-  final Menu helpMenu=new Menu(this.shell,SWT.DROP_DOWN);
-  helpMenuItem.setMenu(helpMenu);
-  final MenuItem helpJavaDocItem=new MenuItem(helpMenu,SWT.PUSH);
-  helpJavaDocItem.setText("&View JavaDoc...");
-  helpJavaDocItem.addSelectionListener(new SelectionAdapter(){
-    @Override public void widgetSelected(    final SelectionEvent arg0){
-      viewJavaDoc();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  new MenuItem(helpMenu,SWT.SEPARATOR);
-  final MenuItem helpAboutItem=new MenuItem(helpMenu,SWT.PUSH);
-  helpAboutItem.setText("&About...");
-  helpAboutItem.addSelectionListener(new SelectionAdapter(){
-    @Override public void widgetSelected(    SelectionEvent arg0){
-      showAboutDialog();
-      shell.setMenuBar(null);
-    }
-  }
-);
-  this.display.addFilter(SWT.KeyDown,new Listener(){
+  this.jobTree.setToolTipText("");
+  final Listener toolTipListener=new Listener(){
+    private SWTJobToolTip jobToolTip=null;
     /** 
  * {@inheritDoc}
  */
-    @Override public void handleEvent(    final Event arg0){
-      if (arg0.keyCode == SWT.ALT) {
-        if (shell.getMenuBar() == null) {
-          shell.setMenuBar(menuBar);
+    @Override public void handleEvent(    final Event event){
+switch (event.type) {
+case SWT.Dispose:
+case SWT.KeyDown:
+case SWT.MouseMove:
+        if (this.jobToolTip != null) {
+          this.jobToolTip.dispose();
+          this.jobToolTip=null;
         }
+      break;
+case SWT.MouseHover:
+    final TreeItem ti=jobTree.getItem(new Point(event.x,event.y));
+  if (ti == null) {
+    break;
+  }
+if (this.jobToolTip != null && !this.jobToolTip.isDisposed()) {
+  this.jobToolTip.dispose();
+}
+final Point pt=jobTree.toDisplay(event.x,event.y);
+final GraphVisualizationData gvi=(GraphVisualizationData)ti.getData();
+if (gvi == null) {
+break;
+}
+final String jobName=gvi.getJobName();
+final JobID jobID=gvi.getJobID();
+this.jobToolTip=new SWTJobToolTip(shell,jobName,jobID,0L,pt.x,pt.y);
+break;
+}
+}
+}
+;
+this.jobTree.addListener(SWT.Dispose,toolTipListener);
+this.jobTree.addListener(SWT.KeyDown,toolTipListener);
+this.jobTree.addListener(SWT.MouseMove,toolTipListener);
+this.jobTree.addListener(SWT.MouseHover,toolTipListener);
+this.jobTabFolder=new CTabFolder(horizontalSash,SWT.TOP);
+this.jobTabFolder.addSelectionListener(this);
+horizontalSash.setWeights(new int[]{2,8});
+this.menuBar=new Menu(this.shell,SWT.BAR);
+final MenuItem fileMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+fileMenuItem.setText("&File");
+final Menu fileMenu=new Menu(this.shell,SWT.DROP_DOWN);
+fileMenuItem.setMenu(fileMenu);
+final MenuItem fileExitItem=new MenuItem(fileMenu,SWT.PUSH);
+fileExitItem.setText("E&xit");
+fileExitItem.addSelectionListener(new SelectionAdapter(){
+@Override public void widgetSelected(SelectionEvent arg0){
+shell.close();
+display.dispose();
+}
+}
+);
+final MenuItem jobMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+jobMenuItem.setText("&Job");
+final Menu jobMenu=new Menu(this.shell,SWT.DROP_DOWN);
+jobMenuItem.setMenu(jobMenu);
+final MenuItem cancelJobItem=new MenuItem(jobMenu,SWT.PUSH);
+cancelJobItem.setText("&Cancel job");
+cancelJobItem.addSelectionListener(new SelectionAdapter(){
+@Override public void widgetSelected(SelectionEvent arg0){
+cancelJob();
+shell.setMenuBar(null);
+}
+}
+);
+final MenuItem debuggingMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+debuggingMenuItem.setText("&Debugging");
+final Menu debuggingMenu=new Menu(this.shell,SWT.DROP_DOWN);
+debuggingMenuItem.setMenu(debuggingMenu);
+final MenuItem debuggingLBUItem=new MenuItem(debuggingMenu,SWT.PUSH);
+debuggingLBUItem.setText("&Log buffer utilization");
+debuggingLBUItem.addSelectionListener(new SelectionAdapter(){
+@Override public void widgetSelected(final SelectionEvent arg0){
+logBufferUtilization();
+shell.setMenuBar(null);
+}
+}
+);
+new MenuItem(debuggingMenu,SWT.SEPARATOR);
+final MenuItem debuggingAFPItem=new MenuItem(debuggingMenu,SWT.CHECK);
+debuggingAFPItem.setText("&Apply failure patterns");
+debuggingAFPItem.setSelection(this.applyFailurePatterns);
+debuggingAFPItem.addSelectionListener(new SelectionAdapter(){
+public void widgetSelected(final SelectionEvent arg0){
+applyFailurePatterns=debuggingAFPItem.getSelection();
+shell.setMenuBar(null);
+}
+}
+);
+final MenuItem debuggingMFPItem=new MenuItem(debuggingMenu,SWT.PUSH);
+debuggingMFPItem.setText("&Manage failure patterns...");
+debuggingMFPItem.addSelectionListener(new SelectionAdapter(){
+public void widgetSelected(final SelectionEvent arg0){
+manageFailurePatterns();
+shell.setMenuBar(null);
+}
+}
+);
+final MenuItem helpMenuItem=new MenuItem(this.menuBar,SWT.CASCADE);
+helpMenuItem.setText("&Help");
+final Menu helpMenu=new Menu(this.shell,SWT.DROP_DOWN);
+helpMenuItem.setMenu(helpMenu);
+final MenuItem helpJavaDocItem=new MenuItem(helpMenu,SWT.PUSH);
+helpJavaDocItem.setText("&View JavaDoc...");
+helpJavaDocItem.addSelectionListener(new SelectionAdapter(){
+@Override public void widgetSelected(final SelectionEvent arg0){
+viewJavaDoc();
+shell.setMenuBar(null);
+}
+}
+);
+new MenuItem(helpMenu,SWT.SEPARATOR);
+final MenuItem helpAboutItem=new MenuItem(helpMenu,SWT.PUSH);
+helpAboutItem.setText("&About...");
+helpAboutItem.addSelectionListener(new SelectionAdapter(){
+@Override public void widgetSelected(SelectionEvent arg0){
+showAboutDialog();
+shell.setMenuBar(null);
+}
+}
+);
+this.display.addFilter(SWT.KeyDown,new Listener(){
+/** 
+ * {@inheritDoc}
+ */
+@Override public void handleEvent(final Event arg0){
+if (arg0.keyCode == SWT.ALT) {
+if (shell.getMenuBar() == null) {
+shell.setMenuBar(menuBar);
+}
  else {
-          shell.setMenuBar(null);
-        }
-      }
-    }
-  }
+shell.setMenuBar(null);
+}
+}
+}
+}
 );
-  this.display.addFilter(SWT.MouseDown,new Listener(){
-    /** 
+this.display.addFilter(SWT.MouseDown,new Listener(){
+/** 
  * {@inheritDoc}
  */
-    @Override public void handleEvent(    final Event arg0){
-      if (shell.getMenuBar() != null) {
-        shell.setMenuBar(null);
-      }
-    }
-  }
+@Override public void handleEvent(final Event arg0){
+if (shell.getMenuBar() != null) {
+shell.setMenuBar(null);
+}
+}
+}
 );
-  this.failurePatternsManager=new SWTFailurePatternsManager(this.shell.getDisplay(),jobManager);
-  this.display.timerExec(QUERYINTERVAL * 1000,this);
+this.failurePatternsManager=new SWTFailurePatternsManager(this.shell.getDisplay(),jobManager);
+this.display.timerExec(QUERYINTERVAL * 1000,this);
 }
