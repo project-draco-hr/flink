@@ -1,18 +1,7 @@
 {
-  final AtomicInteger terminationEventCounter=new AtomicInteger(0);
-  final int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(0);
   final BlockingBackChannel backChannel=retrieveBackChannel();
-  listenToTermination(0,new Callback<TerminationEvent>(){
-    @Override public void execute(    TerminationEvent event) throws Exception {
-      int numTerminationEvents=terminationEventCounter.incrementAndGet();
-      if (numTerminationEvents % numberOfEventsUntilInterrupt == 0) {
-        terminated=true;
-      }
-    }
-  }
-);
   output=new DataOutputCollector<OT>(backChannel.getWriteEnd(),createOutputTypeSerializer());
-  while (!terminated) {
+  while (!isTerminated()) {
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + numIterations + "]"));
     }
@@ -23,7 +12,9 @@
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + numIterations + "]"));
     }
-    backChannel.notifyOfEndOfSuperstep();
+    if (!isTerminated()) {
+      backChannel.notifyOfEndOfSuperstep();
+    }
     numIterations++;
   }
 }

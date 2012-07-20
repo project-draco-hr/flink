@@ -1,27 +1,28 @@
 {
-  if (inputGateIndex == 1) {
-    if (!hasCachedInput()) {
-      if (log.isInfoEnabled()) {
-        log.info(formatLogString("wrapping input [" + inputGateIndex + "] with a caching iterator"));
-      }
-      cachedInput=new CachingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex));
+  if (wrappedInputs[inputGateIndex] != null) {
+    return (MutableObjectIterator<X>)wrappedInputs[inputGateIndex];
+  }
+  if (getTaskConfig().isCachedInputGate(inputGateIndex)) {
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("wrapping input [" + inputGateIndex + "] with a caching iterator"));
     }
- else {
-      if (log.isInfoEnabled()) {
-        log.info(formatLogString("returning cached iterator for input [" + inputGateIndex + "]"));
-      }
-    }
+    SpillingBuffer spillingBuffer=reserveMemoryForCaching(getTaskConfig().getInputGateCacheMemoryFraction());
+    MutableObjectIterator<X> cachedInput=new CachingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),spillingBuffer,(TypeSerializer<X>)getInputSerializer(inputGateIndex));
+    wrappedInputs[inputGateIndex]=cachedInput;
     return cachedInput;
   }
-  if (!getTaskConfig().isIterativeInputGate(inputGateIndex)) {
-    return super.getInput(inputGateIndex);
+  if (getTaskConfig().isIterativeInputGate(inputGateIndex)) {
+    int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(inputGateIndex);
+    String owner=getEnvironment().getTaskName() + " (" + (getEnvironment().getIndexInSubtaskGroup() + 1)+ '/'+ getEnvironment().getCurrentNumberOfSubtasks()+ ")";
+    InterruptingMutableObjectIterator<X> interruptingIterator=new InterruptingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),numberOfEventsUntilInterrupt,owner,this);
+    MutableReader<Record> inputReader=getReader(inputGateIndex);
+    inputReader.subscribeToEvent(interruptingIterator,EndOfSuperstepEvent.class);
+    inputReader.subscribeToEvent(interruptingIterator,TerminationEvent.class);
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("wrapping input [" + inputGateIndex + "] with an interrupting iterator that waits "+ "for ["+ numberOfEventsUntilInterrupt+ "] event(s)"));
+    }
+    wrappedInputs[inputGateIndex]=interruptingIterator;
+    return interruptingIterator;
   }
-  int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(inputGateIndex);
-  String owner=getEnvironment().getTaskName() + " (" + (getEnvironment().getIndexInSubtaskGroup() + 1)+ '/'+ getEnvironment().getCurrentNumberOfSubtasks()+ ")";
-  InterruptingMutableObjectIterator<X> interruptingIterator=new InterruptingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),numberOfEventsUntilInterrupt,owner);
-  getReader(inputGateIndex).subscribeToEvent(interruptingIterator,EndOfSuperstepEvent.class);
-  if (log.isInfoEnabled()) {
-    log.info(formatLogString("wrapping input [" + inputGateIndex + "] with an interrupting iterator that waits "+ "for ["+ numberOfEventsUntilInterrupt+ "] event(s)"));
-  }
-  return interruptingIterator;
+  return super.getInput(inputGateIndex);
 }

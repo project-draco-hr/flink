@@ -1,27 +1,5 @@
 {
-  final AtomicInteger endOfSuperstepEventCounter=new AtomicInteger(0);
-  final AtomicInteger terminationEventCounter=new AtomicInteger(0);
-  final int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(0);
-  listenToEndOfSuperstep(0,new Callback<EndOfSuperstepEvent>(){
-    @Override public void execute(    EndOfSuperstepEvent event) throws Exception {
-      int numEndOfSuperstepEvents=endOfSuperstepEventCounter.incrementAndGet();
-      if (numEndOfSuperstepEvents % numberOfEventsUntilInterrupt == 0) {
-        propagateEvent(event);
-      }
-    }
-  }
-);
-  listenToTermination(0,new Callback<TerminationEvent>(){
-    @Override public void execute(    TerminationEvent event) throws Exception {
-      int numTerminationEvents=terminationEventCounter.incrementAndGet();
-      if (numTerminationEvents % numberOfEventsUntilInterrupt == 0) {
-        propagateEvent(event);
-        terminated=true;
-      }
-    }
-  }
-);
-  while (!terminated) {
+  while (!isTerminated()) {
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + numIterations + "]"));
     }
@@ -29,15 +7,13 @@
       reinstantiateDriver();
     }
     super.invoke();
-    if (hasCachedInput()) {
-      sendAdditionalEvent(new EndOfSuperstepEvent());
-    }
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + numIterations + "]"));
     }
+    if (!isTerminated()) {
+      propagateEvent(new EndOfSuperstepEvent());
+    }
     numIterations++;
   }
-  if (hasCachedInput()) {
-    sendAdditionalEvent(new TerminationEvent());
-  }
+  propagateEvent(new TerminationEvent());
 }

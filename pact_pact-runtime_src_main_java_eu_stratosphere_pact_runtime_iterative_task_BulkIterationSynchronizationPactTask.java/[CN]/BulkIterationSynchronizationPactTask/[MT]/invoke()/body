@@ -1,16 +1,5 @@
 {
-  int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(0);
-  final AtomicInteger nonTerminatedHeadsCounter=new AtomicInteger(numberOfEventsUntilInterrupt);
-  listenToTermination(0,new Callback<TerminationEvent>(){
-    @Override public void execute(    TerminationEvent event) throws Exception {
-      int numNonTerminatedHeads=nonTerminatedHeadsCounter.decrementAndGet();
-      if (numNonTerminatedHeads == 0) {
-        terminated=true;
-      }
-    }
-  }
-);
-  while (!terminated) {
+  while (!isTerminated()) {
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + numIterations + "]"));
     }
@@ -19,11 +8,13 @@
     }
     super.invoke();
     if (log.isInfoEnabled()) {
-      log.info(formatLogString("signaling that all workers are done in iteration [" + numIterations + "]"));
-    }
-    signalAllWorkersDone();
-    if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + numIterations + "]"));
+    }
+    if (!isTerminated()) {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("signaling that all workers are done in iteration [" + numIterations + "]"));
+      }
+      signalAllWorkersDone();
     }
     numIterations++;
   }
