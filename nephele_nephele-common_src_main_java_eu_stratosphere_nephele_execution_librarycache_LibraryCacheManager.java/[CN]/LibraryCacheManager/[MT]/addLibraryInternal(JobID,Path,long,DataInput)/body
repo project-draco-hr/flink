@@ -4,21 +4,17 @@
   }
   final byte[] buf=new byte[(int)size];
   in.readFully(buf);
-  md.reset();
-  md.update(buf);
+  this.md.reset();
+  this.md.update(buf);
   final String cacheName=StringUtils.byteToHexString(md.digest()) + ".jar";
   final Path storePath=new Path(this.libraryCachePath + "/" + cacheName);
 synchronized (this.fs) {
-    if (!fs.exists(storePath)) {
-      final FSDataOutputStream fos=fs.create(storePath,false);
+    if (!this.fs.exists(storePath)) {
+      final FSDataOutputStream fos=this.fs.create(storePath,false);
       fos.write(buf,0,buf.length);
       fos.close();
     }
   }
-synchronized (this.clientPathToCacheName) {
-    final LibraryTranslationKey key=new LibraryTranslationKey(jobID,name);
-    if (!this.clientPathToCacheName.containsKey(key)) {
-      this.clientPathToCacheName.put(key,cacheName);
-    }
-  }
+  final LibraryTranslationKey key=new LibraryTranslationKey(jobID,name);
+  this.clientPathToCacheName.putIfAbsent(key,cacheName);
 }

@@ -12,19 +12,22 @@
   }
   final LinkedList<TreeNode> treeNodes=new LinkedList<TreeNode>();
   LinkedList<ChannelID> actualLocalTargets=new LinkedList<ChannelID>();
+  int firstConnectionID=0;
   for (Iterator<ExecutionEdge> iter=outputChannels.iterator(); iter.hasNext(); ) {
     final ExecutionEdge actualOutputChannel=iter.next();
+    firstConnectionID=actualOutputChannel.getConnectionID();
     final ExecutionVertex targetVertex=actualOutputChannel.getInputGate().getVertex();
     if (targetVertex.getAllocatedResource().getInstance().getInstanceConnectionInfo().equals(source)) {
       actualLocalTargets.add(actualOutputChannel.getInputChannelID());
       iter.remove();
     }
   }
-  TreeNode actualNode=new TreeNode(eg.getVertexByChannelID(sourceChannelID).getAllocatedResource().getInstance(),source,actualLocalTargets);
+  TreeNode actualNode=new TreeNode(eg.getVertexByChannelID(sourceChannelID).getAllocatedResource().getInstance(),source,firstConnectionID,actualLocalTargets);
   treeNodes.add(actualNode);
-  LinkedList<TreeNode> receivernodes=new LinkedList<TreeNode>();
+  LinkedList<TreeNode> receiverNodes=new LinkedList<TreeNode>();
   while (outputChannels.size() > 0) {
     final ExecutionEdge firstChannel=outputChannels.pollFirst();
+    final int connectionID=firstChannel.getConnectionID();
     final ExecutionVertex firstTarget=firstChannel.getInputGate().getVertex();
     final InstanceConnectionInfo actualInstance=firstTarget.getAllocatedResource().getInstance().getInstanceConnectionInfo();
     actualLocalTargets=new LinkedList<ChannelID>();
@@ -37,15 +40,15 @@
         iter.remove();
       }
     }
-    actualNode=new TreeNode(firstTarget.getAllocatedResource().getInstance(),actualInstance,actualLocalTargets);
-    receivernodes.add(actualNode);
+    actualNode=new TreeNode(firstTarget.getAllocatedResource().getInstance(),actualInstance,connectionID,actualLocalTargets);
+    receiverNodes.add(actualNode);
   }
   if (randomize) {
-    Collections.shuffle(receivernodes);
+    Collections.shuffle(receiverNodes);
   }
  else {
-    Collections.sort(receivernodes);
+    Collections.sort(receiverNodes);
   }
-  treeNodes.addAll(receivernodes);
+  treeNodes.addAll(receiverNodes);
   return treeNodes;
 }
