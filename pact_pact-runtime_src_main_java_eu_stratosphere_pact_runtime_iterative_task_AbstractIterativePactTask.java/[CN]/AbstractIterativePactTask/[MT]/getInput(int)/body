@@ -2,19 +2,19 @@
   if (wrappedInputs[inputGateIndex] != null) {
     return (MutableObjectIterator<X>)wrappedInputs[inputGateIndex];
   }
+  String name=getEnvironment().getTaskName() + " (" + (getEnvironment().getIndexInSubtaskGroup() + 1)+ '/'+ getEnvironment().getCurrentNumberOfSubtasks()+ ")";
   if (getTaskConfig().isCachedInputGate(inputGateIndex)) {
     if (log.isInfoEnabled()) {
       log.info(formatLogString("wrapping input [" + inputGateIndex + "] with a caching iterator"));
     }
     SpillingBuffer spillingBuffer=reserveMemoryForCaching(getTaskConfig().getInputGateCacheMemoryFraction());
-    MutableObjectIterator<X> cachedInput=new CachingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),spillingBuffer,(TypeSerializer<X>)getInputSerializer(inputGateIndex));
+    MutableObjectIterator<X> cachedInput=new CachingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),spillingBuffer,(TypeSerializer<X>)getInputSerializer(inputGateIndex),name);
     wrappedInputs[inputGateIndex]=cachedInput;
     return cachedInput;
   }
   if (getTaskConfig().isIterativeInputGate(inputGateIndex)) {
     int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(inputGateIndex);
-    String owner=getEnvironment().getTaskName() + " (" + (getEnvironment().getIndexInSubtaskGroup() + 1)+ '/'+ getEnvironment().getCurrentNumberOfSubtasks()+ ")";
-    InterruptingMutableObjectIterator<X> interruptingIterator=new InterruptingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),numberOfEventsUntilInterrupt,owner,this);
+    InterruptingMutableObjectIterator<X> interruptingIterator=new InterruptingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),numberOfEventsUntilInterrupt,name,this);
     MutableReader<Record> inputReader=getReader(inputGateIndex);
     inputReader.subscribeToEvent(interruptingIterator,EndOfSuperstepEvent.class);
     inputReader.subscribeToEvent(interruptingIterator,TerminationEvent.class);
