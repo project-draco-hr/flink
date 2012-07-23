@@ -1,8 +1,8 @@
 {
   int degreeOfParallelism=2;
   JobGraph jobGraph=new JobGraph("PageRank");
-  JobInputVertex pageWithRankInput=JobGraphUtils.createInput(PageWithRankInputFormat.class,"file:///data/tmp/stratosphere/test-inputs/pagerank/pageWithRank","PageWithRankInput",jobGraph,degreeOfParallelism);
-  JobInputVertex transitionMatrixInput=JobGraphUtils.createInput(TransitionMatrixInputFormat.class,"file:///data/tmp/stratosphere/test-inputs/pagerank/transitionMatrix","TransitionMatrixInput",jobGraph,degreeOfParallelism);
+  JobInputVertex pageWithRankInput=JobGraphUtils.createInput(PageWithRankInputFormat.class,"file://" + PlayConstants.PLAY_DIR + "test-inputs/pagerank/pageWithRank","PageWithRankInput",jobGraph,degreeOfParallelism);
+  JobInputVertex transitionMatrixInput=JobGraphUtils.createInput(TransitionMatrixInputFormat.class,"file://" + PlayConstants.PLAY_DIR + "test-inputs/pagerank/transitionMatrix","TransitionMatrixInput",jobGraph,degreeOfParallelism);
   TaskConfig transitionMatrixInputConfig=new TaskConfig(transitionMatrixInput.getConfiguration());
   transitionMatrixInputConfig.setComparatorFactoryForOutput(PactRecordComparatorFactory.class,0);
   PactRecordComparatorFactory.writeComparatorSetupToConfig(transitionMatrixInput.getConfiguration(),"pact.out.param.0.",new int[]{1},new Class[]{PactLong.class});
@@ -31,16 +31,12 @@
   PactRecordComparatorFactory.writeComparatorSetupToConfig(tail.getConfiguration(),"pact.in.param.0.",new int[]{0},new Class[]{PactLong.class});
   tailConfig.setMemorySize(3 * JobGraphUtils.MEGABYTE);
   tailConfig.setNumFilehandles(2);
-  JobTaskVertex sync=JobGraphUtils.createSingletonTask(BulkIterationSynchronizationPactTask.class,"BulkIterationSync",jobGraph);
-  TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
-  syncConfig.setDriver(MapDriver.class);
-  syncConfig.setStubClass(EmptyMapStub.class);
+  JobOutputVertex sync=JobGraphUtils.createSync(jobGraph,degreeOfParallelism);
   JobOutputVertex output=JobGraphUtils.createFileOutput(jobGraph,"FinalOutput",degreeOfParallelism);
   TaskConfig outputConfig=new TaskConfig(output.getConfiguration());
   outputConfig.setStubClass(PageWithRankOutFormat.class);
   outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,"file:///tmp/stratosphere/iterations");
   JobOutputVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",degreeOfParallelism);
-  JobOutputVertex fakeSyncOutput=JobGraphUtils.createSingletonFakeOutput(jobGraph,"FakeSyncOutput");
   JobGraphUtils.connectLocal(pageWithRankInput,head);
   JobGraphUtils.connectLocal(head,intermediate,DistributionPattern.BIPARTITE,ShipStrategy.BROADCAST);
   JobGraphUtils.connectLocal(transitionMatrixInput,intermediate,DistributionPattern.BIPARTITE,ShipStrategy.PARTITION_HASH);
@@ -48,10 +44,8 @@
   JobGraphUtils.connectLocal(intermediate,tail,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
   tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,1);
   JobGraphUtils.connectLocal(head,sync);
-  syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,degreeOfParallelism);
   JobGraphUtils.connectLocal(head,output);
   JobGraphUtils.connectLocal(tail,fakeTailOutput);
-  JobGraphUtils.connectLocal(sync,fakeSyncOutput);
   fakeTailOutput.setVertexToShareInstancesWith(tail);
   tail.setVertexToShareInstancesWith(head);
   pageWithRankInput.setVertexToShareInstancesWith(head);
@@ -59,8 +53,7 @@
   intermediate.setVertexToShareInstancesWith(head);
   output.setVertexToShareInstancesWith(head);
   sync.setVertexToShareInstancesWith(head);
-  fakeSyncOutput.setVertexToShareInstancesWith(sync);
-  GlobalConfiguration.loadConfiguration("/data/tmp/stratosphere/local-conf");
+  GlobalConfiguration.loadConfiguration(PlayConstants.PLAY_DIR + "local-conf");
   Configuration conf=GlobalConfiguration.getConfiguration();
   JobGraphUtils.submit(jobGraph,conf);
 }
