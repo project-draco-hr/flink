@@ -1,6 +1,7 @@
 {
   CompilerHints hints=getPactContract().getCompilerHints();
   this.estimatedOutputSize=-1;
+  this.inputSize=-1;
   this.estimatedNumRecords=-1;
   if (statistics != null) {
     InputFormat<?,?> format=null;
@@ -34,25 +35,20 @@
         if (PactCompiler.LOG.isWarnEnabled())         PactCompiler.LOG.warn("Pact compiler could not determine the size of input '" + inFormatDescription + "'.");
       }
  else       if (len >= 0) {
-        this.estimatedOutputSize=len;
+        this.inputSize=len;
       }
-      if (hints.getAvgBytesPerRecord() > 0 && this.estimatedOutputSize > 0) {
-        this.estimatedNumRecords=(long)(this.estimatedOutputSize / hints.getAvgBytesPerRecord());
+      final float avgBytes=bs.getAverageRecordWidth();
+      if (avgBytes > 0.0f && hints.getAvgBytesPerRecord() < 1.0f) {
+        hints.setAvgBytesPerRecord(avgBytes);
       }
- else {
-        final float avgBytes=bs.getAverageRecordWidth();
-        if (avgBytes > 0.0f && hints.getAvgBytesPerRecord() < 1.0f) {
-          hints.setAvgBytesPerRecord(avgBytes);
-        }
-        final long card=bs.getNumberOfRecords();
-        if (card != BaseStatistics.UNKNOWN) {
-          this.estimatedNumRecords=card;
-        }
+      final long card=bs.getNumberOfRecords();
+      if (card != BaseStatistics.UNKNOWN) {
+        this.estimatedNumRecords=card;
       }
     }
   }
-  if (this.estimatedNumRecords == -1 && hints.getAvgBytesPerRecord() >= 1.0f && this.estimatedOutputSize > 0) {
-    this.estimatedNumRecords=(long)(this.estimatedOutputSize / hints.getAvgBytesPerRecord()) + 1;
+  if (this.estimatedNumRecords == -1 && hints.getAvgBytesPerRecord() != -1.0f && this.inputSize > 0) {
+    this.estimatedNumRecords=(long)(this.inputSize / hints.getAvgBytesPerRecord()) + 1;
   }
   this.estimatedCardinality.putAll(hints.getDistinctCounts());
   if (this.estimatedNumRecords != -1) {
@@ -80,7 +76,10 @@
       this.estimatedNumRecords=-1;
     }
   }
-  if (this.estimatedOutputSize == -1 && this.estimatedNumRecords != -1 && hints.getAvgBytesPerRecord() >= 1.0f) {
+  if (this.estimatedNumRecords != -1 && hints.getAvgBytesPerRecord() != -1.0f) {
     this.estimatedOutputSize=(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) >= 1 ? (long)(this.estimatedNumRecords * hints.getAvgBytesPerRecord()) : 1;
+  }
+ else {
+    this.estimatedOutputSize=this.inputSize;
   }
 }
