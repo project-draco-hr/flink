@@ -1,6 +1,4 @@
 {
-  this.jsonString.append("\t{\n");
-  this.jsonString.append("\t\t\"id\": " + this.nodeIds.get(visitable));
   String type;
 switch (visitable.getPactType()) {
 case DataSink:
@@ -9,10 +7,14 @@ case DataSink:
 case DataSource:
 type="source";
 break;
+case Union:
+return;
 default :
 type="pact";
 break;
 }
+this.jsonString.append("\t{\n");
+this.jsonString.append("\t\t\"id\": " + this.nodeIds.get(visitable));
 this.jsonString.append(",\n\t\t\"type\": \"" + type + "\"");
 String contents;
 switch (visitable.getPactType()) {
@@ -34,19 +36,32 @@ String child1name="", child2name="";
 if (inConns != null && inConns.size() > 0) {
 this.jsonString.append(",\n\t\t\"predecessors\": [");
 int connCnt=0;
+int inputNum=0;
 for (PactConnection conn : inConns) {
+OptimizerNode inputNode=conn.getSourcePact();
+List<OptimizerNode> inConnForInput;
+if (inputNode instanceof UnionNode) {
+inConnForInput=new LinkedList<OptimizerNode>();
+for (PactConnection inputOfUnion : inputNode.getIncomingConnections()) {
+inConnForInput.add(inputOfUnion.getSourcePact());
+}
+}
+ else {
+inConnForInput=Collections.singletonList(inputNode);
+}
+for (OptimizerNode source : inConnForInput) {
 this.jsonString.append(connCnt == 0 ? "\n" : ",\n");
 if (connCnt == 0) {
 child1name+=child1name.length() > 0 ? ", " : "";
-child1name+=conn.getSourcePact().getPactContract().getName();
+child1name+=source.getPactContract().getName();
 }
  else if (connCnt == 1) {
 child2name+=child2name.length() > 0 ? ", " : "";
-child2name=conn.getSourcePact().getPactContract().getName();
+child2name=source.getPactContract().getName();
 }
-this.jsonString.append("\t\t\t{\"id\": " + this.nodeIds.get(conn.getSourcePact()));
+this.jsonString.append("\t\t\t{\"id\": " + this.nodeIds.get(source));
 if (inConns.size() == 2) {
-this.jsonString.append(", \"side\": \"" + (connCnt == 0 ? "first" : "second") + "\"");
+this.jsonString.append(", \"side\": \"" + (inputNum == 0 ? "first" : "second") + "\"");
 }
 String shipStrategy=null;
 String channelType=null;
@@ -92,6 +107,8 @@ this.jsonString.append(", \"tempMode\": \"" + tempMode + "\"");
 }
 this.jsonString.append('}');
 connCnt++;
+}
+inputNum++;
 }
 this.jsonString.append("\t\t]");
 }

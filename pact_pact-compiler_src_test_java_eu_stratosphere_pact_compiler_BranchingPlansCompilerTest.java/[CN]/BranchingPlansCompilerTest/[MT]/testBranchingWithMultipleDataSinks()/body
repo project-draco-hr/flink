@@ -1,0 +1,22 @@
+{
+  FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
+  FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
+  FileDataSource sourceC=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
+  CoGroupContract co=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,sourceA,sourceB);
+  MapContract ma=new MapContract(IdentityMap.class,co);
+  MatchContract mat1=new MatchContract(DummyMatchStub.class,PactInteger.class,0,0,sourceB,sourceC);
+  MatchContract mat2=new MatchContract(DummyMatchStub.class,PactInteger.class,0,0,ma,mat1);
+  ReduceContract r=new ReduceContract(IdentityReduce.class,PactInteger.class,0,ma);
+  CrossContract c=new CrossContract(DummyCrossStub.class,r,mat2);
+  FileDataSink sinkA=new FileDataSink(DummyOutputFormat.class,OUT_FILE_1,c);
+  FileDataSink sinkB=new FileDataSink(DummyOutputFormat.class,OUT_FILE_2,mat2);
+  FileDataSink sinkC=new FileDataSink(DummyOutputFormat.class,OUT_FILE_3,mat2);
+  List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
+  sinks.add(sinkA);
+  sinks.add(sinkB);
+  sinks.add(sinkC);
+  Plan plan=new Plan(sinks,"Branching Plans With Multiple Data Sinks");
+  OptimizedPlan oPlan=this.compiler.compile(plan,this.instanceType);
+  JobGraphGenerator jobGen=new JobGraphGenerator();
+  jobGen.compileJobGraph(oPlan);
+}

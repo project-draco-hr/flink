@@ -1,0 +1,28 @@
+{
+  FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE_1,"Source A");
+  FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE_1,"Source B");
+  FileDataSource sourceC=new FileDataSource(DummyInputFormat.class,IN_FILE_1,"Source C");
+  MapContract branchingMap=new MapContract(IdentityMap.class,sourceA);
+  ReduceContract branchingReduce=new ReduceContract(IdentityReduce.class,PactInteger.class,0,branchingMap);
+  MatchContract branchingMatch=new MatchContract(DummyMatchStub.class,PactInteger.class,0,0,sourceB,sourceC);
+  branchingMatch.addFirstInput(sourceB);
+  branchingMatch.addFirstInput(sourceC);
+  CoGroupContract branchingCoGroup=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,sourceA,sourceB);
+  CrossContract branchingCross=new CrossContract(DummyCrossStub.class,branchingReduce,branchingCoGroup);
+  CoGroupContract co1=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,branchingCross,branchingCross);
+  CoGroupContract co2=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,branchingMap,branchingMatch);
+  MapContract ma=new MapContract(IdentityMap.class,co2);
+  CoGroupContract co3=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,ma,branchingMatch);
+  CoGroupContract co4=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,co1,branchingCoGroup);
+  CoGroupContract co5=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,branchingReduce,co3);
+  CoGroupContract co6=new CoGroupContract(DummyCoGroupStub.class,PactInteger.class,0,0,co4,co5);
+  FileDataSink sink=new FileDataSink(DummyOutputFormat.class,OUT_FILE_1,co6);
+  sink.addInput(sourceA);
+  sink.addInput(co3);
+  sink.addInput(co4);
+  sink.addInput(co1);
+  Plan plan=new Plan(sink,"Branching of each contract type");
+  OptimizedPlan oPlan=this.compiler.compile(plan,this.instanceType);
+  JobGraphGenerator jobGen=new JobGraphGenerator();
+  jobGen.compileJobGraph(oPlan);
+}
