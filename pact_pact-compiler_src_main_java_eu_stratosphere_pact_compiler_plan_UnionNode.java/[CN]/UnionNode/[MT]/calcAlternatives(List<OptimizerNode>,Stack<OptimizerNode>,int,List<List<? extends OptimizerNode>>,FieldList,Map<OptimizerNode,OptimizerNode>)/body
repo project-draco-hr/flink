@@ -1,0 +1,45 @@
+{
+  List<? extends OptimizerNode> alternativesAtLevel=alternativesForInputs.get(index);
+  for (  OptimizerNode alternative : alternativesAtLevel) {
+    Map<OptimizerNode,OptimizerNode> newBranchPlan=new HashMap<OptimizerNode,OptimizerNode>(branchPlan);
+    boolean isCompatible=true;
+    if (openBranchesOfChildren.get(index) != null) {
+      for (      UnclosedBranchDescriptor branch : openBranchesOfChildren.get(index)) {
+        OptimizerNode brancher=branch.getBranchingNode();
+        if (newBranchPlan.containsKey(brancher)) {
+          if (newBranchPlan.get(brancher) != alternative.branchPlan.get(brancher)) {
+            isCompatible=false;
+            break;
+          }
+        }
+ else {
+          newBranchPlan.put(brancher,alternative.branchPlan.get(brancher));
+        }
+      }
+    }
+    if (isCompatible) {
+      subplanStack.push(alternative);
+      FieldList newPartitionedFieldsInCommon=partitionedFieldsInCommon;
+      GlobalProperties gpForInput=alternative.getGlobalPropertiesForParent(this);
+      if (index == 0 && gpForInput.getPartitioning() == PartitionProperty.HASH_PARTITIONED) {
+        newPartitionedFieldsInCommon=gpForInput.getPartitionedFields();
+      }
+ else       if (gpForInput.getPartitioning() != PartitionProperty.HASH_PARTITIONED || gpForInput.getPartitionedFields().equals(partitionedFieldsInCommon) == false) {
+        newPartitionedFieldsInCommon=null;
+      }
+      if (index < alternativesForInputs.size() - 1) {
+        calcAlternatives(target,subplanStack,index + 1,alternativesForInputs,newPartitionedFieldsInCommon,newBranchPlan);
+      }
+ else {
+        GlobalProperties gp=new GlobalProperties();
+        if (newPartitionedFieldsInCommon != null) {
+          gp.setPartitioning(PartitionProperty.HASH_PARTITIONED,newPartitionedFieldsInCommon);
+        }
+        UnionNode unionNode=new UnionNode(this,subplanStack,gp,new LocalProperties());
+        unionNode.branchPlan=newBranchPlan;
+        target.add(unionNode);
+      }
+      subplanStack.pop();
+    }
+  }
+}
