@@ -1,15 +1,13 @@
 {
-  int numIterations=0;
   BlockingBackChannel backChannel=initBackChannel();
-  final SuperstepBarrier barrier=new SuperstepBarrier();
-  getSyncOutput().subscribeToEvent(barrier,AllWorkersDoneEvent.class);
+  SuperstepBarrier barrier=initSuperstepBarrier();
   TypeSerializer serializer=getInputSerializer(getIterationInputIndex());
   output=(Collector<OT>)iterationCollector();
-  while (numIterations < getTaskConfig().getNumberOfIterations()) {
+  while (!terminationRequested()) {
     if (log.isInfoEnabled()) {
-      log.info(formatLogString("starting iteration [" + numIterations + "]"));
+      log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
     }
-    if (numIterations > 0) {
+    if (!inFirstIteration()) {
       reinstantiateDriver();
     }
     barrier.setup();
@@ -18,21 +16,27 @@
     sendEventToAllIterationOutputs(endOfSuperstepEvent);
     DataInputView superStepResult=backChannel.getReadEndAfterSuperstepEnded();
     if (log.isInfoEnabled()) {
-      log.info(formatLogString("finishing iteration [" + numIterations + "]"));
+      log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
     }
     sendEventToSync(endOfSuperstepEvent);
     if (log.isInfoEnabled()) {
-      log.info(formatLogString("waiting for other workers in iteration [" + numIterations + "]"));
+      log.info(formatLogString("waiting for other workers in iteration [" + currentIteration() + "]"));
     }
     barrier.waitForOtherWorkers();
-    feedBackSuperstepResult(superStepResult,serializer);
-    numIterations++;
+    if (barrier.terminationSignaled()) {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("head received termination request in iteration [" + currentIteration() + "]"));
+      }
+      requestTermination();
+      sendEventToAllIterationOutputs(new TerminationEvent());
+    }
+ else {
+      feedBackSuperstepResult(superStepResult,serializer);
+      incrementIterationCounter();
+    }
   }
-  TerminationEvent terminationEvent=new TerminationEvent();
-  sendEventToAllIterationOutputs(terminationEvent);
-  sendEventToSync(terminationEvent);
   if (log.isInfoEnabled()) {
-    log.info(formatLogString("streaming out final result after [" + numIterations + "] iterations"));
+    log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
   }
   streamOutFinalOutput();
 }
