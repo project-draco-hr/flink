@@ -1,42 +1,62 @@
 {
-  int minLength=Integer.MAX_VALUE;
-  List<Path> shortestPaths=new ArrayList<Path>();
-  Edge key=null;
+  PactRecord pathRec=null;
+  PactString path=null;
+  if (inputRecords.hasNext()) {
+    pathRec=inputRecords.next();
+  }
+ else {
+    pathRec=concatRecords.next();
+  }
+  PactString fromNode=pathRec.getField(0,PactString.class);
+  PactString toNode=pathRec.getField(1,PactString.class);
+  minLength.setValue(pathRec.getField(2,PactInteger.class).getValue());
+  path=new PactString(pathRec.getField(4,PactString.class));
+  shortestPaths.add(path);
+  hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
   while (inputRecords.hasNext()) {
-    PactRecord inputRecord=inputRecords.next();
-    if (key == null) {
-      key=inputRecord.getField(0,Edge.class);
+    pathRec=inputRecords.next();
+    PactInteger length=pathRec.getField(2,PactInteger.class);
+    if (length.getValue() == minLength.getValue()) {
+      path=new PactString(pathRec.getField(4,PactString.class));
+      if (shortestPaths.add(path)) {
+        hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+      }
     }
-    Path value=inputRecord.getField(1,Path.class);
-    LOG.debug("Process: [" + key + ","+ value+ "]");
-    if (value.getLength() == minLength) {
-      shortestPaths.add(value);
-    }
- else     if (value.getLength() < minLength) {
-      minLength=value.getLength();
+ else     if (length.getValue() < minLength.getValue()) {
+      minLength.setValue(length.getValue());
+      hopCnts.clear();
       shortestPaths.clear();
-      shortestPaths.add(value);
+      path=new PactString(pathRec.getField(4,PactString.class));
+      shortestPaths.add(path);
+      hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
     }
   }
   while (concatRecords.hasNext()) {
-    PactRecord concatRecord=concatRecords.next();
-    if (key == null) {
-      key=concatRecord.getField(0,Edge.class);
+    pathRec=concatRecords.next();
+    PactInteger length=pathRec.getField(2,PactInteger.class);
+    if (length.getValue() == minLength.getValue()) {
+      path=new PactString(pathRec.getField(4,PactString.class));
+      if (shortestPaths.add(path)) {
+        hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+      }
     }
-    Path value=concatRecord.getField(1,Path.class);
-    LOG.debug("Process: [" + key + ","+ value+ "]");
-    if (value.getLength() == minLength) {
-      shortestPaths.add(value);
-    }
- else     if (value.getLength() < minLength) {
-      minLength=value.getLength();
+ else     if (length.getValue() < minLength.getValue()) {
+      minLength.setValue(length.getValue());
+      hopCnts.clear();
       shortestPaths.clear();
-      shortestPaths.add(value);
+      path=new PactString(pathRec.getField(4,PactString.class));
+      shortestPaths.add(path);
+      hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
     }
   }
-  for (  Path shortestPath : shortestPaths) {
-    LOG.debug("Emit: [" + key + ","+ shortestPath+ "]");
-    outputRecord.setField(0,shortestPath);
+  outputRecord.setField(0,fromNode);
+  outputRecord.setField(1,toNode);
+  outputRecord.setField(2,minLength);
+  for (  PactString shortestPath : shortestPaths) {
+    outputRecord.setField(3,hopCnts.get(shortestPath));
+    outputRecord.setField(4,shortestPath);
     out.collect(outputRecord);
   }
+  hopCnts.clear();
+  shortestPaths.clear();
 }
