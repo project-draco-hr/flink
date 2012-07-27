@@ -5,16 +5,23 @@
   if (isChainable(combineNode)) {
     combineVertex=null;
     combineConfig=new TaskConfig(new Configuration());
-    this.chainedTasks.put(combineNode,new TaskInChain(ChainedCombineTask.class,combineConfig,"Combiner for " + rc.getName()));
+    this.chainedTasks.put(combineNode,new TaskInChain(ChainedCombineDriver.class,combineConfig,"Combiner for " + rc.getName()));
   }
  else {
     combineVertex=new JobTaskVertex("Combiner for " + combineNode.getPactContract().getName(),this.jobGraph);
-    combineVertex.setTaskClass(CombineTask.class);
     combineConfig=new TaskConfig(combineVertex.getConfiguration());
+    combineVertex.setTaskClass(RegularPactTask.class);
+    combineConfig.setDriver(CombineDriver.class);
   }
   combineConfig.setStubClass(combineNode.getPactContract().getUserCodeClass());
   combineConfig.setLocalStrategy(LocalStrategy.COMBININGSORT);
-  PactRecordComparatorFactory.writeComparatorSetupToConfig(combineConfig.getConfiguration(),combineConfig.getPrefixForInputParameters(0),combineNode.getPactContract().getKeyColumnNumbers(0),combineNode.getPactContract().getKeyClasses());
+  final Ordering secondaryOrder=combineNode.getPactContract().getGroupOrder();
+  if (secondaryOrder == null) {
+    PactRecordComparatorFactory.writeComparatorSetupToConfig(combineConfig.getConfiguration(),combineConfig.getPrefixForInputParameters(0),combineNode.getPactContract().getKeyColumnNumbers(0),combineNode.getPactContract().getKeyClasses());
+  }
+ else {
+    PactRecordComparatorFactory.writeComparatorSetupToConfig(combineConfig.getConfiguration(),combineConfig.getPrefixForInputParameters(0),combineNode.getPactContract().getKeyColumnNumbers(0),combineNode.getPactContract().getKeyClasses(),secondaryOrder.getFieldPositions(),secondaryOrder.getTypes());
+  }
   assignMemory(combineConfig,combineNode.getMemoryPerTask());
   combineConfig.setStubParameters(combineNode.getPactContract().getParameters());
   return combineVertex;

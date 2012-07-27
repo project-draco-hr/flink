@@ -11,22 +11,16 @@
     pathsInput=new FileDataSource(PathInFormat.class,paths,"Paths");
   }
   pathsInput.setDegreeOfParallelism(noSubTasks);
-  MapContract pathStarts=new MapContract(ProjectPathStart.class,"Project Starts");
-  pathStarts.setDegreeOfParallelism(noSubTasks);
-  MapContract pathEnds=new MapContract(ProjectPathEnd.class,"Project Ends");
-  pathEnds.setDegreeOfParallelism(noSubTasks);
-  MatchContract concatPaths=new MatchContract(ConcatPaths.class,PactString.class,0,0,"Concat Paths");
+  MatchContract concatPaths=new MatchContract(ConcatPaths.class,PactString.class,0,1,"Concat Paths");
   concatPaths.setDegreeOfParallelism(noSubTasks);
-  CoGroupContract findShortestPaths=new CoGroupContract(FindShortestPath.class,Edge.class,0,0,"Find Shortest Paths");
+  @SuppressWarnings("unchecked") CoGroupContract findShortestPaths=new CoGroupContract(FindShortestPath.class,new Class[]{PactString.class,PactString.class},new int[]{0,1},new int[]{0,1},"Find Shortest Paths");
   findShortestPaths.setDegreeOfParallelism(noSubTasks);
   FileDataSink result=new FileDataSink(PathOutFormat.class,output,"New Paths");
   result.setDegreeOfParallelism(noSubTasks);
   result.addInput(findShortestPaths);
   findShortestPaths.addFirstInput(pathsInput);
   findShortestPaths.addSecondInput(concatPaths);
-  concatPaths.addFirstInput(pathStarts);
-  pathStarts.addInput(pathsInput);
-  concatPaths.addSecondInput(pathEnds);
-  pathEnds.addInput(pathsInput);
+  concatPaths.addFirstInput(pathsInput);
+  concatPaths.addSecondInput(pathsInput);
   return new Plan(result,"Pairwise Shortest Paths");
 }

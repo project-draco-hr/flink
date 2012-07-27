@@ -1,0 +1,44 @@
+{
+  GlobalProperties gp=source.getGlobalPropertiesForParent(target);
+  FieldList keyFields=null;
+  PactConnection conn=target.getIncomingConnections().get(targetInputNum);
+  if (conn.getScramblePartitionedFields() != null) {
+    throw new CompilerException("Scrambled Fields are not supported yet!");
+  }
+ else   if (target.getPactContract() instanceof AbstractPact<?>) {
+    keyFields=new FieldList(((AbstractPact<?>)target.getPactContract()).getKeyColumnNumbers(targetInputNum));
+  }
+switch (shipMode) {
+case BROADCAST:
+    gp.reset();
+  break;
+case PARTITION_RANGE:
+gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,keyFields);
+gp.setOrdering(null);
+break;
+case PARTITION_HASH:
+gp.setPartitioning(PartitionProperty.HASH_PARTITIONED,keyFields);
+gp.setOrdering(null);
+break;
+case FORWARD:
+if (source.getDegreeOfParallelism() > target.getDegreeOfParallelism()) {
+gp.setOrdering(null);
+}
+if (gp.getPartitioning() == PartitionProperty.NONE) {
+if (source.getUniqueFields().size() > 0) {
+FieldList partitionedFields=new FieldList();
+for (Integer field : source.getUniqueFields().iterator().next()) {
+partitionedFields.add(field);
+}
+gp.setPartitioning(PartitionProperty.ANY,partitionedFields);
+}
+}
+break;
+case NONE:
+throw new CompilerException("Cannot determine properties after connection, id shipping strategy is not set.");
+case SFR:
+default :
+throw new CompilerException("Unsupported shipping strategy: " + shipMode.name());
+}
+return gp;
+}
