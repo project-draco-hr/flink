@@ -1,37 +1,15 @@
 {
   if (wrappedInputs[inputGateIndex] != null) {
     if (getTaskConfig().isCachedInputGate(inputGateIndex)) {
-      CachingMutableObjectIterator<X> cachingInput=(CachingMutableObjectIterator<X>)wrappedInputs[inputGateIndex];
-      try {
-        cachingInput.enableReading();
-      }
- catch (      IOException e) {
-        throw new IllegalStateException("Unable to enable reading on cached input [" + inputGateIndex + "]");
-      }
+      enableReadingOnCachingIterator(inputGateIndex);
     }
     return (MutableObjectIterator<X>)wrappedInputs[inputGateIndex];
   }
-  String name=getEnvironment().getTaskName() + " (" + (getEnvironment().getIndexInSubtaskGroup() + 1)+ '/'+ getEnvironment().getCurrentNumberOfSubtasks()+ ")";
   if (getTaskConfig().isCachedInputGate(inputGateIndex)) {
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("wrapping input [" + inputGateIndex + "] with a caching iterator"));
-    }
-    SpillingBuffer spillingBuffer=reserveMemoryForCaching(getTaskConfig().getInputGateCacheMemoryFraction());
-    MutableObjectIterator<X> cachedInput=new CachingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),spillingBuffer,(TypeSerializer<X>)getInputSerializer(inputGateIndex),name);
-    wrappedInputs[inputGateIndex]=cachedInput;
-    return cachedInput;
+    return wrapWithCachingIterator(inputGateIndex);
   }
   if (getTaskConfig().isIterativeInputGate(inputGateIndex)) {
-    int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(inputGateIndex);
-    InterruptingMutableObjectIterator<X> interruptingIterator=new InterruptingMutableObjectIterator<X>((MutableObjectIterator<X>)super.getInput(inputGateIndex),numberOfEventsUntilInterrupt,name,this);
-    MutableReader<Record> inputReader=getReader(inputGateIndex);
-    inputReader.subscribeToEvent(interruptingIterator,EndOfSuperstepEvent.class);
-    inputReader.subscribeToEvent(interruptingIterator,TerminationEvent.class);
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("wrapping input [" + inputGateIndex + "] with an interrupting iterator that waits "+ "for ["+ numberOfEventsUntilInterrupt+ "] event(s)"));
-    }
-    wrappedInputs[inputGateIndex]=interruptingIterator;
-    return interruptingIterator;
+    return wrapWithInterruptingIterator(inputGateIndex);
   }
   return super.getInput(inputGateIndex);
 }
