@@ -1,5 +1,5 @@
 {
-  int degreeOfParallelism=1;
+  int degreeOfParallelism=2;
   JobGraph jobGraph=new JobGraph("SimpleIteration");
   JobInputVertex input=JobGraphUtils.createInput(TextInputFormat.class,"file://" + PlayConstants.PLAY_DIR + "test-inputs/simple","FileInput",jobGraph,degreeOfParallelism);
   JobTaskVertex head=JobGraphUtils.createTask(BulkIterationHeadPactTask.class,"BulkIterationHead",jobGraph,degreeOfParallelism);
@@ -26,13 +26,19 @@
   outputConfig.setStubClass(SimpleOutFormat.class);
   outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,"file:///tmp/stratosphere/iterations");
   JobOutputVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",degreeOfParallelism);
-  JobGraphUtils.connectLocal(input,head);
-  JobGraphUtils.connectLocal(head,intermediate);
-  JobGraphUtils.connectLocal(head,sync);
-  JobGraphUtils.connectLocal(head,output);
-  JobGraphUtils.connectLocal(intermediate,tail);
-  JobGraphUtils.connectLocal(tail,fakeTailOutput);
-  head.setVertexToShareInstancesWith(tail);
+  JobGraphUtils.connect(input,head,ChannelType.INMEMORY,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
+  JobGraphUtils.connect(head,intermediate,ChannelType.NETWORK,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
+  JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.BIPARTITE,ShipStrategy.FORWARD);
+  JobGraphUtils.connect(head,output,ChannelType.INMEMORY,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
+  JobGraphUtils.connect(intermediate,tail,ChannelType.NETWORK,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
+  JobGraphUtils.connect(tail,fakeTailOutput,ChannelType.INMEMORY,DistributionPattern.POINTWISE,ShipStrategy.FORWARD);
+  input.setVertexToShareInstancesWith(head);
+  intermediate.setVertexToShareInstancesWith(head);
+  sync.setVertexToShareInstancesWith(head);
+  output.setVertexToShareInstancesWith(head);
+  intermediate.setVertexToShareInstancesWith(head);
+  tail.setVertexToShareInstancesWith(head);
+  fakeTailOutput.setVertexToShareInstancesWith(head);
   GlobalConfiguration.loadConfiguration(PlayConstants.PLAY_DIR + "local-conf");
   Configuration conf=GlobalConfiguration.getConfiguration();
   JobGraphUtils.submit(jobGraph,conf);
