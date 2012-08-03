@@ -1,10 +1,29 @@
 {
-  CommandLine cmd=this.parse(args);
-  this.loadConfig(cmd);
-  this.initConnection(cmd);
-  this.loadScript(cmd);
-  final ExecutionResponse response=this.sendScript();
-  if (response.getStatus() == ExecutionStatus.ERROR)   this.dealWithError(null,"Script contains errors: " + response.getDetails());
- else   if (cmd.hasOption("wait"))   this.waitForCompletion(cmd,response);
- else   System.out.println("Successfully submitted script");
+  CommandLine cmd=this.parseOptions(args);
+  final SopremoPlan plan=this.parseScript(cmd);
+  this.configureClient(cmd);
+  this.sopremoClient.submit(plan,new StateListener(){
+    @Override public void stateChanged(    ExecutionState executionState,    String detail){
+switch (executionState) {
+case ENQUEUED:
+        System.out.print("Submitted script");
+      break;
+case RUNNING:
+    System.out.print("\nExecuting script");
+  break;
+case FINISHED:
+System.out.println("\n" + detail);
+break;
+case ERROR:
+System.err.println("\n" + detail);
+break;
+}
+}
+@Override public void progressUpdate(ExecutionState status,String detail){
+super.progressUpdate(status,detail);
+System.out.print(".");
+}
+}
+,cmd.hasOption("wait"));
+this.sopremoClient.close();
 }
