@@ -5,8 +5,18 @@
   if (log.isInfoEnabled()) {
     log.info(formatLogString("wrapping input [0] with an interrupting iterator that waits " + "for [" + numberOfEventsUntilInterrupt + "] event(s)"));
   }
-  reader=new MutableRecordReader<PactRecord>(this);
-  recordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(reader,ReaderInterruptionBehaviors.FALSE_ON_INTERRUPT),numberOfEventsUntilInterrupt,name,this);
-  reader.subscribeToEvent(recordIterator,EndOfSuperstepEvent.class);
-  reader.subscribeToEvent(recordIterator,TerminationEvent.class);
+  headEventReader=new MutableRecordReader<PactRecord>(this,0);
+  headEventRecordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(headEventReader,ReaderInterruptionBehaviors.RELEASE_ON_INTERRUPT),numberOfEventsUntilInterrupt,name,this,0);
+  headEventReader.subscribeToEvent(headEventRecordIterator,EndOfSuperstepEvent.class);
+  headEventReader.subscribeToEvent(headEventRecordIterator,TerminationEvent.class);
+  if (taskConfig.usesConvergenceCriterion()) {
+    int numberOfEventsUntilInterruptOnConvergenceGate=taskConfig.getNumberOfEventsUntilInterruptInIterativeGate(1);
+    convergenceCriterion=InstantiationUtil.instantiate(taskConfig.getConvergenceCriterion(),ConvergenceCriterion.class);
+    convergenceReader=new MutableRecordReader<PactRecord>(this,1);
+    convergenceRecordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(convergenceReader,ReaderInterruptionBehaviors.RELEASE_ON_INTERRUPT),numberOfEventsUntilInterruptOnConvergenceGate,name,this,1);
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("wrapping input [1] with an interrupting iterator that waits " + "for [" + numberOfEventsUntilInterruptOnConvergenceGate + "] event(s)"));
+    }
+    convergenceReader.subscribeToEvent(convergenceRecordIterator,EndOfSuperstepEvent.class);
+  }
 }
