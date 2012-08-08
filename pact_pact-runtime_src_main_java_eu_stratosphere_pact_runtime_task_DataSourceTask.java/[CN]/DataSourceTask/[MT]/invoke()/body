@@ -10,65 +10,69 @@
       final InputFormat<OT,InputSplit> format=this.format;
       format.open(split);
       if (LOG.isDebugEnabled())       LOG.debug(getLogString("Starting to read input from split " + split.toString()));
-      if (record.getClass() == PactRecord.class) {
-        final PactRecord pactRecord=(PactRecord)record;
-        @SuppressWarnings("unchecked") final InputFormat<PactRecord,InputSplit> inFormat=(InputFormat<PactRecord,InputSplit>)format;
-        if (this.output instanceof PactRecordOutputCollector) {
-          final PactRecordOutputCollector output=(PactRecordOutputCollector)this.output;
-          while (!this.taskCanceled && !inFormat.reachedEnd()) {
-            pactRecord.clear();
-            if (inFormat.nextRecord(pactRecord)) {
-              output.collect(pactRecord);
+      try {
+        if (record.getClass() == PactRecord.class) {
+          final PactRecord pactRecord=(PactRecord)record;
+          @SuppressWarnings("unchecked") final InputFormat<PactRecord,InputSplit> inFormat=(InputFormat<PactRecord,InputSplit>)format;
+          if (this.output instanceof PactRecordOutputCollector) {
+            final PactRecordOutputCollector output=(PactRecordOutputCollector)this.output;
+            while (!this.taskCanceled && !inFormat.reachedEnd()) {
+              pactRecord.clear();
+              if (inFormat.nextRecord(pactRecord)) {
+                output.collect(pactRecord);
+              }
             }
           }
-        }
- else         if (this.output instanceof ChainedMapDriver) {
-          @SuppressWarnings("unchecked") final ChainedMapDriver<PactRecord,?> output=(ChainedMapDriver<PactRecord,?>)this.output;
-          while (!this.taskCanceled && !inFormat.reachedEnd()) {
-            pactRecord.clear();
-            if (inFormat.nextRecord(pactRecord)) {
-              output.collect(pactRecord);
+ else           if (this.output instanceof ChainedMapDriver) {
+            @SuppressWarnings("unchecked") final ChainedMapDriver<PactRecord,?> output=(ChainedMapDriver<PactRecord,?>)this.output;
+            while (!this.taskCanceled && !inFormat.reachedEnd()) {
+              pactRecord.clear();
+              if (inFormat.nextRecord(pactRecord)) {
+                output.collect(pactRecord);
+              }
+            }
+          }
+ else {
+            @SuppressWarnings("unchecked") final Collector<PactRecord> output=(Collector<PactRecord>)this.output;
+            while (!this.taskCanceled && !inFormat.reachedEnd()) {
+              pactRecord.clear();
+              if (inFormat.nextRecord(pactRecord)) {
+                output.collect(pactRecord);
+              }
             }
           }
         }
  else {
-          @SuppressWarnings("unchecked") final Collector<PactRecord> output=(Collector<PactRecord>)this.output;
-          while (!this.taskCanceled && !inFormat.reachedEnd()) {
-            pactRecord.clear();
-            if (inFormat.nextRecord(pactRecord)) {
-              output.collect(pactRecord);
+          if (this.output instanceof OutputCollector) {
+            final OutputCollector<OT> output=(OutputCollector<OT>)this.output;
+            while (!this.taskCanceled && !format.reachedEnd()) {
+              if (format.nextRecord(record)) {
+                output.collect(record);
+              }
             }
           }
+ else           if (this.output instanceof ChainedMapDriver) {
+            @SuppressWarnings("unchecked") final ChainedMapDriver<OT,?> output=(ChainedMapDriver<OT,?>)this.output;
+            while (!this.taskCanceled && !format.reachedEnd()) {
+              if (format.nextRecord(record)) {
+                output.collect(record);
+              }
+            }
+          }
+ else {
+            final Collector<OT> output=this.output;
+            while (!this.taskCanceled && !format.reachedEnd()) {
+              if (format.nextRecord(record)) {
+                output.collect(record);
+              }
+            }
+          }
+        }
+        if (LOG.isDebugEnabled() && !this.taskCanceled) {
+          LOG.debug(getLogString("Closing input split " + split.toString()));
         }
       }
- else {
-        if (this.output instanceof OutputCollector) {
-          final OutputCollector<OT> output=(OutputCollector<OT>)this.output;
-          while (!this.taskCanceled && !format.reachedEnd()) {
-            if (format.nextRecord(record)) {
-              output.collect(record);
-            }
-          }
-        }
- else         if (this.output instanceof ChainedMapDriver) {
-          @SuppressWarnings("unchecked") final ChainedMapDriver<OT,?> output=(ChainedMapDriver<OT,?>)this.output;
-          while (!this.taskCanceled && !format.reachedEnd()) {
-            if (format.nextRecord(record)) {
-              output.collect(record);
-            }
-          }
-        }
- else {
-          final Collector<OT> output=this.output;
-          while (!this.taskCanceled && !format.reachedEnd()) {
-            if (format.nextRecord(record)) {
-              output.collect(record);
-            }
-          }
-        }
-      }
-      if (!this.taskCanceled) {
-        if (LOG.isDebugEnabled())         LOG.debug(getLogString("Closing input split " + split.toString()));
+  finally {
         format.close();
       }
     }
