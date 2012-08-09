@@ -1,0 +1,51 @@
+{
+  final int numSSKeyFields=config.getInteger(NUM_SS_KEYS,-1);
+  if (numSSKeyFields == -1) {
+    return null;
+  }
+  final int numKeyFields=config.getInteger(NUM_KEYS,-1);
+  if (numKeyFields < 0) {
+    throw new CorruptConfigurationException("The number of keys for the comparator is invalid: " + numKeyFields);
+  }
+  if (numSSKeyFields < 0) {
+    throw new CorruptConfigurationException("The number of secondary sort keys for the comparator is invalid: " + numSSKeyFields);
+  }
+  final int[] positions=new int[numKeyFields + numSSKeyFields];
+  @SuppressWarnings("unchecked") final Class<? extends Key>[] types=new Class[numKeyFields + numSSKeyFields];
+  final boolean[] direction=new boolean[numKeyFields + numSSKeyFields];
+  for (int i=0; i < numKeyFields; i++) {
+    final int p=config.getInteger(KEY_POS_PREFIX + i,-1);
+    if (p >= 0) {
+      positions[i]=p;
+    }
+ else {
+      throw new CorruptConfigurationException("Contained invalid position for key no positions for keys.");
+    }
+    final String name=config.getString(KEY_CLASS_PREFIX + i,null);
+    if (name != null) {
+      types[i]=Class.forName(name,true,cl).asSubclass(Key.class);
+    }
+ else {
+      throw new CorruptConfigurationException("The key type (" + i + ") for the comparator is null");
+    }
+    direction[i]=config.getBoolean(KEY_SORT_DIRECTION_PREFIX,true);
+  }
+  for (int i=0; i < numSSKeyFields; i++) {
+    final int p=config.getInteger(SS_KEY_POS_PREFIX + i,-1);
+    if (p >= 0) {
+      positions[numKeyFields + i]=p;
+    }
+ else {
+      throw new CorruptConfigurationException("Contained invalid position for key no positions for keys.");
+    }
+    final String name=config.getString(SS_KEY_CLASS_PREFIX + i,null);
+    if (name != null) {
+      types[numKeyFields + i]=Class.forName(name,true,cl).asSubclass(Key.class);
+    }
+ else {
+      throw new CorruptConfigurationException("The key type (" + i + ") for the comparator is null");
+    }
+    direction[numKeyFields + i]=config.getBoolean(SS_KEY_SORT_DIRECTION_PREFIX,true);
+  }
+  return new PactRecordComparator(positions,types);
+}

@@ -25,28 +25,32 @@ throw new IllegalArgumentException("Unsupported ship-strategy: " + connection.ge
 final TaskConfig tempConfig;
 final int[] keyPositions;
 final Class<? extends Key>[] keyTypes;
+final boolean[] keyDirections;
 final Contract targetContract=connection.getTargetPact().getPactContract();
 if (targetContract instanceof AbstractPact<?>) {
 AbstractPact<?> pact=(AbstractPact<?>)targetContract;
 if (connection.getShipStrategy() instanceof PartitionShipStrategy) {
-Map<Integer,Class<? extends Key>> keyTypeMap=new HashMap<Integer,Class<? extends Key>>();
-int[] fields=pact.getKeyColumnNumbers(inputNumber - 1);
+final Map<Integer,Class<? extends Key>> keyTypeMap=new HashMap<Integer,Class<? extends Key>>();
+final int[] fields=pact.getKeyColumnNumbers(inputNumber - 1);
 for (int i=0; i < fields.length; i++) {
-keyTypeMap.put(fields[i],pact.getKeyClasses()[i]);
+keyTypeMap.put(Integer.valueOf(fields[i]),pact.getKeyClasses()[i]);
 }
 FieldList partitionKeys=((PartitionShipStrategy)connection.getShipStrategy()).getPartitionFields();
 keyPositions=new int[partitionKeys.size()];
 keyTypes=new Class[partitionKeys.size()];
+keyDirections=new boolean[partitionKeys.size()];
 int i=0;
 for (Integer key : partitionKeys) {
 keyPositions[i]=key;
 keyTypes[i]=keyTypeMap.get(key);
+keyDirections[i]=true;
 i++;
 }
 }
  else {
 keyPositions=null;
 keyTypes=null;
+keyDirections=null;
 }
 }
  else if (targetContract instanceof GenericDataSink) {
@@ -55,19 +59,23 @@ if (o != null) {
 final int numFields=o.getNumberOfFields();
 keyPositions=new int[numFields];
 keyTypes=new Class[numFields];
+keyDirections=new boolean[numFields];
 for (int i=0; i < numFields; i++) {
 keyPositions[i]=o.getFieldNumber(i);
 keyTypes[i]=o.getType(i);
+keyDirections[i]=o.getOrder(i) != Order.DESCENDING;
 }
 }
  else {
 keyPositions=null;
 keyTypes=null;
+keyDirections=null;
 }
 }
  else {
 keyPositions=null;
 keyTypes=null;
+keyDirections=null;
 }
 final TaskConfig configForOutputShipStrategy;
 switch (connection.getTempMode()) {
@@ -109,7 +117,7 @@ configForOutputShipStrategy.addOutputShipStrategy(connection.getShipStrategy().t
 if (!(keyPositions == null || keyTypes == null || keyPositions.length == 0 || keyTypes.length == 0)) {
 final int outputNum=configForOutputShipStrategy.getNumOutputs() - 1;
 configForOutputShipStrategy.setComparatorFactoryForOutput(PactRecordComparatorFactory.class,outputNum);
-PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutputShipStrategy.getConfiguration(),configForOutputShipStrategy.getPrefixForOutputParameters(outputNum),keyPositions,keyTypes);
+PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutputShipStrategy.getConfigForOutputParameters(outputNum),keyPositions,keyTypes,keyDirections);
 }
 if (targetContract instanceof GenericDataSink) {
 final DataDistribution distri=((GenericDataSink)targetContract).getDataDistribution();
