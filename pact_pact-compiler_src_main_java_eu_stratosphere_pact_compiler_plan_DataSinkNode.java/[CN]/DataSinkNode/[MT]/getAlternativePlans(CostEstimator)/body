@@ -1,48 +1,4 @@
 {
-  final Ordering po=getPactContract().getPartitionOrdering();
-  final Ordering lo=getPactContract().getLocalOrder();
   final List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
-  final List<? extends OptimizerNode> subPlans=this.getPredNode().getAlternativePlans(estimator);
-  for (  OptimizerNode subPlan : subPlans) {
-    final GlobalProperties gp=subPlan.getGlobalPropertiesForParent(this).createCopy();
-    final LocalProperties lp=subPlan.getLocalPropertiesForParent(this).createCopy();
-    final ShipStrategy ss;
-    final LocalStrategy ls;
-    if (po != null && !po.isMetBy(gp.getOrdering())) {
-      ShipStrategy s=this.input.getShipStrategy();
-      if (s.type() == ShipStrategyType.NONE || s.type() == ShipStrategyType.PARTITION_RANGE) {
-        ss=new PartitionRangeSS(po.getInvolvedIndexes());
-      }
- else {
-        continue;
-      }
-      gp.setPartitioning(PartitionProperty.RANGE_PARTITIONED,po.getInvolvedIndexes());
-      gp.setOrdering(po);
-    }
- else {
-      ss=new ForwardSS();
-    }
-    if (lo != null && !lo.isMetBy(lp.getOrdering())) {
-      if (this.localStrategy == LocalStrategy.NONE || this.localStrategy == LocalStrategy.SORT) {
-        ls=LocalStrategy.SORT;
-      }
- else {
-        continue;
-      }
-      lp.setOrdering(lo);
-    }
- else {
-      ls=LocalStrategy.NONE;
-    }
-    DataSinkNode ns=new DataSinkNode(this,subPlan,this.input,gp,lp);
-    ns.input.setShipStrategy(ss);
-    ns.setLocalStrategy(ls);
-    estimator.costOperator(ns);
-    outputPlans.add(ns);
-  }
-  prunePlanAlternatives(outputPlans);
-  if (outputPlans.isEmpty()) {
-    throw new CompilerException("Could not create a valid plan for the DataSink contract '" + getPactContract().getName() + "'. The compiler hints specified incompatible shipping strategies.");
-  }
   return outputPlans;
 }
