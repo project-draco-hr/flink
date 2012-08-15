@@ -1,0 +1,28 @@
+{
+  ExecutionResponse lastResponse=submissionResponse;
+  SopremoID submittedJobId=submissionResponse.getJobId();
+  try {
+    progressListener.progressUpdate(ExecutionState.ENQUEUED,lastResponse.getDetails());
+    while (lastResponse.getState() == ExecutionState.ENQUEUED) {
+      lastResponse=this.executor.getState(submittedJobId);
+      sleepSafely(this.updateTime);
+      progressListener.progressUpdate(ExecutionState.ENQUEUED,lastResponse.getDetails());
+    }
+    progressListener.progressUpdate(ExecutionState.RUNNING,lastResponse.getDetails());
+    while (lastResponse.getState() == ExecutionState.RUNNING) {
+      lastResponse=this.executor.getState(submittedJobId);
+      sleepSafely(this.updateTime);
+      progressListener.progressUpdate(ExecutionState.RUNNING,lastResponse.getDetails());
+    }
+    if (lastResponse.getState() == ExecutionState.ERROR) {
+      progressListener.progressUpdate(ExecutionState.ERROR,lastResponse.getDetails());
+      return false;
+    }
+    progressListener.progressUpdate(ExecutionState.FINISHED,lastResponse.getDetails());
+    return true;
+  }
+ catch (  Exception e) {
+    dealWithError(progressListener,e,"Error while waiting for job execution");
+    return false;
+  }
+}
