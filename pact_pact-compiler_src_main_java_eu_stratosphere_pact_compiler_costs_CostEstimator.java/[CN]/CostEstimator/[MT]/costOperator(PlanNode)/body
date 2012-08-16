@@ -1,0 +1,86 @@
+{
+  final Costs costs=new Costs();
+  final long availableMemory=n.getTotalAvailableMemory();
+  for (Iterator<Channel> channels=n.getInputs(); channels.hasNext(); ) {
+    final Channel channel=channels.next();
+switch (channel.getShipStrategy()) {
+case NONE:
+      throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for an input.");
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+    break;
+case PARTITION_HASH:
+  addHashPartitioningCost(channel,costs);
+break;
+case PARTITION_RANGE:
+addRangePartitionCost(channel,costs);
+break;
+case BROADCAST:
+addBroadcastCost(channel,channel.getReplicationFactor(),costs);
+break;
+case SFR:
+throw new CompilerException("Symmetric-Fragment-And-Replicate Strategy currently not supported.");
+default :
+throw new CompilerException("Unknown shipping strategy for input: " + channel.getShipStrategy());
+}
+}
+Channel firstInput=null;
+Channel secondInput=null;
+{
+Iterator<Channel> channels=n.getInputs();
+if (channels.hasNext()) firstInput=channels.next();
+if (channels.hasNext()) secondInput=channels.next();
+}
+switch (n.getLocalStrategy()) {
+case NONE:
+break;
+case COMBININGSORT:
+case SORT:
+addLocalSortCost(firstInput,availableMemory,costs);
+break;
+case SORT_BOTH_MERGE:
+addLocalSortCost(firstInput,availableMemory / 2,costs);
+addLocalSortCost(secondInput,availableMemory / 2,costs);
+addLocalMergeCost(firstInput,secondInput,0,costs);
+break;
+case SORT_FIRST_MERGE:
+addLocalSortCost(firstInput,availableMemory,costs);
+addLocalMergeCost(firstInput,secondInput,0,costs);
+break;
+case SORT_SECOND_MERGE:
+addLocalSortCost(secondInput,availableMemory,costs);
+addLocalMergeCost(firstInput,secondInput,0,costs);
+break;
+case MERGE:
+addLocalMergeCost(firstInput,secondInput,0,costs);
+break;
+case SORT_SELF_NESTEDLOOP:
+addLocalSortCost(firstInput,availableMemory,costs);
+addLocalSelfNestedLoopCost(firstInput,10,costs);
+break;
+case SELF_NESTEDLOOP:
+addLocalSelfNestedLoopCost(firstInput,10,costs);
+break;
+case HYBRIDHASH_FIRST:
+addHybridHashCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case HYBRIDHASH_SECOND:
+addHybridHashCosts(secondInput,firstInput,availableMemory,costs);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+addBlockNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+addBlockNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+addStreamedNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+addStreamedNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+break;
+default :
+throw new CompilerException("Unknown local strategy: " + n.getLocalStrategy().name());
+}
+n.setCosts(costs);
+}
