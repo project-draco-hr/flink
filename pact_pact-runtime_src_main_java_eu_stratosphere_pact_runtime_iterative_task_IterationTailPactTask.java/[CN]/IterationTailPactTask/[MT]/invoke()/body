@@ -1,0 +1,24 @@
+{
+  final BlockingBackChannel backChannel=retrieveBackChannel();
+  output=new DataOutputCollector(backChannel.getWriteEnd(),createOutputTypeSerializer(),validOutputs);
+  while (!terminationRequested()) {
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
+    }
+    if (!inFirstIteration()) {
+      reinstantiateDriver();
+    }
+    super.invoke();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
+    }
+    if (!terminationRequested()) {
+      backChannel.notifyOfEndOfSuperstep();
+      propagateEvent(new EndOfSuperstepEvent());
+      incrementIterationCounter();
+    }
+ else {
+      propagateEvent(new TerminationEvent());
+    }
+  }
+}
