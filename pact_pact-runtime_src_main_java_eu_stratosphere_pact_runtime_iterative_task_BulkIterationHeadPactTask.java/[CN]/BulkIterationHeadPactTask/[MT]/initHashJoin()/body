@@ -1,0 +1,30 @@
+{
+  long completeMemorySize=config.getMemorySize();
+  long backChannelMemorySize=(long)(completeMemorySize * 0.5);
+  config.setMemorySize(completeMemorySize - backChannelMemorySize);
+  final List<MemorySegment> memorySegments=getMemoryManager().allocatePages(getOwningNepheleTask(),config.getMemorySize());
+  final TypeSerializer<IT1> serializer1=(TypeSerializer<IT1>)PactRecordSerializer.get();
+  final TypeSerializer<IT2> serializer2=(TypeSerializer<IT2>)PactRecordSerializer.get();
+  final TypeComparator<IT1> comparator1=(TypeComparator<IT1>)new PactRecordComparator(new int[]{0},new Class[]{PactLong.class});
+  final TypeComparator<IT2> comparator2=(TypeComparator<IT2>)new PactRecordComparator(new int[]{0},new Class[]{PactLong.class});
+  final TypePairComparatorFactory<IT1,IT2> pairComparatorFactory;
+  try {
+    final Class<? extends TypePairComparatorFactory<IT1,IT2>> factoryClass=config.getPairComparatorFactory(getUserCodeClassLoader());
+    if (factoryClass == null) {
+      @SuppressWarnings("unchecked") TypePairComparatorFactory<IT1,IT2> pactRecordFactory=(TypePairComparatorFactory<IT1,IT2>)PactRecordPairComparatorFactory.get();
+      pairComparatorFactory=pactRecordFactory;
+    }
+ else {
+      @SuppressWarnings("unchecked") final Class<TypePairComparatorFactory<IT1,IT2>> clazz=(Class<TypePairComparatorFactory<IT1,IT2>>)(Class<?>)TypePairComparatorFactory.class;
+      pairComparatorFactory=InstantiationUtil.instantiate(factoryClass,clazz);
+    }
+  }
+ catch (  ClassNotFoundException e) {
+    throw new Exception("The class registered as TypePairComparatorFactory cloud not be loaded.",e);
+  }
+  MutableHashTable hashJoin=new MutableHashTable(serializer2,serializer1,comparator2,comparator1,pairComparatorFactory.createComparator12(comparator1,comparator2),memorySegments,getIOManager());
+  Broker<MutableHashTable> solutionsetBroker=SolutionSetBroker.instance();
+  System.out.println("HANDING IN JOIN: " + brokerKey());
+  solutionsetBroker.handIn(brokerKey(),hashJoin);
+  return hashJoin;
+}
