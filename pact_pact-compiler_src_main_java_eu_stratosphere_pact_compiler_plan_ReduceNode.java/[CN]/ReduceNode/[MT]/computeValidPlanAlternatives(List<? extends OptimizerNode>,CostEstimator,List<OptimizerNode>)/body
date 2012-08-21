@@ -1,26 +1,26 @@
 {
   FieldSet keySet=new FieldSet(getPactContract().getKeyColumnNumbers(0));
-  ShipStrategy ss=ShipStrategy.NONE;
+  ShipStrategy ss=new NoneSS();
   ShipStrategy hintSS=this.inConn.getShipStrategy();
-  if (hintSS == ShipStrategy.BROADCAST || hintSS == ShipStrategy.SFR)   return;
+  if (hintSS.type() == ShipStrategyType.BROADCAST || hintSS.type() == ShipStrategyType.SFR)   return;
  else   ss=hintSS;
   for (  OptimizerNode subPlan : altSubPlans) {
     GlobalProperties gp;
     LocalProperties lp;
-    if (ss == ShipStrategy.NONE) {
+    if (ss.type() == ShipStrategyType.NONE) {
       gp=subPlan.getGlobalPropertiesForParent(this);
       lp=subPlan.getLocalPropertiesForParent(this);
       if ((partitioningIsOnRightFields(gp) && gp.getPartitioning().isPartitioned()) || isFieldSetUnique(keySet,0)) {
-        ss=ShipStrategy.FORWARD;
+        ss=new ForwardSS();
       }
  else {
-        ss=ShipStrategy.PARTITION_HASH;
+        ss=new PartitionHashSS(this.keyList);
       }
-      gp=PactConnection.getGlobalPropertiesAfterConnection(subPlan,this,ss);
+      gp=PactConnection.getGlobalPropertiesAfterConnection(subPlan,this,0,ss);
       lp=PactConnection.getLocalPropertiesAfterConnection(subPlan,this,ss);
     }
  else {
-      gp=PactConnection.getGlobalPropertiesAfterConnection(subPlan,this,ss);
+      gp=PactConnection.getGlobalPropertiesAfterConnection(subPlan,this,0,ss);
       lp=PactConnection.getLocalPropertiesAfterConnection(subPlan,this,ss);
       if (!((partitioningIsOnRightFields(gp) && gp.getPartitioning().isPartitioned()) || isFieldSetUnique(keySet,0))) {
         continue;
@@ -56,7 +56,7 @@
       lp.setGrouped(true,keySet);
     }
     OptimizerNode reducePred=subPlan;
-    if (isCombineable() && ss != ShipStrategy.FORWARD) {
+    if (isCombineable() && ss.type() != ShipStrategyType.FORWARD) {
       OptimizerNode combiner=new CombinerNode(getPactContract(),subPlan,this.combinerReducingFactor);
       combiner.setDegreeOfParallelism(subPlan.getDegreeOfParallelism());
       estimator.costOperator(combiner);
