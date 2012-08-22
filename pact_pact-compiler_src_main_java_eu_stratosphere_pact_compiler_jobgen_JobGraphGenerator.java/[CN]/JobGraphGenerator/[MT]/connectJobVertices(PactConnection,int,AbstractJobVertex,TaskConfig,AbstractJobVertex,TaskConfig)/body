@@ -1,7 +1,7 @@
 {
   final ChannelType channelType;
   final DistributionPattern distributionPattern;
-switch (connection.getShipStrategy()) {
+switch (connection.getShipStrategy().type()) {
 case FORWARD:
 case PARTITION_LOCAL_HASH:
     int sourceDOP=connection.getSourcePact().getDegreeOfParallelism();
@@ -25,23 +25,32 @@ throw new IllegalArgumentException("Unsupported ship-strategy: " + connection.ge
 final TaskConfig tempConfig;
 final int[] keyPositions;
 final Class<? extends Key>[] keyTypes;
+final boolean[] keyDirections;
 final Contract targetContract=connection.getTargetPact().getPactContract();
 if (targetContract instanceof AbstractPact<?>) {
 AbstractPact<?> pact=(AbstractPact<?>)targetContract;
-if (connection.getScramblePartitionedFields() != null) {
-int[] originalKeyPositions=pact.getKeyColumnNumbers(inputNumber - 1);
-Class<? extends Key>[] originalKeyTypes=pact.getKeyClasses();
-int[] scrambleArray=connection.getScramblePartitionedFields();
-keyTypes=new Class[scrambleArray.length];
-keyPositions=new int[scrambleArray.length];
-for (int i=0; i < scrambleArray.length; i++) {
-keyPositions[i]=originalKeyPositions[scrambleArray[i]];
-keyTypes[i]=originalKeyTypes[scrambleArray[i]];
+if (connection.getShipStrategy() instanceof PartitionShipStrategy) {
+final Map<Integer,Class<? extends Key>> keyTypeMap=new HashMap<Integer,Class<? extends Key>>();
+final int[] fields=pact.getKeyColumnNumbers(inputNumber - 1);
+for (int i=0; i < fields.length; i++) {
+keyTypeMap.put(Integer.valueOf(fields[i]),pact.getKeyClasses()[i]);
+}
+FieldList partitionKeys=((PartitionShipStrategy)connection.getShipStrategy()).getPartitionFields();
+keyPositions=new int[partitionKeys.size()];
+keyTypes=new Class[partitionKeys.size()];
+keyDirections=new boolean[partitionKeys.size()];
+int i=0;
+for (Integer key : partitionKeys) {
+keyPositions[i]=key;
+keyTypes[i]=keyTypeMap.get(key);
+keyDirections[i]=true;
+i++;
 }
 }
  else {
-keyPositions=pact.getKeyColumnNumbers(inputNumber - 1);
-keyTypes=pact.getKeyClasses();
+keyPositions=null;
+keyTypes=null;
+keyDirections=null;
 }
 }
  else if (targetContract instanceof GenericDataSink) {
@@ -50,19 +59,23 @@ if (o != null) {
 final int numFields=o.getNumberOfFields();
 keyPositions=new int[numFields];
 keyTypes=new Class[numFields];
+keyDirections=new boolean[numFields];
 for (int i=0; i < numFields; i++) {
 keyPositions[i]=o.getFieldNumber(i);
 keyTypes[i]=o.getType(i);
+keyDirections[i]=o.getOrder(i) != Order.DESCENDING;
 }
 }
  else {
 keyPositions=null;
 keyTypes=null;
+keyDirections=null;
 }
 }
  else {
 keyPositions=null;
 keyTypes=null;
+keyDirections=null;
 }
 final TaskConfig configForOutputShipStrategy;
 switch (connection.getTempMode()) {
@@ -79,7 +92,7 @@ outputVertex.connectTo(tempVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPR
 tempVertex.connectTo(inputVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
 tempVertex.setVertexToShareInstancesWith(outputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
-outputConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
+outputConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
 configForOutputShipStrategy=tempConfig;
 inputConfig.addInputToGroup(inputNumber);
 tempConfig.addInputToGroup(1);
@@ -92,7 +105,7 @@ outputVertex.connectTo(tempVertex,channelType,CompressionLevel.NO_COMPRESSION,di
 tempVertex.connectTo(inputVertex,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
 tempVertex.setVertexToShareInstancesWith(inputVertex);
 tempConfig=new TaskConfig(tempVertex.getConfiguration());
-tempConfig.addOutputShipStrategy(ShipStrategy.FORWARD);
+tempConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
 configForOutputShipStrategy=outputConfig;
 inputConfig.addInputToGroup(inputNumber);
 tempConfig.addInputToGroup(1);
@@ -100,11 +113,11 @@ break;
 default :
 throw new CompilerException("Invalid connection temp mode: " + connection.getTempMode());
 }
-configForOutputShipStrategy.addOutputShipStrategy(connection.getShipStrategy());
+configForOutputShipStrategy.addOutputShipStrategy(connection.getShipStrategy().type());
 if (!(keyPositions == null || keyTypes == null || keyPositions.length == 0 || keyTypes.length == 0)) {
 final int outputNum=configForOutputShipStrategy.getNumOutputs() - 1;
 configForOutputShipStrategy.setComparatorFactoryForOutput(PactRecordComparatorFactory.class,outputNum);
-PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutputShipStrategy.getConfiguration(),configForOutputShipStrategy.getPrefixForOutputParameters(outputNum),keyPositions,keyTypes);
+PactRecordComparatorFactory.writeComparatorSetupToConfig(configForOutputShipStrategy.getConfigForOutputParameters(outputNum),keyPositions,keyTypes,keyDirections);
 }
 if (targetContract instanceof GenericDataSink) {
 final DataDistribution distri=((GenericDataSink)targetContract).getDataDistribution();

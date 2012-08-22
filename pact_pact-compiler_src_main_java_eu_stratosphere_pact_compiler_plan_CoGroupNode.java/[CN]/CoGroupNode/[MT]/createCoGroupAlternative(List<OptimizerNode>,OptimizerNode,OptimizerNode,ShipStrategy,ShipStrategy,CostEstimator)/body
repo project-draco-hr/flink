@@ -1,30 +1,32 @@
 {
   GlobalProperties gp1, gp2;
   LocalProperties lp1, lp2;
-  gp1=PactConnection.getGlobalPropertiesAfterConnection(subPlan1,this,ss1);
+  gp1=PactConnection.getGlobalPropertiesAfterConnection(subPlan1,this,0,ss1);
   lp1=PactConnection.getLocalPropertiesAfterConnection(subPlan1,this,ss1);
-  gp2=PactConnection.getGlobalPropertiesAfterConnection(subPlan2,this,ss2);
+  gp2=PactConnection.getGlobalPropertiesAfterConnection(subPlan2,this,1,ss2);
   lp2=PactConnection.getLocalPropertiesAfterConnection(subPlan2,this,ss2);
   int[] scrambledKeyOrder1=null;
   int[] scrambledKeyOrder2=null;
-  if (ss1 == ShipStrategy.FORWARD && ss2 == ShipStrategy.PARTITION_HASH) {
+  if (ss1.type() == ShipStrategyType.FORWARD && ss2.type() == ShipStrategyType.PARTITION_HASH) {
     scrambledKeyOrder1=getScrambledKeyOrder(this.keySet1,gp1.getPartitionedFields());
     if (scrambledKeyOrder1 != null) {
       FieldList scrambledKeys2=new FieldList();
       for (int i=0; i < scrambledKeyOrder1.length; i++) {
-        scrambledKeys2.set(i,this.keySet2.get(scrambledKeyOrder1[i]));
+        scrambledKeys2.add(this.keySet2.get(scrambledKeyOrder1[i]));
       }
       gp2.setPartitioning(gp2.getPartitioning(),scrambledKeys2);
+      ss2=new PartitionHashSS(scrambledKeys2);
     }
   }
-  if (ss2 == ShipStrategy.FORWARD && ss1 == ShipStrategy.PARTITION_HASH) {
+  if (ss2.type() == ShipStrategyType.FORWARD && ss1.type() == ShipStrategyType.PARTITION_HASH) {
     scrambledKeyOrder2=getScrambledKeyOrder(this.keySet2,gp2.getPartitionedFields());
     if (scrambledKeyOrder2 != null) {
       FieldList scrambledKeys1=new FieldList();
       for (int i=0; i < scrambledKeyOrder2.length; i++) {
-        scrambledKeys1.set(i,this.keySet1.get(scrambledKeyOrder2[i]));
+        scrambledKeys1.add(this.keySet1.get(scrambledKeyOrder2[i]));
       }
       gp1.setPartitioning(gp1.getPartitioning(),scrambledKeys1);
+      ss1=new PartitionHashSS(scrambledKeys1);
     }
   }
   int[] keyColumns1=getPactContract().getKeyColumnNumbers(0);
@@ -41,9 +43,7 @@
   outGp.setPartitioning(gp1.getPartitioning(),gp1.getPartitionedFields());
   CoGroupNode n=new CoGroupNode(this,subPlan1,subPlan2,this.input1,this.input2,outGp,new LocalProperties());
   n.input1.setShipStrategy(ss1);
-  n.input1.setScramblePartitionedFields(scrambledKeyOrder2);
   n.input2.setShipStrategy(ss2);
-  n.input2.setScramblePartitionedFields(scrambledKeyOrder1);
   n.getLocalProperties().setOrdering(ordering1);
   n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns1));
   if (n.getLocalStrategy() == LocalStrategy.NONE) {
@@ -68,9 +68,7 @@
   outGp.setPartitioning(gp2.getPartitioning(),gp2.getPartitionedFields());
   n=new CoGroupNode(this,subPlan1,subPlan2,input1,input2,outGp,new LocalProperties());
   n.input1.setShipStrategy(ss1);
-  n.input1.setScramblePartitionedFields(scrambledKeyOrder2);
   n.input2.setShipStrategy(ss2);
-  n.input2.setScramblePartitionedFields(scrambledKeyOrder1);
   n.getLocalProperties().setOrdering(ordering2);
   n.getLocalProperties().setGrouped(true,new FieldSet(keyColumns2));
   if (n.getLocalStrategy() == LocalStrategy.NONE) {
