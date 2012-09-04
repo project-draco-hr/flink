@@ -2,10 +2,22 @@
   if (element == null)   throw new NullPointerException();
   if (element.isMissing())   this.remove(index);
   if (index < 0 || index > this.size())   throw new IndexOutOfBoundsException();
-  if (index < this.schema.getTailSize()) {
-    for (int i=this.schema.getTailSize() - 1; i >= index; i--)     if (!this.record.isNull(i))     if (i == this.schema.getTailSize() - 1)     this.getOtherField().add(0,SopremoUtil.unwrap(this.record.getField(i,JsonNodeWrapper.class)));
- else     this.record.setField(i + 1,this.record.getField(i,JsonNodeWrapper.class));
-    this.record.setField(index,SopremoUtil.wrap(element));
+  final int recordPosition=this.schema.getTailSize() - this.size() + index;
+  if (recordPosition < 0)   this.getOtherField().add(index,element);
+ else {
+    IJsonNode oldNode=SopremoUtil.unwrap(this.record.getField(recordPosition + 1,JsonNodeWrapper.class));
+    IJsonNode tmpNode;
+    this.record.setField(recordPosition + 1,SopremoUtil.wrap(element));
+    for (int i=recordPosition + 1; i > 0; i--) {
+      if (this.record.isNull(i)) {
+        this.record.setField(i,SopremoUtil.wrap(oldNode));
+        return this;
+      }
+      tmpNode=SopremoUtil.unwrap(this.record.getField(i,JsonNodeWrapper.class));
+      if (oldNode != null)       this.record.setField(i,SopremoUtil.wrap(oldNode));
+      oldNode=tmpNode;
+    }
+    if (oldNode != null)     this.getOtherField().add(oldNode);
   }
   return this;
 }

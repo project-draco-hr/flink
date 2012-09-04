@@ -1,0 +1,41 @@
+{
+  final JobID dummyKey=new JobID();
+  List<String> requiredLibraries=new ArrayList<String>(plan.getRequiredPackages());
+  try {
+    progressListener.progressUpdate(ExecutionState.SETUP,"");
+    List<Path> libraryPaths=new ArrayList<Path>();
+    for (    String library : requiredLibraries) {
+      final DataInputStream dis=new DataInputStream(new FileInputStream(library));
+      final Path libraryPath=new Path(library);
+      LibraryCacheManager.addLibrary(dummyKey,libraryPath,new File(library).length(),dis);
+      dis.close();
+      libraryPaths.add(libraryPath);
+    }
+    LibraryCacheManager.register(dummyKey,libraryPaths.toArray(new Path[libraryPaths.size()]));
+    LibraryCacheProfileRequest request=new LibraryCacheProfileRequest();
+    final String[] internalJarNames=LibraryCacheManager.getRequiredJarFiles(dummyKey);
+    request.setRequiredLibraries(internalJarNames);
+    LibraryCacheProfileResponse response=null;
+    response=this.executor.getLibraryCacheProfile(request);
+    for (int k=0; k < internalJarNames.length; k++)     if (!response.isCached(k)) {
+      final String library=internalJarNames[k];
+      progressListener.progressUpdate(ExecutionState.SETUP,"Transfering " + requiredLibraries.get(k));
+      LibraryCacheUpdate update=new LibraryCacheUpdate(library);
+      this.executor.updateLibraryCache(update);
+    }
+    for (int index=0; index < internalJarNames.length; index++)     requiredLibraries.set(index,internalJarNames[index]);
+    plan.setRequiredPackages(requiredLibraries);
+    return true;
+  }
+ catch (  IOException e) {
+    dealWithError(progressListener,e,"Cannot transfer libraries");
+    return false;
+  }
+ finally {
+    try {
+      LibraryCacheManager.unregister(dummyKey);
+    }
+ catch (    IOException e) {
+    }
+  }
+}
