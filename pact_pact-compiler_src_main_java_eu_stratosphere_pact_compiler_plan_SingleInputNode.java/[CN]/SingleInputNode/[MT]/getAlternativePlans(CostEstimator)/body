@@ -1,4 +1,28 @@
 {
-  List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
+  if (this.cachedPlans != null) {
+    return this.cachedPlans;
+  }
+  List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
+  List<Channel> candidates=new ArrayList<Channel>(subPlans.size());
+  List<InterestingProperties> ips=this.inConn.getInterestingProperties();
+  for (  PlanNode p : subPlans) {
+    if (ips.isEmpty()) {
+      Channel c=new Channel(p);
+      c.setShipStrategy(ShipStrategyType.FORWARD);
+      c.setLocalStrategy(LocalStrategy.NONE);
+      candidates.add(c);
+    }
+ else {
+      for (      InterestingProperties ip : ips) {
+        candidates.add(ip.createChannelRealizingProperties(p));
+      }
+    }
+  }
+  List<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  createPlanAlternatives(candidates,outputPlans);
+  prunePlanAlternatives(outputPlans);
+  if (isBranching()) {
+    this.cachedPlans=outputPlans;
+  }
   return outputPlans;
 }
