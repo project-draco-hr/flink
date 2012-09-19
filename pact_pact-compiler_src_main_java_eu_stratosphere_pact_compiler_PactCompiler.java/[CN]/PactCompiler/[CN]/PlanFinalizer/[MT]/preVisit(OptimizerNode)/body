@@ -1,0 +1,34 @@
+{
+  if (!this.allNodes.add(visitable)) {
+    return false;
+  }
+  for (  PactConnection conn : visitable.getIncomingConnections()) {
+switch (conn.getTempMode()) {
+case NONE:
+      break;
+case TEMP_SENDER_SIDE:
+    this.memoryPerInstance-=PactCompiler.DEFAULT_TEMP_TASK_MEMORY * conn.getSourcePact().getDegreeOfParallelism();
+  LOG.debug("Memory reduced to " + this.memoryPerInstance + " due to TempTask");
+break;
+case TEMP_RECEIVER_SIDE:
+this.memoryPerInstance-=PactCompiler.DEFAULT_TEMP_TASK_MEMORY * conn.getTargetPact().getDegreeOfParallelism();
+LOG.debug("Memory reduced to " + this.memoryPerInstance + " due to TempTask");
+break;
+}
+}
+for (PactConnection conn : visitable.getOutConns()) {
+if (conn.getShipStrategy().type() == ShipStrategyType.PARTITION_RANGE) {
+this.memoryConsumers+=visitable.getInstancesPerMachine();
+this.memoryPerInstance-=PactCompiler.DEFAULT_TEMP_TASK_MEMORY * conn.getSourcePact().getDegreeOfParallelism();
+LOG.debug("Memory reduced to " + this.memoryPerInstance + " due to TempTask");
+}
+}
+if (visitable instanceof DataSinkNode) {
+this.sinks.add((DataSinkNode)visitable);
+}
+ else if (visitable instanceof DataSourceNode) {
+this.sources.add((DataSourceNode)visitable);
+}
+this.memoryConsumers+=visitable.getMemoryConsumerCount() * visitable.getInstancesPerMachine();
+return true;
+}

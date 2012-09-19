@@ -1,0 +1,33 @@
+{
+  final PlanNode[] toKeep=new PlanNode[this.intProps.size()];
+  PlanNode cheapest=null;
+  for (  PlanNode candidate : plans) {
+    if (cheapest == null || (cheapest.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0)) {
+      cheapest=candidate;
+    }
+    for (int i=0; i < this.intProps.size(); i++) {
+      if (this.intProps.get(i).isMetBy(candidate)) {
+        final PlanNode previous=toKeep[i];
+        if (previous == null || previous.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0) {
+          toKeep[i]=candidate;
+        }
+      }
+    }
+  }
+  plans.clear();
+  if (cheapest != null) {
+    plans.add(cheapest);
+    cheapest.setPruningMarker();
+  }
+  final Costs cheapestCosts=cheapest.getCumulativeCosts();
+  for (int i=0; i < toKeep.length; i++) {
+    final PlanNode n=toKeep[i];
+    if (n != null && !n.isPruneMarkerSet()) {
+      final Costs maxDelta=this.intProps.get(i).getMaximalCosts();
+      if (!cheapestCosts.isOtherMoreThanDeltaAbove(n.getCumulativeCosts(),maxDelta)) {
+        n.setPruningMarker();
+        plans.add(n);
+      }
+    }
+  }
+}

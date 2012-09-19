@@ -72,9 +72,18 @@
   rootNode.accept(propsVisitor);
   BranchesVisitor branchingVisitor=new BranchesVisitor();
   rootNode.accept(branchingVisitor);
-  List<? extends PlanNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
+  List<PlanNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
   if (bestPlan.size() != 1) {
     throw new CompilerException("Error in compiler: more than one best plan was created!");
   }
-  return null;
+  PlanNode bestPlanRoot=bestPlan.get(0);
+  List<SinkPlanNode> bestPlanSinks=new ArrayList<SinkPlanNode>(4);
+  if (bestPlanRoot instanceof SinkPlanNode) {
+    bestPlanSinks.add((SinkPlanNode)bestPlanRoot);
+  }
+  new NodeConnector().connectNodes(bestPlanSinks);
+  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryMegabytes);
+  plan.setInstanceTypeName(instanceName);
+  plan.setPlanConfiguration(pactPlan.getPlanConfiguration());
+  return plan;
 }

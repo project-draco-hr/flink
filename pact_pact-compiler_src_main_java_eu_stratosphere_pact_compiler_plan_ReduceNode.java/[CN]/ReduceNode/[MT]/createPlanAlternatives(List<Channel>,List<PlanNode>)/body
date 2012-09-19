@@ -1,0 +1,25 @@
+{
+  final LocalStrategy defaultStrat=isCombineable() ? (this.localStrategy != LocalStrategy.NONE ? this.localStrategy : LocalStrategy.COMBININGSORT) : LocalStrategy.SORT;
+  for (  Channel c : inputs) {
+    final GlobalProperties gprops=c.getGlobalProperties();
+    final LocalProperties lprops=c.getLocalProperties();
+    if (gprops.getPartitioning().isPartitionedOnKey() && this.keys.isValidSubset(gprops.getPartitionedFields())) {
+      if (lprops.getOrdering() != null && lprops.getOrdering().groupsFields(this.keys)) {
+        if (c.getShipStrategy() == ShipStrategyType.FORWARD) {
+          c.setLocalStrategy(defaultStrat);
+          outputPlans.add(new SingleInputPlanNode(this,c,LocalStrategy.NONE));
+        }
+ else {
+          Channel toCombiner=new Channel(c.getSource());
+          toCombiner.setShipStrategy(ShipStrategyType.FORWARD);
+          toCombiner.setLocalStrategy(LocalStrategy.COMBININGSORT,c.getLocalStrategyKeys(),c.getLocalStrategySortOrder());
+          SingleInputPlanNode combiner=new SingleInputPlanNode(this,toCombiner,LocalStrategy.NONE);
+          Channel toReducer=new Channel(combiner);
+          toReducer.setShipStrategy(c.getShipStrategy(),c.getShipStrategyKeys(),c.getShipStrategySortOrder());
+          toReducer.setLocalStrategy(defaultStrat,c.getLocalStrategyKeys(),c.getLocalStrategySortOrder());
+          outputPlans.add(new SingleInputPlanNode(this,toReducer,LocalStrategy.NONE));
+        }
+      }
+    }
+  }
+}

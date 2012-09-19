@@ -1,4 +1,30 @@
 {
-  final List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
+  if (this.cachedPlans != null) {
+    return this.cachedPlans;
+  }
+  List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
+  List<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  List<InterestingProperties> ips=this.input.getInterestingProperties();
+  for (  PlanNode p : subPlans) {
+    if (ips.isEmpty()) {
+      Channel c=new Channel(p);
+      c.setShipStrategy(ShipStrategyType.FORWARD);
+      c.setLocalStrategy(LocalStrategy.NONE);
+      outputPlans.add(new SinkPlanNode(this,c));
+    }
+ else {
+      for (      InterestingProperties ip : ips) {
+        Channel c=ip.createChannelRealizingProperties(p);
+        outputPlans.add(new SinkPlanNode(this,c));
+      }
+    }
+  }
+  for (  PlanNode node : outputPlans) {
+    estimator.costOperator(node);
+  }
+  prunePlanAlternatives(outputPlans);
+  if (isBranching()) {
+    this.cachedPlans=outputPlans;
+  }
   return outputPlans;
 }
