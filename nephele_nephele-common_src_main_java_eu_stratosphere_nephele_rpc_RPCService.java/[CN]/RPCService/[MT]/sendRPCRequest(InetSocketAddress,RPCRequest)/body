@@ -1,0 +1,25 @@
+{
+  if (this.shutdownRequested.get()) {
+    throw new IOException("Shutdown of RPC service has already been requested");
+  }
+  final Integer requestID=Integer.valueOf(request.getRequestID());
+  this.pendingRequests.put(requestID,request);
+  for (int i=0; i < RETRY_LIMIT; ++i) {
+    this.senderThread.sendMessage(remoteSocketAddress,request);
+synchronized (request) {
+      request.wait(TIMEOUT);
+    }
+    final RPCResponse rpcResponse=this.pendingResponses.remove(requestID);
+    if (rpcResponse == null) {
+      continue;
+    }
+    this.pendingRequests.remove(requestID);
+    this.senderThread.sendMessage(remoteSocketAddress,new RPCCleanup(request.getRequestID()));
+    if (rpcResponse instanceof RPCReturnValue) {
+      return ((RPCReturnValue)rpcResponse).getRetVal();
+    }
+    throw ((RPCThrowable)rpcResponse).getThrowable();
+  }
+  this.pendingRequests.remove(requestID);
+  throw new IOException("Unable to complete RPC of method " + request.getMethodName() + " on "+ remoteSocketAddress);
+}

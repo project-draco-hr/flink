@@ -1,0 +1,33 @@
+{
+  final Kryo kryo=RPCService.createKryoObject();
+  final byte[] buf=new byte[RPCMessage.MAXIMUM_MSG_SIZE];
+  final MemoryBackedOutputStream mbos=new MemoryBackedOutputStream(buf);
+  while (!this.shutdownRequested) {
+    SendingRequest sendingRequest=null;
+    try {
+      sendingRequest=this.msgQueue.take();
+    }
+ catch (    InterruptedException ie) {
+      if (this.shutdownRequested) {
+        return;
+      }
+ else {
+        continue;
+      }
+    }
+    mbos.reset();
+    final Output output=new Output(mbos);
+    kryo.writeObject(output,new RPCEnvelope(sendingRequest.rpcMessage));
+    output.close();
+    mbos.close();
+    final DatagramPacket datagramPacket=new DatagramPacket(mbos.getBuf(),mbos.getLen());
+    datagramPacket.setSocketAddress(sendingRequest.remoteSocketAddress);
+    try {
+      this.socket.send(datagramPacket);
+    }
+ catch (    IOException ioe) {
+      Log.error("Shutting down sender thread due to error: ",ioe);
+      return;
+    }
+  }
+}

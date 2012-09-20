@@ -1,0 +1,37 @@
+{
+  final Integer requestID=Integer.valueOf(rpcRequest.getRequestID());
+  final CachedResponse cachedResponse=this.cachedResponses.get(requestID);
+  if (cachedResponse != null) {
+    this.senderThread.sendMessage(remoteSocketAddress,cachedResponse.rpcResponse);
+    return;
+  }
+  final RPCProtocol callbackHandler=this.callbackHandlers.get(rpcRequest.getInterfaceName());
+  if (callbackHandler == null) {
+    Log.error("Cannot find callback handler for protocol " + rpcRequest.getInterfaceName());
+    return;
+  }
+  Method method=null;
+  try {
+    method=callbackHandler.getClass().getMethod(rpcRequest.getMethodName(),rpcRequest.getParameterTypes());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Log.error("Error while processing incoming RPC request: ",e);
+    return;
+  }
+  RPCResponse rpcResponse=null;
+  try {
+    final Object retVal=method.invoke(callbackHandler,rpcRequest.getArgs());
+    rpcResponse=new RPCReturnValue(rpcRequest.getRequestID(),retVal);
+  }
+ catch (  InvocationTargetException ite) {
+    rpcResponse=new RPCThrowable(rpcRequest.getRequestID(),ite.getTargetException());
+  }
+catch (  Exception e) {
+    e.printStackTrace();
+    Log.error("Error while processing incoming RPC request: ",e);
+    return;
+  }
+  this.cachedResponses.put(requestID,new CachedResponse(System.currentTimeMillis(),rpcResponse));
+  this.senderThread.sendMessage(remoteSocketAddress,rpcResponse);
+}
