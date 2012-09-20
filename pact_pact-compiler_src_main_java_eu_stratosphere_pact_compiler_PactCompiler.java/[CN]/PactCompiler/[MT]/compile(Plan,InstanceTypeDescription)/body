@@ -4,8 +4,7 @@
   }
   final String instanceName=type.getInstanceType().getIdentifier();
   final long memoryPerInstance=(long)(type.getHardwareDescription().getSizeOfFreeMemory() * 0.96f);
-  int memoryMegabytes=(int)(memoryPerInstance >>> 20);
-  int numInstances=type.getMaximumNumberOfAvailableInstances();
+  final int numInstances=type.getMaximumNumberOfAvailableInstances();
   int maxMachinesJob=pactPlan.getMaxNumberMachines();
   if (maxMachinesJob < 1) {
     maxMachinesJob=this.maxMachines;
@@ -68,6 +67,7 @@
  else {
     throw new CompilerException("The plan encountered when generating alternatives has no sinks.");
   }
+  rootNode.accept(new MemoryDistributer(memoryPerInstance / graphCreator.getMemoryConsumerCount()));
   InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
   rootNode.accept(propsVisitor);
   BranchesVisitor branchingVisitor=new BranchesVisitor();
@@ -81,9 +81,9 @@
   if (bestPlanRoot instanceof SinkPlanNode) {
     bestPlanSinks.add((SinkPlanNode)bestPlanRoot);
   }
-  new NodeConnector().connectNodes(bestPlanSinks);
-  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryMegabytes);
+  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryPerInstance);
   plan.setInstanceTypeName(instanceName);
   plan.setPlanConfiguration(pactPlan.getPlanConfiguration());
+  new PactRecordPostPass().postPass(plan);
   return plan;
 }

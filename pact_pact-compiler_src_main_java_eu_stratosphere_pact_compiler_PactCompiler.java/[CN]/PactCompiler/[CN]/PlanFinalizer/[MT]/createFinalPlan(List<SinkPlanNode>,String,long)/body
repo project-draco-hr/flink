@@ -1,0 +1,23 @@
+{
+  if (LOG.isDebugEnabled())   LOG.debug("Available memory per instance: " + memoryPerInstance);
+  this.memoryPerInstance=memPerInstance;
+  this.memoryConsumerWeights=0;
+  for (  SinkPlanNode node : sinks) {
+    node.accept(this);
+  }
+  if (this.memoryConsumerWeights > 0) {
+    final long memoryPerSubTask=this.memoryPerInstance / this.memoryConsumerWeights;
+    if (LOG.isDebugEnabled())     LOG.debug("Memory per consumer: " + memoryPerSubTask);
+    for (    PlanNode node : this.allNodes) {
+      final int consumerWeight=node.getMemoryConsumerWeight();
+      if (consumerWeight > 0) {
+        node.setMemoryPerSubTask(memoryPerSubTask * consumerWeight);
+        if (LOG.isDebugEnabled()) {
+          final long mib=(memoryPerSubTask * consumerWeight) >> 20;
+          LOG.debug("Assigned " + mib + " MiBytes memory to each subtask of "+ node.getPactContract().getName()+ " ("+ mib * node.getDegreeOfParallelism() + " MiBytes total.");
+        }
+      }
+    }
+  }
+  return new OptimizedPlan(this.sources,this.sinks,this.allNodes,jobName);
+}
