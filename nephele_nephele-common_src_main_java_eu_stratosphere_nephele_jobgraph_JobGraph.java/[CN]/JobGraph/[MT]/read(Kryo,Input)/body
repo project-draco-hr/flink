@@ -1,0 +1,64 @@
+{
+  this.jobID.read(kryo,input);
+  this.jobName=input.readString();
+  try {
+    readRequiredJarFiles(kryo,input);
+  }
+ catch (  IOException ioe) {
+    new RuntimeException(ioe);
+  }
+  final int numVertices=input.readInt();
+  for (int i=0; i < numVertices; i++) {
+    final String className=input.readString();
+    final JobVertexID id=new JobVertexID();
+    id.read(kryo,input);
+    final String vertexName=input.readString();
+    Class<? extends IOReadableWritable> c;
+    try {
+      c=ClassUtils.getRecordByName(className);
+    }
+ catch (    ClassNotFoundException cnfe) {
+      throw new RuntimeException(cnfe.toString());
+    }
+    Constructor<? extends IOReadableWritable> cst;
+    try {
+      cst=c.getConstructor(String.class,JobVertexID.class,JobGraph.class);
+      cst.newInstance(vertexName,id,this);
+    }
+ catch (    Exception e) {
+      throw new RuntimeException(e.toString());
+    }
+  }
+  final JobVertexID tmpID=new JobVertexID();
+  for (int i=0; i < numVertices; i++) {
+    AbstractJobVertex jv;
+    tmpID.read(kryo,input);
+    if (inputVertices.containsKey(tmpID)) {
+      jv=inputVertices.get(tmpID);
+    }
+ else {
+      if (outputVertices.containsKey(tmpID)) {
+        jv=outputVertices.get(tmpID);
+      }
+ else {
+        if (taskVertices.containsKey(tmpID)) {
+          jv=taskVertices.get(tmpID);
+        }
+ else {
+          throw new IllegalStateException("Cannot find vertex with ID " + tmpID + " in any vertex map.");
+        }
+      }
+    }
+    jv.read(kryo,input);
+  }
+  ClassLoader cl=null;
+  try {
+    cl=LibraryCacheManager.getClassLoader(this.jobID);
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Error initializing class loader: " + StringUtils.stringifyException(ioe));
+  }
+  this.jobConfiguration=new Configuration(cl);
+  this.jobConfiguration.read(kryo,input);
+  this.taskManagerConfiguration.read(kryo,input);
+}

@@ -1,0 +1,50 @@
+{
+  this.jobID.write(kryo,output);
+  output.writeInt(this.stages.size());
+  output.writeInt(this.groupVertices.size());
+  Iterator<ManagementGroupVertex> it=new ManagementGroupVertexIterator(this,true,-1);
+  while (it.hasNext()) {
+    final ManagementGroupVertex groupVertex=it.next();
+    groupVertex.getID().write(kryo,output);
+    output.writeInt(groupVertex.getStage().getStageNumber());
+    output.writeString(groupVertex.getName());
+  }
+  it=new ManagementGroupVertexIterator(this,true,-1);
+  while (it.hasNext()) {
+    final ManagementGroupVertex groupVertex=it.next();
+    groupVertex.getID().write(kryo,output);
+    groupVertex.write(kryo,output);
+  }
+  output.writeInt(this.vertices.size());
+  Iterator<ManagementVertex> it2=new ManagementGraphIterator(this,true);
+  while (it2.hasNext()) {
+    final ManagementVertex managementVertex=it2.next();
+    managementVertex.getID().write(kryo,output);
+    managementVertex.getGroupVertex().getID().write(kryo,output);
+    output.writeString(managementVertex.getInstanceName());
+    output.writeString(managementVertex.getInstanceType());
+    output.writeString(managementVertex.getCheckpointState());
+    output.writeInt(managementVertex.getIndexInGroup());
+    managementVertex.write(kryo,output);
+  }
+  it2=vertices.values().iterator();
+  while (it2.hasNext()) {
+    final ManagementVertex managementVertex=it2.next();
+    managementVertex.getID().write(kryo,output);
+    for (int i=0; i < managementVertex.getNumberOfOutputGates(); i++) {
+      final ManagementGate outputGate=managementVertex.getOutputGate(i);
+      output.writeInt(outputGate.getNumberOfForwardEdges());
+      for (int j=0; j < outputGate.getNumberOfForwardEdges(); j++) {
+        final ManagementEdge edge=outputGate.getForwardEdge(j);
+        edge.getSourceEdgeID().write(kryo,output);
+        edge.getTargetEdgeID().write(kryo,output);
+        edge.getTarget().getVertex().getID().write(kryo,output);
+        output.writeInt(edge.getTarget().getIndex());
+        output.writeInt(edge.getSourceIndex());
+        output.writeInt(edge.getTargetIndex());
+        EnumUtils.writeEnum(output,edge.getChannelType());
+        EnumUtils.writeEnum(output,edge.getCompressionLevel());
+      }
+    }
+  }
+}

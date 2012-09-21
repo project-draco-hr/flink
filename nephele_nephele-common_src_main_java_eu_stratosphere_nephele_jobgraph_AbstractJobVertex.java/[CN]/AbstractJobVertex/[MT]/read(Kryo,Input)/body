@@ -1,0 +1,62 @@
+{
+  if (jobGraph == null) {
+    throw new IllegalStateException("jobGraph is null, cannot deserialize");
+  }
+  this.instanceType=input.readString();
+  this.numberOfSubtasks=input.readInt();
+  this.numberOfSubtasksPerInstance=input.readInt();
+  this.numberOfExecutionRetries=input.readInt();
+  if (input.readBoolean()) {
+    final JobVertexID id=new JobVertexID();
+    id.read(kryo,input);
+    final AbstractJobVertex vertexToShareInstancesWith=this.jobGraph.findVertexByID(id);
+    if (vertexToShareInstancesWith == null) {
+      throw new IllegalStateException("Cannot find vertex with id " + id + " share instances with");
+    }
+    this.vertexToShareInstancesWith=vertexToShareInstancesWith;
+  }
+  ClassLoader cl=null;
+  try {
+    cl=LibraryCacheManager.getClassLoader(this.getJobGraph().getJobID());
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Error initializying class loader: " + StringUtils.stringifyException(ioe));
+  }
+  this.configuration=new Configuration(cl);
+  this.configuration.read(kryo,input);
+  final int numForwardEdges=input.readInt();
+  final JobVertexID tmpID=new JobVertexID();
+  for (int i=0; i < numForwardEdges; i++) {
+    if (input.readBoolean()) {
+      tmpID.read(kryo,input);
+      final AbstractJobVertex jv=jobGraph.findVertexByID(tmpID);
+      if (jv == null) {
+        throw new IllegalStateException("Cannot find vertex with id " + tmpID);
+      }
+      final ChannelType channelType=EnumUtils.readEnum(input,ChannelType.class);
+      final CompressionLevel compressionLevel=EnumUtils.readEnum(input,CompressionLevel.class);
+      final DistributionPattern distributionPattern=EnumUtils.readEnum(input,DistributionPattern.class);
+      final int indexOfInputGate=input.readInt();
+      try {
+        this.connectTo(jv,channelType,compressionLevel,i,indexOfInputGate,distributionPattern);
+      }
+ catch (      JobGraphDefinitionException e) {
+        throw new IllegalStateException(StringUtils.stringifyException(e));
+      }
+    }
+ else {
+      this.forwardEdges.add(null);
+    }
+  }
+  final boolean isNotNull=input.readBoolean();
+  if (!isNotNull) {
+    return;
+  }
+  final String className=input.readString();
+  try {
+    this.invokableClass=(Class<? extends AbstractInvokable>)Class.forName(className,true,cl);
+  }
+ catch (  ClassNotFoundException cnfe) {
+    throw new RuntimeException("Class " + className + " not found in one of the supplied jar files: "+ StringUtils.stringifyException(cnfe));
+  }
+}
