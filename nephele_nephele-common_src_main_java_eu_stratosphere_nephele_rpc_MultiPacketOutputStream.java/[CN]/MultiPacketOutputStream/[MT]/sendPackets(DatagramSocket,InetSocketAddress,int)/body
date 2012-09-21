@@ -1,0 +1,28 @@
+{
+  if (this.totalLen == 0) {
+    return;
+  }
+  final int maximumPacketSize=RPCMessage.MAXIMUM_MSG_SIZE + RPCMessage.METADATA_SIZE;
+  final short numberOfPackets=(short)(this.totalLen / maximumPacketSize + 1);
+  for (short i=0; i < numberOfPackets; ++i) {
+    final boolean lastPacket=(i == (numberOfPackets - 1));
+    int offset;
+    if (lastPacket) {
+      offset=(numberOfPackets - 1) * maximumPacketSize + this.lenInPacket;
+    }
+ else {
+      offset=(i + 1) * maximumPacketSize - RPCMessage.METADATA_SIZE;
+    }
+    shortToByteArray(i,this.buf,offset);
+    shortToByteArray(numberOfPackets,this.buf,offset + 2);
+    DatagramPacket packet;
+    if (lastPacket) {
+      packet=new DatagramPacket(this.buf,i * maximumPacketSize,this.lenInPacket + RPCMessage.METADATA_SIZE);
+    }
+ else {
+      packet=new DatagramPacket(this.buf,i * maximumPacketSize,maximumPacketSize);
+    }
+    packet.setSocketAddress(remoteAddress);
+    socket.send(packet);
+  }
+}
