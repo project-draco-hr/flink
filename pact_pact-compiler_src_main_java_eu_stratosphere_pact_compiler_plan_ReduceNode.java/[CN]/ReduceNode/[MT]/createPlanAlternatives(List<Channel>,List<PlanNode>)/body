@@ -3,21 +3,21 @@
   for (  Channel c : inputs) {
     final GlobalProperties gprops=c.getGlobalProperties();
     final LocalProperties lprops=c.getLocalProperties();
-    if (gprops.getPartitioning().isPartitionedOnKey() && this.keys.isValidSubset(gprops.getPartitionedFields())) {
-      if (lprops.getOrdering() != null && lprops.getOrdering().groupsFields(this.keys)) {
+    if (gprops.isPartitionedOnFields(this.keys)) {
+      if (lprops.areFieldsGrouped(this.keys)) {
         if (c.getShipStrategy() == ShipStrategyType.FORWARD) {
           c.setLocalStrategy(defaultStrat);
-          outputPlans.add(new SingleInputPlanNode(this,c,DriverStrategy.GROUP));
+          outputPlans.add(new SingleInputPlanNode(this,c,DriverStrategy.GROUP,Utils.createOrderedFromSet(this.keys)));
         }
  else {
           Channel toCombiner=new Channel(c.getSource());
           toCombiner.setShipStrategy(ShipStrategyType.FORWARD);
           toCombiner.setLocalStrategy(LocalStrategy.COMBININGSORT,c.getLocalStrategyKeys(),c.getLocalStrategySortOrder());
-          SingleInputPlanNode combiner=new SingleInputPlanNode(this,toCombiner,DriverStrategy.GROUP);
+          SingleInputPlanNode combiner=new SingleInputPlanNode(this,toCombiner,DriverStrategy.GROUP,Utils.createOrderedFromSet(this.keys));
           Channel toReducer=new Channel(combiner);
           toReducer.setShipStrategy(c.getShipStrategy(),c.getShipStrategyKeys(),c.getShipStrategySortOrder());
           toReducer.setLocalStrategy(defaultStrat,c.getLocalStrategyKeys(),c.getLocalStrategySortOrder());
-          outputPlans.add(new SingleInputPlanNode(this,toReducer,DriverStrategy.GROUP));
+          outputPlans.add(new SingleInputPlanNode(this,toReducer,DriverStrategy.GROUP,Utils.createOrderedFromSet(this.keys)));
         }
       }
     }
