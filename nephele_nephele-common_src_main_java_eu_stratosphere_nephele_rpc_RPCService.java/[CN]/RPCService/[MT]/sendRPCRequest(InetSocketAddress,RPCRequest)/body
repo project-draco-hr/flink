@@ -2,29 +2,33 @@
   if (this.shutdownRequested.get()) {
     throw new IOException("Shutdown of RPC service has already been requested");
   }
-  final Integer requestID=Integer.valueOf(request.getRequestID());
-  this.pendingRequests.put(requestID,request);
+  DatagramPacket[] packets=messageToPackets(remoteSocketAddress,request);
+  final Integer messageID=Integer.valueOf(request.getMessageID());
+  this.pendingRequests.put(messageID,request);
   for (int i=0; i < RETRY_LIMIT; ++i) {
-    this.senderThread.sendMessage(remoteSocketAddress,request);
+    sendPackets(packets);
+    try {
 synchronized (request) {
-      try {
         request.wait(TIMEOUT);
       }
- catch (      InterruptedException ie) {
-        throw new IOException(ie);
-      }
     }
-    final RPCResponse rpcResponse=this.pendingResponses.remove(requestID);
+ catch (    InterruptedException ie) {
+      Log.debug("Caught interrupted exception while waiting for RPC request to complete: ",ie);
+      return null;
+    }
+    final RPCResponse rpcResponse=this.pendingResponses.remove(messageID);
     if (rpcResponse == null) {
+      Log.debug("Timeout, retransmitting request " + request.getMessageID());
       continue;
     }
-    this.pendingRequests.remove(requestID);
-    this.senderThread.sendMessage(remoteSocketAddress,new RPCCleanup(request.getRequestID()));
+    this.pendingRequests.remove(messageID);
+    packets=messageToPackets(remoteSocketAddress,new RPCCleanup(request.getMessageID()));
+    sendPackets(packets);
     if (rpcResponse instanceof RPCReturnValue) {
       return ((RPCReturnValue)rpcResponse).getRetVal();
     }
     throw ((RPCThrowable)rpcResponse).getThrowable();
   }
-  this.pendingRequests.remove(requestID);
+  this.pendingRequests.remove(messageID);
   throw new IOException("Unable to complete RPC of method " + request.getMethodName() + " on "+ remoteSocketAddress);
 }
