@@ -5,14 +5,17 @@
   TypeSerializer serializer=getInputSerializer(getIterationInputIndex());
   output=(Collector<OT>)iterationCollector();
   while (!terminationRequested()) {
+    notifyMonitor(IterationMonitoring.Event.HEAD_STARTING);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
     }
+    barrier.setup();
+    notifyMonitor(IterationMonitoring.Event.HEAD_PACT_STARTING);
     if (!inFirstIteration()) {
       reinstantiateDriver();
     }
-    barrier.setup();
     super.invoke();
+    notifyMonitor(IterationMonitoring.Event.HEAD_PACT_FINISHED);
     EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
     sendEventToAllIterationOutputs(endOfSuperstepEvent);
     DataInputView superstepResult=backChannel.getReadEndAfterSuperstepEnded();
@@ -20,6 +23,8 @@
       log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
     }
     sendEventToSync(endOfSuperstepEvent);
+    notifyMonitor(IterationMonitoring.Event.HEAD_FINISHED);
+    notifyMonitor(IterationMonitoring.Event.HEAD_WAITING_FOR_OTHERS);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("waiting for other workers in iteration [" + currentIteration() + "]"));
     }
