@@ -11,11 +11,18 @@
   if (instanceType == null) {
     instanceType=instanceManager.getDefaultInstanceType();
   }
-  final Class<? extends AbstractInvokable> invokableClass=jobVertex.getInvokableClass();
+  Class<? extends AbstractInvokable> invokableClass=null;
+  try {
+    invokableClass=(Class<? extends AbstractInvokable>)Class.forName(jobVertex.getInvokableClassName(),false,jobClassLoader);
+  }
+ catch (  ClassNotFoundException e) {
+    LOG.error(e);
+    throw new GraphConversionException(StringUtils.stringifyException(e));
+  }
   if (invokableClass == null) {
     throw new GraphConversionException("JobVertex " + jobVertex.getID() + " ("+ jobVertex.getName()+ ") does not specify a task");
   }
-  final ExecutionSignature signature=ExecutionSignature.createSignature(jobVertex.getInvokableClass(),jobVertex.getJobGraph().getJobID());
+  final ExecutionSignature signature=ExecutionSignature.createSignature(invokableClass,jobVertex.getJobGraph().getJobID());
   ExecutionGroupVertex groupVertex=null;
   try {
     groupVertex=new ExecutionGroupVertex(jobVertex.getName(),jobVertex.getID(),this,jobVertex.getNumberOfSubtasks(),instanceType,userDefinedInstanceType,jobVertex.getNumberOfSubtasksPerInstance(),jobVertex.getVertexToShareInstancesWith() != null ? true : false,jobVertex.getNumberOfExecutionRetries(),jobVertex.getConfiguration(),signature,invokableClass);
