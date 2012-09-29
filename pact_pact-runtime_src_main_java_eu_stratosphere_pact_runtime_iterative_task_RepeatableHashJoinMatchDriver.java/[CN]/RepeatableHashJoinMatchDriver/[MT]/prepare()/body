@@ -1,0 +1,27 @@
+{
+  if (!firstIteration) {
+    return;
+  }
+  TaskConfig config=taskContext.getTaskConfig();
+  TypeSerializer<IT1> probesideSerializer=taskContext.getInputSerializer(0);
+  TypeSerializer<IT2> buildsideSerializer=taskContext.getInputSerializer(1);
+  TypeComparator<IT1> probesideComparator=taskContext.getInputComparator(0);
+  TypeComparator<IT2> buildSideComparator=taskContext.getInputComparator(1);
+  final TypePairComparatorFactory<IT1,IT2> pairComparatorFactory;
+  try {
+    final Class<? extends TypePairComparatorFactory<IT1,IT2>> factoryClass=config.getPairComparatorFactory(taskContext.getUserCodeClassLoader());
+    if (factoryClass == null) {
+      @SuppressWarnings("unchecked") TypePairComparatorFactory<IT1,IT2> pactRecordFactory=(TypePairComparatorFactory<IT1,IT2>)PactRecordPairComparatorFactory.get();
+      pairComparatorFactory=pactRecordFactory;
+    }
+ else {
+      @SuppressWarnings("unchecked") final Class<TypePairComparatorFactory<IT1,IT2>> clazz=(Class<TypePairComparatorFactory<IT1,IT2>>)(Class<?>)TypePairComparatorFactory.class;
+      pairComparatorFactory=InstantiationUtil.instantiate(factoryClass,clazz);
+    }
+  }
+ catch (  ClassNotFoundException e) {
+    throw new Exception("The class registered as TypePairComparatorFactory cloud not be loaded.",e);
+  }
+  List<MemorySegment> memSegments=taskContext.getMemoryManager().allocatePages(taskContext.getOwningNepheleTask(),config.getMemorySize());
+  hashJoin=new MutableHashTable(buildsideSerializer,probesideSerializer,buildSideComparator,probesideComparator,pairComparatorFactory.createComparator12(probesideComparator,buildSideComparator),memSegments,taskContext.getIOManager());
+}

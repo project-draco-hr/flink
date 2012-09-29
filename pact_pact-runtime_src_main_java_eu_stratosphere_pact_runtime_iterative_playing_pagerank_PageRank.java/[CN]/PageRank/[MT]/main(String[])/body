@@ -5,7 +5,7 @@
   String transitionMatrixInputPath="file://" + PlayConstants.PLAY_DIR + "test-inputs/pagerank/transitionMatrix";
   String outputPath="file:///tmp/stratosphere/iterations";
   String confPath=PlayConstants.PLAY_DIR + "local-conf";
-  int memoryPerTask=100;
+  int memoryPerTask=25;
   if (args.length == 7) {
     degreeOfParallelism=Integer.parseInt(args[0]);
     numSubTasksPerInstance=Integer.parseInt(args[1]);
@@ -29,14 +29,11 @@
   headConfig.setBackChannelMemoryFraction(0.8f);
   JobTaskVertex intermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"BulkIterationIntermediate",jobGraph,degreeOfParallelism,numSubTasksPerInstance);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
-  intermediateConfig.setDriver(MatchDriver.class);
+  intermediateConfig.setDriver(RepeatableHashJoinMatchDriver.class);
   intermediateConfig.setStubClass(DotProductMatch.class);
-  intermediateConfig.setLocalStrategy(TaskConfig.LocalStrategy.HYBRIDHASH_FIRST);
   PactRecordComparatorFactory.writeComparatorSetupToConfig(intermediateConfig.getConfigForInputParameters(0),new int[]{0},new Class[]{PactLong.class},new boolean[]{true});
   PactRecordComparatorFactory.writeComparatorSetupToConfig(intermediateConfig.getConfigForInputParameters(1),new int[]{0},new Class[]{PactLong.class},new boolean[]{true});
   intermediateConfig.setMemorySize(memoryPerTask * JobGraphUtils.MEGABYTE);
-  intermediateConfig.setGateCached(1);
-  intermediateConfig.setInputGateCacheMemoryFraction(0.5f);
   JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"BulkIterationTail",jobGraph,degreeOfParallelism,numSubTasksPerInstance);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
   tailConfig.setLocalStrategy(TaskConfig.LocalStrategy.SORT);
