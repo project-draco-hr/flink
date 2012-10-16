@@ -33,10 +33,20 @@
     throw new Exception("Failed to initialize discovery service. " + e.getMessage(),e);
   }
   this.localInstanceConnectionInfo=new InstanceConnectionInfo(taskManagerAddress,ipcPort,dataPort);
+  RPCService rpcService=null;
+  try {
+    rpcService=new RPCService(ipcPort,4,ServerTypeUtils.getRPCTypesToRegister());
+  }
+ catch (  IOException e) {
+    LOG.error(StringUtils.stringifyException(e));
+    throw new Exception("Failed to taskmanager server. " + e.getMessage(),e);
+  }
+  this.rpcService=rpcService;
+  this.rpcService.setProtocolCallbackHandler(TaskOperationProtocol.class,this);
   LOG.info("Announcing connection information " + this.localInstanceConnectionInfo + " to job manager");
   JobManagerProtocol jobManager=null;
   try {
-    jobManager=RPC.getProxy(JobManagerProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    jobManager=this.rpcService.getProxy(jobManagerAddress,JobManagerProtocol.class);
   }
  catch (  IOException e) {
     LOG.error(StringUtils.stringifyException(e));
@@ -45,7 +55,7 @@
   this.jobManager=jobManager;
   InputSplitProviderProtocol globalInputSplitProvider=null;
   try {
-    globalInputSplitProvider=RPC.getProxy(InputSplitProviderProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    globalInputSplitProvider=this.rpcService.getProxy(jobManagerAddress,InputSplitProviderProtocol.class);
   }
  catch (  IOException e) {
     LOG.error(StringUtils.stringifyException(e));
@@ -54,7 +64,7 @@
   this.globalInputSplitProvider=globalInputSplitProvider;
   ChannelLookupProtocol lookupService=null;
   try {
-    lookupService=RPC.getProxy(ChannelLookupProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    lookupService=this.rpcService.getProxy(jobManagerAddress,ChannelLookupProtocol.class);
   }
  catch (  IOException e) {
     LOG.error(StringUtils.stringifyException(e));
@@ -63,23 +73,13 @@
   this.lookupService=lookupService;
   PluginCommunicationProtocol pluginCommunicationService=null;
   try {
-    pluginCommunicationService=RPC.getProxy(PluginCommunicationProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    pluginCommunicationService=this.rpcService.getProxy(jobManagerAddress,PluginCommunicationProtocol.class);
   }
  catch (  IOException e) {
     LOG.error(StringUtils.stringifyException(e));
     throw new Exception("Failed to initialize plugin communication protocol. " + e.getMessage(),e);
   }
   this.pluginCommunicationService=pluginCommunicationService;
-  Server taskManagerServer=null;
-  try {
-    taskManagerServer=RPC.getServer(this,taskManagerAddress.getHostName(),ipcPort,handlerCount);
-    taskManagerServer.start();
-  }
- catch (  IOException e) {
-    LOG.error(StringUtils.stringifyException(e));
-    throw new Exception("Failed to taskmanager server. " + e.getMessage(),e);
-  }
-  this.taskManagerServer=taskManagerServer;
   if (GlobalConfiguration.getBoolean(ProfilingUtils.ENABLE_PROFILING_KEY,false)) {
     final String profilerClassName=GlobalConfiguration.getString(ProfilingUtils.TASKMANAGER_CLASSNAME_KEY,null);
     if (profilerClassName == null) {

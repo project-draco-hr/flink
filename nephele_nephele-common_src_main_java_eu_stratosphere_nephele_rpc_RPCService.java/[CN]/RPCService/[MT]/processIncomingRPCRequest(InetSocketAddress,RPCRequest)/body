@@ -1,0 +1,46 @@
+{
+  final Integer messageID=Integer.valueOf(rpcRequest.getMessageID());
+  if (this.requestsBeingProcessed.putIfAbsent(messageID,rpcRequest) != null) {
+    Log.debug("Request " + rpcRequest.getMessageID() + " is already being processed at the moment");
+    return;
+  }
+  final CachedResponse cachedResponse=this.cachedResponses.get(messageID);
+  if (cachedResponse != null) {
+    try {
+      sendPackets(cachedResponse.packets);
+    }
+ catch (    IOException e) {
+      Log.error("Caught exception while trying to send RPC response: ",e);
+    }
+ finally {
+      this.requestsBeingProcessed.remove(messageID);
+    }
+    return;
+  }
+  final RPCProtocol callbackHandler=callbackHandlers.get(rpcRequest.getInterfaceName());
+  if (callbackHandler == null) {
+    Log.error("Cannot find callback handler for protocol " + rpcRequest.getInterfaceName());
+    this.requestsBeingProcessed.remove(messageID);
+    return;
+  }
+  try {
+    final Method method=callbackHandler.getClass().getMethod(rpcRequest.getMethodName(),rpcRequest.getParameterTypes());
+    RPCResponse rpcResponse=null;
+    try {
+      final Object retVal=method.invoke(callbackHandler,rpcRequest.getArgs());
+      rpcResponse=new RPCReturnValue(rpcRequest.getMessageID(),retVal);
+    }
+ catch (    InvocationTargetException ite) {
+      rpcResponse=new RPCThrowable(rpcRequest.getMessageID(),ite.getTargetException());
+    }
+    final DatagramPacket[] packets=messageToPackets(remoteSocketAddress,rpcResponse);
+    cachedResponses.put(messageID,new CachedResponse(System.currentTimeMillis(),packets));
+    sendPackets(packets);
+  }
+ catch (  Exception e) {
+    Log.error("Caught processing RPC request: ",e);
+  }
+ finally {
+    this.requestsBeingProcessed.remove(messageID);
+  }
+}
