@@ -1,0 +1,27 @@
+{
+  final T record=this.nextRecordToSerialize;
+  if (record == null) {
+    return true;
+  }
+  if (buffer != this.lastBuffer) {
+    if (!buffer.isBackedByMemory()) {
+      throw new IllegalStateException("This record serializer only works with memory backed buffers");
+    }
+    this.wrapper=new DataOutputWrapper(((MemoryBuffer)buffer).getByteBuffer());
+    this.lastBuffer=buffer;
+  }
+  try {
+    record.write(this.wrapper);
+  }
+ catch (  BufferOverflowException e) {
+    this.wrapper.buffer.position(this.wrapper.buffer.position() - this.wrapper.written);
+    this.wrapper.written=0;
+    if (this.wrapper.buffer.position() == 0) {
+      throw new IOException("Record " + this.nextRecordToSerialize + " is too large to be serialized");
+    }
+    return false;
+  }
+  this.nextRecordToSerialize=null;
+  this.wrapper.written=0;
+  return true;
+}
