@@ -1,0 +1,22 @@
+{
+  if ((this.acceptedLocalFirst != null && candidate1.getLocalStrategy() != this.acceptedLocalFirst) || (this.acceptedLocalSecond != null && candidate2.getLocalStrategy() != this.acceptedLocalSecond)) {
+    return;
+  }
+  final GlobalProperties gp1=candidate1.getGlobalProperties();
+  final GlobalProperties gp2=candidate2.getGlobalProperties();
+  if (!((gp1.isFullyReplicated() && gp2.getPartitioning().isPartitioned()) || (gp2.isFullyReplicated() && gp1.getPartitioning().isPartitioned()) || (gp1.isPartitionedOnFields(this.keySet1) && gp2.isPartitionedOnFields(this.keySet2) && gp1.getPartitioning() == gp2.getPartitioning()))) {
+    return;
+  }
+  final LocalProperties lp1=candidate1.getLocalProperties();
+  final LocalProperties lp2=candidate2.getLocalProperties();
+  final int numKeys=this.keySet1.size();
+  if ((this.driverStrategy == null || this.driverStrategy == DriverStrategy.MERGE) && lp1.getOrdering() != null && lp2.getOrdering() != null && this.keys1Order.isMetBy(lp1.getOrdering()) && this.keys2Order.isMetBy(lp2.getOrdering()) && lp1.getOrdering().isOrderEqualOnFirstNFields(lp2.getOrdering(),numKeys)) {
+    outputPlans.add(new DualInputPlanNode(this,candidate1,candidate2,DriverStrategy.MERGE,this.keySet1,this.keySet2,getDirections(lp1.getOrdering(),numKeys)));
+  }
+  if (this.driverStrategy == null || this.driverStrategy == DriverStrategy.HYBRIDHASH_FIRST) {
+    outputPlans.add(new DualInputPlanNode(this,candidate1,candidate2,DriverStrategy.HYBRIDHASH_FIRST,this.keySet1,this.keySet2));
+  }
+  if (this.driverStrategy == null || this.driverStrategy == DriverStrategy.HYBRIDHASH_SECOND) {
+    outputPlans.add(new DualInputPlanNode(this,candidate1,candidate2,DriverStrategy.HYBRIDHASH_SECOND,this.keySet1,this.keySet2));
+  }
+}
