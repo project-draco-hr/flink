@@ -5,18 +5,12 @@
   if (log.isInfoEnabled()) {
     log.info(formatLogString("wrapping input [0] with an interrupting iterator that waits " + "for [" + numberOfEventsUntilInterrupt + "] event(s)"));
   }
+  if (taskConfig.usesConvergenceCriterion()) {
+    convergenceCriterion=InstantiationUtil.instantiate(taskConfig.getConvergenceCriterion(),ConvergenceCriterion.class);
+  }
   headEventReader=new MutableRecordReader<PactRecord>(this,0);
-  headEventRecordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(headEventReader,ReaderInterruptionBehaviors.RELEASE_ON_INTERRUPT),numberOfEventsUntilInterrupt,name,this,0);
+  headEventRecordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(headEventReader,ReaderInterruptionBehaviors.RELEASE_ON_INTERRUPT),numberOfEventsUntilInterrupt,name,this,0,convergenceCriterion);
+  headEventReader.subscribeToEvent(headEventRecordIterator,WorkerDoneEvent.class);
   headEventReader.subscribeToEvent(headEventRecordIterator,EndOfSuperstepEvent.class);
   headEventReader.subscribeToEvent(headEventRecordIterator,TerminationEvent.class);
-  if (taskConfig.usesConvergenceCriterion()) {
-    int numberOfEventsUntilInterruptOnConvergenceGate=taskConfig.getNumberOfEventsUntilInterruptInIterativeGate(1);
-    convergenceCriterion=InstantiationUtil.instantiate(taskConfig.getConvergenceCriterion(),ConvergenceCriterion.class);
-    convergenceReader=new MutableRecordReader<PactRecord>(this,1);
-    convergenceRecordIterator=new InterruptingMutableObjectIterator<PactRecord>(new PactRecordNepheleReaderIterator(convergenceReader,ReaderInterruptionBehaviors.RELEASE_ON_INTERRUPT),numberOfEventsUntilInterruptOnConvergenceGate,name,this,1);
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("wrapping input [1] with an interrupting iterator that waits " + "for [" + numberOfEventsUntilInterruptOnConvergenceGate + "] event(s)"));
-    }
-    convergenceReader.subscribeToEvent(convergenceRecordIterator,EndOfSuperstepEvent.class);
-  }
 }
