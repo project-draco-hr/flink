@@ -1,12 +1,10 @@
 {
-synchronized (this.jobSubmitClient) {
-    final JobSubmissionResult submissionResult=this.jobSubmitClient.submitJob(this.jobGraph);
-    if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
-      LOG.error("ERROR: " + submissionResult.getDescription());
-      throw new JobExecutionException(submissionResult.getDescription(),false);
-    }
-    Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
+  final JobSubmissionResult submissionResult=this.jobSubmitClient.submitJob(this.jobGraph);
+  if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
+    LOG.error("ERROR: " + submissionResult.getDescription());
+    throw new JobExecutionException(submissionResult.getDescription(),false);
   }
+  Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
   long sleep=0;
   try {
     final int interval=this.jobSubmitClient.getRecommendedPollingInterval();
@@ -57,12 +55,14 @@ synchronized (this.jobSubmitClient) {
           startTimestamp=jobEvent.getTimestamp();
         }
         if (jobStatus == JobStatus.FINISHED) {
+          close();
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
           final long jobDuration=jobEvent.getTimestamp() - startTimestamp;
           System.out.println("Job duration (in ms): " + jobDuration);
           return jobDuration;
         }
  else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
+          close();
           Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
           LOG.info(jobEvent.getOptionalMessage());
           if (jobStatus == JobStatus.CANCELED) {
