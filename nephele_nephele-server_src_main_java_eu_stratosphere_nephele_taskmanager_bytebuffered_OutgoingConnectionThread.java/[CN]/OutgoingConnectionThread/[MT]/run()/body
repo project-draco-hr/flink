@@ -2,22 +2,29 @@
   while (!isInterrupted()) {
 synchronized (this.pendingConnectionRequests) {
       if (!this.pendingConnectionRequests.isEmpty()) {
-        final OutgoingConnection outgoingConnection=this.pendingConnectionRequests.poll();
-        try {
-          final SocketChannel socketChannel=SocketChannel.open();
-          socketChannel.configureBlocking(false);
-          final SelectionKey key=socketChannel.register(this.selector,SelectionKey.OP_CONNECT);
-          socketChannel.connect(outgoingConnection.getConnectionAddress());
-          key.attach(outgoingConnection);
-        }
- catch (        final IOException ioe) {
-          final Runnable reporterThread=new Runnable(){
-            @Override public void run(){
-              outgoingConnection.reportConnectionProblem(ioe);
-            }
+        final long now=System.currentTimeMillis();
+        final ConnectionRequest connectionRequest=this.pendingConnectionRequests.peek();
+        final long earliest=connectionRequest.earliestConnectionTime;
+        if (earliest == -1L || earliest <= now) {
+          this.pendingConnectionRequests.poll();
+          final OutgoingConnection outgoingConnection=connectionRequest.outgoingConnection;
+          try {
+            final SocketChannel socketChannel=SocketChannel.open();
+            socketChannel.configureBlocking(false);
+            final SelectionKey key=socketChannel.register(this.selector,SelectionKey.OP_CONNECT);
+            socketChannel.connect(outgoingConnection.getConnectionAddress());
+            key.attach(outgoingConnection);
           }
+ catch (          final IOException ioe) {
+            ioe.printStackTrace();
+            final Runnable reporterThread=new Runnable(){
+              @Override public void run(){
+                outgoingConnection.reportConnectionProblem(ioe);
+              }
+            }
 ;
-          new Thread(reporterThread).start();
+            new Thread(reporterThread).start();
+          }
         }
       }
     }
