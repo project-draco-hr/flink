@@ -1,0 +1,50 @@
+{
+  final Map<InstanceConnectionInfo,ConnectionInfoLookupResponse> forwardingTable=new HashMap<InstanceConnectionInfo,ConnectionInfoLookupResponse>();
+  final ExecutionGate outputGate=outputChannel.getOutputGate();
+  final List<ExecutionEdge> remainingReceivers=new ArrayList<ExecutionEdge>(outputGate.getNumberOfEdges());
+  final Queue<AbstractInstance> requesters=new LinkedList<AbstractInstance>();
+  final Set<AbstractInstance> remainingReceiverInstances=new HashSet<AbstractInstance>();
+  final int numberOfOutputChannels=outputGate.getNumberOfEdges();
+  for (int i=0; i < numberOfOutputChannels; ++i) {
+    final ExecutionEdge edge=outputGate.getEdge(i);
+    final ExecutionVertex targetVertex=edge.getInputGate().getVertex();
+    remainingReceivers.add(edge);
+    remainingReceiverInstances.add(targetVertex.getAllocatedResource().getInstance());
+  }
+  final ExecutionVertex sourceVertex=outputChannel.getOutputGate().getVertex();
+  requesters.add(sourceVertex.getAllocatedResource().getInstance());
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Creating new multicast forwarding table for " + sourceVertex + ", output channel ID: "+ outputChannel.getOutputChannelID());
+  }
+  while (!requesters.isEmpty()) {
+    final AbstractInstance currentRequester=requesters.poll();
+    final Iterator<ExecutionEdge> it=remainingReceivers.iterator();
+    final List<ChannelID> localTargets=new ArrayList<ChannelID>(16);
+    while (it.hasNext()) {
+      final ExecutionEdge edge=it.next();
+      final ExecutionVertex targetVertex=edge.getInputGate().getVertex();
+      if (targetVertex.getAllocatedResource().getInstance().equals(currentRequester)) {
+        localTargets.add(edge.getInputChannelID());
+        it.remove();
+      }
+    }
+    remainingReceiverInstances.remove(currentRequester);
+    final List<AbstractInstance> closestReceiverInstances=getClosestReceiverInstances(currentRequester,remainingReceiverInstances);
+    requesters.addAll(closestReceiverInstances);
+    final ConnectionInfoLookupResponse cilr=ConnectionInfoLookupResponse.createReceiverFoundAndReady();
+    final Iterator<ChannelID> localIt=localTargets.iterator();
+    while (localIt.hasNext()) {
+      cilr.addLocalTarget(localIt.next());
+    }
+    final Iterator<AbstractInstance> remoteIt=closestReceiverInstances.iterator();
+    while (remoteIt.hasNext()) {
+      final InstanceConnectionInfo ici=remoteIt.next().getInstanceConnectionInfo();
+      cilr.addRemoteTarget(new RemoteReceiver(new InetSocketAddress(ici.getAddress(),ici.getDataPort()),outputChannel.getConnectionID()));
+    }
+    forwardingTable.put(currentRequester.getInstanceConnectionInfo(),cilr);
+  }
+  if (!remainingReceivers.isEmpty()) {
+    throw new IllegalStateException("There are still " + remainingReceivers.size() + " unprocessed receivers left");
+  }
+  return new MulticastForwardingTable(forwardingTable);
+}

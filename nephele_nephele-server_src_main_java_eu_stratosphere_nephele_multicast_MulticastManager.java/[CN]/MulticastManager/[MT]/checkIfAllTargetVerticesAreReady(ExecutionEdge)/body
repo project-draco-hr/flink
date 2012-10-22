@@ -1,0 +1,25 @@
+{
+  final ExecutionGate outputGate=outputChannel.getOutputGate();
+  List<ExecutionVertex> verticesToDeploy=null;
+  final int numberOfOutputChannels=outputGate.getNumberOfEdges();
+  for (int i=0; i < numberOfOutputChannels; ++i) {
+    final ExecutionEdge c=outputGate.getEdge(i);
+    final ExecutionVertex targetVertex=c.getInputGate().getVertex();
+    if (targetVertex.getExecutionState() == ExecutionState.ASSIGNED) {
+      if (verticesToDeploy == null) {
+        verticesToDeploy=new ArrayList<ExecutionVertex>();
+      }
+      verticesToDeploy.add(targetVertex);
+    }
+ else {
+      if (targetVertex.getExecutionState() != ExecutionState.RUNNING && targetVertex.getExecutionState() != ExecutionState.FINISHING) {
+        return false;
+      }
+    }
+  }
+  if (verticesToDeploy != null) {
+    this.scheduler.deployAssignedVertices(verticesToDeploy);
+    return false;
+  }
+  return true;
+}
