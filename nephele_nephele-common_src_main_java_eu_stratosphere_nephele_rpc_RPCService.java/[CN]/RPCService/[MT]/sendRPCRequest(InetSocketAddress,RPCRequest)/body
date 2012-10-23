@@ -4,19 +4,23 @@
   }
   DatagramPacket[] packets=messageToPackets(remoteSocketAddress,request);
   final Integer messageID=Integer.valueOf(request.getMessageID());
-  this.pendingRequests.put(messageID,request);
+  final RPCRequestMonitor requestMonitor=new RPCRequestMonitor();
+  this.pendingRequests.put(messageID,requestMonitor);
   for (int i=0; i < RETRY_LIMIT; ++i) {
     sendPackets(packets);
+    RPCResponse rpcResponse;
     try {
-synchronized (request) {
-        request.wait(TIMEOUT);
+synchronized (requestMonitor) {
+        if (requestMonitor.rpcResponse == null) {
+          requestMonitor.wait(TIMEOUT);
+        }
+        rpcResponse=requestMonitor.rpcResponse;
       }
     }
  catch (    InterruptedException ie) {
       Log.debug("Caught interrupted exception while waiting for RPC request to complete: ",ie);
       return null;
     }
-    final RPCResponse rpcResponse=this.pendingResponses.remove(messageID);
     if (rpcResponse == null) {
       this.statistics.reportRequestTimeout(packets.length,i);
       Log.debug("Timeout, retransmitting request " + request.getMessageID());
