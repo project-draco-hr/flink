@@ -1,0 +1,53 @@
+{
+  final int numInputs=this.driver.getNumberOfInputs();
+  final TypeSerializer<?>[] inputSerializers=new TypeSerializer[numInputs];
+  final CloseableInputProvider<?>[] inputProviders=new CloseableInputProvider[numInputs];
+  final MutableObjectIterator<?>[] inputs=new MutableObjectIterator[numInputs];
+  final TypeComparator<?>[] driverComparators=this.driver.requiresComparatorOnInput() ? new TypeComparator[numInputs] : null;
+  for (int i=0; i < numInputs; i++) {
+    final TypeSerializerFactory<?> serializerFactory=this.config.getInputSerializer(i,this.userCodeClassLoader);
+    inputSerializers[i]=serializerFactory.getSerializer();
+    final MutableObjectIterator<?> inputIter;
+    if (serializerFactory.getDataType() == PactRecord.class) {
+      @SuppressWarnings("unchecked") MutableRecordReader<PactRecord> reader=(MutableRecordReader<PactRecord>)this.inputReaders[i];
+      inputIter=new PactRecordNepheleReaderIterator(reader,readerInterruptionBehavior());
+    }
+ else {
+      @SuppressWarnings("unchecked") MutableRecordReader<DeserializationDelegate<?>> reader=(MutableRecordReader<DeserializationDelegate<?>>)this.inputReaders[i];
+      @SuppressWarnings({"unchecked","rawtypes"}) final MutableObjectIterator<?> iter=new NepheleReaderIterator(reader,inputSerializers[i],readerInterruptionBehavior());
+      inputIter=iter;
+    }
+    final LocalStrategy localStrategy=this.config.getInputLocalStrategy(i);
+    if (localStrategy == null) {
+      inputs[i]=inputIter;
+    }
+ else {
+switch (localStrategy) {
+case NONE:
+        inputs[i]=inputIter;
+      break;
+case SORT:
+    @SuppressWarnings({"rawtypes","unchecked"}) UnilateralSortMerger<?> sorter=new UnilateralSortMerger(getMemoryManager(),getIOManager(),inputIter,this,inputSerializers[i],getLocalStrategyComparator(i),this.config.getMemoryInput(i),this.config.getFilehandlesInput(i),this.config.getSpillingThresholdInput(i));
+  inputProviders[i]=sorter;
+break;
+case COMBININGSORT:
+if (i != 0 || !(this.stub instanceof GenericReducer)) {
+throw new IllegalStateException("Performing combining sort outside a reduce task!");
+}
+@SuppressWarnings({"rawtypes","unchecked"}) CombiningUnilateralSortMerger<?> cSorter=new CombiningUnilateralSortMerger((GenericReducer)this.stub,getMemoryManager(),getIOManager(),inputIter,this,inputSerializers[i],getLocalStrategyComparator(i),this.config.getMemoryInput(i),this.config.getFilehandlesInput(i),this.config.getSpillingThresholdInput(i),false);
+inputProviders[i]=cSorter;
+break;
+default :
+throw new Exception("Unrecognized local strategy provided: " + localStrategy.name());
+}
+}
+if (driverComparators != null) {
+final TypeComparatorFactory<?> comparatorFactory=this.config.getDriverComparator(i,this.userCodeClassLoader);
+driverComparators[i]=comparatorFactory.createComparator();
+}
+}
+this.inputSerializers=inputSerializers;
+this.localStrategies=inputProviders;
+this.inputs=inputs;
+this.inputComparators=driverComparators;
+}
