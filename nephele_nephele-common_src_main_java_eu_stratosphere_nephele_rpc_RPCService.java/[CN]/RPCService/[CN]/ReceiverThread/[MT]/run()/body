@@ -20,19 +20,19 @@ catch (    IOException ioe) {
     final int length=dp.getLength() - RPCMessage.METADATA_SIZE;
     final byte[] dbbuf=dp.getData();
     final short numberOfPackets=byteArrayToShort(dbbuf,length + 2);
+    final short fragmentationID=byteArrayToShort(dbbuf,length + 4);
     if (numberOfPackets == 1) {
-      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(new SinglePacketInputStream(dbbuf,length)));
+      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(new SinglePacketInputStream(dbbuf,length)),fragmentationID);
     }
  else {
       final short packetIndex=byteArrayToShort(dbbuf,length);
-      final short fragmentationID=byteArrayToShort(dbbuf,length + 4);
       final MultiPacketInputStream mpis=this.rpcService.getIncompleteInputStream(remoteSocketAddress,fragmentationID,numberOfPackets);
       mpis.addPacket(packetIndex,dp);
       if (!mpis.isComplete()) {
         continue;
       }
       this.rpcService.removeIncompleteInputStream(remoteSocketAddress,fragmentationID);
-      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(mpis));
+      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(mpis),fragmentationID);
     }
   }
 }
