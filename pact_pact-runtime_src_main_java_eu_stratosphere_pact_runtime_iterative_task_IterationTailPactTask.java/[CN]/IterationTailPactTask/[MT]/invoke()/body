@@ -1,4 +1,5 @@
 {
+  boolean isJoinOnConstantDataPath=driver instanceof RepeatableHashJoinMatchDriver || driver instanceof RepeatableHashJoinMatchDriver2;
   final BlockingBackChannel backChannel=retrieveBackChannel();
   DataOutputCollector outputCollector=new DataOutputCollector(backChannel.getWriteEnd(),createOutputTypeSerializer(),validOutputs);
   output=outputCollector;
@@ -8,13 +9,14 @@
       log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
     }
     notifyMonitor(IterationMonitoring.Event.TAIL_PACT_STARTING);
-    if (!inFirstIteration()) {
+    if (!inFirstIteration() && !isJoinOnConstantDataPath) {
       reinstantiateDriver();
     }
     super.invoke();
     notifyMonitor(IterationMonitoring.Event.TAIL_PACT_FINISHED);
+    long elementsCollected=outputCollector.getElementsCollectedAndReset();
     if (log.isInfoEnabled()) {
-      log.info("IterationTail [" + getEnvironment().getIndexInSubtaskGroup() + "] inserted ["+ outputCollector.elementsCollected()+ "] elements into backchannel in iteration ["+ currentIteration()+ "]");
+      log.info("IterationTail [" + getEnvironment().getIndexInSubtaskGroup() + "] inserted ["+ elementsCollected+ "] elements into backchannel in iteration ["+ currentIteration()+ "]");
     }
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
@@ -28,5 +30,13 @@
       propagateEvent(new TerminationEvent());
     }
     notifyMonitor(IterationMonitoring.Event.TAIL_FINISHED);
+  }
+  if (isJoinOnConstantDataPath) {
+    if (driver instanceof RepeatableHashJoinMatchDriver) {
+      ((RepeatableHashJoinMatchDriver)driver).finalCleanup();
+    }
+ else {
+      ((RepeatableHashJoinMatchDriver2)driver).finalCleanup();
+    }
   }
 }
