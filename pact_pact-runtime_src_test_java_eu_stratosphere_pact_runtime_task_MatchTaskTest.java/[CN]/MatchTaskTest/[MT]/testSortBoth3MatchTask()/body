@@ -3,24 +3,22 @@
   int valCnt1=1;
   int keyCnt2=20;
   int valCnt2=20;
-  super.addInput(new UniformPactRecordGenerator(keyCnt1,valCnt1,false));
-  super.addInput(new UniformPactRecordGenerator(keyCnt2,valCnt2,false));
-  super.addOutput(this.outList);
-  MatchDriver<PactRecord,PactRecord,PactRecord> testTask=new MatchDriver<PactRecord,PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
-  super.getTaskConfig().setMemorySize(6 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(4);
-  final int[] keyPos1=new int[]{0};
-  final int[] keyPos2=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos1,keyClasses));
-  addInputComparator(new PactRecordComparator(keyPos2,keyClasses));
+  setOutput(this.outList);
+  addInputComparator(this.comparator1);
+  addInputComparator(this.comparator2);
+  getTaskConfig().setDriverPairComparator(PactRecordPairComparatorFactory.get());
+  getTaskConfig().setDriverStrategy(DriverStrategy.MERGE);
+  getTaskConfig().setMemoryDriver(BNLJN_MEM);
+  setNumFileHandlesForSort(4);
+  final MatchDriver<PactRecord,PactRecord,PactRecord> testTask=new MatchDriver<PactRecord,PactRecord,PactRecord>();
   try {
+    addInputSorted(new UniformPactRecordGenerator(keyCnt1,valCnt1,false),this.comparator1.duplicate());
+    addInputSorted(new UniformPactRecordGenerator(keyCnt2,valCnt2,false),this.comparator2.duplicate());
     testDriver(testTask,MockMatchStub.class);
   }
  catch (  Exception e) {
-    LOG.debug(e);
-    Assert.fail("Invoke method caused exception.");
+    e.printStackTrace();
+    Assert.fail("The test caused an exception.");
   }
   int expCnt=valCnt1 * valCnt2 * Math.min(keyCnt1,keyCnt2);
   Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ expCnt,this.outList.size() == expCnt);

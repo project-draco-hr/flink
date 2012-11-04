@@ -2,21 +2,20 @@
   int keyCnt=100;
   int valCnt=20;
   addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
-  addOutput(this.outList);
-  CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
-  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(2);
-  final int[] keyPos=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos,keyClasses));
-  boolean stubFailed=false;
+  addInputComparator(this.comparator);
+  setOutput(new DiscardingOutputCollector());
+  getTaskConfig().setDriverStrategy(DriverStrategy.GROUP);
+  getTaskConfig().setMemoryDriver(COMBINE_MEM);
+  getTaskConfig().setFilehandlesDriver(2);
+  final CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
   try {
     testDriver(testTask,MockFailingCombiningReduceStub.class);
+    Assert.fail("Exception not forwarded.");
   }
- catch (  Exception e) {
-    stubFailed=true;
+ catch (  ExpectedTestException etex) {
   }
-  Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
-  this.outList.clear();
+catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("Test failed due to an exception.");
+  }
 }

@@ -1,32 +1,30 @@
 {
-  int keyCnt=100000;
-  int valCnt=8;
+  final int keyCnt=100000;
+  final int valCnt=8;
   addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
-  addOutput(this.outList);
-  CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
-  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(2);
-  final int[] keyPos=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos,keyClasses));
+  addInputComparator(this.comparator);
+  setOutput(this.outList);
+  getTaskConfig().setDriverStrategy(DriverStrategy.GROUP);
+  getTaskConfig().setMemoryDriver(COMBINE_MEM);
+  getTaskConfig().setFilehandlesDriver(2);
+  final CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
   try {
     testDriver(testTask,MockCombiningReduceStub.class);
   }
  catch (  Exception e) {
-    LOG.debug(e);
+    e.printStackTrace();
     Assert.fail("Invoke method caused exception.");
   }
   int expSum=0;
   for (int i=1; i < valCnt; i++) {
     expSum+=i;
   }
-  HashMap<PactInteger,PactInteger> aggMap=new HashMap<PactInteger,PactInteger>();
+  final HashMap<PactInteger,PactInteger> aggMap=new HashMap<PactInteger,PactInteger>();
   for (  PactRecord record : this.outList) {
     PactInteger key=new PactInteger();
     PactInteger value=new PactInteger();
-    record.getField(0,key);
-    record.getField(1,value);
+    key=record.getField(0,key);
+    value=record.getField(1,value);
     PactInteger prevVal=aggMap.get(key);
     if (prevVal != null) {
       aggMap.put(key,new PactInteger(prevVal.getValue() + value.getValue()));

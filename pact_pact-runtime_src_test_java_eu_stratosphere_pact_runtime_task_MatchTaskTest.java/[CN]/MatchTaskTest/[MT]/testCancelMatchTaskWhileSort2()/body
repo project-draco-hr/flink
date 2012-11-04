@@ -1,26 +1,31 @@
 {
   int keyCnt=20;
   int valCnt=20;
-  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
-  super.addInput(new DelayingInfinitiveInputIterator(100));
-  super.addOutput(new NirvanaOutputList());
+  setOutput(new NirvanaOutputList());
+  addInputComparator(this.comparator1);
+  addInputComparator(this.comparator2);
+  getTaskConfig().setDriverPairComparator(PactRecordPairComparatorFactory.get());
+  getTaskConfig().setDriverStrategy(DriverStrategy.MERGE);
+  getTaskConfig().setMemoryDriver(BNLJN_MEM);
+  setNumFileHandlesForSort(4);
   final MatchDriver<PactRecord,PactRecord,PactRecord> testTask=new MatchDriver<PactRecord,PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
-  super.getTaskConfig().setMemorySize(6 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(4);
-  final int[] keyPos1=new int[]{0};
-  final int[] keyPos2=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos1,keyClasses));
-  addInputComparator(new PactRecordComparator(keyPos2,keyClasses));
+  try {
+    addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+    addInputSorted(new DelayingInfinitiveInputIterator(100),this.comparator1.duplicate());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("The test caused an exception.");
+  }
+  final AtomicBoolean success=new AtomicBoolean(false);
   Thread taskRunner=new Thread(){
     @Override public void run(){
       try {
         testDriver(testTask,MockMatchStub.class);
+        success.set(true);
       }
  catch (      Exception ie) {
         ie.printStackTrace();
-        Assert.fail("Task threw exception although it was properly canceled");
       }
     }
   }
@@ -35,4 +40,5 @@
  catch (  InterruptedException ie) {
     Assert.fail("Joining threads failed");
   }
+  Assert.assertTrue("Test threw an exception even though it was properly canceled.",success.get());
 }

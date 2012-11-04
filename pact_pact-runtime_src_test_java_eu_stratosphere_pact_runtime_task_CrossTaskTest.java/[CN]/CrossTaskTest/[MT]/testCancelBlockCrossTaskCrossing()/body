@@ -1,20 +1,21 @@
 {
   int keyCnt=10;
   int valCnt=1;
-  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
-  super.addInput(new DelayingInfinitiveInputIterator(100));
-  super.addOutput(this.outList);
+  setOutput(this.output);
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
+  addInput(new DelayingInfinitiveInputIterator(100));
+  getTaskConfig().setDriverStrategy(DriverStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND);
+  getTaskConfig().setMemoryDriver(CROSS_MEM);
   final CrossDriver<PactRecord,PactRecord,PactRecord> testTask=new CrossDriver<PactRecord,PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.NESTEDLOOP_BLOCKED_OUTER_SECOND);
-  super.getTaskConfig().setMemorySize(1 * 1024 * 1024);
+  final AtomicBoolean success=new AtomicBoolean(false);
   Thread taskRunner=new Thread(){
     @Override public void run(){
       try {
         testDriver(testTask,MockCrossStub.class);
+        success.set(true);
       }
  catch (      Exception ie) {
         ie.printStackTrace();
-        Assert.fail("Task threw exception although it was properly canceled");
       }
     }
   }
@@ -29,4 +30,5 @@
  catch (  InterruptedException ie) {
     Assert.fail("Joining threads failed");
   }
+  Assert.assertTrue("Exception was thrown despite proper canceling.",success.get());
 }

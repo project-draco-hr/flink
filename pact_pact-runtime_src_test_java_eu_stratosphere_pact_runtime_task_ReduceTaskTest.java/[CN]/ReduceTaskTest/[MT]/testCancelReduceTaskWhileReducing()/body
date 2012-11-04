@@ -1,23 +1,20 @@
 {
   final int keyCnt=1000;
   final int valCnt=2;
-  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
-  super.addOutput(new NirvanaOutputList());
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+  addInputComparator(this.comparator);
+  setOutput(new NirvanaOutputList());
+  getTaskConfig().setDriverStrategy(DriverStrategy.GROUP);
   final ReduceDriver<PactRecord,PactRecord> testTask=new ReduceDriver<PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT);
-  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(4);
-  final int[] keyPos=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos,keyClasses));
+  final AtomicBoolean success=new AtomicBoolean(false);
   Thread taskRunner=new Thread(){
     @Override public void run(){
       try {
         testDriver(testTask,MockDelayingReduceStub.class);
+        success.set(true);
       }
  catch (      Exception ie) {
         ie.printStackTrace();
-        Assert.fail("Task threw exception although it was properly canceled");
       }
     }
   }

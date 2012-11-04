@@ -5,8 +5,8 @@
   final int INPUT_2_DUPLICATES=4000;
   final int DUPLICATE_KEY=13;
   try {
-    final TestData.Generator generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    final TestData.Generator generator2=new Generator(SEED2,500,2048,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.Generator generator1=new Generator(SEED1,500,4096,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
+    final TestData.Generator generator2=new Generator(SEED2,500,2048,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
     final TestData.GeneratorIterator gen1Iter=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
     final TestData.GeneratorIterator gen2Iter=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
     final TestData.ConstantValueIterator const1Iter=new TestData.ConstantValueIterator(DUPLICATE_KEY,"LEFT String for Duplicate Keys",INPUT_1_DUPLICATES);
@@ -17,8 +17,8 @@
     final List<MutableObjectIterator<PactRecord>> inList2=new ArrayList<MutableObjectIterator<PactRecord>>();
     inList2.add(gen2Iter);
     inList2.add(const2Iter);
-    MutableObjectIterator<PactRecord> input1=new UnionIterator<PactRecord>(inList1);
-    MutableObjectIterator<PactRecord> input2=new UnionIterator<PactRecord>(inList2);
+    MutableObjectIterator<PactRecord> input1=new MergeIterator<PactRecord>(inList1,serializer1,comparator1.duplicate());
+    MutableObjectIterator<PactRecord> input2=new MergeIterator<PactRecord>(inList2,serializer2,comparator2.duplicate());
     final Map<TestData.Key,Collection<Match>> expectedMatchesMap=matchValues(collectData(input1),collectData(input2));
     generator1.reset();
     generator2.reset();
@@ -32,11 +32,11 @@
     inList2.clear();
     inList2.add(gen2Iter);
     inList2.add(const2Iter);
-    input1=new UnionIterator<PactRecord>(inList1);
-    input2=new UnionIterator<PactRecord>(inList2);
+    input1=new MergeIterator<PactRecord>(inList1,serializer1,comparator1.duplicate());
+    input2=new MergeIterator<PactRecord>(inList2,serializer2,comparator2.duplicate());
     final MatchStub matcher=new MatchRemovingMatcher(expectedMatchesMap);
     final Collector<PactRecord> collector=new DiscardingOutputCollector();
-    MergeMatchIterator<PactRecord,PactRecord,PactRecord> iterator=new MergeMatchIterator<PactRecord,PactRecord,PactRecord>(input1,input2,this.serializer1,this.comparator1,this.serializer2,this.comparator2,this.pairComparator,this.memoryManager,this.ioManager,MEMORY_SIZE,64,0.7f,0.00016f,LocalStrategy.SORT_BOTH_MERGE,parentTask);
+    MergeMatchIterator<PactRecord,PactRecord,PactRecord> iterator=new MergeMatchIterator<PactRecord,PactRecord,PactRecord>(input1,input2,this.serializer1,this.comparator1,this.serializer2,this.comparator2,this.pairComparator,this.memoryManager,this.ioManager,PAGES_FOR_BNLJN,this.parentTask);
     iterator.open();
     while (iterator.callWithNextKey(matcher,collector))     ;
     iterator.close();

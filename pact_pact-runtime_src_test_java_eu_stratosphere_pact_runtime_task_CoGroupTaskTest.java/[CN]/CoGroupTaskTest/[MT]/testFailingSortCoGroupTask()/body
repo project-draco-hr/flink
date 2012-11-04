@@ -3,25 +3,22 @@
   int valCnt1=2;
   int keyCnt2=200;
   int valCnt2=1;
-  super.addInput(new UniformPactRecordGenerator(keyCnt1,valCnt1,false));
-  super.addInput(new UniformPactRecordGenerator(keyCnt2,valCnt2,false));
-  super.addOutput(this.outList);
-  CoGroupDriver<PactRecord,PactRecord,PactRecord> testTask=new CoGroupDriver<PactRecord,PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT_BOTH_MERGE);
-  super.getTaskConfig().setMemorySize(6 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(4);
-  final int[] keyPos1=new int[]{0};
-  final int[] keyPos2=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos1,keyClasses));
-  addInputComparator(new PactRecordComparator(keyPos2,keyClasses));
-  boolean stubFailed=false;
+  setOutput(this.output);
+  addInput(new UniformPactRecordGenerator(keyCnt1,valCnt1,true));
+  addInput(new UniformPactRecordGenerator(keyCnt2,valCnt2,true));
+  addInputComparator(this.comparator1);
+  addInputComparator(this.comparator2);
+  getTaskConfig().setDriverPairComparator(PactRecordPairComparatorFactory.get());
+  getTaskConfig().setDriverStrategy(DriverStrategy.CO_GROUP);
+  final CoGroupDriver<PactRecord,PactRecord,PactRecord> testTask=new CoGroupDriver<PactRecord,PactRecord,PactRecord>();
   try {
     testDriver(testTask,MockFailingCoGroupStub.class);
+    Assert.fail("Stub exception was not forwarded.");
   }
- catch (  Exception e) {
-    stubFailed=true;
+ catch (  ExpectedTestException etex) {
   }
-  Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
-  this.outList.clear();
+catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("The test caused an exception.");
+  }
 }

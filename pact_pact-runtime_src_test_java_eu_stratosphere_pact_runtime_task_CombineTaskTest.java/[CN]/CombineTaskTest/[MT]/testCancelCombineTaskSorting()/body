@@ -1,21 +1,20 @@
 {
   addInput(new DelayingInfinitiveInputIterator(100));
-  addOutput(new NirvanaOutputList());
+  addInputComparator(this.comparator);
+  setOutput(new DiscardingOutputCollector());
+  getTaskConfig().setDriverStrategy(DriverStrategy.GROUP);
+  getTaskConfig().setMemoryDriver(COMBINE_MEM);
+  getTaskConfig().setFilehandlesDriver(2);
   final CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.COMBININGSORT);
-  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(2);
-  final int[] keyPos=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos,keyClasses));
+  final AtomicBoolean success=new AtomicBoolean(false);
   Thread taskRunner=new Thread(){
     @Override public void run(){
       try {
         testDriver(testTask,MockFailingCombiningReduceStub.class);
+        success.set(true);
       }
  catch (      Exception ie) {
         ie.printStackTrace();
-        Assert.fail("Task threw exception although it was properly canceled");
       }
     }
   }
@@ -30,4 +29,5 @@
  catch (  InterruptedException ie) {
     Assert.fail("Joining threads failed");
   }
+  Assert.assertTrue("Exception was thrown despite proper canceling.",success.get());
 }

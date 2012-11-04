@@ -1,21 +1,24 @@
 {
-  super.addInput(new DelayingInfinitiveInputIterator(100));
-  super.addOutput(new NirvanaOutputList());
+  addInputComparator(this.comparator);
+  setOutput(new NirvanaOutputList());
+  getTaskConfig().setDriverStrategy(DriverStrategy.GROUP);
   final ReduceDriver<PactRecord,PactRecord> testTask=new ReduceDriver<PactRecord,PactRecord>();
-  super.getTaskConfig().setLocalStrategy(LocalStrategy.SORT);
-  super.getTaskConfig().setMemorySize(3 * 1024 * 1024);
-  super.getTaskConfig().setNumFilehandles(4);
-  final int[] keyPos=new int[]{0};
-  @SuppressWarnings("unchecked") final Class<? extends Key>[] keyClasses=(Class<? extends Key>[])new Class[]{PactInteger.class};
-  addInputComparator(new PactRecordComparator(keyPos,keyClasses));
+  try {
+    addInputSorted(new DelayingInfinitiveInputIterator(100),this.comparator.duplicate());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail();
+  }
+  final AtomicBoolean success=new AtomicBoolean(false);
   Thread taskRunner=new Thread(){
     @Override public void run(){
       try {
         testDriver(testTask,MockReduceStub.class);
+        success.set(true);
       }
  catch (      Exception ie) {
         ie.printStackTrace();
-        Assert.fail("Task threw exception although it was properly canceled");
       }
     }
   }
@@ -30,4 +33,5 @@
  catch (  InterruptedException ie) {
     Assert.fail("Joining threads failed");
   }
+  Assert.assertTrue("Test threw an exception even though it was properly canceled.",success.get());
 }
