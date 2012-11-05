@@ -1,0 +1,11 @@
+{
+  final SopremoPlan actualPlan=this.parseScript("$li = read from 'file:///lineitem.json';\n" + "$filterLi = filter $li where $li.l_linenumber >= 1;\n" + "$groups = group $filterLi by [$filterLi.l_linestatus, $filterLi.l_returnflag] into {\n"+ "     first: $filterLi[0],\n"+ "	  count_qty: count($filterLi),\n"+ "	  sum_qty: sum($filterLi[*].l_quantity),\n"+ "	  mean_qty: mean($filterLi[*].l_quantity)\n"+ "};\n"+ "write $groups to 'file:///q1.result';\n");
+  final Source input=new Source("file:///lineitem.json");
+  final Selection filter=new Selection().withInputs(input).withCondition(new ComparativeExpression(new ObjectAccess("l_linenumber"),BinaryOperator.GREATER_EQUAL,new ConstantExpression(1)));
+  final BatchAggregationExpression batch=new BatchAggregationExpression();
+  final Grouping grouping=new Grouping().withInputs(filter).withGroupingKey(0,new ArrayCreation(new ObjectAccess("l_linestatus"),new ObjectAccess("l_returnflag"))).withResultProjection(new ObjectCreation(new ObjectCreation.FieldAssignment("first",batch.add(new ArrayAccessAsAggregation(0))),new ObjectCreation.FieldAssignment("count_qty",batch.add(CoreFunctions.COUNT)),new ObjectCreation.FieldAssignment("sum_qty",batch.add(CoreFunctions.SUM,new ObjectAccess("l_quantity"))),new ObjectCreation.FieldAssignment("mean_qty",batch.add(CoreFunctions.MEAN,new ObjectAccess("l_quantity")))));
+  final Sink sink=new Sink("file:///q1.result").withInputs(grouping);
+  final SopremoPlan expectedPlan=new SopremoPlan();
+  expectedPlan.setSinks(sink);
+  SopremoTest.assertPlanEquals(expectedPlan,actualPlan);
+}

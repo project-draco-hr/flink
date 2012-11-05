@@ -1,0 +1,20 @@
+{
+  return baseExpression.replace(new IsInstancePredicate(PathExpression.class),new TransformFunction(){
+    @Override public EvaluationExpression call(    EvaluationExpression argument){
+      PathExpression pathExpression=(PathExpression)argument;
+      final List<EvaluationExpression> fragments=pathExpression.getFragments();
+      if (fragments.size() <= 1)       return argument;
+      if (!(fragments.get(0) instanceof InputSelection) || !(fragments.get(1) instanceof ArrayAccess))       return argument;
+      InputSelection input=(InputSelection)fragments.get(0);
+      ArrayAccess arrayAccess=(ArrayAccess)fragments.get(1);
+      if (arrayAccess.getStartIndex() < 0 || arrayAccess.getEndIndex() < 0)       throw new IllegalArgumentException("Negative indexes cannot replaced currently");
+      if (arrayAccess.getStartIndex() > arrayAccess.getEndIndex())       throw new IllegalArgumentException("Array inversion is not directly supported");
+      final EvaluationExpression aggregation=new FunctionCall("array access",new AggregationFunction(new ArrayAccessAsAggregation(arrayAccess.getStartIndex(),arrayAccess.getEndIndex(),arrayAccess.isSelectingRange())),input);
+      if (fragments.size() == 2)       return aggregation;
+      final PathExpression rewrittenPath=new PathExpression(fragments.subList(2,fragments.size()));
+      rewrittenPath.add(0,aggregation);
+      return rewrittenPath;
+    }
+  }
+);
+}
