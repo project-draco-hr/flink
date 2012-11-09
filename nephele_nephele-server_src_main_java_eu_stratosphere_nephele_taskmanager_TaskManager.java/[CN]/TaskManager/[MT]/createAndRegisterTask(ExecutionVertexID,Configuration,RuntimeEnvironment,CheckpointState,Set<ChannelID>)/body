@@ -11,7 +11,6 @@
   Task task=null;
 synchronized (this) {
     final Task runningTask=this.runningTasks.get(id);
-    boolean registerTask=true;
     if (runningTask == null) {
       if (CheckpointUtils.hasCompleteCheckpointAvailable(id)) {
         task=new ReplayTask(id,environment,this);
@@ -21,37 +20,29 @@ synchronized (this) {
       }
     }
  else {
-      if (runningTask instanceof RuntimeTask) {
-        if (CheckpointUtils.hasPartialCheckpointAvailable(id)) {
-          task=new ReplayTask((RuntimeTask)runningTask,this);
-        }
- else {
-          return null;
-        }
+      if (CheckpointUtils.hasPartialCheckpointAvailable(id)) {
+        task=new ReplayTask((RuntimeTask)runningTask,this);
       }
  else {
-        task=runningTask;
-        registerTask=false;
+        return null;
       }
     }
     final Environment ee=task.getEnvironment();
-    if (registerTask) {
-      this.byteBufferedChannelManager.register(task,activeOutputChannels);
-      boolean enableProfiling=false;
-      if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
-        enableProfiling=true;
-      }
-      if (enableProfiling) {
-        task.registerProfiler(this.profiler,jobConfiguration);
-      }
-      if (!this.taskManagerPlugins.isEmpty()) {
-        final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
-        while (it.hasNext()) {
-          it.next().registerTask(id,jobConfiguration,ee);
-        }
-      }
-      this.runningTasks.put(id,task);
+    this.byteBufferedChannelManager.register(task,activeOutputChannels);
+    boolean enableProfiling=false;
+    if (this.profiler != null && jobConfiguration.getBoolean(ProfilingUtils.PROFILE_JOB_KEY,true)) {
+      enableProfiling=true;
     }
+    if (enableProfiling) {
+      task.registerProfiler(this.profiler,jobConfiguration);
+    }
+    if (!this.taskManagerPlugins.isEmpty()) {
+      final Iterator<TaskManagerPlugin> it=this.taskManagerPlugins.values().iterator();
+      while (it.hasNext()) {
+        it.next().registerTask(id,jobConfiguration,ee);
+      }
+    }
+    this.runningTasks.put(id,task);
   }
   return task;
 }
