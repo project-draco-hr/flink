@@ -1,0 +1,41 @@
+{
+  final IncomingConnection incomingConnection=(IncomingConnection)key.attachment();
+  try {
+    incomingConnection.read();
+  }
+ catch (  EOFException eof) {
+    if (incomingConnection.isCloseUnexpected()) {
+      final SocketChannel socketChannel=(SocketChannel)key.channel();
+      LOG.error("Connection from " + socketChannel.socket().getRemoteSocketAddress() + " was closed unexpectedly");
+      incomingConnection.reportTransmissionProblem(key,eof);
+    }
+ else {
+      incomingConnection.closeConnection(key);
+    }
+  }
+catch (  IOException ioe) {
+    incomingConnection.reportTransmissionProblem(key,ioe);
+  }
+catch (  InterruptedException e) {
+  }
+catch (  NoBufferAvailableException e) {
+    final SocketChannel socketChannel=(SocketChannel)key.channel();
+    try {
+      final SelectionKey newKey=socketChannel.register(this.selector,0);
+      newKey.attach(incomingConnection);
+    }
+ catch (    ClosedChannelException e1) {
+      incomingConnection.reportTransmissionProblem(key,e1);
+    }
+    final BufferAvailabilityListener bal=new IncomingConnectionBufferAvailListener(this.pendingReadEventSubscribeRequests,key);
+    if (!e.getBufferProvider().registerBufferAvailabilityListener(bal)) {
+      try {
+        final SelectionKey newKey=socketChannel.register(this.selector,SelectionKey.OP_READ);
+        newKey.attach(incomingConnection);
+      }
+ catch (      ClosedChannelException e1) {
+        incomingConnection.reportTransmissionProblem(key,e1);
+      }
+    }
+  }
+}

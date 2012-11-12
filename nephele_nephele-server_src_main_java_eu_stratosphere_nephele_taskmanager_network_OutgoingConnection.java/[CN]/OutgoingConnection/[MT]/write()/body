@@ -1,0 +1,24 @@
+{
+  final WritableByteChannel writableByteChannel=(WritableByteChannel)this.selectionKey.channel();
+  if (this.currentEnvelope == null) {
+synchronized (this.queuedEnvelopes) {
+      if (this.queuedEnvelopes.isEmpty()) {
+        return false;
+      }
+ else {
+        this.currentEnvelope=this.queuedEnvelopes.peek();
+        this.serializer.setTransferEnvelope(this.currentEnvelope);
+      }
+    }
+  }
+  if (!this.serializer.write(writableByteChannel)) {
+    if (this.currentEnvelope.getBuffer() != null) {
+      this.currentEnvelope.getBuffer().recycleBuffer();
+    }
+synchronized (this.queuedEnvelopes) {
+      this.queuedEnvelopes.poll();
+      this.currentEnvelope=null;
+    }
+  }
+  return true;
+}
