@@ -1,41 +1,35 @@
 {
+  final List<InternalProfilingData> profilingDataList=new ArrayList<InternalProfilingData>(16);
   final long timestamp=System.currentTimeMillis();
-  InternalInstanceProfilingData instanceProfilingData=null;
-synchronized (this.monitoredThreads) {
-    final Iterator<Environment> iterator=this.monitoredThreads.keySet().iterator();
-    while (iterator.hasNext()) {
-      final Environment environment=iterator.next();
-      final EnvironmentThreadSet environmentThreadSet=this.monitoredThreads.get(environment);
-      final InternalExecutionVertexThreadProfilingData threadProfilingData=environmentThreadSet.captureCPUUtilization(environment.getJobID(),this.tmx,timestamp);
-      if (threadProfilingData != null) {
-        this.profilingDataContainer.add(threadProfilingData);
-      }
-    }
-    if (!this.monitoredThreads.isEmpty()) {
-      try {
-        instanceProfilingData=this.instanceProfiler.generateProfilingData(timestamp);
-      }
- catch (      ProfilingException e) {
-        LOG.error("Error while retrieving instance profiling data: ",e);
-      }
+  final Iterator<Environment> iterator=this.monitoredThreads.keySet().iterator();
+  while (iterator.hasNext()) {
+    final Environment environment=iterator.next();
+    final EnvironmentThreadSet environmentThreadSet=this.monitoredThreads.get(environment);
+    final InternalExecutionVertexThreadProfilingData threadProfilingData=environmentThreadSet.captureCPUUtilization(environment.getJobID(),this.tmx,timestamp);
+    if (threadProfilingData != null) {
+      profilingDataList.add(threadProfilingData);
     }
   }
-synchronized (this.profilingDataContainer) {
-    if (instanceProfilingData != null) {
-      this.profilingDataContainer.add(instanceProfilingData);
+  InternalInstanceProfilingData instanceProfilingData=null;
+  try {
+    instanceProfilingData=this.instanceProfiler.generateProfilingData(timestamp);
+  }
+ catch (  ProfilingException e) {
+    LOG.error(StringUtils.stringifyException(e));
+  }
+  if (instanceProfilingData != null) {
+    profilingDataList.add(instanceProfilingData);
+  }
+  if (!profilingDataList.isEmpty()) {
+    try {
+      this.jobManagerProfiler.reportProfilingData(profilingDataList);
     }
-    if (!this.profilingDataContainer.isEmpty()) {
-      try {
-        this.jobManagerProfiler.reportProfilingData(this.profilingDataContainer);
-        this.profilingDataContainer.clear();
-      }
- catch (      IOException e) {
-        LOG.error(StringUtils.stringifyException(e));
-      }
-catch (      InterruptedException ie) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug(StringUtils.stringifyException(ie));
-        }
+ catch (    IOException e) {
+      LOG.error(StringUtils.stringifyException(e));
+    }
+catch (    InterruptedException ie) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(StringUtils.stringifyException(ie));
       }
     }
   }
