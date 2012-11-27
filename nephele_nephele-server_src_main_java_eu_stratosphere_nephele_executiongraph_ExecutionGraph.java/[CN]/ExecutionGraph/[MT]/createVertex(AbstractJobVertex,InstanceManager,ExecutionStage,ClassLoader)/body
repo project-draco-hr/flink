@@ -1,0 +1,89 @@
+{
+  InstanceType instanceType=null;
+  boolean userDefinedInstanceType=false;
+  if (jobVertex.getInstanceType() != null) {
+    userDefinedInstanceType=true;
+    instanceType=instanceManager.getInstanceTypeByName(jobVertex.getInstanceType());
+    if (instanceType == null) {
+      throw new GraphConversionException("Requested instance type " + jobVertex.getInstanceType() + " is not known to the instance manager");
+    }
+  }
+  if (instanceType == null) {
+    instanceType=instanceManager.getDefaultInstanceType();
+  }
+  Class<? extends AbstractInvokable> invokableClass=null;
+  try {
+    invokableClass=(Class<? extends AbstractInvokable>)Class.forName(jobVertex.getInvokableClassName(),false,jobClassLoader);
+  }
+ catch (  ClassNotFoundException e) {
+    LOG.error(e);
+    throw new GraphConversionException(StringUtils.stringifyException(e));
+  }
+  if (invokableClass == null) {
+    throw new GraphConversionException("JobVertex " + jobVertex.getID() + " ("+ jobVertex.getName()+ ") does not specify a task");
+  }
+  final ExecutionSignature signature=ExecutionSignature.createSignature(invokableClass,jobVertex.getJobGraph().getJobID());
+  ExecutionGroupVertex groupVertex=null;
+  try {
+    groupVertex=new ExecutionGroupVertex(jobVertex.getName(),jobVertex.getID(),this,jobVertex.getNumberOfSubtasks(),instanceType,userDefinedInstanceType,jobVertex.getNumberOfSubtasksPerInstance(),jobVertex.getVertexToShareInstancesWith() != null ? true : false,jobVertex.getNumberOfExecutionRetries(),jobVertex.getConfiguration(),signature,invokableClass);
+  }
+ catch (  Throwable t) {
+    throw new GraphConversionException(StringUtils.stringifyException(t));
+  }
+  groupVertex.registerGroupExecutionListener(this);
+  try {
+    jobVertex.checkConfiguration(groupVertex.getEnvironment().getInvokable());
+  }
+ catch (  IllegalConfigurationException e) {
+    throw new GraphConversionException(StringUtils.stringifyException(e));
+  }
+  final int minimumNumberOfSubtasks=jobVertex.getMinimumNumberOfSubtasks(groupVertex.getEnvironment().getInvokable());
+  final int maximumNumberOfSubtasks=jobVertex.getMaximumNumberOfSubtasks(groupVertex.getEnvironment().getInvokable());
+  if (jobVertex.getNumberOfSubtasks() != -1) {
+    if (jobVertex.getNumberOfSubtasks() < 1) {
+      throw new GraphConversionException("Cannot split task " + jobVertex.getName() + " into "+ jobVertex.getNumberOfSubtasks()+ " subtasks");
+    }
+    if (jobVertex.getNumberOfSubtasks() < minimumNumberOfSubtasks) {
+      throw new GraphConversionException("Number of subtasks must be at least " + minimumNumberOfSubtasks);
+    }
+    if (maximumNumberOfSubtasks != -1) {
+      if (jobVertex.getNumberOfSubtasks() > maximumNumberOfSubtasks) {
+        throw new GraphConversionException("Number of subtasks for vertex " + jobVertex.getName() + " can be at most "+ maximumNumberOfSubtasks);
+      }
+    }
+  }
+  if (jobVertex.getNumberOfSubtasksPerInstance() != -1 && jobVertex.getNumberOfSubtasksPerInstance() < 1) {
+    throw new GraphConversionException("Cannot set number of subtasks per instance to " + jobVertex.getNumberOfSubtasksPerInstance() + " for vertex "+ jobVertex.getName());
+  }
+  groupVertex.setMinMemberSize(minimumNumberOfSubtasks);
+  groupVertex.setMaxMemberSize(maximumNumberOfSubtasks);
+  if (jobVertex instanceof AbstractJobInputVertex) {
+    final InputSplit[] inputSplits;
+    if (groupVertex.getEnvironment().getInvokable() instanceof AbstractInputTask) {
+      try {
+        inputSplits=((AbstractInputTask<?>)groupVertex.getEnvironment().getInvokable()).computeInputSplits(jobVertex.getNumberOfSubtasks());
+      }
+ catch (      Exception e) {
+        throw new GraphConversionException("Cannot compute input splits for " + groupVertex.getName() + ": "+ StringUtils.stringifyException(e));
+      }
+    }
+ else {
+      throw new GraphConversionException("JobInputVertex contained a task class which was not an input task.");
+    }
+    if (inputSplits == null) {
+      LOG.info("Job input vertex " + jobVertex.getName() + " generated 0 input splits");
+    }
+ else {
+      LOG.info("Job input vertex " + jobVertex.getName() + " generated "+ inputSplits.length+ " input splits");
+    }
+    groupVertex.setInputSplits(inputSplits);
+  }
+  if (jobVertex instanceof JobFileOutputVertex) {
+    final JobFileOutputVertex jbov=(JobFileOutputVertex)jobVertex;
+    jobVertex.getConfiguration().setString("outputPath",jbov.getFilePath().toString());
+  }
+  initialExecutionStage.addStageMember(groupVertex);
+  final ExecutionVertex ev=new ExecutionVertex(this,groupVertex,jobVertex.getNumberOfForwardConnections(),jobVertex.getNumberOfBackwardConnections());
+  ev.setAllocatedResource(new AllocatedResource(DummyInstance.createDummyInstance(instanceType),instanceType,null));
+  return ev;
+}

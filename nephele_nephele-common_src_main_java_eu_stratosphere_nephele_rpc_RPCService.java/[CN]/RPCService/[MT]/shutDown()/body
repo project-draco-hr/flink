@@ -1,0 +1,22 @@
+{
+  if (!this.shutdownRequested.compareAndSet(false,true)) {
+    return;
+  }
+  this.receiverThread.requestShutdown();
+  this.socket.close();
+  try {
+    this.receiverThread.join();
+  }
+ catch (  InterruptedException ie) {
+    Log.debug("Caught exception while waiting for receiver thread to shut down: ",ie);
+  }
+  this.rpcHandlers.shutdown();
+  try {
+    this.rpcHandlers.awaitTermination(5000L,TimeUnit.MILLISECONDS);
+  }
+ catch (  InterruptedException ie) {
+    Log.debug("Caught exception while waiting for RPC handlers to finish: ",ie);
+  }
+  this.cleanupTimer.cancel();
+  this.statistics.processCollectedData();
+}

@@ -1,0 +1,40 @@
+{
+  if (this.dataBuffer == null) {
+    requestWriteBufferFromBroker();
+  }
+  if (this.closeRequested) {
+    throw new IOException("Channel is aready requested to be closed");
+  }
+  if (this.compressor != null) {
+    while (this.recordSerializer.dataLeftFromPreviousSerialization()) {
+      if (!this.recordSerializer.read(this.dataBuffer)) {
+        this.dataBuffer=this.compressor.compress(this.dataBuffer);
+        releaseWriteBuffer();
+        requestWriteBufferFromBroker();
+      }
+    }
+  }
+ else {
+    while (this.recordSerializer.dataLeftFromPreviousSerialization()) {
+      if (!this.recordSerializer.read(this.dataBuffer)) {
+        releaseWriteBuffer();
+        requestWriteBufferFromBroker();
+      }
+    }
+  }
+  if (this.recordSerializer.dataLeftFromPreviousSerialization()) {
+    throw new IOException("Serialization buffer is expected to be empty!");
+  }
+  this.recordSerializer.serialize(record);
+  if (this.compressor != null) {
+    if (!this.recordSerializer.read(this.dataBuffer)) {
+      this.dataBuffer=this.compressor.compress(this.dataBuffer);
+      releaseWriteBuffer();
+    }
+  }
+ else {
+    if (!this.recordSerializer.read(this.dataBuffer)) {
+      releaseWriteBuffer();
+    }
+  }
+}

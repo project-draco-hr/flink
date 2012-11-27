@@ -1,0 +1,52 @@
+{
+  this.jobID=kryo.readObject(input,JobID.class);
+  final int numberOfStages=input.readInt();
+  for (int i=0; i < numberOfStages; i++) {
+    new ManagementStage(this,i);
+  }
+  final int numberOfGroupVertices=input.readInt();
+  for (int i=0; i < numberOfGroupVertices; i++) {
+    final ManagementGroupVertexID groupVertexID=kryo.readObject(input,ManagementGroupVertexID.class);
+    final ManagementStage stage=this.stages.get(input.readInt());
+    final String groupVertexName=input.readString();
+    new ManagementGroupVertex(stage,groupVertexID,groupVertexName);
+  }
+  for (int i=0; i < numberOfGroupVertices; i++) {
+    final ManagementGroupVertexID groupVertexID=kryo.readObject(input,ManagementGroupVertexID.class);
+    final ManagementGroupVertex groupVertex=this.groupVertices.get(groupVertexID);
+    groupVertex.read(kryo,input);
+  }
+  int numberOfVertices=input.readInt();
+  for (int i=0; i < numberOfVertices; i++) {
+    final ManagementVertexID vertexID=kryo.readObject(input,ManagementVertexID.class);
+    final ManagementGroupVertexID groupVertexID=kryo.readObject(input,ManagementGroupVertexID.class);
+    final ManagementGroupVertex groupVertex=this.getGroupVertexByID(groupVertexID);
+    final String instanceName=input.readString();
+    final String instanceType=input.readString();
+    final String checkpointState=input.readString();
+    final int indexInGroup=input.readInt();
+    final ManagementVertex vertex=new ManagementVertex(groupVertex,vertexID,instanceName,instanceType,checkpointState,indexInGroup);
+    vertex.read(kryo,input);
+  }
+  for (int i=0; i < numberOfVertices; i++) {
+    final ManagementVertexID sourceID=kryo.readObject(input,ManagementVertexID.class);
+    final ManagementVertex sourceVertex=getVertexByID(sourceID);
+    for (int j=0; j < sourceVertex.getNumberOfOutputGates(); j++) {
+      final ManagementGate sourceGate=sourceVertex.getOutputGate(j);
+      int numberOfForwardEdges=input.readInt();
+      for (int k=0; k < numberOfForwardEdges; k++) {
+        final ManagementEdgeID sourceEdgeID=kryo.readObject(input,ManagementEdgeID.class);
+        final ManagementEdgeID targetEdgeID=kryo.readObject(input,ManagementEdgeID.class);
+        final ManagementVertexID targetID=kryo.readObject(input,ManagementVertexID.class);
+        final ManagementVertex targetVertex=getVertexByID(targetID);
+        final int targetGateIndex=input.readInt();
+        final ManagementGate targetGate=targetVertex.getInputGate(targetGateIndex);
+        final int sourceIndex=input.readInt();
+        final int targetIndex=input.readInt();
+        final ChannelType channelType=EnumUtils.readEnum(input,ChannelType.class);
+        final CompressionLevel compressionLevel=EnumUtils.readEnum(input,CompressionLevel.class);
+        new ManagementEdge(sourceEdgeID,targetEdgeID,sourceGate,sourceIndex,targetGate,targetIndex,channelType,compressionLevel);
+      }
+    }
+  }
+}

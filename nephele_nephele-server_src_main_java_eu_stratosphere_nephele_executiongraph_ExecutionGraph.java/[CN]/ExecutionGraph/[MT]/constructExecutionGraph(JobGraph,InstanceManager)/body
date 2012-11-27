@@ -3,9 +3,21 @@
   final HashMap<AbstractJobVertex,ExecutionGroupVertex> temporaryGroupVertexMap=new HashMap<AbstractJobVertex,ExecutionGroupVertex>();
   final ExecutionStage initialExecutionStage=new ExecutionStage(this,0);
   this.stages.add(initialExecutionStage);
+  final JobID jobID=jobGraph.getJobID();
+  ClassLoader jobClassLoader=null;
+  try {
+    jobClassLoader=LibraryCacheManager.getClassLoader(jobID);
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+    throw new GraphConversionException(StringUtils.stringifyException(e));
+  }
+  if (jobClassLoader == null) {
+    throw new GraphConversionException("Cannot find class loader for job " + jobID);
+  }
   final AbstractJobVertex[] all=jobGraph.getAllJobVertices();
   for (int i=0; i < all.length; i++) {
-    final ExecutionVertex createdVertex=createVertex(all[i],instanceManager,initialExecutionStage,jobGraph.getJobConfiguration());
+    final ExecutionVertex createdVertex=createVertex(all[i],instanceManager,initialExecutionStage,jobClassLoader);
     temporaryVertexMap.put(all[i],createdVertex);
     temporaryGroupVertexMap.put(all[i],createdVertex.getGroupVertex());
   }

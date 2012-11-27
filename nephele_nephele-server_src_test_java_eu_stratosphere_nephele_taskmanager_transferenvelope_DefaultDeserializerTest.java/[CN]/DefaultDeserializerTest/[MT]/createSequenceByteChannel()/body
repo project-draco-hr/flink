@@ -1,0 +1,33 @@
+{
+  int[] interruptions=new int[1024];
+  for (int i=0; i < interruptions.length; ++i) {
+    interruptions[i]=i;
+  }
+  final DefaultSerializer ds=new DefaultSerializer();
+  final InterruptibleByteChannel ibc=new InterruptibleByteChannel(interruptions,interruptions);
+  int nextByte=0;
+  for (int i=0; i < 10; ++i) {
+    final TransferEnvelope te=new TransferEnvelope(SEQUENCE_NUMBER,JOB_ID,CHANNEL_ID);
+    if (i == 1 | i == 2 || i == 9) {
+      te.addEvent(new ChannelCloseEvent());
+    }
+ else {
+      final int bufferSize=getSequenceBufferSize(i);
+      final Queue<ByteBuffer> bufferPool=new ArrayDeque<ByteBuffer>();
+      final ByteBuffer bb=ByteBuffer.allocate(bufferSize);
+      final Buffer buffer=BufferFactory.createFromMemory(bb.capacity(),bb,new BufferPoolConnector(bufferPool));
+      final ByteBuffer srcBuffer=ByteBuffer.allocate(bufferSize);
+      while (srcBuffer.hasRemaining()) {
+        srcBuffer.put((byte)(nextByte++ % 100));
+      }
+      srcBuffer.flip();
+      buffer.write(srcBuffer);
+      buffer.finishWritePhase();
+      te.setBuffer(buffer);
+    }
+    ds.setTransferEnvelope(te);
+    while (ds.write(ibc))     ;
+  }
+  ibc.switchToReadPhase();
+  return ibc;
+}

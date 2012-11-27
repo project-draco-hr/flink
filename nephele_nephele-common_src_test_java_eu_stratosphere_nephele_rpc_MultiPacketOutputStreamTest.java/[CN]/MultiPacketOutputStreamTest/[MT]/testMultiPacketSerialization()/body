@@ -1,0 +1,44 @@
+{
+  final byte[] sourceBuf=new byte[1500];
+  for (int i=0; i < sourceBuf.length; ++i) {
+    sourceBuf[i]=(byte)(i % 23);
+  }
+  final MultiPacketOutputStream mpos=new MultiPacketOutputStream(1024);
+  try {
+    mpos.write(sourceBuf);
+  }
+ catch (  IOException ioe) {
+    fail(StringUtils.stringifyException(ioe));
+  }
+  final DatagramPacket[] packets=mpos.createPackets(TEST_REMOTE_ADDRESS,17);
+  assertNotNull(packets);
+  assertEquals(2,packets.length);
+  int offset=packets[0].getOffset();
+  int length=packets[0].getLength();
+  assertEquals(0,offset);
+  assertEquals(RPCMessage.MAXIMUM_MSG_SIZE + RPCMessage.METADATA_SIZE,length);
+  byte[] packetBuf=packets[0].getData();
+  byte lastByte=0;
+  for (int i=offset; i < (offset + length - RPCMessage.METADATA_SIZE); ++i) {
+    lastByte=packetBuf[i];
+    assertEquals((byte)(i % 23),lastByte);
+  }
+  assertEquals(3,lastByte);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE]);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 1]);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 2]);
+  assertEquals(2,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 3]);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 4]);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 5]);
+  assertEquals(0,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 6]);
+  assertEquals(17,packetBuf[offset + length - RPCMessage.METADATA_SIZE + 7]);
+  offset=packets[1].getOffset();
+  length=packets[1].getLength();
+  assertEquals(sourceBuf.length - RPCMessage.MAXIMUM_MSG_SIZE + RPCMessage.METADATA_SIZE,length);
+  assertEquals(RPCMessage.MAXIMUM_MSG_SIZE + RPCMessage.METADATA_SIZE,offset);
+  packetBuf=packets[1].getData();
+  int j=lastByte + 1;
+  for (int i=offset; i < (offset + length - RPCMessage.METADATA_SIZE); ++i) {
+    assertEquals((byte)(j++ % 23),packetBuf[i]);
+  }
+}

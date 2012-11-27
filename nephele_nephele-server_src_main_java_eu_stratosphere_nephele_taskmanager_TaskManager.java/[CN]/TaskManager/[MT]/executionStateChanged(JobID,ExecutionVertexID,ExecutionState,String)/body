@@ -5,12 +5,25 @@
   if (newExecutionState == ExecutionState.FINISHED || newExecutionState == ExecutionState.CANCELED || newExecutionState == ExecutionState.FAILED) {
     unregisterTask(id);
   }
-synchronized (this.jobManager) {
-    try {
-      this.jobManager.updateTaskExecutionState(new TaskExecutionState(jobID,id,newExecutionState,optionalDescription));
+  if (newExecutionState == ExecutionState.CANCELED) {
+    final Runnable runnable=new Runnable(){
+      @Override public void run(){
+        try {
+          jobManager.updateTaskExecutionState(new TaskExecutionState(jobID,id,newExecutionState,optionalDescription));
+        }
+ catch (        Exception e) {
+          LOG.error(StringUtils.stringifyException(e));
+        }
+      }
     }
- catch (    IOException e) {
-      LOG.error(StringUtils.stringifyException(e));
-    }
+;
+    this.executorService.execute(runnable);
+    return;
+  }
+  try {
+    jobManager.updateTaskExecutionState(new TaskExecutionState(jobID,id,newExecutionState,optionalDescription));
+  }
+ catch (  Exception e) {
+    LOG.error(StringUtils.stringifyException(e));
   }
 }

@@ -1,0 +1,46 @@
+{
+  final int entryToTest=toEntry(inputChannel.getInputGate().getIndex(),inputChannel.getChannelIndex(),false);
+  boolean found=false;
+  while (true) {
+    for (int i=this.outstandingEnvelopesAsIntBuffer.position(); i < this.outstandingEnvelopesAsIntBuffer.limit(); ++i) {
+      if (this.outstandingEnvelopesAsIntBuffer.get(i) == entryToTest) {
+        this.outstandingEnvelopesAsIntBuffer.put(i,setDataAvailability(entryToTest,true));
+        found=true;
+        break;
+      }
+    }
+    if (!found) {
+      if (this.outstandingEnvelopesAsIntBuffer.limit() == this.outstandingEnvelopesAsIntBuffer.capacity()) {
+        loadNextOutstandingEnvelopes();
+        continue;
+      }
+      final int newEntry=setDataAvailability(entryToTest,true);
+      final int limit=this.outstandingEnvelopesAsIntBuffer.limit();
+      this.outstandingEnvelopesAsIntBuffer.limit(limit + 1);
+      this.outstandingEnvelopesAsIntBuffer.put(limit,newEntry);
+    }
+    break;
+  }
+  int newPosition=this.outstandingEnvelopesAsIntBuffer.position();
+  int count=0;
+  for (int i=this.outstandingEnvelopesAsIntBuffer.position(); i < this.outstandingEnvelopesAsIntBuffer.limit(); ++i) {
+    final int entry=this.outstandingEnvelopesAsIntBuffer.get(i);
+    if (getDataAvailability(entry)) {
+      announce(toInputChannel(getInputGate(entry),getInputChannel(entry)));
+      newPosition=i + 1;
+      ++count;
+    }
+ else {
+      break;
+    }
+  }
+  this.outstandingEnvelopesAsIntBuffer.position(Math.min(this.outstandingEnvelopesAsIntBuffer.limit(),newPosition));
+  if (count > 0 && LOG.isDebugEnabled()) {
+    LOG.debug("Announced " + count + " buffers from log");
+    LOG.debug("Initial log entries: " + this.numberOfInitialLogEntries + ", announced "+ this.numberOfAnnouncedEnvelopes);
+    LOG.debug("Outstanding buffer: " + this.outstandingEnvelopesAsIntBuffer.remaining());
+  }
+  if (!this.outstandingEnvelopesAsIntBuffer.hasRemaining()) {
+    loadNextOutstandingEnvelopes();
+  }
+}

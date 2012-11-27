@@ -1,23 +1,29 @@
 {
+  MulticastForwardingTable mft=this.cachedTrees.get(sourceChannelID);
+  if (mft != null) {
+    return mft.getConnectionInfo(caller);
+  }
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  if (eg == null) {
+    LOG.error("Cannot find execution graph with jod ID " + jobID);
+    return ConnectionInfoLookupResponse.createReceiverNotFound();
+  }
+  final ExecutionEdge outputChannel=eg.getEdgeByID(sourceChannelID);
+  if (outputChannel == null) {
+    LOG.error("Cannot find execution edge with ID " + sourceChannelID);
+    return ConnectionInfoLookupResponse.createReceiverNotFound();
+  }
+  if (!verifySource(caller,outputChannel)) {
+    return ConnectionInfoLookupResponse.createReceiverNotFound();
+  }
+  if (!checkIfAllTargetVerticesAreReady(outputChannel)) {
+    LOG.info("Received multicast request but not all receivers ready.");
+    return ConnectionInfoLookupResponse.createReceiverNotReady();
+  }
+  mft=createForwardingTable(outputChannel);
   if (LOG.isInfoEnabled()) {
-    LOG.info("Receiving multicast receiver request from " + caller + " channel ID: "+ sourceChannelID);
+    LOG.info(mft);
   }
-  if (this.cachedTrees.containsKey(sourceChannelID)) {
-    LOG.info("Replying with cached entry...");
-    return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
-  }
- else {
-    if (!checkIfAllTargetVerticesReady(caller,jobID,sourceChannelID)) {
-      LOG.info("Received multicast request but not all receivers ready.");
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
-    }
-    LinkedList<TreeNode> treeNodes=extractTreeNodes(caller,jobID,sourceChannelID,this.randomized);
-    if (this.useHardCodedTree) {
-      LOG.info("Creating a hard-coded tree topology from file: " + hardCodedTreeFilePath);
-      cachedTrees.put(sourceChannelID,createHardCodedTree(treeNodes));
-      return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
-    }
-    cachedTrees.put(sourceChannelID,createDefaultTree(treeNodes,this.treeBranching));
-    return cachedTrees.get(sourceChannelID).getConnectionInfo(caller);
-  }
+  this.cachedTrees.put(sourceChannelID,mft);
+  return mft.getConnectionInfo(caller);
 }

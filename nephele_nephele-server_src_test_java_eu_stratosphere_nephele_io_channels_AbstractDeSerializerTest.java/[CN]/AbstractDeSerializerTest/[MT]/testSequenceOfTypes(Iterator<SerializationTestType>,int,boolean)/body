@@ -1,0 +1,56 @@
+{
+  final FileBufferManager fbm=FileBufferManager.getInstance();
+  final ChannelID ownerID=ChannelID.generate();
+  final RecordSerializer<SerializationTestType> recordSerializer=createSerializer();
+  final RecordDeserializer<SerializationTestType> recordDeserializer=createDeserializer();
+  final ArrayDeque<SerializationTestType> elements=new ArrayDeque<SerializationTestType>(512);
+  final ByteBuffer byteBuffer=ByteBuffer.allocate(bufferSize);
+  final TestBufferPoolConnector bufferPoolConnector=new TestBufferPoolConnector();
+  Buffer buffer=BufferFactory.createFromMemory(bufferSize,byteBuffer,bufferPoolConnector);
+  while (sequence.hasNext()) {
+    final SerializationTestType type=sequence.next();
+    recordSerializer.serialize(type);
+    elements.addLast(type);
+    while (true) {
+      recordSerializer.read(buffer);
+      if (recordSerializer.dataLeftFromPreviousSerialization()) {
+        buffer.finishWritePhase();
+        if (copyToFileBuffer) {
+          final FileBuffer fileBuffer=BufferFactory.createFromFile(bufferSize,ownerID,fbm,false,true);
+          buffer.copyToBuffer(fileBuffer);
+          fileBuffer.finishWritePhase();
+          buffer=fileBuffer;
+        }
+        while (!elements.isEmpty()) {
+          final SerializationTestType reference=elements.pollFirst();
+          final SerializationTestType result=recordDeserializer.readData(reference.getClass().newInstance(),buffer);
+          if (result == null) {
+            elements.addFirst(reference);
+            break;
+          }
+ else {
+            assertEquals("The deserialized element is not equal to the serialized element.",reference,result);
+          }
+        }
+        byteBuffer.clear();
+        buffer=BufferFactory.createFromMemory(bufferSize,byteBuffer,bufferPoolConnector);
+      }
+ else {
+        break;
+      }
+    }
+  }
+  buffer.finishWritePhase();
+  if (copyToFileBuffer) {
+    final FileBuffer fileBuffer=BufferFactory.createFromFile(bufferSize,ownerID,fbm,false,true);
+    buffer.copyToBuffer(fileBuffer);
+    fileBuffer.finishWritePhase();
+    buffer=fileBuffer;
+  }
+  while (!elements.isEmpty()) {
+    final SerializationTestType reference=elements.pollFirst();
+    final SerializationTestType result=recordDeserializer.readData(reference.getClass().newInstance(),buffer);
+    assertNotNull(result);
+    assertEquals("The deserialized element is not equal to the serialized element.",reference,result);
+  }
+}

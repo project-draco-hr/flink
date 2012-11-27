@@ -1,0 +1,28 @@
+{
+  final Runnable runnable=new Runnable(){
+    /** 
+ * {@inheritDoc}
+ */
+    @Override public void run(){
+      final Kryo k=kryo.get();
+      k.reset();
+      final RPCEnvelope envelope=k.readObject(input,RPCEnvelope.class);
+      final RPCMessage msg=envelope.getRPCMessage();
+      if (fragmentationID != msg.getMessageID()) {
+        Log.error("Received message with invalid fragmentation ID");
+        return;
+      }
+      if (msg instanceof RPCRequest) {
+        processIncomingRPCRequest(remoteSocketAddress,(RPCRequest)msg);
+      }
+ else       if (msg instanceof RPCResponse) {
+        processIncomingRPCResponse((RPCResponse)msg);
+      }
+ else {
+        processIncomingRPCCleanup(remoteSocketAddress,(RPCCleanup)msg);
+      }
+    }
+  }
+;
+  this.rpcHandlers.execute(runnable);
+}

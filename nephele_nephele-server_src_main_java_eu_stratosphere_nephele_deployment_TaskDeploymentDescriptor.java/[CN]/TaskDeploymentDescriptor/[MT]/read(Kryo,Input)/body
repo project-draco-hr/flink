@@ -1,0 +1,42 @@
+{
+  this.jobID=kryo.readObject(input,JobID.class);
+  this.vertexID=kryo.readObject(input,ExecutionVertexID.class);
+  this.taskName=input.readString();
+  this.indexInSubtaskGroup=input.readInt();
+  this.currentNumberOfSubtasks=input.readInt();
+  this.initialCheckpointState=EnumUtils.readEnum(input,CheckpointState.class);
+  final String[] requiredJarFiles=new String[input.readInt()];
+  for (int i=0; i < requiredJarFiles.length; i++) {
+    requiredJarFiles[i]=input.readString();
+  }
+  try {
+    LibraryCacheManager.register(this.jobID,requiredJarFiles);
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException(ioe);
+  }
+  ClassLoader cl=null;
+  try {
+    cl=LibraryCacheManager.getClassLoader(this.jobID);
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException(ioe);
+  }
+  final String invokableClassName=input.readString();
+  if (invokableClassName == null) {
+    throw new RuntimeException("invokableClassName is null");
+  }
+  try {
+    this.invokableClass=(Class<? extends AbstractInvokable>)Class.forName(invokableClassName,true,cl);
+  }
+ catch (  ClassNotFoundException cnfe) {
+    throw new RuntimeException("Class " + invokableClassName + " not found in one of the supplied jar files: "+ StringUtils.stringifyException(cnfe));
+  }
+  this.jobConfiguration=new Configuration(cl);
+  this.jobConfiguration.read(kryo,input);
+  this.taskConfiguration=new Configuration(cl);
+  this.taskConfiguration.read(kryo,input);
+  this.outputGates=kryo.readObject(input,ArrayList.class);
+  this.inputGates=kryo.readObject(input,ArrayList.class);
+  this.hasAlreadyBeenDeployed=input.readBoolean();
+}

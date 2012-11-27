@@ -1,0 +1,38 @@
+{
+  while (!this.shutdownRequested) {
+    final byte[] buf=new byte[RPCMessage.MAXIMUM_MSG_SIZE + RPCMessage.METADATA_SIZE];
+    final DatagramPacket dp=new DatagramPacket(buf,buf.length);
+    try {
+      this.socket.receive(dp);
+    }
+ catch (    SocketException se) {
+      if (this.shutdownRequested) {
+        return;
+      }
+      Log.error("Shutting down receiver thread due to error: ",se);
+      return;
+    }
+catch (    IOException ioe) {
+      Log.error("Shutting down receiver thread due to error: ",ioe);
+      return;
+    }
+    final InetSocketAddress remoteSocketAddress=(InetSocketAddress)dp.getSocketAddress();
+    final int length=dp.getLength() - RPCMessage.METADATA_SIZE;
+    final byte[] dbbuf=dp.getData();
+    final short numberOfPackets=NumberUtils.byteArrayToShort(dbbuf,length + 2);
+    final int fragmentationID=NumberUtils.byteArrayToInteger(dbbuf,length + 4);
+    if (numberOfPackets == 1) {
+      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(new SinglePacketInputStream(dbbuf,length)),fragmentationID);
+    }
+ else {
+      final short packetIndex=NumberUtils.byteArrayToShort(dbbuf,length);
+      final MultiPacketInputStream mpis=this.rpcService.getIncompleteInputStream(remoteSocketAddress,fragmentationID,numberOfPackets);
+      mpis.addPacket(packetIndex,dp);
+      if (!mpis.isComplete()) {
+        continue;
+      }
+      this.rpcService.removeIncompleteInputStream(remoteSocketAddress,fragmentationID);
+      this.rpcService.processIncomingRPCMessage(remoteSocketAddress,new Input(mpis),fragmentationID);
+    }
+  }
+}

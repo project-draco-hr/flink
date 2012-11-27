@@ -1,0 +1,51 @@
+{
+  if (jobGraph == null) {
+    throw new IllegalStateException("jobGraph is null, cannot deserialize");
+  }
+  this.instanceType=input.readString();
+  this.numberOfSubtasks=input.readInt();
+  this.numberOfSubtasksPerInstance=input.readInt();
+  this.numberOfExecutionRetries=input.readInt();
+  if (input.readBoolean()) {
+    final JobVertexID id=kryo.readObject(input,JobVertexID.class);
+    final AbstractJobVertex vertexToShareInstancesWith=this.jobGraph.findVertexByID(id);
+    if (vertexToShareInstancesWith == null) {
+      throw new IllegalStateException("Cannot find vertex with id " + id + " share instances with");
+    }
+    this.vertexToShareInstancesWith=vertexToShareInstancesWith;
+  }
+  ClassLoader cl=null;
+  try {
+    cl=LibraryCacheManager.getClassLoader(this.getJobGraph().getJobID());
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("Error initializying class loader: " + StringUtils.stringifyException(ioe));
+  }
+  this.configuration=new Configuration(cl);
+  this.configuration.read(kryo,input);
+  final int numForwardEdges=input.readInt();
+  for (int i=0; i < numForwardEdges; i++) {
+    if (input.readBoolean()) {
+      final JobVertexID tmpID=kryo.readObject(input,JobVertexID.class);
+      final AbstractJobVertex jv=jobGraph.findVertexByID(tmpID);
+      if (jv == null) {
+        throw new IllegalStateException("Cannot find vertex with id " + tmpID);
+      }
+      final ChannelType channelType=EnumUtils.readEnum(input,ChannelType.class);
+      final CompressionLevel compressionLevel=EnumUtils.readEnum(input,CompressionLevel.class);
+      final DistributionPattern distributionPattern=EnumUtils.readEnum(input,DistributionPattern.class);
+      final int indexOfInputGate=input.readInt();
+      final boolean allowSpanningRecords=input.readBoolean();
+      try {
+        this.connectTo(jv,channelType,compressionLevel,i,indexOfInputGate,distributionPattern,allowSpanningRecords);
+      }
+ catch (      JobGraphDefinitionException e) {
+        throw new IllegalStateException(StringUtils.stringifyException(e));
+      }
+    }
+ else {
+      this.forwardEdges.add(null);
+    }
+  }
+  this.invokableClassName=input.readString();
+}

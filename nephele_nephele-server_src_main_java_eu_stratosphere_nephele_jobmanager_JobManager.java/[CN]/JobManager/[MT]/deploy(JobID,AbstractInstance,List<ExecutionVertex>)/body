@@ -20,7 +20,13 @@
  catch (      IOException ioe) {
         LOG.error("Cannot check library availability: " + StringUtils.stringifyException(ioe));
       }
-      final List<TaskDeploymentDescriptor> submissionList=new SerializableArrayList<TaskDeploymentDescriptor>();
+catch (      InterruptedException ie) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(StringUtils.stringifyException(ie));
+        }
+        return;
+      }
+      final List<TaskDeploymentDescriptor> submissionList=new ArrayList<TaskDeploymentDescriptor>();
       for (      final ExecutionVertex vertex : verticesToBeDeployed) {
         submissionList.add(vertex.constructDeploymentDescriptor());
         LOG.info("Starting task " + vertex + " on "+ vertex.getAllocatedResource().getInstance());
@@ -29,11 +35,17 @@
       try {
         submissionResultList=instance.submitTasks(submissionList);
       }
- catch (      final IOException ioe) {
+ catch (      IOException ioe) {
         final String errorMsg=StringUtils.stringifyException(ioe);
         for (        final ExecutionVertex vertex : verticesToBeDeployed) {
           vertex.updateExecutionStateAsynchronously(ExecutionState.FAILED,errorMsg);
         }
+      }
+catch (      InterruptedException ie) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(StringUtils.stringifyException(ie));
+        }
+        return;
       }
       if (verticesToBeDeployed.size() != submissionResultList.size()) {
         LOG.error("size of submission result list does not match size of list with vertices to be deployed");

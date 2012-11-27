@@ -1,0 +1,24 @@
+{
+  final Map<FunctionCall,EvaluationExpression> aggregatingFunctionCalls=new IdentityHashMap<FunctionCall,EvaluationExpression>();
+  findAggregatingFunctionCalls(baseExpression,aggregatingFunctionCalls,null);
+  if (aggregatingFunctionCalls.isEmpty())   return baseExpression;
+  EvaluationExpression result=baseExpression;
+  final Int2ObjectMap<BatchAggregationExpression> aggregationPerInput=new Int2ObjectOpenHashMap<BatchAggregationExpression>();
+  for (  FunctionCall functionCall : aggregatingFunctionCalls.keySet()) {
+    AggregationFunction aggregationFunction=((AggregationFunction)functionCall.getFunction());
+    final List<InputSelection> inputs=functionCall.findAll(InputSelection.class);
+    if (inputs.isEmpty())     continue;
+    final Aggregation<IJsonNode,IJsonNode> aggregation=aggregationFunction.getAggregation();
+    int input=inputs.get(0).getIndex();
+    for (int index=1; index < inputs.size(); index++)     if (inputs.get(index).getIndex() != input)     throw new IllegalArgumentException("Cannot batch process aggregations with multiple inputs");
+    final List<EvaluationExpression> parameters=functionCall.getParameters();
+    if (parameters.size() > 1)     throw new IllegalStateException("Cannot batch process aggregations with multiple parameters");
+    BatchAggregationExpression batch=aggregationPerInput.get(input);
+    if (batch == null)     aggregationPerInput.put(input,batch=new BatchAggregationExpression());
+    final EvaluationExpression parent=aggregatingFunctionCalls.get(functionCall);
+    final EvaluationExpression partial=batch.add(aggregation,adjustAggregationParameters(parameters.get(0)));
+    if (parent == null)     result=partial;
+ else     parent.replace(functionCall,partial);
+  }
+  return result;
+}

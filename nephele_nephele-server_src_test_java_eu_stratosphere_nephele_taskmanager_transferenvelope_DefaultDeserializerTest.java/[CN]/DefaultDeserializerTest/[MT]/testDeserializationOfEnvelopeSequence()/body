@@ -1,0 +1,40 @@
+{
+  int numberOfEnvelopes=0;
+  try {
+    final ReadableByteChannel rbc=createSequenceByteChannel();
+    final TestBufferProviderBroker tbpb=new TestBufferProviderBroker(new TestBufferProvider(7));
+    int nextByte=0;
+    while (true) {
+      final TransferEnvelope te=executeDeserialization(rbc,tbpb);
+      final Buffer buffer=te.getBuffer();
+      if (buffer != null) {
+        final ByteBuffer bb=ByteBuffer.allocate(getSequenceBufferSize(numberOfEnvelopes));
+        assertEquals(bb.remaining(),buffer.remaining());
+        buffer.read(bb);
+        bb.flip();
+        while (bb.hasRemaining()) {
+          final byte b=bb.get();
+          assertEquals((nextByte++ % 100),b);
+        }
+      }
+ else {
+        final List<AbstractEvent> eventList=te.getEventList();
+        assertEquals(1,eventList.size());
+        final AbstractEvent event=eventList.get(0);
+        assertTrue(event instanceof ChannelCloseEvent);
+      }
+      ++numberOfEnvelopes;
+    }
+  }
+ catch (  EOFException eof) {
+    if (numberOfEnvelopes != 10) {
+      fail(StringUtils.stringifyException(eof));
+    }
+  }
+catch (  IOException ioe) {
+    fail(StringUtils.stringifyException(ioe));
+  }
+catch (  NoBufferAvailableException nbae) {
+    fail(StringUtils.stringifyException(nbae));
+  }
+}

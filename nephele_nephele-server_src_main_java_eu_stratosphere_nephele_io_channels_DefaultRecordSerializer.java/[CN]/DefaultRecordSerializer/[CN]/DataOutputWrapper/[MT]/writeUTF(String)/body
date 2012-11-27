@@ -1,0 +1,44 @@
+{
+  if (s == null) {
+    throw new NullPointerException();
+  }
+  final int len=s.length();
+  final ByteBuffer buf=this.buffer;
+  int ch, uft8Length=0;
+  for (int i=0; i < len; ++i) {
+    ch=s.charAt(i);
+    if ((ch >= 0x0001) && (ch <= 0x007F)) {
+      ++uft8Length;
+    }
+ else     if (ch > 0x07FF) {
+      uft8Length+=3;
+    }
+ else {
+      uft8Length+=2;
+    }
+  }
+  if (uft8Length > 65535) {
+    throw new IOException("String too long to encode in UTF-8");
+  }
+  if ((uft8Length + 2) > buf.remaining()) {
+    throw new BufferOverflowException();
+  }
+  buf.put((byte)((uft8Length >>> 8) & 0xFF));
+  buf.put((byte)(uft8Length & 0xFF));
+  for (int i=0; i < len; i++) {
+    ch=s.charAt(i);
+    if ((ch >= 0x0001) && (ch <= 0x007F)) {
+      buf.put((byte)ch);
+    }
+ else     if (ch > 0x07FF) {
+      buf.put((byte)(0xE0 | ((ch >> 12) & 0x0F)));
+      buf.put((byte)(0x80 | ((ch >> 6) & 0x3F)));
+      buf.put((byte)(0x80 | (ch & 0x3F)));
+    }
+ else {
+      buf.put((byte)(0xC0 | ((ch >> 6) & 0x1F)));
+      buf.put((byte)(0x80 | (ch & 0x3F)));
+    }
+  }
+  this.written+=uft8Length + 2;
+}
