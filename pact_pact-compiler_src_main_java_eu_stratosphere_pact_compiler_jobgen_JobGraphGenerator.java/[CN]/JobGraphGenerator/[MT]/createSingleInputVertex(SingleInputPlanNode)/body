@@ -1,0 +1,31 @@
+{
+  final String taskName=node.getPactContract().getName();
+  final DriverStrategy ds=node.getDriverStrategy();
+  boolean chaining=false;
+{
+    Channel inConn=node.getInput();
+    PlanNode pred=inConn.getSource();
+    chaining=ds.getPushChainDriverClass() != null && !(pred instanceof UnionPlanNode) && inConn.getShipStrategy() == ShipStrategyType.FORWARD && pred.getOutgoingChannels().size() == 1 && node.getDegreeOfParallelism() == pred.getDegreeOfParallelism() && node.getSubtasksPerInstance() == pred.getSubtasksPerInstance();
+  }
+  final JobTaskVertex vertex;
+  final TaskConfig config;
+  if (chaining) {
+    vertex=null;
+    config=new TaskConfig(new Configuration());
+    this.chainedTasks.put(node,new TaskInChain(ChainedMapDriver.class,config,taskName));
+  }
+ else {
+    vertex=new JobTaskVertex(taskName,this.jobGraph);
+    vertex.setTaskClass(RegularPactTask.class);
+    config=new TaskConfig(vertex.getConfiguration());
+    config.setDriver(ds.getDriverClass());
+  }
+  config.setStubClass(node.getPactContract().getUserCodeClass());
+  config.setStubParameters(node.getPactContract().getParameters());
+  config.setDriverStrategy(ds);
+  if (node.getComparator() != null) {
+    config.setDriverComparator(node.getComparator(),0);
+  }
+  assignDriverResources(node,config);
+  return vertex;
+}
