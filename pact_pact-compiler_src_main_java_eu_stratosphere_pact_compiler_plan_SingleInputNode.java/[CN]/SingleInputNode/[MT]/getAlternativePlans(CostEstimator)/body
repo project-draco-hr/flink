@@ -2,24 +2,39 @@
   if (this.cachedPlans != null) {
     return this.cachedPlans;
   }
-  List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
-  List<Channel> candidates=new ArrayList<Channel>(subPlans.size());
-  List<InterestingProperties> ips=this.inConn.getInterestingProperties();
-  for (  PlanNode p : subPlans) {
-    if (ips.isEmpty()) {
-      Channel c=new Channel(p);
-      c.setShipStrategy(ShipStrategyType.FORWARD);
-      c.setLocalStrategy(LocalStrategy.NONE);
-      candidates.add(c);
+  final List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
+  final Set<RequestedGlobalProperties> intGlobal=this.inConn.getInterestingProperties().getGlobalProperties();
+  final List<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  for (  PlanNode child : subPlans) {
+    if (this.inConn.getShipStrategy() == null) {
+      final GlobalProperties gp=child.getGlobalProperties();
+      for (      RequestedGlobalProperties igps : intGlobal) {
+        final Channel c=new Channel(child);
+        if (igps.isMetBy(gp)) {
+          c.setShipStrategy(ShipStrategyType.FORWARD);
+        }
+ else {
+          igps.parameterizeChannel(c);
+        }
+        addLocalCandidates(c,outputPlans);
+      }
     }
  else {
-      for (      InterestingProperties ip : ips) {
-        candidates.add(ip.createChannelRealizingProperties(p));
+      final Channel c=new Channel(child);
+      if (this.keys != null) {
+        c.setShipStrategy(this.inConn.getShipStrategy(),this.keys.toFieldList());
+      }
+ else {
+        c.setShipStrategy(this.inConn.getShipStrategy());
+      }
+      for (      RequestedGlobalProperties igps : intGlobal) {
+        if (igps.isMetBy(c.getGlobalProperties())) {
+          addLocalCandidates(c,outputPlans);
+          break;
+        }
       }
     }
   }
-  List<PlanNode> outputPlans=new ArrayList<PlanNode>();
-  createPlanAlternatives(candidates,outputPlans);
   for (  PlanNode node : outputPlans) {
     estimator.costOperator(node);
   }

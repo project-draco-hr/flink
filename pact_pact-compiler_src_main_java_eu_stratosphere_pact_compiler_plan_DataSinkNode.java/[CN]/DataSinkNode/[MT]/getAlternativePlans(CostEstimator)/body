@@ -4,17 +4,23 @@
   }
   List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
   List<PlanNode> outputPlans=new ArrayList<PlanNode>();
-  List<InterestingProperties> ips=this.input.getInterestingProperties();
+  InterestingProperties ips=this.input.getInterestingProperties();
   for (  PlanNode p : subPlans) {
-    if (ips.isEmpty()) {
-      Channel c=new Channel(p);
-      c.setShipStrategy(ShipStrategyType.FORWARD);
-      c.setLocalStrategy(LocalStrategy.NONE);
-      outputPlans.add(new SinkPlanNode(this,c));
-    }
+    for (    RequestedGlobalProperties gp : ips.getGlobalProperties()) {
+      for (      RequestedLocalProperties lp : ips.getLocalProperties()) {
+        Channel c=new Channel(p);
+        if (gp.isMetBy(p.getGlobalProperties())) {
+          c.setShipStrategy(ShipStrategyType.FORWARD);
+        }
  else {
-      for (      InterestingProperties ip : ips) {
-        Channel c=ip.createChannelRealizingProperties(p);
+          gp.parameterizeChannel(c);
+        }
+        if (lp.isMetBy(c.getLocalPropertiesAfterShippingOnly())) {
+          c.setLocalStrategy(LocalStrategy.NONE);
+        }
+ else {
+          lp.parameterizeChannel(c);
+        }
         outputPlans.add(new SinkPlanNode(this,c));
       }
     }
