@@ -1,0 +1,22 @@
+{
+  if (!currentPageRankIterator.hasNext()) {
+    throw new IllegalStateException("No current page rank!");
+  }
+  PactRecord currentPageRank=currentPageRankIterator.next();
+  double summedRank=0;
+  while (partialRanks.hasNext()) {
+    summedRank+=partialRanks.next().getField(1,PactDouble.class).getValue();
+  }
+  double rank=BETA * summedRank + dampingFactor + danglingRankFactor;
+  double currentRank=currentPageRank.getField(1,PactDouble.class).getValue();
+  boolean isDangling=currentPageRank.getField(2,BooleanValue.class).get();
+  double danglingRankToAggregate=isDangling ? rank : 0;
+  double diff=Math.abs(currentRank - rank);
+  aggregator.aggregate(diff,rank,danglingRankToAggregate,1);
+  accumulator.setField(0,currentPageRank.getField(0,PactLong.class));
+  accumulator.setField(1,new PactDouble(rank));
+  accumulator.setField(2,new BooleanValue(isDangling));
+  System.out.println(">>>" + currentPageRank.getField(0,PactLong.class).getValue() + " "+ rank+ " "+ isDangling+ " in iteration "+ currentIteration);
+  System.out.println(">>>" + currentPageRank.getField(0,PactLong.class).getValue() + " "+ BETA * summedRank + " " + dampingFactor + " " + danglingRankFactor + " in iteration " + currentIteration);
+  collector.collect(accumulator);
+}
