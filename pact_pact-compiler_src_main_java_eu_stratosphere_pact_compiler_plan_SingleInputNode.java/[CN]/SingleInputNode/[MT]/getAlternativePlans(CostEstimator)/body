@@ -4,6 +4,14 @@
   }
   final List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
   final Set<RequestedGlobalProperties> intGlobal=this.inConn.getInterestingProperties().getGlobalProperties();
+  final RequestedGlobalProperties[] allValidGlobals;
+{
+    Set<RequestedGlobalProperties> pairs=new HashSet<RequestedGlobalProperties>();
+    for (    OperatorDescriptorSingle ods : this.possibleProperties) {
+      pairs.addAll(ods.getPossibleGlobalProperties());
+    }
+    allValidGlobals=(RequestedGlobalProperties[])pairs.toArray(new RequestedGlobalProperties[pairs.size()]);
+  }
   final List<PlanNode> outputPlans=new ArrayList<PlanNode>();
   for (  PlanNode child : subPlans) {
     if (this.inConn.getShipStrategy() == null) {
@@ -16,7 +24,12 @@
  else {
           igps.parameterizeChannel(c);
         }
-        addLocalCandidates(c,outputPlans);
+        for (        RequestedGlobalProperties rgps : allValidGlobals) {
+          if (rgps.isMetBy(c.getGlobalProperties())) {
+            addLocalCandidates(c,outputPlans);
+            break;
+          }
+        }
       }
     }
  else {
@@ -27,8 +40,8 @@
  else {
         c.setShipStrategy(this.inConn.getShipStrategy());
       }
-      for (      RequestedGlobalProperties igps : intGlobal) {
-        if (igps.isMetBy(c.getGlobalProperties())) {
+      for (      RequestedGlobalProperties rgps : allValidGlobals) {
+        if (rgps.isMetBy(c.getGlobalProperties())) {
           addLocalCandidates(c,outputPlans);
           break;
         }

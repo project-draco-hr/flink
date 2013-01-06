@@ -4,43 +4,79 @@
   }
   final List<? extends PlanNode> subPlans1=getFirstPredecessorNode().getAlternativePlans(estimator);
   final List<? extends PlanNode> subPlans2=getSecondPredecessorNode().getAlternativePlans(estimator);
-  final List<Channel> candidates1=new ArrayList<Channel>(subPlans1.size());
-  final List<Channel> candidates2=new ArrayList<Channel>(subPlans2.size());
-  List<InterestingProperties> ips=this.input1.getInterestingProperties();
-  for (  PlanNode p : subPlans1) {
-    if (ips.isEmpty()) {
-      Channel c=new Channel(p);
-      c.setShipStrategy(ShipStrategyType.FORWARD);
-      c.setLocalStrategy(LocalStrategy.NONE);
-      candidates1.add(c);
+  final Set<RequestedGlobalProperties> intGlobal1=this.input1.getInterestingProperties().getGlobalProperties();
+  final Set<RequestedGlobalProperties> intGlobal2=this.input2.getInterestingProperties().getGlobalProperties();
+  final GlobalPropertiesPair[] allGlobalPairs;
+  final LocalPropertiesPair[] allLocalPairs;
+{
+    Set<GlobalPropertiesPair> pairsGlob=new HashSet<GlobalPropertiesPair>();
+    Set<LocalPropertiesPair> pairsLoc=new HashSet<LocalPropertiesPair>();
+    for (    OperatorDescriptorDual ods : this.possibleProperties) {
+      pairsGlob.addAll(ods.getPossibleGlobalProperties());
+      pairsLoc.addAll(ods.getPossibleLocalProperties());
     }
+    allGlobalPairs=(GlobalPropertiesPair[])pairsGlob.toArray(new GlobalPropertiesPair[pairsGlob.size()]);
+    allLocalPairs=(LocalPropertiesPair[])pairsLoc.toArray(new LocalPropertiesPair[pairsLoc.size()]);
+  }
+  final List<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  for (  PlanNode child1 : subPlans1) {
+    for (    PlanNode child2 : subPlans2) {
+      final GlobalProperties gp1=child1.getGlobalProperties();
+      final GlobalProperties gp2=child2.getGlobalProperties();
+      for (      RequestedGlobalProperties igps1 : intGlobal1) {
+        final Channel c1=new Channel(child1);
+        if (this.input1.getShipStrategy() == null) {
+          if (igps1.isMetBy(gp1)) {
+            c1.setShipStrategy(ShipStrategyType.FORWARD);
+          }
  else {
-      for (      InterestingProperties ip : ips) {
-        candidates1.add(ip.createChannelRealizingProperties(p));
+            igps1.parameterizeChannel(c1);
+          }
+        }
+ else {
+          if (this.keys1 != null) {
+            c1.setShipStrategy(this.input1.getShipStrategy(),this.keys1.toFieldList());
+          }
+ else {
+            c1.setShipStrategy(this.input1.getShipStrategy());
+          }
+        }
+        for (        RequestedGlobalProperties igps2 : intGlobal2) {
+          final Channel c2=new Channel(child2);
+          if (this.input2.getShipStrategy() == null) {
+            if (igps2.isMetBy(gp2)) {
+              c2.setShipStrategy(ShipStrategyType.FORWARD);
+            }
+ else {
+              igps2.parameterizeChannel(c2);
+            }
+          }
+ else {
+            if (this.keys2 != null) {
+              c2.setShipStrategy(this.input2.getShipStrategy(),this.keys2.toFieldList());
+            }
+ else {
+              c2.setShipStrategy(this.input2.getShipStrategy());
+            }
+          }
+          for (          GlobalPropertiesPair gpp : allGlobalPairs) {
+            if (gpp.getProperties1().isMetBy(c1.getGlobalProperties()) && gpp.getProperties2().isMetBy(c2.getGlobalProperties())) {
+              addLocalCandidates(c1,c2,outputPlans,allLocalPairs);
+              break;
+            }
+          }
+          if (this.input2.getShipStrategy() != null) {
+            break;
+          }
+        }
+        if (this.input1.getShipStrategy() != null) {
+          break;
+        }
       }
     }
   }
-  ips=this.input2.getInterestingProperties();
-  for (  PlanNode p : subPlans2) {
-    if (ips.isEmpty()) {
-      Channel c=new Channel(p);
-      c.setShipStrategy(ShipStrategyType.FORWARD);
-      c.setLocalStrategy(LocalStrategy.NONE);
-      candidates2.add(c);
-    }
- else {
-      for (      InterestingProperties ip : ips) {
-        candidates2.add(ip.createChannelRealizingProperties(p));
-      }
-    }
-  }
-  final List<PlanNode> outputPlans=new ArrayList<PlanNode>(subPlans1.size() + subPlans2.size());
-  for (  Channel first : candidates1) {
-    for (    Channel second : candidates2) {
-      if (areBranchCompatible(first,second)) {
-        createPlanAlternative(first,second,outputPlans);
-      }
-    }
+  for (  PlanNode node : outputPlans) {
+    estimator.costOperator(node);
   }
   prunePlanAlternatives(outputPlans);
   this.cachedPlans=outputPlans;
