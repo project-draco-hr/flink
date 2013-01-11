@@ -1,0 +1,115 @@
+{
+  if (node instanceof SinkPlanNode) {
+    final SinkPlanNode sn=(SinkPlanNode)node;
+    final Channel inchannel=sn.getInput();
+    final TypeSchema schema=new TypeSchema();
+    sn.postPassHelper=schema;
+    final GenericDataSink pactSink=sn.getSinkNode().getPactContract();
+    final Class<? extends OutputFormat<?>> format=pactSink.getFormatClass();
+    final int numFieldsInInput;
+    if (ArrayModelOutputFormat.class.isAssignableFrom(format)) {
+      final Class<? extends ArrayModelOutputFormat> formatClass=format.asSubclass(ArrayModelOutputFormat.class);
+      final ArrayModelOutputFormat formatInstance=InstantiationUtil.instantiate(formatClass,ArrayModelOutputFormat.class);
+      final Class<? extends Value>[] types=formatInstance.getDataTypes();
+      numFieldsInInput=types.length;
+      try {
+        addToSchema(types,schema);
+      }
+ catch (      ConflictingFieldTypeInfoException ex) {
+        throw new RuntimeException("Bug! Conflict on first set of type entries in the data sink.");
+      }
+    }
+ else {
+      throw new CompilerException("Incompatibe input format type. Array model programs require an ArrayModelInputFormat");
+    }
+    final Ordering partitioning=pactSink.getPartitionOrdering();
+    final Ordering sorting=pactSink.getLocalOrder();
+    try {
+      if (partitioning != null) {
+        addOrderingToSchema(partitioning,schema);
+      }
+      if (sorting != null) {
+        addOrderingToSchema(sorting,schema);
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("BUG: Conflicting information found when adding data sink types");
+    }
+    try {
+      propagateToChannel(inchannel,schema,numFieldsInInput);
+    }
+ catch (    MissingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("BUG: Missing type infomation for input to to data sink.");
+    }
+  }
+ else   if (node instanceof SourcePlanNode) {
+    final SourcePlanNode n=(SourcePlanNode)node;
+    try {
+      n.setSerializer(createSerializer(parentSchema,numFields));
+    }
+ catch (    MissingFieldTypeInfoException e) {
+      throw new RuntimeException("Bug: Missing field types for data source");
+    }
+  }
+ else   if (node instanceof SingleInputPlanNode) {
+    final SingleInputPlanNode sn=(SingleInputPlanNode)node;
+    final TypeSchema schema;
+    if (sn.postPassHelper == null) {
+      schema=new TypeSchema();
+      sn.postPassHelper=schema;
+    }
+ else {
+      schema=(TypeSchema)sn.postPassHelper;
+    }
+    schema.increaseNumConnectionsThatContributed();
+    final SingleInputNode optNode=sn.getSingleInputNode();
+    try {
+      for (      Map.Entry<Integer,Class<? extends Value>> entry : parentSchema) {
+        final Integer pos=entry.getKey();
+        if (optNode.isFieldConstant(0,pos)) {
+          schema.addType(pos,entry.getValue());
+        }
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Conflicting type information for field " + ex.getFieldNumber() + " in node '"+ optNode.getPactContract().getName()+ "' propagated from successor node. "+ "Conflicting types: "+ ex.getPreviousType().getName()+ " and "+ ex.getNewType().getName()+ ". Most probable cause: Invalid constant field annotations.");
+    }
+    if (schema.getNumConnectionsThatContributed() < sn.getOutgoingChannels().size()) {
+      return;
+    }
+    final SingleInputContract<?> contract=optNode.getPactContract();
+    final int numFieldsInInput;
+    Class<? extends Stub> stubClass=contract.getUserCodeClass();
+    if (AbstractArrayModelStub.class.isAssignableFrom(stubClass)) {
+      AbstractArrayModelStub ams=(AbstractArrayModelStub)InstantiationUtil.instantiate(stubClass,Stub.class);
+      final Class<? extends Value>[] types=ams.getDataTypes();
+      numFieldsInInput=types.length;
+      try {
+        addToSchema(types,schema);
+      }
+ catch (      ConflictingFieldTypeInfoException ex) {
+        throw new CompilerPostPassException("Conflicting type information for field " + ex.getFieldNumber() + " in node '"+ optNode.getPactContract().getName()+ "' between types declared in the node's "+ "contract and types inferred from successor contracts. Conflicting types: "+ ex.getPreviousType().getName()+ " and "+ ex.getNewType().getName()+ ". Most probable cause: Invalid constant field annotations.");
+      }
+    }
+ else {
+      throw new CompilerException("Incompatibe stub type. Array model programs require array model stubs.");
+    }
+    if (sn.getDriverStrategy().requiresComparator()) {
+      try {
+        sn.setComparator(createComparator(sn.getKeys(),sn.getSortOrders(),schema));
+      }
+ catch (      MissingFieldTypeInfoException ex) {
+        throw new CompilerPostPassException("Could not set up runtime strategy for node '" + contract.getName() + "'. Missing type information for key field "+ ex.getFieldNumber());
+      }
+    }
+    try {
+      propagateToChannel(sn.getInput(),schema,numFieldsInInput);
+    }
+ catch (    MissingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + contract.getName() + "'. Missing type information for key field "+ ex.getFieldNumber());
+    }
+  }
+ else {
+    throw new CompilerPostPassException("Unknown node type encountered: " + node.getClass().getName());
+  }
+}
