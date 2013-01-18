@@ -19,18 +19,33 @@
     allLocalPairs=(LocalPropertiesPair[])pairsLoc.toArray(new LocalPropertiesPair[pairsLoc.size()]);
   }
   final List<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  final int dop=getDegreeOfParallelism();
+  final int subPerInstance=getSubtasksPerInstance();
+  final int numInstances=dop / subPerInstance + (dop % subPerInstance == 0 ? 0 : 1);
+  final int inDop1=getFirstPredecessorNode().getDegreeOfParallelism();
+  final int inSubPerInstance1=getFirstPredecessorNode().getSubtasksPerInstance();
+  final int inNumInstances1=inDop1 / inSubPerInstance1 + (inDop1 % inSubPerInstance1 == 0 ? 0 : 1);
+  final int inDop2=getSecondPredecessorNode().getDegreeOfParallelism();
+  final int inSubPerInstance2=getSecondPredecessorNode().getSubtasksPerInstance();
+  final int inNumInstances2=inDop2 / inSubPerInstance2 + (inDop2 % inSubPerInstance2 == 0 ? 0 : 1);
+  final boolean globalDopChange1=numInstances != inNumInstances1;
+  final boolean globalDopChange2=numInstances != inNumInstances2;
+  final boolean localDopChange1=numInstances == inNumInstances1 & subPerInstance != inSubPerInstance1;
+  final boolean localDopChange2=numInstances == inNumInstances2 & subPerInstance != inSubPerInstance2;
   for (  PlanNode child1 : subPlans1) {
     for (    PlanNode child2 : subPlans2) {
-      final GlobalProperties gp1=child1.getGlobalProperties();
-      final GlobalProperties gp2=child2.getGlobalProperties();
+      if (!areBranchCompatible(child1,child2)) {
+        continue;
+      }
       for (      RequestedGlobalProperties igps1 : intGlobal1) {
         final Channel c1=new Channel(child1);
         if (this.input1.getShipStrategy() == null) {
-          if (igps1.isMetBy(gp1)) {
-            c1.setShipStrategy(ShipStrategyType.FORWARD);
+          igps1.parameterizeChannel(c1,globalDopChange1,localDopChange1);
+          if (globalDopChange1 && !c1.getShipStrategy().isNetworkStrategy()) {
+            c1.getGlobalProperties().reset();
           }
- else {
-            igps1.parameterizeChannel(c1);
+          if (localDopChange1 && !(c1.getShipStrategy().isNetworkStrategy() || c1.getShipStrategy().compensatesForLocalDOPChanges())) {
+            c1.getGlobalProperties().reset();
           }
         }
  else {
@@ -40,15 +55,22 @@
  else {
             c1.setShipStrategy(this.input1.getShipStrategy());
           }
+          if (globalDopChange1) {
+            c1.adjustGlobalPropertiesForFullParallelismChange();
+          }
+ else           if (localDopChange1) {
+            c1.adjustGlobalPropertiesForLocalParallelismChange();
+          }
         }
         for (        RequestedGlobalProperties igps2 : intGlobal2) {
           final Channel c2=new Channel(child2);
           if (this.input2.getShipStrategy() == null) {
-            if (igps2.isMetBy(gp2)) {
-              c2.setShipStrategy(ShipStrategyType.FORWARD);
+            igps2.parameterizeChannel(c2,globalDopChange2,localDopChange2);
+            if (globalDopChange2 && !c2.getShipStrategy().isNetworkStrategy()) {
+              c2.getGlobalProperties().reset();
             }
- else {
-              igps2.parameterizeChannel(c2);
+            if (localDopChange2 && !(c2.getShipStrategy().isNetworkStrategy() || c2.getShipStrategy().compensatesForLocalDOPChanges())) {
+              c2.getGlobalProperties().reset();
             }
           }
  else {
@@ -57,6 +79,12 @@
             }
  else {
               c2.setShipStrategy(this.input2.getShipStrategy());
+            }
+            if (globalDopChange2) {
+              c2.adjustGlobalPropertiesForFullParallelismChange();
+            }
+ else             if (localDopChange2) {
+              c2.adjustGlobalPropertiesForLocalParallelismChange();
             }
           }
           for (          GlobalPropertiesPair gpp : allGlobalPairs) {

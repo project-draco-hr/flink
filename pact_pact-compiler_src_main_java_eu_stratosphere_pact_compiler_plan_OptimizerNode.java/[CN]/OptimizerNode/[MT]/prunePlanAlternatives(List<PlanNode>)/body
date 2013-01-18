@@ -1,65 +1,45 @@
 {
-  if (plans.isEmpty()) {
-    throw new CompilerException("No plan meeting the requirements could be created.");
+  if (this.openBranches == null || this.openBranches.isEmpty()) {
+    prunePlanAlternativesWithCommonBranching(plans);
   }
-  if (plans.size() == 1) {
-    return;
-  }
-  final RequestedGlobalProperties[] gps=(RequestedGlobalProperties[])this.intProps.getGlobalProperties().toArray(new RequestedGlobalProperties[this.intProps.getGlobalProperties().size()]);
-  final RequestedLocalProperties[] lps=(RequestedLocalProperties[])this.intProps.getLocalProperties().toArray(new RequestedLocalProperties[this.intProps.getLocalProperties().size()]);
-  final PlanNode[][] toKeep=new PlanNode[gps.length][];
-  final PlanNode[] cheapestForGlobal=new PlanNode[gps.length];
-  PlanNode cheapest=null;
-  for (  PlanNode candidate : plans) {
-    if (cheapest == null || (cheapest.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0)) {
-      cheapest=candidate;
+ else {
+    final OptimizerNode branchDeterminer=openBranches.get(this.openBranches.size() - 1).getBranchingNode();
+    Comparator<PlanNode> sorter=new Comparator<PlanNode>(){
+      @Override public int compare(      PlanNode o1,      PlanNode o2){
+        PlanNode n1=o1.getCandidateAtBranchPoint(branchDeterminer);
+        PlanNode n2=o2.getCandidateAtBranchPoint(branchDeterminer);
+        return System.identityHashCode(n1) - System.identityHashCode(n2);
+      }
     }
-    for (int i=0; i < gps.length; i++) {
-      if (gps[i].isMetBy(candidate.getGlobalProperties())) {
-        if (cheapestForGlobal[i] == null || (cheapestForGlobal[i].getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0)) {
-          cheapestForGlobal[i]=candidate;
-        }
-        final PlanNode[] localMatches;
-        if (toKeep[i] == null) {
-          localMatches=new PlanNode[lps.length];
-          toKeep[i]=localMatches;
+;
+    Collections.sort(plans,sorter);
+    List<PlanNode> result=new ArrayList<PlanNode>();
+    List<PlanNode> turn=new ArrayList<PlanNode>();
+    while (!plans.isEmpty()) {
+      turn.clear();
+      PlanNode determiner=plans.remove(plans.size() - 1);
+      turn.add(determiner);
+      PlanNode determinerChoice=determiner.getCandidateAtBranchPoint(branchDeterminer);
+      for (int k=plans.size() - 1; k >= 0; k--) {
+        PlanNode toCheck=plans.get(k);
+        PlanNode checkerChoice=toCheck.getCandidateAtBranchPoint(branchDeterminer);
+        if (checkerChoice == determinerChoice) {
+          plans.remove(k);
+          turn.add(toCheck);
         }
  else {
-          localMatches=toKeep[i];
-        }
-        for (int k=0; k < lps.length; k++) {
-          if (lps[k].isMetBy(candidate.getLocalProperties())) {
-            final PlanNode previous=localMatches[k];
-            if (previous == null || previous.getCumulativeCosts().compareTo(candidate.getCumulativeCosts()) > 0) {
-              localMatches[k]=candidate;
-            }
-          }
+          break;
         }
       }
-    }
-  }
-  plans.clear();
-  if (cheapest != null) {
-    plans.add(cheapest);
-    cheapest.setPruningMarker();
-  }
-  for (int i=0; i < gps.length; i++) {
-    if (toKeep[i] != null) {
-      final PlanNode[] localMatches=toKeep[i];
-      for (int k=0; k < localMatches.length; k++) {
-        final PlanNode n=localMatches[k];
-        if (n != null && !n.isPruneMarkerSet()) {
-          n.setPruningMarker();
-          plans.add(n);
-        }
+      if (turn.size() > 1) {
+        prunePlanAlternativesWithCommonBranching(turn);
       }
-    }
-    if (cheapestForGlobal[i] != null) {
-      final PlanNode n=cheapestForGlobal[i];
-      if (!n.isPruneMarkerSet()) {
-        n.setPruningMarker();
-        plans.add(n);
+ else {
+        throw new CompilerException();
       }
+      result.addAll(turn);
     }
+    plans.clear();
+    plans.addAll(result);
   }
 }
