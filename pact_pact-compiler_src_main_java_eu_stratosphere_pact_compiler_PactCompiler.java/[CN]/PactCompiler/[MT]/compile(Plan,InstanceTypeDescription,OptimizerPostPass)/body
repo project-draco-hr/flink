@@ -72,6 +72,9 @@
   rootNode.accept(propsVisitor);
   BranchesVisitor branchingVisitor=new BranchesVisitor();
   rootNode.accept(branchingVisitor);
+  if (rootNode.getOpenBranches() != null && rootNode.getOpenBranches().size() > 0) {
+    throw new CompilerException("Bug: Logic for branching plans (non-tree plans) has an error, and does not " + "track the re-joining of branches correctly.");
+  }
   List<PlanNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
   if (bestPlan.size() != 1) {
     throw new CompilerException("Error in compiler: more than one best plan was created!");
@@ -81,9 +84,13 @@
   if (bestPlanRoot instanceof SinkPlanNode) {
     bestPlanSinks.add((SinkPlanNode)bestPlanRoot);
   }
+ else   if (bestPlanRoot instanceof SinkJoinerPlanNode) {
+    ((SinkJoinerPlanNode)bestPlanRoot).getDataSinks(bestPlanSinks);
+  }
   OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryPerInstance);
   plan.setInstanceTypeName(instanceName);
   plan.setPlanConfiguration(pactPlan.getPlanConfiguration());
+  plan.accept(new BinaryUnionReplacer());
   postPasser.postPass(plan);
   return plan;
 }

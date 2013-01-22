@@ -1,8 +1,66 @@
 {
+  if (this.hereJoinedBranchers != null && this.hereJoinedBranchers.size() > 0) {
+    boolean someDamOnLeftPaths=false;
+    boolean damOnAllLeftPaths=true;
+    boolean someDamOnRightPaths=false;
+    boolean damOnAllRightPaths=true;
+    if (operator.getStrategy().firstDam() == DamBehavior.FULL_DAM || in1.getLocalStrategy().dams()) {
+      someDamOnLeftPaths=true;
+    }
+ else {
+      for (      OptimizerNode brancher : this.hereJoinedBranchers) {
+        PlanNode candAtBrancher=in1.getSource().getCandidateAtBranchPoint(brancher);
+        int res=in1.getSource().hasDamOnPathDownTo(candAtBrancher);
+        if (res == 0) {
+          throw new CompilerException("Bug: Tracing dams for deadlock detection is broken.");
+        }
+ else         if (res == PlanNode.FOUND_SOURCE) {
+          damOnAllLeftPaths=false;
+        }
+ else         if (res == PlanNode.FOUND_SOURCE_AND_DAM) {
+          someDamOnLeftPaths=true;
+        }
+ else {
+          throw new CompilerException();
+        }
+      }
+    }
+    if (operator.getStrategy().secondDam() == DamBehavior.FULL_DAM || in2.getLocalStrategy().dams()) {
+      someDamOnRightPaths=true;
+    }
+ else {
+      for (      OptimizerNode brancher : this.hereJoinedBranchers) {
+        PlanNode candAtBrancher=in2.getSource().getCandidateAtBranchPoint(brancher);
+        int res=in2.getSource().hasDamOnPathDownTo(candAtBrancher);
+        if (res == 0) {
+          throw new CompilerException("Bug: Tracing dams for deadlock detection is broken.");
+        }
+ else         if (res == PlanNode.FOUND_SOURCE) {
+          damOnAllRightPaths=false;
+        }
+ else         if (res == PlanNode.FOUND_SOURCE_AND_DAM) {
+          someDamOnRightPaths=true;
+        }
+ else {
+          throw new CompilerException();
+        }
+      }
+    }
+    if ((damOnAllLeftPaths & damOnAllRightPaths) | (!someDamOnLeftPaths & !someDamOnRightPaths)) {
+    }
+ else {
+      if (someDamOnLeftPaths & !damOnAllRightPaths) {
+        in2.setTempMode(TempMode.MATERIALIZE);
+      }
+      if (someDamOnRightPaths & !damOnAllLeftPaths) {
+        in1.setTempMode(TempMode.MATERIALIZE);
+      }
+    }
+  }
   DualInputPlanNode node=operator.instantiate(in1,in2,this);
   GlobalProperties gp1=in1.getGlobalProperties().clone().filterByNodesConstantSet(this,0);
   GlobalProperties gp2=in2.getGlobalProperties().clone().filterByNodesConstantSet(this,1);
-  GlobalProperties combined=GlobalProperties.combine(gp1,gp2);
+  GlobalProperties combined=operator.computeGlobalProperties(gp1,gp2);
   LocalProperties lp1=in1.getLocalProperties().clone().filterByNodesConstantSet(this,0);
   LocalProperties lp2=in2.getLocalProperties().clone().filterByNodesConstantSet(this,1);
   LocalProperties locals=operator.computeLocalProperties(lp1,lp2);
