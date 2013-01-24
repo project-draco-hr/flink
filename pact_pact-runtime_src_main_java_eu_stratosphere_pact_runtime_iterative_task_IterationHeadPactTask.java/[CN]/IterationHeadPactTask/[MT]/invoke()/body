@@ -1,0 +1,66 @@
+{
+  int workerIndex=getEnvironment().getIndexInSubtaskGroup();
+  IterationContext iterationContext=IterationContext.instance();
+  BlockingBackChannel backChannel=initBackChannel();
+  SuperstepBarrier barrier=initSuperstepBarrier();
+  MutableHashTable hashJoin=config.usesWorkset() ? initHashJoin() : null;
+  TypeSerializer serializer=getInputSerializer(getIterationInputIndex());
+  output=(Collector<OT>)iterationCollector();
+  while (!terminationRequested()) {
+    notifyMonitor(IterationMonitoring.Event.HEAD_STARTING);
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
+    }
+    barrier.setup();
+    notifyMonitor(IterationMonitoring.Event.HEAD_PACT_STARTING);
+    if (!inFirstIteration()) {
+      reinstantiateDriver();
+    }
+    super.invoke();
+    notifyMonitor(IterationMonitoring.Event.HEAD_PACT_FINISHED);
+    EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
+    sendEventToAllIterationOutputs(endOfSuperstepEvent);
+    DataInputView superstepResult=backChannel.getReadEndAfterSuperstepEnded();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
+    }
+    Value aggregate=iterationContext.getAggregateAndReset(workerIndex);
+    if (aggregate != null && log.isInfoEnabled()) {
+      log.info(formatLogString("sending aggregate [" + aggregate + "] to sync in iteration ["+ currentIteration()+ "]"));
+    }
+    sendEventToSync(new WorkerDoneEvent(workerIndex,aggregate));
+    notifyMonitor(IterationMonitoring.Event.HEAD_FINISHED);
+    notifyMonitor(IterationMonitoring.Event.HEAD_WAITING_FOR_OTHERS);
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("waiting for other workers in iteration [" + currentIteration() + "]"));
+    }
+    barrier.waitForOtherWorkers();
+    if (barrier.terminationSignaled()) {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("head received termination request in iteration [" + currentIteration() + "]"));
+      }
+      requestTermination();
+      sendEventToAllIterationOutputs(new TerminationEvent());
+    }
+ else {
+      incrementIterationCounter();
+      Value globalAggregate=barrier.aggregate();
+      if (globalAggregate != null) {
+        if (log.isInfoEnabled()) {
+          log.info(formatLogString("head received global aggregate [" + globalAggregate + "] in iteration ["+ currentIteration()+ "]"));
+        }
+        IterationContext.instance().setGlobalAggregate(workerIndex,globalAggregate);
+      }
+    }
+    feedBackSuperstepResult(superstepResult,serializer);
+  }
+  if (log.isInfoEnabled()) {
+    log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
+  }
+  if (config.usesWorkset()) {
+    streamOutFinalOutputWorkset(hashJoin);
+  }
+ else {
+    streamOutFinalOutputBulk();
+  }
+}

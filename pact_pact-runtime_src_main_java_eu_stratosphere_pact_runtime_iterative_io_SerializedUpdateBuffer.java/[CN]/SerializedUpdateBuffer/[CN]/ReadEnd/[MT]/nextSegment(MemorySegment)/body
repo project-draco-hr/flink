@@ -1,0 +1,28 @@
+{
+  if (requestsRemaining > 0) {
+    requestsRemaining--;
+    spilledBufferSource.readBlock(current);
+  }
+ else {
+    emptyBufferTarget.add(current);
+  }
+  if (spilledBuffersRemaining > 0) {
+    spilledBuffersRemaining--;
+    try {
+      return spilledBufferSource.getReturnQueue().take();
+    }
+ catch (    InterruptedException e) {
+      throw new RuntimeException("Read End was interrupted while waiting for spilled buffer.",e);
+    }
+  }
+ else   if (fullBufferSource.size() > 0) {
+    return fullBufferSource.removeFirst();
+  }
+ else {
+    clear();
+    if (spilledBufferSource != null) {
+      spilledBufferSource.closeAndDelete();
+    }
+    throw new EOFException();
+  }
+}

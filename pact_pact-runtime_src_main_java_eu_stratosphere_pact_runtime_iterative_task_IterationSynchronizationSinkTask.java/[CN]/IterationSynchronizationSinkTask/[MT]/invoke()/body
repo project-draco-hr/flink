@@ -1,0 +1,32 @@
+{
+  while (!terminationRequested()) {
+    notifyMonitor(IterationMonitoring.Event.SYNC_STARTING,currentIteration);
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("starting iteration [" + currentIteration + "]"));
+    }
+    readHeadEventChannel();
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("finishing iteration [" + currentIteration + "]"));
+    }
+    if (checkForConvergence()) {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("signaling that all workers are to terminate in iteration [" + currentIteration + "]"));
+      }
+      requestTermination();
+      sendToAllWorkers(new TerminationEvent());
+      notifyMonitor(IterationMonitoring.Event.SYNC_FINISHED,currentIteration);
+    }
+ else {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("signaling that all workers are done in iteration [" + currentIteration + "]"));
+      }
+      AllWorkersDoneEvent allWorkersDoneEvent=taskConfig.usesConvergenceCriterion() ? new AllWorkersDoneEvent(aggregator.getAggregate()) : new AllWorkersDoneEvent();
+      if (taskConfig.usesConvergenceCriterion()) {
+        aggregator.reset();
+      }
+      sendToAllWorkers(allWorkersDoneEvent);
+      notifyMonitor(IterationMonitoring.Event.SYNC_FINISHED,currentIteration);
+      currentIteration++;
+    }
+  }
+}

@@ -8,12 +8,17 @@
   initTable(numBuckets,(byte)partitionFanOut);
   final TypeComparator<BT> buildTypeComparator=this.buildSideComparator;
   final BT record=this.buildSideSerializer.createInstance();
+  long recordsInserted=0;
   while (input.next(record)) {
     final int hashCode=hash(buildTypeComparator.hash(record),0);
     insertIntoTable(record,hashCode);
+    recordsInserted++;
   }
   for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
     HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(i);
     p.finalizeBuildPhase(this.ioManager,this.currentEnumerator,this.writeBehindBuffers);
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("inserted " + recordsInserted + " records into build side of HybridHashJoin");
   }
 }

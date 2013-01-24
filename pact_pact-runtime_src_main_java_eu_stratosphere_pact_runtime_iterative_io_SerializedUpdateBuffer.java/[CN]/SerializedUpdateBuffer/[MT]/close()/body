@@ -1,0 +1,27 @@
+{
+  if (currentWriter != null) {
+    try {
+      currentWriter.closeAndDelete();
+    }
+ catch (    Throwable t) {
+    }
+  }
+  ArrayList<MemorySegment> freeMem=Lists.newArrayListWithCapacity(64);
+  freeMem.add(getCurrentSegment());
+  clear();
+  freeMem.addAll(fullBuffers);
+  fullBuffers=null;
+  try {
+    for (int i=readEnds.size() - 1; i >= 0; --i) {
+      final ReadEnd re=readEnds.remove(i);
+      re.forceDispose(freeMem);
+    }
+    while (freeMem.size() < totalNumBuffers) {
+      freeMem.add(emptyBuffers.take());
+    }
+  }
+ catch (  InterruptedException e) {
+    throw new RuntimeException("Retrieving memory back from asynchronous I/O was interrupted.",e);
+  }
+  return freeMem;
+}

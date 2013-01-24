@@ -1,0 +1,23 @@
+{
+  current.putInt(0,positionInCurrent);
+  if (emptyBuffers.size() > numSegmentsSpillingThreshold) {
+    fullBuffers.addLast(current);
+  }
+ else {
+    if (currentWriter == null) {
+      currentWriter=ioManager.createBlockChannelWriter(channelEnumerator.next(),emptyBuffers);
+    }
+    numBuffersSpilled+=fullBuffers.size();
+    while (fullBuffers.size() > 0) {
+      currentWriter.writeBlock(fullBuffers.removeFirst());
+    }
+    currentWriter.writeBlock(current);
+    numBuffersSpilled++;
+  }
+  try {
+    return emptyBuffers.take();
+  }
+ catch (  InterruptedException iex) {
+    throw new RuntimeException("Spilling Fifo Queue was interrupted while waiting for next buffer.");
+  }
+}
