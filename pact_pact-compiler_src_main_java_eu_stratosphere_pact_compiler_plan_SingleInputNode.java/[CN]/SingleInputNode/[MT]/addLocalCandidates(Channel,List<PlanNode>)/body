@@ -1,0 +1,27 @@
+{
+  final LocalProperties lp=template.getLocalPropertiesAfterShippingOnly();
+  for (  RequestedLocalProperties ilp : this.inConn.getInterestingProperties().getLocalProperties()) {
+    final Channel in=template.clone();
+    if (ilp.isMetBy(lp)) {
+      in.setLocalStrategy(LocalStrategy.NONE);
+    }
+ else {
+      ilp.parameterizeChannel(in);
+    }
+    for (    OperatorDescriptorSingle dps : this.possibleProperties) {
+      for (      RequestedLocalProperties ilps : dps.getPossibleLocalProperties()) {
+        if (ilps.isMetBy(in.getLocalProperties())) {
+          final SingleInputPlanNode node=dps.instantiate(in,this);
+          final GlobalProperties gProps=node.getGlobalProperties();
+          final LocalProperties lProps=node.getLocalProperties();
+          dps.processPropertiesByStrategy(gProps,lProps);
+          gProps.filterByNodesConstantSet(this,0);
+          lProps.filterByNodesConstantSet(this,0);
+          node.updatePropertiesWithUniqueSets(getUniqueFields());
+          target.add(node);
+          break;
+        }
+      }
+    }
+  }
+}

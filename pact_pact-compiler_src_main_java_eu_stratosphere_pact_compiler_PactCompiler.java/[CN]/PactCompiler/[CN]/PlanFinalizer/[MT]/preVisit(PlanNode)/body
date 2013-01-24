@@ -1,0 +1,27 @@
+{
+  if (!this.allNodes.add(visitable)) {
+    return false;
+  }
+  if (visitable instanceof SinkPlanNode) {
+    this.sinks.add((SinkPlanNode)visitable);
+  }
+ else   if (visitable instanceof SourcePlanNode) {
+    this.sources.add((SourcePlanNode)visitable);
+  }
+  for (Iterator<Channel> iter=visitable.getInputs(); iter.hasNext(); ) {
+    final Channel conn=iter.next();
+    conn.setTarget(visitable);
+    conn.getSource().addOutgoingChannel(conn);
+  }
+  this.memoryConsumerWeights+=visitable.getMemoryConsumerWeight();
+  for (Iterator<Channel> channels=visitable.getInputs(); channels.hasNext(); ) {
+    final Channel c=channels.next();
+    if (c.getLocalStrategy().dams()) {
+      this.memoryConsumerWeights++;
+    }
+    if (c.getTempMode() != TempMode.NONE) {
+      this.memoryConsumerWeights++;
+    }
+  }
+  return true;
+}

@@ -2,12 +2,71 @@
   if (this.cachedPlans != null) {
     return this.cachedPlans;
   }
-  List<? extends OptimizerNode> subPlans=this.getPredNode().getAlternativePlans(estimator);
-  List<OptimizerNode> outputPlans=new ArrayList<OptimizerNode>();
-  computeValidPlanAlternatives(subPlans,estimator,outputPlans);
-  prunePlanAlternatives(outputPlans);
-  if (this.getOutConns() != null && this.getOutConns().size() > 1) {
-    this.cachedPlans=outputPlans;
+  final List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
+  final Set<RequestedGlobalProperties> intGlobal=this.inConn.getInterestingProperties().getGlobalProperties();
+  final RequestedGlobalProperties[] allValidGlobals;
+{
+    Set<RequestedGlobalProperties> pairs=new HashSet<RequestedGlobalProperties>();
+    for (    OperatorDescriptorSingle ods : this.possibleProperties) {
+      pairs.addAll(ods.getPossibleGlobalProperties());
+    }
+    allValidGlobals=(RequestedGlobalProperties[])pairs.toArray(new RequestedGlobalProperties[pairs.size()]);
   }
+  final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  final int dop=getDegreeOfParallelism();
+  final int subPerInstance=getSubtasksPerInstance();
+  final int inDop=getPredecessorNode().getDegreeOfParallelism();
+  final int inSubPerInstance=getPredecessorNode().getSubtasksPerInstance();
+  final int numInstances=dop / subPerInstance + (dop % subPerInstance == 0 ? 0 : 1);
+  final int inNumInstances=inDop / inSubPerInstance + (inDop % inSubPerInstance == 0 ? 0 : 1);
+  final boolean globalDopChange=numInstances != inNumInstances;
+  final boolean localDopChange=numInstances == inNumInstances & subPerInstance != inSubPerInstance;
+  for (  PlanNode child : subPlans) {
+    if (this.inConn.getShipStrategy() == null) {
+      for (      RequestedGlobalProperties igps : intGlobal) {
+        final Channel c=new Channel(child);
+        igps.parameterizeChannel(c,globalDopChange,localDopChange);
+        if (globalDopChange && !c.getShipStrategy().isNetworkStrategy()) {
+          c.getGlobalProperties().reset();
+        }
+        if (localDopChange && !(c.getShipStrategy().isNetworkStrategy() || c.getShipStrategy().compensatesForLocalDOPChanges())) {
+          c.getGlobalProperties().reset();
+        }
+        for (        RequestedGlobalProperties rgps : allValidGlobals) {
+          if (rgps.isMetBy(c.getGlobalProperties())) {
+            addLocalCandidates(c,outputPlans);
+            break;
+          }
+        }
+      }
+    }
+ else {
+      final Channel c=new Channel(child);
+      if (this.keys != null) {
+        c.setShipStrategy(this.inConn.getShipStrategy(),this.keys.toFieldList());
+      }
+ else {
+        c.setShipStrategy(this.inConn.getShipStrategy());
+      }
+      if (globalDopChange) {
+        c.adjustGlobalPropertiesForFullParallelismChange();
+      }
+ else       if (localDopChange) {
+        c.adjustGlobalPropertiesForLocalParallelismChange();
+      }
+      for (      RequestedGlobalProperties rgps : allValidGlobals) {
+        if (rgps.isMetBy(c.getGlobalProperties())) {
+          addLocalCandidates(c,outputPlans);
+          break;
+        }
+      }
+    }
+  }
+  for (  PlanNode node : outputPlans) {
+    estimator.costOperator(node);
+  }
+  prunePlanAlternatives(outputPlans);
+  outputPlans.trimToSize();
+  this.cachedPlans=outputPlans;
   return outputPlans;
 }

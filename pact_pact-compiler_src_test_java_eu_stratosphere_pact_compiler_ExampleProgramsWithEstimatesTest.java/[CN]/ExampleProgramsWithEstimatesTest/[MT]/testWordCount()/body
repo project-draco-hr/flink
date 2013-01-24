@@ -1,0 +1,17 @@
+{
+  WordCount wc=new WordCount();
+  Plan p=wc.getPlan(String.valueOf(defaultParallelism),IN_FILE_1,OUT_FILE_1);
+  OptimizedPlan plan=compile(p);
+  SinkPlanNode sink=plan.getDataSinks().iterator().next();
+  SingleInputPlanNode reducer=(SingleInputPlanNode)sink.getPredecessor();
+  SingleInputPlanNode mapper=(SingleInputPlanNode)reducer.getPredecessor();
+  Assert.assertEquals(ShipStrategyType.FORWARD,mapper.getInput().getShipStrategy());
+  Assert.assertEquals(ShipStrategyType.PARTITION_HASH,reducer.getInput().getShipStrategy());
+  Assert.assertEquals(ShipStrategyType.FORWARD,sink.getInput().getShipStrategy());
+  Channel c=reducer.getInput();
+  Assert.assertEquals(LocalStrategy.COMBININGSORT,c.getLocalStrategy());
+  FieldList l=new FieldList(0);
+  Assert.assertEquals(l,c.getShipStrategyKeys());
+  Assert.assertEquals(l,c.getLocalStrategyKeys());
+  Assert.assertTrue(Arrays.equals(c.getLocalStrategySortOrder(),reducer.getSortOrders()));
+}

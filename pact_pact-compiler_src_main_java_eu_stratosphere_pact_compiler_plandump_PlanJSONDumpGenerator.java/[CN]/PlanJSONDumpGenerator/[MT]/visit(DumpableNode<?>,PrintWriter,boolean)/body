@@ -1,0 +1,285 @@
+{
+  if (this.nodeIds.containsKey(node)) {
+    return;
+  }
+  this.nodeIds.put(node,this.nodeCnt++);
+  for (Iterator<? extends DumpableNode<?>> children=node.getPredecessors(); children.hasNext(); ) {
+    final DumpableNode<?> child=children.next();
+    visit(child,writer,false);
+  }
+  final OptimizerNode n=node.getOptimizerNode();
+  if (n instanceof UnionNode) {
+    return;
+  }
+  writer.print("\t{\n\t\t\"id\": " + this.nodeIds.get(node));
+  final String type;
+switch (n.getPactType()) {
+case DataSink:
+    type="sink";
+  break;
+case DataSource:
+type="source";
+break;
+case Union:
+return;
+default :
+type="pact";
+break;
+}
+writer.print(",\n\t\t\"type\": \"" + type + "\"");
+writer.print(",\n\t\t\"pact\": \"" + n.getName() + "\"");
+final String contents;
+switch (n.getPactType()) {
+case DataSink:
+contents=n.getPactContract().toString();
+break;
+case DataSource:
+contents=n.getPactContract().toString();
+break;
+default :
+contents=n.getPactContract().getName();
+break;
+}
+writer.print(",\n\t\t\"contents\": \"" + contents + "\"");
+writer.print(",\n\t\t\"parallelism\": \"" + (n.getDegreeOfParallelism() >= 1 ? n.getDegreeOfParallelism() : "default") + "\"");
+Iterator<? extends DumpableConnection<?>> inConns=node.getDumpableInputs();
+String child1name="", child2name="";
+if (inConns != null && inConns.hasNext()) {
+writer.print(",\n\t\t\"predecessors\": [");
+int connNum=0;
+int inputNum=0;
+while (inConns.hasNext()) {
+final DumpableConnection<?> conn=inConns.next();
+final Collection<DumpableConnection<?>> inConnsForInput;
+if (conn.getSource().getOptimizerNode() instanceof UnionNode) {
+inConnsForInput=new ArrayList<DumpableConnection<?>>();
+for (Iterator<? extends DumpableConnection<?>> inputOfUnion=conn.getSource().getDumpableInputs(); inputOfUnion.hasNext(); ) {
+inConnsForInput.add(inputOfUnion.next());
+}
+}
+ else {
+inConnsForInput=Collections.<DumpableConnection<?>>singleton(conn);
+}
+for (DumpableConnection<?> inConn : inConnsForInput) {
+final DumpableNode<?> source=inConn.getSource();
+writer.print(connNum == 0 ? "\n" : ",\n");
+if (connNum == 0) {
+child1name+=child1name.length() > 0 ? ", " : "";
+child1name+=source.getOptimizerNode().getPactContract().getName();
+}
+ else if (connNum == 1) {
+child2name+=child2name.length() > 0 ? ", " : "";
+child2name=source.getOptimizerNode().getPactContract().getName();
+}
+writer.print("\t\t\t{\"id\": " + this.nodeIds.get(source));
+if (inConns.hasNext()) {
+writer.print(", \"side\": \"" + (inputNum == 0 ? "first" : "second") + "\"");
+}
+final Channel channel=(inConn instanceof Channel) ? (Channel)inConn : null;
+String shipStrategy=null;
+switch (conn.getShipStrategy()) {
+case NONE:
+break;
+case FORWARD:
+shipStrategy="Forward";
+break;
+case BROADCAST:
+shipStrategy="Broadcast";
+break;
+case PARTITION_HASH:
+shipStrategy="Hash Partition";
+break;
+case PARTITION_RANGE:
+shipStrategy="Range Partition";
+break;
+case PARTITION_LOCAL_HASH:
+shipStrategy="Hash Partition (local)";
+break;
+default :
+throw new CompilerException("Unknown ship strategy '" + conn.getShipStrategy().name() + "' in JSON generator.");
+}
+if (channel != null && channel.getShipStrategyKeys() != null && channel.getShipStrategyKeys().size() > 0) {
+shipStrategy+=" on " + (channel.getShipStrategySortOrder() == null ? channel.getShipStrategyKeys().toString() : Utils.createOrdering(channel.getShipStrategyKeys(),channel.getShipStrategySortOrder()).toString());
+}
+if (shipStrategy != null) {
+writer.print(", \"shippingStrategy\": \"" + shipStrategy + "\"");
+}
+if (channel != null) {
+String localStrategy=null;
+switch (channel.getLocalStrategy()) {
+case NONE:
+break;
+case SORT:
+localStrategy="Sort";
+break;
+case COMBININGSORT:
+localStrategy="Sort (combining)";
+break;
+default :
+throw new CompilerException("Unknown local strategy " + channel.getLocalStrategy().name());
+}
+if (channel.getLocalStrategyKeys() != null && channel.getLocalStrategyKeys().size() > 0) {
+localStrategy+=" on " + (channel.getLocalStrategySortOrder() == null ? channel.getLocalStrategyKeys().toString() : Utils.createOrdering(channel.getLocalStrategyKeys(),channel.getLocalStrategySortOrder()).toString());
+}
+if (localStrategy != null) {
+writer.print(", \"localStrategy\": \"" + localStrategy + "\"");
+}
+if (channel.getTempMode() != TempMode.NONE) {
+String tempMode=channel.getTempMode().toString();
+writer.print(", \"tempMode\": \"" + tempMode + "\"");
+}
+}
+writer.print('}');
+connNum++;
+}
+inputNum++;
+}
+writer.print("\t\t]");
+}
+final PlanNode p=node.getPlanNode();
+if (p == null) {
+return;
+}
+String locString=null;
+if (p.getDriverStrategy() != null) {
+switch (p.getDriverStrategy()) {
+case NONE:
+break;
+case MAP:
+locString="Map";
+break;
+case PARTIAL_GROUP:
+locString="Ordered Partial Grouping";
+break;
+case GROUP_OVER_ORDERED:
+locString="Ordered Grouping";
+break;
+case HYBRIDHASH_BUILD_FIRST:
+locString="Hybrid Hash (build: " + child1name + ")";
+break;
+case HYBRIDHASH_BUILD_SECOND:
+locString="Hybrid Hash (build: " + child2name + ")";
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+locString="Nested Loops (Blocked Outer: " + child1name + ")";
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+locString="Nested Loops (Blocked Outer: " + child2name + ")";
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+locString="Nested Loops (Streamed Outer: " + child1name + ")";
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+locString="Nested Loops (Streamed Outer: " + child2name + ")";
+break;
+case MERGE:
+locString="Merge";
+break;
+case CO_GROUP:
+locString="Co-Group";
+break;
+default :
+throw new CompilerException("Unknown local strategy '" + p.getDriverStrategy().name() + "' in JSON generator.");
+}
+if (locString != null) {
+writer.print(",\n\t\t\"local_strategy\": \"");
+writer.print(locString);
+writer.print("\"");
+}
+}
+{
+final GlobalProperties gp=p.getGlobalProperties();
+writer.print(",\n\t\t\"global_properties\": [\n");
+addProperty(writer,"Partitioning",gp.getPartitioning().name(),true);
+if (gp.getPartitioningFields() != null) {
+addProperty(writer,"Partitioned on",gp.getPartitioningFields().toString(),false);
+}
+if (gp.getPartitioningOrdering() != null) {
+addProperty(writer,"Partitioning Order",gp.getPartitioningOrdering().toString(),false);
+}
+ else {
+addProperty(writer,"Partitioning Order","(none)",false);
+}
+if (n.getUniqueFields() == null || n.getUniqueFields().size() == 0) {
+addProperty(writer,"Uniqueness","not unique",false);
+}
+ else {
+addProperty(writer,"Uniqueness",n.getUniqueFields().toString(),false);
+}
+writer.print("\n\t\t]");
+}
+{
+LocalProperties lp=p.getLocalProperties();
+writer.print(",\n\t\t\"local_properties\": [\n");
+if (lp.getOrdering() != null) {
+addProperty(writer,"Order",lp.getOrdering().toString(),true);
+}
+ else {
+addProperty(writer,"Order","(none)",true);
+}
+if (lp.getGroupedFields() != null && lp.getGroupedFields().size() > 0) {
+addProperty(writer,"Grouped on",lp.getGroupedFields().toString(),false);
+}
+ else {
+addProperty(writer,"Grouping","not grouped",false);
+}
+if (n.getUniqueFields() == null || n.getUniqueFields().size() == 0) {
+addProperty(writer,"Uniqueness","not unique",false);
+}
+ else {
+addProperty(writer,"Uniqueness",n.getUniqueFields().toString(),false);
+}
+writer.print("\n\t\t]");
+}
+writer.print(",\n\t\t\"properties\": [\n");
+addProperty(writer,"Est. Cardinality",n.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(n.getEstimatedNumRecords()),true);
+String estCardinality="(unknown)";
+if (n.getEstimatedCardinalities().size() > 0) {
+estCardinality="";
+for (Entry<FieldSet,Long> entry : n.getEstimatedCardinalities().entrySet()) {
+estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+addProperty(writer,"Est. Cardinality/fields",estCardinality,false);
+addProperty(writer,"Est. Output Size",n.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(n.getEstimatedOutputSize(),"B"),false);
+writer.print("\t\t]");
+if (p.getNodeCosts() != null) {
+writer.print(",\n\t\t\"costs\": [\n");
+addProperty(writer,"Network",p.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(p.getNodeCosts().getNetworkCost(),"B"),true);
+addProperty(writer,"Disk I/O",p.getNodeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(p.getNodeCosts().getSecondaryStorageCost(),"B"),false);
+addProperty(writer,"Cumulative Network",p.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(p.getCumulativeCosts().getNetworkCost(),"B"),false);
+addProperty(writer,"Cumulative Disk I/O",p.getCumulativeCosts().getSecondaryStorageCost() == -1 ? "(unknown)" : formatNumber(p.getCumulativeCosts().getSecondaryStorageCost(),"B"),false);
+writer.print("\n\t\t]");
+}
+if (n.getPactContract().getCompilerHints() != null) {
+CompilerHints hints=n.getPactContract().getCompilerHints();
+CompilerHints defaults=new CompilerHints();
+writer.print(",\n\t\t\"compiler_hints\": [\n");
+String hintCardinality;
+if (hints.getDistinctCounts().size() > 0) {
+hintCardinality="";
+for (Entry<FieldSet,Long> entry : hints.getDistinctCounts().entrySet()) {
+hintCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+ else {
+hintCardinality="(none)";
+}
+addProperty(writer,"Cardinality",hintCardinality,true);
+addProperty(writer,"Avg. Records/StubCall",hints.getAvgRecordsEmittedPerStubCall() == defaults.getAvgRecordsEmittedPerStubCall() ? "(none)" : String.valueOf(hints.getAvgRecordsEmittedPerStubCall()),false);
+String valuesKey;
+if (hints.getAvgNumRecordsPerDistinctFields().size() > 0) {
+valuesKey="";
+for (Entry<FieldSet,Float> entry : hints.getAvgNumRecordsPerDistinctFields().entrySet()) {
+valuesKey+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
+}
+}
+ else {
+valuesKey="(none)";
+}
+addProperty(writer,"Avg. Values/Distinct fields",valuesKey,false);
+addProperty(writer,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
+writer.print("\t\t]");
+}
+writer.print("\n\t},\n");
+}

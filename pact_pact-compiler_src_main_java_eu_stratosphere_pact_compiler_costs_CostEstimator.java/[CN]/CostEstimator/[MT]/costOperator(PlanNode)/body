@@ -1,0 +1,81 @@
+{
+  final Costs costs=new Costs();
+  final long availableMemory=n.getGuaranteedAvailableMemory();
+  for (Iterator<Channel> channels=n.getInputs(); channels.hasNext(); ) {
+    final Channel channel=channels.next();
+switch (channel.getShipStrategy()) {
+case NONE:
+      throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for an input.");
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+    break;
+case PARTITION_RANDOM:
+  addRandomPartitioningCost(channel,costs);
+break;
+case PARTITION_HASH:
+addHashPartitioningCost(channel,costs);
+break;
+case PARTITION_RANGE:
+addRangePartitionCost(channel,costs);
+break;
+case BROADCAST:
+addBroadcastCost(channel,channel.getReplicationFactor(),costs);
+break;
+default :
+throw new CompilerException("Unknown shipping strategy for input: " + channel.getShipStrategy());
+}
+switch (channel.getLocalStrategy()) {
+case NONE:
+break;
+case SORT:
+case COMBININGSORT:
+addLocalSortCost(channel,availableMemory,costs);
+break;
+default :
+throw new CompilerException("Unsupported local strategy for input: " + channel.getLocalStrategy());
+}
+if (channel.getTempMode() != null && channel.getTempMode() != TempMode.NONE) {
+addArtificialDamCost(channel,0,costs);
+}
+}
+Channel firstInput=null;
+Channel secondInput=null;
+{
+Iterator<Channel> channels=n.getInputs();
+if (channels.hasNext()) firstInput=channels.next();
+if (channels.hasNext()) secondInput=channels.next();
+}
+switch (n.getDriverStrategy()) {
+case NONE:
+case MAP:
+case PARTIAL_GROUP:
+case GROUP_OVER_ORDERED:
+case CO_GROUP:
+break;
+case MERGE:
+addLocalMergeCost(firstInput,secondInput,availableMemory,costs);
+break;
+case HYBRIDHASH_BUILD_FIRST:
+addHybridHashCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case HYBRIDHASH_BUILD_SECOND:
+addHybridHashCosts(secondInput,firstInput,availableMemory,costs);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+addBlockNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+addBlockNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+addStreamedNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+addStreamedNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+break;
+case GROUP_SELF_NESTEDLOOP:
+default :
+throw new CompilerException("Unknown local strategy: " + n.getDriverStrategy().name());
+}
+n.setCosts(costs);
+}

@@ -1,0 +1,96 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Beginning compilation of PACT program '" + pactPlan.getJobName() + '\'');
+  }
+  final String instanceName=type.getInstanceType().getIdentifier();
+  final long memoryPerInstance=(long)(type.getHardwareDescription().getSizeOfFreeMemory() * 0.96f);
+  final int numInstances=type.getMaximumNumberOfAvailableInstances();
+  int maxMachinesJob=pactPlan.getMaxNumberMachines();
+  if (maxMachinesJob < 1) {
+    maxMachinesJob=this.maxMachines;
+  }
+ else   if (this.maxMachines >= 1) {
+    if (maxMachinesJob > this.maxMachines && LOG.isWarnEnabled()) {
+      LOG.warn("Maximal number of machines specified in PACT program (" + maxMachinesJob + ") exceeds the maximum number in the global configuration ("+ this.maxMachines+ "). Using the value given in the global configuration.");
+    }
+    maxMachinesJob=Math.min(maxMachinesJob,this.maxMachines);
+  }
+  if (maxMachinesJob < 1) {
+    maxMachinesJob=numInstances;
+  }
+ else   if (maxMachinesJob > numInstances) {
+    maxMachinesJob=numInstances;
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Maximal number of machines decreased to " + maxMachinesJob + " because no more instances are available.");
+    }
+  }
+  int defaultParallelism=pactPlan.getDefaultParallelism() > 0 ? pactPlan.getDefaultParallelism() : this.defaultDegreeOfParallelism;
+  if (this.maxIntraNodeParallelism > 0) {
+    if (defaultParallelism < 1) {
+      defaultParallelism=maxMachinesJob * this.maxIntraNodeParallelism;
+    }
+ else     if (defaultParallelism > maxMachinesJob * this.maxIntraNodeParallelism) {
+      int oldParallelism=defaultParallelism;
+      defaultParallelism=maxMachinesJob * this.maxIntraNodeParallelism;
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Decreasing default degree of parallelism from " + oldParallelism + " to "+ defaultParallelism+ " to fit a maximum number of "+ maxMachinesJob+ " instances with a intra-parallelism of "+ this.maxIntraNodeParallelism);
+      }
+    }
+  }
+ else   if (defaultParallelism < 1) {
+    defaultParallelism=maxMachinesJob;
+    if (LOG.isInfoEnabled()) {
+      LOG.info("No default parallelism specified. Using default parallelism of " + defaultParallelism + " (One task per instance)");
+    }
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Using a default degree of parallelism of " + defaultParallelism + ", a maximum intra-node parallelism of "+ this.maxIntraNodeParallelism+ '.');
+    if (this.maxMachines > 0) {
+      LOG.debug("The execution is limited to a maximum number of " + maxMachinesJob + " machines.");
+    }
+  }
+  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(this.statistics,maxMachinesJob,defaultParallelism,true);
+  pactPlan.accept(graphCreator);
+  OptimizerNode rootNode;
+  if (graphCreator.sinks.size() == 1) {
+    rootNode=graphCreator.sinks.get(0);
+  }
+ else   if (graphCreator.sinks.size() > 1) {
+    Iterator<DataSinkNode> iter=graphCreator.sinks.iterator();
+    rootNode=iter.next();
+    int id=graphCreator.getId();
+    while (iter.hasNext()) {
+      rootNode=new SinkJoiner(rootNode,iter.next());
+      rootNode.SetId(id++);
+    }
+  }
+ else {
+    throw new CompilerException("Bug: The optimizer plan representation has no sinks.");
+  }
+  rootNode.accept(new MemoryDistributer(graphCreator.getMemoryConsumerCount() == 0 ? 0 : memoryPerInstance / graphCreator.getMemoryConsumerCount()));
+  InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
+  rootNode.accept(propsVisitor);
+  BranchesVisitor branchingVisitor=new BranchesVisitor();
+  rootNode.accept(branchingVisitor);
+  if (rootNode.getOpenBranches() != null && rootNode.getOpenBranches().size() > 0) {
+    throw new CompilerException("Bug: Logic for branching plans (non-tree plans) has an error, and does not " + "track the re-joining of branches correctly.");
+  }
+  List<PlanNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
+  if (bestPlan.size() != 1) {
+    throw new CompilerException("Error in compiler: more than one best plan was created!");
+  }
+  PlanNode bestPlanRoot=bestPlan.get(0);
+  List<SinkPlanNode> bestPlanSinks=new ArrayList<SinkPlanNode>(4);
+  if (bestPlanRoot instanceof SinkPlanNode) {
+    bestPlanSinks.add((SinkPlanNode)bestPlanRoot);
+  }
+ else   if (bestPlanRoot instanceof SinkJoinerPlanNode) {
+    ((SinkJoinerPlanNode)bestPlanRoot).getDataSinks(bestPlanSinks);
+  }
+  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,pactPlan.getJobName(),memoryPerInstance);
+  plan.setInstanceTypeName(instanceName);
+  plan.setPlanConfiguration(pactPlan.getPlanConfiguration());
+  plan.accept(new BinaryUnionReplacer());
+  postPasser.postPass(plan);
+  return plan;
+}

@@ -1,30 +1,42 @@
 {
+  final Configuration conf=getPactContract().getParameters();
+  final String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
+  final ShipStrategyType preSet;
+  if (shipStrategy != null) {
+    if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH)) {
+      preSet=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE)) {
+      preSet=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_FORWARD)) {
+      preSet=ShipStrategyType.FORWARD;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet=ShipStrategyType.PARTITION_RANDOM;
+    }
+ else {
+      throw new CompilerException("Unrecognized ship strategy hint: " + shipStrategy);
+    }
+  }
+ else {
+    preSet=null;
+  }
   List<Contract> children=((SingleInputContract<?>)getPactContract()).getInputs();
   OptimizerNode pred;
+  PactConnection conn;
   if (children.size() == 1) {
     pred=contractToNode.get(children.get(0));
+    conn=new PactConnection(pred,this);
+    if (preSet != null) {
+      conn.setShipStrategy(preSet);
+    }
   }
  else {
-    pred=new UnionNode(getPactContract(),children,contractToNode);
-    pred.setDegreeOfParallelism(this.getDegreeOfParallelism());
-    pred.SetId(this.id);
-    pred.setInstancesPerMachine(instancesPerMachine);
-    this.id++;
+    pred=createdUnionCascade(children,contractToNode,preSet);
+    conn=new PactConnection(pred,this);
+    conn.setShipStrategy(ShipStrategyType.FORWARD);
   }
-  PactConnection conn=new PactConnection(pred,this);
-  this.setInConn(conn);
-  pred.addOutConn(conn);
-  Configuration conf=getPactContract().getParameters();
-  String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
-  if (shipStrategy != null) {
-    if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
-      conn.setShipStrategy(new ForwardSS());
-    }
- else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
-      conn.setShipStrategy(new PartitionHashSS(this.keyList));
-    }
- else {
-      throw new CompilerException("Invalid hint for the shipping strategy of a single input connection: " + shipStrategy);
-    }
-  }
+  setIncomingConnection(conn);
+  pred.addOutgoingConnection(conn);
 }

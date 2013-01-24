@@ -1,49 +1,23 @@
 {
-  DualInputContract<?> contr=(DualInputContract<?>)getPactContract();
-  List<Contract> leftPreds=contr.getFirstInputs();
-  List<Contract> rightPreds=contr.getSecondInputs();
-  OptimizerNode pred1;
-  if (leftPreds.size() == 1) {
-    pred1=contractToNode.get(leftPreds.get(0));
-  }
- else {
-    pred1=new UnionNode(getPactContract(),leftPreds,contractToNode);
-    pred1.setDegreeOfParallelism(this.getDegreeOfParallelism());
-    pred1.SetId(this.id);
-    pred1.setInstancesPerMachine(instancesPerMachine);
-    this.id++;
-  }
-  PactConnection conn1=new PactConnection(pred1,this);
-  this.input1=conn1;
-  pred1.addOutConn(conn1);
-  OptimizerNode pred2;
-  if (rightPreds.size() == 1) {
-    pred2=contractToNode.get(rightPreds.get(0));
-  }
- else {
-    pred2=new UnionNode(getPactContract(),rightPreds,contractToNode);
-    pred2.setDegreeOfParallelism(this.getDegreeOfParallelism());
-    pred2.SetId(this.id);
-    pred2.setInstancesPerMachine(instancesPerMachine);
-    this.id++;
-  }
-  PactConnection conn2=new PactConnection(pred2,this);
-  this.input2=conn2;
-  pred2.addOutConn(conn2);
-  Configuration conf=getPactContract().getParameters();
+  final Configuration conf=getPactContract().getParameters();
+  ShipStrategyType preSet1=null;
+  ShipStrategyType preSet2=null;
   String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
   if (shipStrategy != null) {
     if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new ForwardSS());
-      this.input2.setShipStrategy(new ForwardSS());
+      preSet1=preSet2=ShipStrategyType.FORWARD;
     }
  else     if (PactCompiler.HINT_SHIP_STRATEGY_BROADCAST.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new BroadcastSS());
-      this.input2.setShipStrategy(new BroadcastSS());
+      preSet1=preSet2=ShipStrategyType.BROADCAST;
     }
- else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new PartitionHashSS(this.keySet1));
-      this.input2.setShipStrategy(new PartitionHashSS(this.keySet2));
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH.equals(shipStrategy)) {
+      preSet1=preSet2=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE.equals(shipStrategy)) {
+      preSet1=preSet2=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet1=preSet2=ShipStrategyType.PARTITION_RANDOM;
     }
  else {
       throw new CompilerException("Unknown hint for shipping strategy: " + shipStrategy);
@@ -52,13 +26,19 @@
   shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY_FIRST_INPUT,null);
   if (shipStrategy != null) {
     if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new ForwardSS());
+      preSet1=ShipStrategyType.FORWARD;
     }
  else     if (PactCompiler.HINT_SHIP_STRATEGY_BROADCAST.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new BroadcastSS());
+      preSet1=ShipStrategyType.BROADCAST;
     }
- else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
-      this.input1.setShipStrategy(new PartitionHashSS(this.keySet1));
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH.equals(shipStrategy)) {
+      preSet1=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE.equals(shipStrategy)) {
+      preSet1=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet1=ShipStrategyType.PARTITION_RANDOM;
     }
  else {
       throw new CompilerException("Unknown hint for shipping strategy of input one: " + shipStrategy);
@@ -67,16 +47,57 @@
   shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY_SECOND_INPUT,null);
   if (shipStrategy != null) {
     if (PactCompiler.HINT_SHIP_STRATEGY_FORWARD.equals(shipStrategy)) {
-      this.input2.setShipStrategy(new ForwardSS());
+      preSet1=ShipStrategyType.FORWARD;
     }
  else     if (PactCompiler.HINT_SHIP_STRATEGY_BROADCAST.equals(shipStrategy)) {
-      this.input2.setShipStrategy(new BroadcastSS());
+      preSet1=ShipStrategyType.BROADCAST;
     }
- else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION.equals(shipStrategy)) {
-      this.input2.setShipStrategy(new PartitionHashSS(this.keySet2));
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH.equals(shipStrategy)) {
+      preSet1=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE.equals(shipStrategy)) {
+      preSet1=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet1=ShipStrategyType.PARTITION_RANDOM;
     }
  else {
       throw new CompilerException("Unknown hint for shipping strategy of input two: " + shipStrategy);
     }
   }
+  DualInputContract<?> contr=(DualInputContract<?>)getPactContract();
+  List<Contract> leftPreds=contr.getFirstInputs();
+  List<Contract> rightPreds=contr.getSecondInputs();
+  OptimizerNode pred1;
+  PactConnection conn1;
+  if (leftPreds.size() == 1) {
+    pred1=contractToNode.get(leftPreds.get(0));
+    conn1=new PactConnection(pred1,this);
+    if (preSet1 != null) {
+      conn1.setShipStrategy(preSet1);
+    }
+  }
+ else {
+    pred1=createdUnionCascade(leftPreds,contractToNode,preSet1);
+    conn1=new PactConnection(pred1,this);
+    conn1.setShipStrategy(ShipStrategyType.FORWARD);
+  }
+  this.input1=conn1;
+  pred1.addOutgoingConnection(conn1);
+  OptimizerNode pred2;
+  PactConnection conn2;
+  if (rightPreds.size() == 1) {
+    pred2=contractToNode.get(rightPreds.get(0));
+    conn2=new PactConnection(pred2,this);
+    if (preSet2 != null) {
+      conn2.setShipStrategy(preSet2);
+    }
+  }
+ else {
+    pred2=createdUnionCascade(rightPreds,contractToNode,preSet1);
+    conn2=new PactConnection(pred2,this);
+    conn2.setShipStrategy(ShipStrategyType.FORWARD);
+  }
+  this.input2=conn2;
+  pred2.addOutgoingConnection(conn2);
 }

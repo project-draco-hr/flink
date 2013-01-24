@@ -1,4 +1,7 @@
 {
+  final String out1Path="file:///test/1";
+  final String out2Path="file:///test/2";
+  final String out3Path="file:///test/3";
   FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
   FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
   FileDataSource sourceC=new FileDataSource(DummyInputFormat.class,IN_FILE_1);
@@ -8,15 +11,24 @@
   MatchContract mat2=MatchContract.builder(DummyMatchStub.class,PactInteger.class,0,0).input1(ma).input2(mat1).build();
   ReduceContract r=new ReduceContract.Builder(IdentityReduce.class,PactInteger.class,0).input(ma).build();
   CrossContract c=CrossContract.builder(DummyCrossStub.class).input1(r).input2(mat2).build();
-  FileDataSink sinkA=new FileDataSink(DummyOutputFormat.class,OUT_FILE_1,c);
-  FileDataSink sinkB=new FileDataSink(DummyOutputFormat.class,OUT_FILE_2,mat2);
-  FileDataSink sinkC=new FileDataSink(DummyOutputFormat.class,OUT_FILE_3,mat2);
+  FileDataSink sinkA=new FileDataSink(DummyOutputFormat.class,out1Path,c);
+  FileDataSink sinkB=new FileDataSink(DummyOutputFormat.class,out2Path,mat2);
+  FileDataSink sinkC=new FileDataSink(DummyOutputFormat.class,out3Path,mat2);
   List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
   sinks.add(sinkA);
   sinks.add(sinkB);
   sinks.add(sinkC);
   Plan plan=new Plan(sinks,"Branching Plans With Multiple Data Sinks");
   OptimizedPlan oPlan=this.compiler.compile(plan,this.instanceType);
+  Assert.assertEquals("Wrong number of data sinks.",3,oPlan.getDataSinks().size());
+  Set<String> allSinks=new HashSet<String>();
+  allSinks.add(out1Path);
+  allSinks.add(out2Path);
+  allSinks.add(out3Path);
+  for (  SinkPlanNode n : oPlan.getDataSinks()) {
+    String path=((FileDataSink)n.getSinkNode().getPactContract()).getFilePath();
+    Assert.assertTrue("Invalid data sink.",allSinks.remove(path));
+  }
   JobGraphGenerator jobGen=new JobGraphGenerator();
   jobGen.compileJobGraph(oPlan);
 }
