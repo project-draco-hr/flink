@@ -9,4 +9,18 @@
   if (this.computeEstimates) {
     n.computeOutputEstimates(this.statistics);
   }
+  if (n instanceof BulkIterationNode) {
+    final BulkIterationNode iterNode=(BulkIterationNode)n;
+    final BulkIteration iter=iterNode.getIterationContract();
+    final GraphCreatingVisitor recursiveCreator=new GraphCreatingVisitor(this,this.statistics,this.maxMachines,this.defaultParallelism,this.computeEstimates);
+    iter.getNextPartialSolution().accept(recursiveCreator);
+    OptimizerNode rootOfStepFunction=recursiveCreator.con2node.get(iter.getNextPartialSolution());
+    PartialSolutionNode partialSolution=(PartialSolutionNode)recursiveCreator.con2node.get(iter.getPartialSolution());
+    PactConnection rootConn=new PactConnection(rootOfStepFunction,null);
+    rootOfStepFunction.addOutgoingConnection(rootConn);
+    iterNode.setNextPartialSolution(rootOfStepFunction,rootConn);
+    iterNode.setPartialSolution(partialSolution);
+    this.numMemoryConsumers+=recursiveCreator.numMemoryConsumers;
+    rootOfStepFunction.accept(new StaticDynamicPathIdentifier(iterNode.getCostWeight()));
+  }
 }
