@@ -1,8 +1,9 @@
 {
-  final Costs costs=new Costs();
+  final Costs totalCosts=new Costs();
   final long availableMemory=n.getGuaranteedAvailableMemory();
   for (Iterator<Channel> channels=n.getInputs(); channels.hasNext(); ) {
     final Channel channel=channels.next();
+    final Costs costs=new Costs();
 switch (channel.getShipStrategy()) {
 case NONE:
       throw new CompilerException("Cannot determine costs: Shipping strategy has not been set for an input.");
@@ -37,9 +38,14 @@ throw new CompilerException("Unsupported local strategy for input: " + channel.g
 if (channel.getTempMode() != null && channel.getTempMode() != TempMode.NONE) {
 addArtificialDamCost(channel,0,costs);
 }
+if (channel.isOnDynamicPath()) {
+costs.multiplyWith(channel.getCostWeight());
+}
+totalCosts.addCosts(costs);
 }
 Channel firstInput=null;
 Channel secondInput=null;
+Costs driverCosts=new Costs();
 {
 Iterator<Channel> channels=n.getInputs();
 if (channels.hasNext()) firstInput=channels.next();
@@ -53,29 +59,33 @@ case GROUP_OVER_ORDERED:
 case CO_GROUP:
 break;
 case MERGE:
-addLocalMergeCost(firstInput,secondInput,availableMemory,costs);
+addLocalMergeCost(firstInput,secondInput,availableMemory,driverCosts);
 break;
 case HYBRIDHASH_BUILD_FIRST:
-addHybridHashCosts(firstInput,secondInput,availableMemory,costs);
+addHybridHashCosts(firstInput,secondInput,availableMemory,driverCosts);
 break;
 case HYBRIDHASH_BUILD_SECOND:
-addHybridHashCosts(secondInput,firstInput,availableMemory,costs);
+addHybridHashCosts(secondInput,firstInput,availableMemory,driverCosts);
 break;
 case NESTEDLOOP_BLOCKED_OUTER_FIRST:
-addBlockNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+addBlockNestedLoopsCosts(firstInput,secondInput,availableMemory,driverCosts);
 break;
 case NESTEDLOOP_BLOCKED_OUTER_SECOND:
-addBlockNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+addBlockNestedLoopsCosts(secondInput,firstInput,availableMemory,driverCosts);
 break;
 case NESTEDLOOP_STREAMED_OUTER_FIRST:
-addStreamedNestedLoopsCosts(firstInput,secondInput,availableMemory,costs);
+addStreamedNestedLoopsCosts(firstInput,secondInput,availableMemory,driverCosts);
 break;
 case NESTEDLOOP_STREAMED_OUTER_SECOND:
-addStreamedNestedLoopsCosts(secondInput,firstInput,availableMemory,costs);
+addStreamedNestedLoopsCosts(secondInput,firstInput,availableMemory,driverCosts);
 break;
 case GROUP_SELF_NESTEDLOOP:
 default :
 throw new CompilerException("Unknown local strategy: " + n.getDriverStrategy().name());
 }
-n.setCosts(costs);
+if (n.isOnDynamicPath()) {
+driverCosts.multiplyWith(n.getCostWeight());
+}
+totalCosts.addCosts(driverCosts);
+n.setCosts(totalCosts);
 }
