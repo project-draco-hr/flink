@@ -28,6 +28,48 @@
  else   if (node instanceof SourcePlanNode) {
     ((SourcePlanNode)node).setSerializer(PactRecordSerializerFactory.get());
   }
+ else   if (node instanceof BulkIterationPlanNode) {
+    BulkIterationPlanNode iterationNode=(BulkIterationPlanNode)node;
+    final KeySchema schema;
+    if (iterationNode.postPassHelper == null) {
+      schema=new KeySchema();
+      iterationNode.postPassHelper=schema;
+    }
+ else {
+      schema=(KeySchema)iterationNode.postPassHelper;
+    }
+    schema.increaseNumConnectionsThatContributed();
+    try {
+      for (      Map.Entry<Integer,Class<? extends Key>> entry : parentSchema) {
+        final Integer pos=entry.getKey();
+        schema.addType(pos,entry.getValue());
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Conflicting key type information for field " + ex.getFieldNumber() + " in node '"+ iterationNode.getPactContract().getName()+ "' propagated from successor node. "+ "Conflicting types: "+ ex.getPreviousType().getName()+ " and "+ ex.getNewType().getName()+ ". Most probable cause: Invalid constant field annotations.");
+    }
+    if (schema.getNumConnectionsThatContributed() < iterationNode.getOutgoingChannels().size()) {
+      return;
+    }
+    iterationNode.setSerializerForIterationChannel(PactRecordSerializerFactory.get());
+    traverse(iterationNode.getRootOfStepFunction(),schema);
+    KeySchema pss=(KeySchema)iterationNode.getPartialSolutionPlanNode().postPassHelper;
+    try {
+      for (      Map.Entry<Integer,Class<? extends Key>> entry : pss) {
+        final Integer pos=entry.getKey();
+        schema.addType(pos,entry.getValue());
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Conflicting key type information for field " + ex.getFieldNumber() + " in node '"+ iterationNode.getPactContract().getName()+ "'. Contradicting types between the "+ "result of the iteration and the partial solution schema: "+ ex.getPreviousType().getName()+ " and "+ ex.getNewType().getName()+ ". Most probable cause: Invalid constant field annotations.");
+    }
+    try {
+      propagateToChannel(schema,iterationNode.getInput());
+    }
+ catch (    MissingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + iterationNode.getPactContract().getName() + "'. Missing type information for key field "+ ex.getFieldNumber());
+    }
+  }
  else   if (node instanceof SingleInputPlanNode) {
     final SingleInputPlanNode sn=(SingleInputPlanNode)node;
     final KeySchema schema;
@@ -176,6 +218,27 @@
     }
  catch (    MissingFieldTypeInfoException ex) {
       throw new CompilerPostPassException("Could not set up runtime strategy for the input channel to " + " a union node. Missing type information for key field " + ex.getFieldNumber());
+    }
+  }
+ else   if (node instanceof PartialSolutionPlanNode) {
+    PartialSolutionPlanNode psn=(PartialSolutionPlanNode)node;
+    final KeySchema schema;
+    if (psn.postPassHelper == null) {
+      schema=new KeySchema();
+      psn.postPassHelper=schema;
+    }
+ else {
+      schema=(KeySchema)psn.postPassHelper;
+    }
+    schema.increaseNumConnectionsThatContributed();
+    try {
+      for (      Map.Entry<Integer,Class<? extends Key>> entry : parentSchema) {
+        final Integer pos=entry.getKey();
+        schema.addType(pos,entry.getValue());
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Conflicting key type information for field " + ex.getFieldNumber() + " in the partial solution of iteration '"+ psn.getPartialSolutionNode().getIterationNode().getPactContract().getName()+ "', as propagated from the successor nodes. Conflicting types: "+ ex.getPreviousType().getName()+ " and "+ ex.getNewType().getName()+ ". Most probable cause: Invalid constant field annotations.");
     }
   }
  else {
