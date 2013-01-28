@@ -1,7 +1,9 @@
 {
   super(memSegments.remove(memSegments.size() - 1),segmentSize,HEADER_LENGTH);
   totalNumBuffers=memSegments.size() + 1;
-  Preconditions.checkArgument(totalNumBuffers >= 3,"SerializedUpdateBuffer needs at least 3 memory segments.");
+  if (totalNumBuffers >= 3) {
+    throw new IllegalArgumentException("SerializedUpdateBuffer needs at least 3 memory segments.");
+  }
   emptyBuffers=new LinkedBlockingQueue<MemorySegment>(totalNumBuffers);
   fullBuffers=new ArrayDeque<MemorySegment>(64);
   emptyBuffers.addAll(memSegments);
@@ -9,8 +11,10 @@
   numSegmentsSpillingThreshold=threshold > 0 ? threshold : 0;
   minBuffersForWriteEnd=Math.max(2,Math.min(16,totalNumBuffers / 2));
   minBuffersForSpilledReadEnd=Math.max(1,Math.min(16,totalNumBuffers / 4));
-  Preconditions.checkState(minBuffersForSpilledReadEnd + minBuffersForWriteEnd <= totalNumBuffers,"BUG: Unfulfillable memory assignment.");
+  if (minBuffersForSpilledReadEnd + minBuffersForWriteEnd > totalNumBuffers) {
+    throw new IllegalArgumentException("BUG: Unfulfillable memory assignment.");
+  }
   this.ioManager=ioManager;
   channelEnumerator=ioManager.createChannelEnumerator();
-  readEnds=Lists.newArrayList();
+  readEnds=new ArrayList<ReadEnd>();
 }
