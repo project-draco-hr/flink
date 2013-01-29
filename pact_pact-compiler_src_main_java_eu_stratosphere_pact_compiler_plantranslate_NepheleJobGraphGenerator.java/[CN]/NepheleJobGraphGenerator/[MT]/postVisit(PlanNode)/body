@@ -1,46 +1,77 @@
 {
   try {
-    if (node instanceof UnionPlanNode) {
+    if (node instanceof SourcePlanNode || node instanceof UnionPlanNode) {
       return;
     }
-    final Iterator<Channel> inConns=node.getInputs();
-    if (!inConns.hasNext()) {
+    if (node instanceof IterationPlanNode) {
+      if (this.inIteration) {
+        throw new CompilerException("Nested Iterations are not possible at the moment!");
+      }
+      this.inIteration=true;
+      ((IterationPlanNode)node).acceptForStepFunction(this);
+      this.inIteration=false;
       return;
     }
     final AbstractJobVertex targetVertex=this.vertices.get(node);
     if (targetVertex == null) {
-      final Channel inConn=inConns.next();
-      if (inConns.hasNext()) {
-        throw new IllegalStateException("Bug: Found a chained task with more than one input!");
-      }
-      if (inConn.getLocalStrategy() != null && inConn.getLocalStrategy() != LocalStrategy.NONE) {
-        throw new IllegalStateException("Bug: Found a chained task with an input local strategy.");
-      }
-      if (inConn.getShipStrategy() != null && inConn.getShipStrategy() != ShipStrategyType.FORWARD) {
-        throw new IllegalStateException("Bug: Found a chained task with an input ship strategy other than FORWARD.");
-      }
-      final TaskInChain chainedTask=this.chainedTasks.get(node);
-      AbstractJobVertex container=chainedTask.getContainingVertex();
-      if (container == null) {
-        final PlanNode sourceNode=inConn.getSource();
-        container=this.vertices.get(sourceNode);
+      final TaskInChain chainedTask;
+      if ((chainedTask=this.chainedTasks.get(node)) != null) {
+        final Iterator<Channel> inConns=node.getInputs();
+        if (!inConns.hasNext()) {
+          throw new CompilerException("Bug: Found chained task with no input.");
+        }
+        final Channel inConn=inConns.next();
+        if (inConns.hasNext()) {
+          throw new CompilerException("Bug: Found a chained task with more than one input!");
+        }
+        if (inConn.getLocalStrategy() != null && inConn.getLocalStrategy() != LocalStrategy.NONE) {
+          throw new CompilerException("Bug: Found a chained task with an input local strategy.");
+        }
+        if (inConn.getShipStrategy() != null && inConn.getShipStrategy() != ShipStrategyType.FORWARD) {
+          throw new CompilerException("Bug: Found a chained task with an input ship strategy other than FORWARD.");
+        }
+        AbstractJobVertex container=chainedTask.getContainingVertex();
         if (container == null) {
-          container=this.chainedTasks.get(sourceNode).getContainingVertex();
-          if (container == null)           throw new IllegalStateException("Bug: Chained task predecessor has not been assigned its containing vertex.");
-        }
+          final PlanNode sourceNode=inConn.getSource();
+          container=this.vertices.get(sourceNode);
+          if (container == null) {
+            container=this.chainedTasks.get(sourceNode).getContainingVertex();
+            if (container == null)             throw new IllegalStateException("Bug: Chained task predecessor has not been assigned its containing vertex.");
+          }
  else {
-          new TaskConfig(container.getConfiguration()).addOutputShipStrategy(ShipStrategyType.FORWARD);
+            new TaskConfig(container.getConfiguration()).addOutputShipStrategy(ShipStrategyType.FORWARD);
+          }
+          chainedTask.setContainingVertex(container);
         }
-        chainedTask.setContainingVertex(container);
+        chainedTask.getTaskConfig().setInputSerializer(inConn.getSerializer(),0);
+        this.chainedTasksInSequence.add(chainedTask);
+        return;
       }
-      chainedTask.getTaskConfig().setInputSerializer(inConn.getSerializer(),0);
-      this.chainedTasksInSequence.add(chainedTask);
-      return;
+ else       if ((this.iterations.get(node)) != null) {
+        throw new CompilerException("Merged partial solution task not yet supported.");
+      }
+ else {
+        throw new CompilerException("Bug: Unrecognized merged task vertex.");
+      }
     }
     final TaskConfig targetVertexConfig=new TaskConfig(targetVertex.getConfiguration());
+    final Iterator<Channel> inConns;
+    if (node instanceof PartialSolutionPlanNode) {
+      inConns=((PartialSolutionPlanNode)node).getContainingIterationNode().getInputs();
+      targetVertexConfig.setIterationHeadPartialSolutionInputIndex(0);
+    }
+ else {
+      inConns=node.getInputs();
+    }
+    if (!inConns.hasNext()) {
+      throw new CompilerException("Bug: Found a non-source task with no input.");
+    }
     for (int inputIndex=0; inConns.hasNext(); inputIndex++) {
       final Channel input=inConns.next();
       TypeSerializerFactory<?> typeSerFact=null;
+      int numChannelsTotal=0;
+      int numChannelsDynamicPath=0;
+      int numDynamicSenderTasksTotal=0;
       for (      Channel inConn : getConnectionsOfInput(input)) {
         if (typeSerFact == null) {
           typeSerFact=inConn.getSerializer();
@@ -52,15 +83,36 @@
         AbstractJobVertex sourceVertex=this.vertices.get(sourceNode);
         TaskConfig sourceVertexConfig;
         if (sourceVertex == null) {
-          final TaskInChain chainedTask=this.chainedTasks.get(sourceNode);
-          if (chainedTask.getContainingVertex() == null)           throw new IllegalStateException("Bug: Chained task has not been assigned its containing vertex when connecting.");
-          sourceVertex=chainedTask.getContainingVertex();
-          sourceVertexConfig=chainedTask.getTaskConfig();
+          final TaskInChain chainedTask;
+          final IterationDescriptor iteration;
+          if ((chainedTask=this.chainedTasks.get(sourceNode)) != null) {
+            if (chainedTask.getContainingVertex() == null)             throw new IllegalStateException("Bug: Chained task has not been assigned its containing vertex when connecting.");
+            sourceVertex=chainedTask.getContainingVertex();
+            sourceVertexConfig=chainedTask.getTaskConfig();
+          }
+ else           if ((iteration=this.iterations.get(sourceNode)) != null) {
+            sourceVertex=iteration.getHeadTask();
+            sourceVertexConfig=iteration.getHeadFinalResultConfig();
+          }
+ else {
+            throw new CompilerException("Bug: Could not resolve source node for a channel.");
+          }
         }
  else {
           sourceVertexConfig=new TaskConfig(sourceVertex.getConfiguration());
         }
-        connectJobVertices(inConn,inputIndex,sourceVertex,sourceVertexConfig,targetVertex,targetVertexConfig);
+        DistributionPattern pattern=connectJobVertices(inConn,inputIndex,sourceVertex,sourceVertexConfig,targetVertex,targetVertexConfig);
+        numChannelsTotal++;
+        if (inConn.isOnDynamicPath()) {
+          numChannelsDynamicPath++;
+          numDynamicSenderTasksTotal+=getNumberOfSendersPerReceiver(pattern,sourceVertex.getNumberOfSubtasks(),targetVertex.getNumberOfSubtasks());
+        }
+      }
+      if (numChannelsTotal != numChannelsDynamicPath) {
+        throw new CompilerException("Error: It is currently not supported to union between dynamic and static path in an iteration.");
+      }
+      if (numDynamicSenderTasksTotal > 0) {
+        targetVertexConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(inputIndex,numDynamicSenderTasksTotal);
       }
       addLocalInfoFromChannelToConfig(input,targetVertexConfig,inputIndex);
     }

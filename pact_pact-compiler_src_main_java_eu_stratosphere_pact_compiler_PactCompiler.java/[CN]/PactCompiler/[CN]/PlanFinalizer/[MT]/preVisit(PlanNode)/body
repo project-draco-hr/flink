@@ -8,6 +8,14 @@
  else   if (visitable instanceof SourcePlanNode) {
     this.sources.add((SourcePlanNode)visitable);
   }
+ else   if (visitable instanceof PartialSolutionPlanNode) {
+    final PartialSolutionPlanNode pspn=(PartialSolutionPlanNode)visitable;
+    final IterationPlanNode iteration=this.stackOfIterationNodes.peekLast();
+    if (iteration == null || !(iteration instanceof BulkIterationPlanNode)) {
+      throw new CompilerException("Bug: Error finalizing the plan. " + "Cannot associate the node for a partial solutions with its containing iteration.");
+    }
+    pspn.setContainingIterationNode((BulkIterationPlanNode)iteration);
+  }
   for (Iterator<Channel> iter=visitable.getInputs(); iter.hasNext(); ) {
     final Channel conn=iter.next();
     conn.setTarget(visitable);
@@ -24,7 +32,10 @@
     }
   }
   if (visitable instanceof IterationPlanNode) {
+    final IterationPlanNode iterNode=(IterationPlanNode)visitable;
+    this.stackOfIterationNodes.addLast(iterNode);
     ((IterationPlanNode)visitable).acceptForStepFunction(this);
+    this.stackOfIterationNodes.removeLast();
   }
   return true;
 }

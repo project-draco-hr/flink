@@ -10,6 +10,13 @@
  else     if (node instanceof SourcePlanNode) {
       vertex=createDataSourceVertex((SourcePlanNode)node);
     }
+ else     if (node instanceof BulkIterationPlanNode) {
+      PlanNode root=((BulkIterationPlanNode)node).getRootOfStepFunction();
+      if (root.getDegreeOfParallelism() != node.getDegreeOfParallelism() || root.getSubtasksPerInstance() != node.getSubtasksPerInstance()) {
+        throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      vertex=null;
+    }
  else     if (node instanceof SingleInputPlanNode) {
       vertex=createSingleInputVertex((SingleInputPlanNode)node);
     }
@@ -18,6 +25,9 @@
     }
  else     if (node instanceof UnionPlanNode) {
       vertex=null;
+    }
+ else     if (node instanceof PartialSolutionPlanNode) {
+      vertex=createBulkIterationHead((PartialSolutionPlanNode)node);
     }
  else {
       throw new CompilerException("Unrecognized node type: " + node.getClass().getName());

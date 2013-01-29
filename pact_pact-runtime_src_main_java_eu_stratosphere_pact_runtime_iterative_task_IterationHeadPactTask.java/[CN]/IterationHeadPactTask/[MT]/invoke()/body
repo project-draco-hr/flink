@@ -1,11 +1,10 @@
 {
-  int workerIndex=getEnvironment().getIndexInSubtaskGroup();
-  IterationContext iterationContext=IterationContext.instance();
+  final int workerIndex=getEnvironment().getIndexInSubtaskGroup();
+  final IterationContext iterationContext=IterationContext.instance();
   BlockingBackChannel backChannel=initBackChannel();
   SuperstepBarrier barrier=initSuperstepBarrier();
-  MutableHashTable hashJoin=config.usesWorkset() ? initHashJoin() : null;
-  TypeSerializer serializer=getInputSerializer(getIterationInputIndex());
-  output=(Collector<OT>)iterationCollector();
+  this.partialSolutionInput=this.config.getIterationHeadPartialSolutionInputIndex();
+  this.solutionTypeSerializer=getInputSerializer(this.partialSolutionInput);
   while (!terminationRequested()) {
     notifyMonitor(IterationMonitoring.Event.HEAD_STARTING);
     if (log.isInfoEnabled()) {
@@ -52,15 +51,10 @@
         IterationContext.instance().setGlobalAggregate(workerIndex,globalAggregate);
       }
     }
-    feedBackSuperstepResult(superstepResult,serializer);
+    feedBackSuperstepResult(superstepResult);
   }
   if (log.isInfoEnabled()) {
     log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
   }
-  if (config.usesWorkset()) {
-    streamOutFinalOutputWorkset(hashJoin);
-  }
- else {
-    streamOutFinalOutputBulk();
-  }
+  streamOutFinalOutputBulk();
 }
