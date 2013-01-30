@@ -48,8 +48,7 @@
         return;
       }
  else       if (node instanceof PartialSolutionPlanNode) {
-        @SuppressWarnings("unused") final IterationDescriptor descr=this.iterations.get(node);
-        throw new CompilerException("Merged partial solution task not yet supported.");
+        return;
       }
  else {
         throw new CompilerException("Bug: Unrecognized merged task vertex.");
@@ -69,11 +68,36 @@
     }
     for (int inputIndex=0; inConns.hasNext(); inputIndex++) {
       final Channel input=inConns.next();
+      final PlanNode inputPlanNode=input.getSource();
+      final Iterator<Channel> allInChannels;
+      if (inputPlanNode instanceof UnionPlanNode) {
+        allInChannels=((UnionPlanNode)inputPlanNode).getListOfInputs().iterator();
+      }
+ else       if (inputPlanNode instanceof PartialSolutionPlanNode) {
+        if (this.vertices.get(inputPlanNode) == null) {
+          final PartialSolutionPlanNode pspn=(PartialSolutionPlanNode)inputPlanNode;
+          final BulkIterationPlanNode iterationNode=pspn.getContainingIterationNode();
+          if (iterationNode.getInput().getSource() instanceof UnionPlanNode) {
+            allInChannels=((UnionPlanNode)iterationNode.getInput().getSource()).getInputs();
+          }
+ else {
+            allInChannels=Collections.singletonList(iterationNode.getInput()).iterator();
+          }
+          targetVertexConfig.setIterationHeadPartialSolutionInputIndex(inputIndex);
+        }
+ else {
+          allInChannels=Collections.singletonList(input).iterator();
+        }
+      }
+ else {
+        allInChannels=Collections.singletonList(input).iterator();
+      }
       TypeSerializerFactory<?> typeSerFact=null;
       int numChannelsTotal=0;
       int numChannelsDynamicPath=0;
       int numDynamicSenderTasksTotal=0;
-      for (      Channel inConn : getConnectionsOfInput(input)) {
+      while (allInChannels.hasNext()) {
+        final Channel inConn=allInChannels.next();
         if (typeSerFact == null) {
           typeSerFact=inConn.getSerializer();
         }

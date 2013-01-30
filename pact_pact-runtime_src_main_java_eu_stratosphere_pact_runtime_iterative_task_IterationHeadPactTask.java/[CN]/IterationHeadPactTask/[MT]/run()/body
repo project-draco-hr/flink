@@ -6,7 +6,8 @@
   this.partialSolutionInput=this.config.getIterationHeadPartialSolutionInputIndex();
   this.solutionTypeSerializer=getInputSerializer(this.partialSolutionInput);
   excludeFromReset(this.partialSolutionInput);
-  while (!terminationRequested()) {
+  DataInputView superstepResult=null;
+  while (this.running && !terminationRequested()) {
     notifyMonitor(IterationMonitoring.Event.HEAD_STARTING);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
@@ -16,12 +17,13 @@
     if (!inFirstIteration()) {
       reinstantiateDriver();
       resetAllInputs();
+      feedBackSuperstepResult(superstepResult);
     }
     super.run();
     notifyMonitor(IterationMonitoring.Event.HEAD_PACT_FINISHED);
     EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
     sendEventToAllIterationOutputs(endOfSuperstepEvent);
-    DataInputView superstepResult=backChannel.getReadEndAfterSuperstepEnded();
+    superstepResult=backChannel.getReadEndAfterSuperstepEnded();
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
     }
@@ -53,10 +55,9 @@
         IterationContext.instance().setGlobalAggregate(workerIndex,globalAggregate);
       }
     }
-    feedBackSuperstepResult(superstepResult);
   }
   if (log.isInfoEnabled()) {
     log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
   }
-  streamOutFinalOutputBulk();
+  streamOutFinalOutputBulk(new InputViewIterator<X>(superstepResult,this.solutionTypeSerializer));
 }
