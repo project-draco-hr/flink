@@ -36,9 +36,10 @@
       }
       leftoverRecord=null;
     }
+    boolean available=true;
     if (bytesUntilSpilling > 0 && buffer.getCapacity() >= bytesUntilSpilling) {
       boolean fullBuffer=false;
-      while (isRunning() && reader.next(current)) {
+      while (isRunning() && (available=reader.next(current))) {
         if (!buffer.write(current)) {
           leftoverRecord=current;
           fullBuffer=true;
@@ -76,10 +77,12 @@
         this.queues.sort.add(SPILLING_MARKER);
       }
     }
-    while (isRunning() && reader.next(current)) {
-      if (!buffer.write(current)) {
-        leftoverRecord=current;
-        break;
+    if (available) {
+      while (isRunning() && reader.next(current)) {
+        if (!buffer.write(current)) {
+          leftoverRecord=current;
+          break;
+        }
       }
     }
     if (leftoverRecord != null) {

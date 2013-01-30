@@ -1,0 +1,28 @@
+{
+  final MemoryManager memMan=getMemoryManager();
+  final IOManager ioMan=getIOManager();
+  this.localStrategies=new CloseableInputProvider[numInputs];
+  this.inputs=new MutableObjectIterator[numInputs];
+  this.excludeFromReset=new boolean[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    initInputLocalStrategy(i);
+  }
+  this.resettableInputs=new SpillingResettableMutableObjectIterator[numInputs];
+  this.tempBarriers=new TempBarrier[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    if (this.config.isInputDammed(i)) {
+      final long memory=this.config.getInputDamMemory(i);
+      final int pages=memMan.computeNumberOfPages(memory);
+      @SuppressWarnings({"unchecked","rawtypes"}) TempBarrier<?> barrier=new TempBarrier(this,getInput(i),this.inputSerializers[i],memMan,ioMan,pages);
+      barrier.startReading();
+      this.tempBarriers[i]=barrier;
+      this.inputs[i]=null;
+    }
+ else     if (this.config.isInputReplayable(i)) {
+      final long memory=this.config.getInputDamMemory(i);
+      @SuppressWarnings({"unchecked","rawtypes"}) SpillingResettableMutableObjectIterator<?> iter=new SpillingResettableMutableObjectIterator(getInput(i),this.inputSerializers[i],getMemoryManager(),getIOManager(),memory,this);
+      this.resettableInputs[i]=iter;
+      this.inputs[i]=iter;
+    }
+  }
+}
