@@ -1,0 +1,25 @@
+{
+  if (this.currentSortBufferOffset > this.lastEntryOffset) {
+    if (memoryAvailable()) {
+      this.currentSortBufferSegment=nextMemorySegment();
+      this.sortBuffer.add(this.currentSortBufferSegment);
+      this.sortBufferOutputView=new RandomAccessOutputView(this.sortBuffer.toArray(new MemorySegment[this.sortBuffer.size()]),this.segmentSize);
+      this.sortBufferOutputView.setWritePosition((sortBuffer.size() - 1) * this.segmentSize);
+      this.currentSortBufferOffset=0;
+      this.sortBufferBytes+=this.segmentSize;
+    }
+ else {
+      return false;
+    }
+  }
+  try {
+    this.serializer.serialize(record,this.sortBufferOutputView);
+    this.numRecords++;
+    this.comparator.putNormalizedKey(record,this.currentSortBufferSegment.getBackingArray(),this.currentSortBufferSegment.translateOffset(this.currentSortBufferOffset),this.numKeyBytes);
+    this.currentSortBufferOffset+=this.recordSize;
+    return true;
+  }
+ catch (  EOFException eofex) {
+    return false;
+  }
+}

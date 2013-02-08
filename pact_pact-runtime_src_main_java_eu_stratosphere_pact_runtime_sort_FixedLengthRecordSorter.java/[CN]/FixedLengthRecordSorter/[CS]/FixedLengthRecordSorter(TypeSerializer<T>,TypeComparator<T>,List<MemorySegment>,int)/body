@@ -1,0 +1,39 @@
+{
+  if (serializer == null || comparator == null || memory == null)   throw new NullPointerException();
+  if (maxNormalizedKeyBytes < 0)   throw new IllegalArgumentException("Maximal number of normalized key bytes must not be negative.");
+  this.serializer=serializer;
+  this.comparator=comparator;
+  this.useNormKeyUninverted=!comparator.invertNormalizedKey();
+  this.totalNumBuffers=memory.size();
+  if (this.totalNumBuffers < MIN_REQUIRED_BUFFERS) {
+    throw new IllegalArgumentException("Normalized-Key sorter requires at least " + MIN_REQUIRED_BUFFERS + " memory buffers.");
+  }
+  this.segmentSize=memory.get(0).size();
+  if (memory instanceof ArrayList<?>) {
+    this.freeMemory=(ArrayList<MemorySegment>)memory;
+  }
+ else {
+    this.freeMemory=new ArrayList<MemorySegment>(memory.size());
+    this.freeMemory.addAll(memory);
+  }
+  this.sortBuffer=new ArrayList<MemorySegment>(16);
+  this.currentSortBufferSegment=nextMemorySegment();
+  this.sortBuffer.add(this.currentSortBufferSegment);
+  this.sortBufferOutputView=new RandomAccessOutputView(this.sortBuffer.toArray(new MemorySegment[this.sortBuffer.size()]),this.segmentSize);
+  this.sortBufferInputView=new RandomAccessInputView(this.sortBuffer,this.segmentSize);
+  if (this.comparator.supportsNormalizedKey()) {
+    this.numKeyBytes=Math.min(this.comparator.getNormalizeKeyLen(),maxNormalizedKeyBytes);
+    this.normalizedKeyFullyDetermines=!this.comparator.isNormalizedKeyPrefixOnly(this.numKeyBytes);
+  }
+ else {
+    this.numKeyBytes=0;
+    this.normalizedKeyFullyDetermines=false;
+  }
+  this.recordSize=serializer.getLength();
+  if (this.recordSize == -1) {
+    throw new IllegalArgumentException("We only accept fixed length records.");
+  }
+  this.recordsPerSegment=segmentSize / this.recordSize;
+  this.lastEntryOffset=(this.recordsPerSegment - 1) * this.recordSize;
+  this.swapBuffer=new byte[this.recordSize];
+}
