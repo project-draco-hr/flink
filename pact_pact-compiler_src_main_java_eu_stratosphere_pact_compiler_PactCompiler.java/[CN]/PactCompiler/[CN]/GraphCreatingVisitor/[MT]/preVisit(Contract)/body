@@ -29,15 +29,38 @@
     n=new CrossNode((GenericCrossContract<?>)c);
   }
  else   if (c instanceof BulkIteration) {
-    BulkIteration iter=(BulkIteration)c;
-    n=new BulkIterationNode(iter);
+    n=new BulkIterationNode((BulkIteration)c);
+  }
+ else   if (c instanceof WorksetIteration) {
+    n=new WorksetIterationNode((WorksetIteration)c);
   }
  else   if (c instanceof PartialSolutionPlaceHolder) {
     final PartialSolutionPlaceHolder holder=(PartialSolutionPlaceHolder)c;
     final BulkIteration enclosingIteration=holder.getContainingBulkIteration();
     final BulkIterationNode containingIterationNode=(BulkIterationNode)this.parent.con2node.get(enclosingIteration);
-    PartialSolutionNode p=new PartialSolutionNode(holder,containingIterationNode);
+    BulkPartialSolutionNode p=new BulkPartialSolutionNode(holder,containingIterationNode);
     p.setDegreeOfParallelism(containingIterationNode.getDegreeOfParallelism());
+    p.setSubtasksPerInstance(containingIterationNode.getSubtasksPerInstance());
+    p.copyEstimates(containingIterationNode);
+    n=p;
+  }
+ else   if (c instanceof WorksetPlaceHolder) {
+    final WorksetPlaceHolder holder=(WorksetPlaceHolder)c;
+    final WorksetIteration enclosingIteration=holder.getContainingWorksetIteration();
+    final WorksetIterationNode containingIterationNode=(WorksetIterationNode)this.parent.con2node.get(enclosingIteration);
+    WorksetNode p=new WorksetNode(holder,containingIterationNode);
+    p.setDegreeOfParallelism(containingIterationNode.getDegreeOfParallelism());
+    p.setSubtasksPerInstance(containingIterationNode.getSubtasksPerInstance());
+    p.copyEstimates(containingIterationNode);
+    n=p;
+  }
+ else   if (c instanceof SolutionSetPlaceHolder) {
+    final SolutionSetPlaceHolder holder=(SolutionSetPlaceHolder)c;
+    final WorksetIteration enclosingIteration=holder.getContainingWorksetIteration();
+    final WorksetIterationNode containingIterationNode=(WorksetIterationNode)this.parent.con2node.get(enclosingIteration);
+    SolutionSetNode p=new SolutionSetNode(holder,containingIterationNode);
+    p.setDegreeOfParallelism(containingIterationNode.getDegreeOfParallelism());
+    p.setSubtasksPerInstance(containingIterationNode.getSubtasksPerInstance());
     p.copyEstimates(containingIterationNode);
     n=p;
   }
@@ -46,16 +69,26 @@
   }
   this.con2node.put(c,n);
   this.numMemoryConsumers+=n.isMemoryConsumer() ? 1 : 0;
-  int par=c.getDegreeOfParallelism();
-  par=par >= 1 ? par : this.defaultParallelism;
   if (n.getDegreeOfParallelism() < 1) {
+    int par=c.getDegreeOfParallelism();
+    if (par > 0) {
+      if (this.forceDOP && par != this.defaultParallelism) {
+        par=this.defaultParallelism;
+        LOG.warn("The degree-of-parallelism of nested Dataflows (such as step functions in iterations) is " + "currently fixed to the degree-of-parallelism of the surrounding operator (the iteration).");
+      }
+    }
+ else {
+      par=this.defaultParallelism;
+    }
     n.setDegreeOfParallelism(par);
   }
-  int tasksPerInstance=1;
-  if (this.maxMachines > 0) {
-    int p=n.getDegreeOfParallelism();
-    tasksPerInstance=(p / this.maxMachines) + (p % this.maxMachines == 0 ? 0 : 1);
+  if (n.getSubtasksPerInstance() < 1) {
+    int tasksPerInstance=1;
+    if (this.maxMachines > 0) {
+      int p=n.getDegreeOfParallelism();
+      tasksPerInstance=(p / this.maxMachines) + (p % this.maxMachines == 0 ? 0 : 1);
+    }
+    n.setSubtasksPerInstance(tasksPerInstance);
   }
-  n.setSubtasksPerInstance(tasksPerInstance);
   return true;
 }

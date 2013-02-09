@@ -1,0 +1,38 @@
+{
+  if (this.nextWorkset.cachedPlans != null) {
+    this.nextWorkset.accept(PlanCacheCleaner.INSTANCE);
+  }
+  if (this.solutionSetDelta.cachedPlans != null) {
+    this.solutionSetDelta.accept(PlanCacheCleaner.INSTANCE);
+  }
+  this.worksetNode.setCandidateProperties(worksetIn.getGlobalProperties(),worksetIn.getLocalProperties());
+  this.solutionSetNode.setCandidateProperties(this.partitionedProperties,new LocalProperties());
+  final SolutionSetPlanNode sspn=this.solutionSetNode.getCurrentSolutionSetPlanNode();
+  final WorksetPlanNode wspn=this.worksetNode.getCurrentWorksetPlanNode();
+  List<PlanNode> solutionSetDeltaCandidates=this.solutionSetDelta.getAlternativePlans(estimator);
+  List<PlanNode> worksetCandidates=this.nextWorkset.getAlternativePlans(estimator);
+  for (Iterator<PlanNode> planDeleter=solutionSetDeltaCandidates.iterator(); planDeleter.hasNext(); ) {
+    PlanNode candidate=planDeleter.next();
+    GlobalProperties gp=candidate.getGlobalProperties();
+    if (gp.getPartitioning() != PartitioningProperty.HASH_PARTITIONED || gp.getPartitioningFields() == null || !gp.getPartitioningFields().equals(this.solutionSetKeyFields)) {
+      planDeleter.remove();
+    }
+  }
+  if (solutionSetDeltaCandidates.isEmpty()) {
+    throw new CompilerException("No viable strategies for solution set delta found during plan enumeration. " + "Possible reason: Partitioning is not preserved when matching with the solution set. Missing annotation?");
+  }
+  for (Iterator<PlanNode> planDeleter=worksetCandidates.iterator(); planDeleter.hasNext(); ) {
+    PlanNode candidate=planDeleter.next();
+    if (!(globPropsReqWorkset.isMetBy(candidate.getGlobalProperties()) && locPropsReqWorkset.isMetBy(candidate.getLocalProperties()))) {
+      planDeleter.remove();
+    }
+  }
+  if (worksetCandidates.isEmpty()) {
+    return;
+  }
+  final GlobalProperties gp=new GlobalProperties();
+  gp.setHashPartitioned(this.solutionSetKeyFields);
+  gp.addUniqueFieldCombination(this.solutionSetKeyFields);
+  final LocalProperties lp=new LocalProperties();
+  lp.addUniqueFields(this.solutionSetKeyFields);
+}

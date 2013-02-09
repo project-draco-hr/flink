@@ -1,0 +1,24 @@
+{
+  final int numSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  final String verticesInput=(args.length > 1 ? args[1] : "");
+  final String edgeInput=(args.length > 2 ? args[2] : "");
+  final String output=(args.length > 3 ? args[3] : "");
+  final int maxIterations=(args.length > 4 ? Integer.parseInt(args[4]) : 1);
+  FileDataSource initialVertices=new FileDataSource(DuplicateLongInputFormat.class,verticesInput,"Vertices");
+  DelimitedInputFormat.configureDelimitedFormat(initialVertices).recordDelimiter('\n');
+  WorksetIteration iteration=new WorksetIteration(0,"Connected Components Iteration");
+  iteration.setInitialSolutionSet(initialVertices);
+  iteration.setInitialWorkset(initialVertices);
+  iteration.setMaximumNumberOfIterations(maxIterations);
+  FileDataSource edges=new FileDataSource(LongLongInputFormat.class,edgeInput,"Edges");
+  DelimitedInputFormat.configureDelimitedFormat(edges).recordDelimiter('\n');
+  MatchContract joinWithNeighbors=MatchContract.builder(NeighborWithComponentIDJoin.class,PactLong.class,0,0).input1(iteration.getWorkset()).input2(edges).name("Join Candidate Id With Neighbor").build();
+  ReduceContract minCandidateId=ReduceContract.builder(MinimumComponentIDReduce.class,PactLong.class,0).input(joinWithNeighbors).name("Find Minimum Candidate Id").build();
+  MatchContract updateComponentId=MatchContract.builder(UpdateComponentIdMatch.class,PactLong.class,0,0).input1(minCandidateId).input2(iteration.getSolutionSet()).name("Update Component Id").build();
+  iteration.setNextWorkset(updateComponentId);
+  iteration.setSolutionSetDelta(updateComponentId);
+  FileDataSink result=new FileDataSink(RecordOutputFormat.class,output,iteration,"Result");
+  Plan plan=new Plan(result,"Iterative KMeans");
+  plan.setDefaultParallelism(numSubTasks);
+  return plan;
+}
