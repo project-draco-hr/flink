@@ -1,23 +1,25 @@
 {
   if (!currentPageRankIterator.hasNext()) {
-    throw new IllegalStateException("No current page rank!");
+    long missingVertex=partialRanks.next().getField(0,PactLong.class).getValue();
+    throw new IllegalStateException("No current page rank for vertex [" + missingVertex + "]!");
   }
   PactRecord currentPageRank=currentPageRankIterator.next();
   long edges=0;
   double summedRank=0;
   while (partialRanks.hasNext()) {
-    summedRank+=partialRanks.next().getField(1,PactDouble.class).getValue();
+    summedRank+=partialRanks.next().getField(1,doubleInstance).getValue();
     edges++;
   }
   double rank=BETA * summedRank + dampingFactor + danglingRankFactor;
-  double currentRank=currentPageRank.getField(1,PactDouble.class).getValue();
-  boolean isDangling=currentPageRank.getField(2,BooleanValue.class).get();
-  double danglingRankToAggregate=isDangling ? rank : 0;
-  long danglingVerticesToAggregate=isDangling ? 1 : 0;
+  double currentRank=currentPageRank.getField(1,doubleInstance).getValue();
+  isDangling=currentPageRank.getField(2,isDangling);
+  double danglingRankToAggregate=isDangling.get() ? rank : 0;
+  long danglingVerticesToAggregate=isDangling.get() ? 1 : 0;
   double diff=Math.abs(currentRank - rank);
-  aggregator.aggregate(diff,rank,danglingRankToAggregate,danglingVerticesToAggregate,1,edges,summedRank);
-  accumulator.setField(0,currentPageRank.getField(0,PactLong.class));
-  accumulator.setField(1,new PactDouble(rank));
-  accumulator.setField(2,new BooleanValue(isDangling));
+  aggregator.aggregate(diff,rank,danglingRankToAggregate,danglingVerticesToAggregate,1,edges,summedRank,0);
+  newRank.setValue(rank);
+  accumulator.setField(0,currentPageRank.getField(0,vertexID));
+  accumulator.setField(1,newRank);
+  accumulator.setField(2,isDangling);
   collector.collect(accumulator);
 }
