@@ -12,6 +12,11 @@
   final TypeComparatorFactory<T> comparatorFactory=this.config.getDriverComparator(0,this.userCodeClassLoader);
   this.serializer=serializerFactory.getSerializer();
   this.comparator=comparatorFactory.createComparator();
-  List<MemorySegment> memory=this.memManager.allocatePages(this.parent,availableMemory);
-  this.sorter=new NormalizedKeySorter<T>(this.serializer,this.comparator.duplicate(),memory);
+  final List<MemorySegment> memory=this.memManager.allocatePages(this.parent,availableMemory);
+  if (this.comparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.comparator,memory);
+  }
+ else {
+    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.comparator.duplicate(),memory);
+  }
 }
