@@ -3,8 +3,7 @@
     if (memoryAvailable()) {
       this.currentSortBufferSegment=nextMemorySegment();
       this.sortBuffer.add(this.currentSortBufferSegment);
-      this.sortBufferOutputView=new RandomAccessOutputView(this.sortBuffer.toArray(new MemorySegment[this.sortBuffer.size()]),this.segmentSize);
-      this.sortBufferOutputView.setWritePosition((sortBuffer.size() - 1) * this.segmentSize);
+      this.outView.set(this.currentSortBufferSegment);
       this.currentSortBufferOffset=0;
       this.sortBufferBytes+=this.segmentSize;
     }
@@ -13,13 +12,12 @@
     }
   }
   try {
-    this.serializer.serialize(record,this.sortBufferOutputView);
+    this.comparator.writeWithKeyNormalization(record,this.outView);
     this.numRecords++;
-    this.comparator.putNormalizedKey(record,this.currentSortBufferSegment.getBackingArray(),this.currentSortBufferSegment.translateOffset(this.currentSortBufferOffset),this.numKeyBytes);
     this.currentSortBufferOffset+=this.recordSize;
     return true;
   }
  catch (  EOFException eofex) {
-    return false;
+    throw new IOException("Error: Serialization consumes more bytes than announced by the serializer.");
   }
 }

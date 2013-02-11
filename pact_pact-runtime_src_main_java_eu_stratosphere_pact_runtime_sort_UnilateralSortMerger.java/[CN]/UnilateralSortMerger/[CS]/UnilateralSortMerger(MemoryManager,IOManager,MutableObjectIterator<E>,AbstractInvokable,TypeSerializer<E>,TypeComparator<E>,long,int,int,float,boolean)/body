@@ -68,7 +68,13 @@
       sortSegments.add(segments.next());
     }
     final TypeComparator<E> comp=comparator.duplicate();
-    final NormalizedKeySorter<E> buffer=new NormalizedKeySorter<E>(serializer,comp,sortSegments);
+    final InMemorySorter<E> buffer;
+    if (comp.supportsSerializationWithKeyNormalization() && serializer.getLength() > 0 && serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+      buffer=new FixedLengthRecordSorter<E>(serializer,comp,sortSegments);
+    }
+ else {
+      buffer=new NormalizedKeySorter<E>(serializer,comp,sortSegments);
+    }
     CircularElement<E> element=new CircularElement<E>(i,buffer);
     circularQueues.empty.add(element);
   }
