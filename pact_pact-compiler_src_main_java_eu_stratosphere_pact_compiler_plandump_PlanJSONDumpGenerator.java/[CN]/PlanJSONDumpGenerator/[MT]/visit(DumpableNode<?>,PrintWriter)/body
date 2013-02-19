@@ -5,9 +5,15 @@
   this.nodeIds.put(node,this.nodeCnt++);
   for (Iterator<? extends DumpableNode<?>> children=node.getPredecessors(); children.hasNext(); ) {
     final DumpableNode<?> child=children.next();
-    visit(child,writer,false);
+    visit(child,writer);
   }
   final OptimizerNode n=node.getOptimizerNode();
+  if (this.firstInList) {
+    firstInList=false;
+  }
+ else {
+    writer.print(",\n");
+  }
   writer.print("\t{\n\t\t\"id\": " + this.nodeIds.get(node));
   final String type;
   final String contents;
@@ -61,22 +67,24 @@
           child2name=source.getOptimizerNode().getPactContract().getName();
         }
         writer.print("\t\t\t{\"id\": " + this.nodeIds.get(source));
-        if (inConns.hasNext()) {
+        if (inConns.hasNext() || inputNum > 0) {
           writer.print(", \"side\": \"" + (inputNum == 0 ? "first" : "second") + "\"");
         }
         final Channel channel=(inConn instanceof Channel) ? (Channel)inConn : null;
+        final ShipStrategyType shipType=channel != null ? channel.getShipStrategy() : ((PactConnection)inConn).getShipStrategy();
         String shipStrategy=null;
-switch (conn.getShipStrategy()) {
+        if (shipType != null) {
+switch (shipType) {
 case NONE:
-          break;
+            break;
 case FORWARD:
-        shipStrategy="Forward";
-      break;
+          shipStrategy="Forward";
+        break;
 case BROADCAST:
-    shipStrategy="Broadcast";
-  break;
+      shipStrategy="Broadcast";
+    break;
 case PARTITION_HASH:
-shipStrategy="Hash Partition";
+  shipStrategy="Hash Partition";
 break;
 case PARTITION_RANGE:
 shipStrategy="Range Partition";
@@ -86,6 +94,7 @@ shipStrategy="Hash Partition (local)";
 break;
 default :
 throw new CompilerException("Unknown ship strategy '" + conn.getShipStrategy().name() + "' in JSON generator.");
+}
 }
 if (channel != null && channel.getShipStrategyKeys() != null && channel.getShipStrategyKeys().size() > 0) {
 shipStrategy+=" on " + (channel.getShipStrategySortOrder() == null ? channel.getShipStrategyKeys().toString() : Utils.createOrdering(channel.getShipStrategyKeys(),channel.getShipStrategySortOrder()).toString());
@@ -107,13 +116,13 @@ break;
 default :
 throw new CompilerException("Unknown local strategy " + channel.getLocalStrategy().name());
 }
-if (channel.getLocalStrategyKeys() != null && channel.getLocalStrategyKeys().size() > 0) {
+if (channel != null && channel.getLocalStrategyKeys() != null && channel.getLocalStrategyKeys().size() > 0) {
 localStrategy+=" on " + (channel.getLocalStrategySortOrder() == null ? channel.getLocalStrategyKeys().toString() : Utils.createOrdering(channel.getLocalStrategyKeys(),channel.getLocalStrategySortOrder()).toString());
 }
 if (localStrategy != null) {
 writer.print(", \"localStrategy\": \"" + localStrategy + "\"");
 }
-if (channel.getTempMode() != TempMode.NONE) {
+if (channel != null && channel.getTempMode() != TempMode.NONE) {
 String tempMode=channel.getTempMode().toString();
 writer.print(", \"tempMode\": \"" + tempMode + "\"");
 }
@@ -123,10 +132,11 @@ connNum++;
 }
 inputNum++;
 }
-writer.print("\t\t]");
+writer.print("\n\t\t]");
 }
 final PlanNode p=node.getPlanNode();
 if (p == null) {
+writer.print("\n\t}");
 return;
 }
 String locString=null;
@@ -270,5 +280,5 @@ addProperty(writer,"Avg. Values/Distinct fields",valuesKey,false);
 addProperty(writer,"Avg. Width (bytes)",hints.getAvgBytesPerRecord() == defaults.getAvgBytesPerRecord() ? "(none)" : String.valueOf(hints.getAvgBytesPerRecord()),false);
 writer.print("\t\t]");
 }
-writer.print("\n\t},\n");
+writer.print("\n\t}");
 }
