@@ -1,0 +1,15 @@
+{
+  if (files.isEmpty())   return null;
+  BlockInfo blockInfo=this.createBlockInfo();
+  long totalCount=0;
+  for (  FileStatus file : files) {
+    if (file.getLen() < blockInfo.getInfoSize())     continue;
+    FSDataInputStream fdis=file.getPath().getFileSystem().open(file.getPath(),blockInfo.getInfoSize());
+    fdis.seek(file.getLen() - blockInfo.getInfoSize());
+    DataInputStream input=new DataInputStream(fdis);
+    blockInfo.read(input);
+    totalCount+=blockInfo.getAccumulatedRecordCount();
+  }
+  final float avgWidth=totalCount == 0 ? 0 : ((float)stats.getTotalInputSize() / totalCount);
+  return new SequentialStatistics(stats.getLastModificationTime(),stats.getTotalInputSize(),avgWidth,totalCount);
+}
