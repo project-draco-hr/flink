@@ -1,0 +1,36 @@
+{
+  try {
+    WordCount wc=new WordCount();
+    Plan p=wc.getPlan(DEFAULT_PARALLELISM_STRING,IN_FILE,OUT_FILE);
+    OptimizedPlan plan;
+    if (estimates) {
+      FileDataSource source=getContractResolver(p).getNode("Input Lines");
+      setSourceStatistics(source,1024 * 1024 * 1024* 1024L,24f);
+      plan=compileWithStats(p);
+    }
+ else {
+      plan=compileNoStats(p);
+    }
+    OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(plan);
+    SinkPlanNode sink=resolver.getNode("Word Counts");
+    SingleInputPlanNode reducer=resolver.getNode("Count Words");
+    SingleInputPlanNode mapper=resolver.getNode("Tokenize Lines");
+    Assert.assertEquals(ShipStrategyType.FORWARD,mapper.getInput().getShipStrategy());
+    Assert.assertEquals(ShipStrategyType.PARTITION_HASH,reducer.getInput().getShipStrategy());
+    Assert.assertEquals(ShipStrategyType.FORWARD,sink.getInput().getShipStrategy());
+    Channel c=reducer.getInput();
+    Assert.assertEquals(LocalStrategy.COMBININGSORT,c.getLocalStrategy());
+    FieldList l=new FieldList(0);
+    Assert.assertEquals(l,c.getShipStrategyKeys());
+    Assert.assertEquals(l,c.getLocalStrategyKeys());
+    Assert.assertTrue(Arrays.equals(c.getLocalStrategySortOrder(),reducer.getSortOrders()));
+    SingleInputPlanNode combiner=(SingleInputPlanNode)reducer.getPredecessor();
+    Assert.assertEquals(DriverStrategy.PARTIAL_GROUP,combiner.getDriverStrategy());
+    Assert.assertEquals(l,combiner.getKeys());
+    Assert.assertEquals(ShipStrategyType.FORWARD,combiner.getInput().getShipStrategy());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}

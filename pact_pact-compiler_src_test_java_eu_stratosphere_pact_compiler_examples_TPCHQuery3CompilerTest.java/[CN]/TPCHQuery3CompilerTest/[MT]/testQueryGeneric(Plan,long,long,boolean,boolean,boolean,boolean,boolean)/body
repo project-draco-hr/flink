@@ -1,0 +1,54 @@
+{
+  try {
+    ContractResolver cr=getContractResolver(p);
+    FileDataSource ordersSource=cr.getNode(ORDERS);
+    FileDataSource lineItemSource=cr.getNode(LINEITEM);
+    setSourceStatistics(ordersSource,orderSize,100f);
+    setSourceStatistics(lineItemSource,lineitemSize,140f);
+    final OptimizedPlan plan=compileWithStats(p);
+    final OptimizerPlanNodeResolver or=getOptimizerPlanNodeResolver(plan);
+    final SinkPlanNode sink=or.getNode("Output");
+    final SingleInputPlanNode reducer=or.getNode("AggLio");
+    final SingleInputPlanNode combiner=reducer.getPredecessor() instanceof SingleInputPlanNode ? (SingleInputPlanNode)reducer.getPredecessor() : null;
+    final DualInputPlanNode join=or.getNode("JoinLiO");
+    final SingleInputPlanNode filteringMapper=or.getNode("FilterO");
+    checkStandardStrategies(filteringMapper,join,combiner,reducer,sink);
+    if (checkBroadcastShipStrategies(join,reducer,combiner)) {
+      Assert.assertTrue("Broadcast join incorrectly chosen.",broadcastOkay);
+      if (checkHashJoinStrategies(join,reducer,true)) {
+        Assert.assertTrue("Hash join (build orders) incorrectly chosen",hashJoinFirstOkay);
+      }
+ else       if (checkHashJoinStrategies(join,reducer,false)) {
+        Assert.assertTrue("Hash join (build lineitem) incorrectly chosen",hashJoinSecondOkay);
+      }
+ else       if (checkBroadcastMergeJoin(join,reducer)) {
+        Assert.assertTrue("Merge join incorrectly chosen",mergeJoinOkay);
+      }
+ else {
+        Assert.fail("Plan has no correct hash join or merge join strategies.");
+      }
+    }
+ else     if (checkRepartitionShipStrategies(join,reducer,combiner)) {
+      Assert.assertTrue("Partitioned join incorrectly chosen.",partitionedOkay);
+      if (checkHashJoinStrategies(join,reducer,true)) {
+        Assert.assertTrue("Hash join (build orders) incorrectly chosen",hashJoinFirstOkay);
+      }
+ else       if (checkHashJoinStrategies(join,reducer,false)) {
+        Assert.assertTrue("Hash join (build lineitem) incorrectly chosen",hashJoinSecondOkay);
+      }
+ else       if (checkRepartitionMergeJoin(join,reducer)) {
+        Assert.assertTrue("Merge join incorrectly chosen",mergeJoinOkay);
+      }
+ else {
+        Assert.fail("Plan has no correct hash join or merge join strategies.");
+      }
+    }
+ else {
+      Assert.fail("Plan has neither correct BC join or partitioned join configuration.");
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}
