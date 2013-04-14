@@ -25,20 +25,23 @@
     if (numSamples < 0) {
       throw new RuntimeException("Error: Invalid number of samples: " + numSamples);
     }
-    final int delimiterLength=getDelimiter().length;
-    this.bufferSize=1024;
+    this.openTimeout=10000;
+    this.bufferSize=4 * 1024;
+    this.lineLengthLimit=MAX_SAMPLE_LEN;
     long offset=0;
     long totalNumBytes=0;
     long stepSize=stats.getTotalInputSize() / numSamples;
     int fileNum=0;
     int samplesTaken=0;
-    for (int sampleNum=0; sampleNum < numSamples && fileNum < allFiles.size(); sampleNum++) {
+    while (samplesTaken < numSamples && fileNum < allFiles.size()) {
       FileStatus file=allFiles.get(fileNum);
-      FileInputSplit split=new FileInputSplit(sampleNum,file.getPath(),offset,file.getLen() - offset,null);
+      FileInputSplit split=new FileInputSplit(0,file.getPath(),offset,file.getLen() - offset,null);
       try {
         open(split);
-        readLine();
-        totalNumBytes+=this.currLen + delimiterLength;
+        if (readLine()) {
+          totalNumBytes+=this.currLen + this.delimiter.length;
+          samplesTaken++;
+        }
       }
   finally {
         super.close();
