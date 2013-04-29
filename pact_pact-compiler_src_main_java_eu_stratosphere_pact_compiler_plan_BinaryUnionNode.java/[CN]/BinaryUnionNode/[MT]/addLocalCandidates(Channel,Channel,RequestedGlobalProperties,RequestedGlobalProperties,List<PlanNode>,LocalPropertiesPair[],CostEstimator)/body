@@ -1,0 +1,45 @@
+{
+  if (!(rgps1.equals(rgps2))) {
+    return;
+  }
+  GlobalProperties p1=c1.getGlobalProperties();
+  GlobalProperties p2=c2.getGlobalProperties();
+  p1.clearUniqueFieldCombinations();
+  p2.clearUniqueFieldCombinations();
+  if (!rgps1.isTrivial() && !(p1.equals(p2))) {
+    final int dop=getDegreeOfParallelism();
+    final int subPerInstance=getSubtasksPerInstance();
+    final int numInstances=dop / subPerInstance + (dop % subPerInstance == 0 ? 0 : 1);
+    final int inDop1=getFirstPredecessorNode().getDegreeOfParallelism();
+    final int inSubPerInstance1=getFirstPredecessorNode().getSubtasksPerInstance();
+    final int inNumInstances1=inDop1 / inSubPerInstance1 + (inDop1 % inSubPerInstance1 == 0 ? 0 : 1);
+    final int inDop2=getSecondPredecessorNode().getDegreeOfParallelism();
+    final int inSubPerInstance2=getSecondPredecessorNode().getSubtasksPerInstance();
+    final int inNumInstances2=inDop2 / inSubPerInstance2 + (inDop2 % inSubPerInstance2 == 0 ? 0 : 1);
+    final boolean globalDopChange1=numInstances != inNumInstances1;
+    final boolean globalDopChange2=numInstances != inNumInstances2;
+    if (c1.getShipStrategy() == ShipStrategyType.FORWARD && c2.getShipStrategy() != ShipStrategyType.FORWARD) {
+      c2=c2.clone();
+      p1.parameterizeChannel(c2,globalDopChange2);
+    }
+ else     if (c2.getShipStrategy() == ShipStrategyType.FORWARD && c1.getShipStrategy() != ShipStrategyType.FORWARD) {
+      c1=c1.clone();
+      p2.parameterizeChannel(c1,globalDopChange1);
+    }
+ else     if (c1.getShipStrategy() == ShipStrategyType.FORWARD && c2.getShipStrategy() == ShipStrategyType.FORWARD) {
+      boolean adjustC1=c1.getEstimatedOutputSize() <= 0 || c2.getEstimatedOutputSize() <= 0 || c1.getEstimatedOutputSize() <= c2.getEstimatedOutputSize();
+      if (adjustC1) {
+        c2=c2.clone();
+        p1.parameterizeChannel(c2,globalDopChange2);
+      }
+ else {
+        c1=c1.clone();
+        p2.parameterizeChannel(c1,globalDopChange1);
+      }
+    }
+ else {
+      throw new CompilerException("Bug in Plan Enumeration for Union Node.");
+    }
+  }
+  super.addLocalCandidates(c1,c2,rgps1,rgps2,target,validLocalCombinations,estimator);
+}

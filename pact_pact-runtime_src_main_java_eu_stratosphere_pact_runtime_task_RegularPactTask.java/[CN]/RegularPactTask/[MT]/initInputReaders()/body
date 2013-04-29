@@ -1,18 +1,26 @@
 {
   final int numInputs=this.driver.getNumberOfInputs();
   final MutableReader<?>[] inputReaders=new MutableReader[numInputs];
+  int numGates=0;
   for (int i=0; i < numInputs; i++) {
     final int groupSize=this.config.getGroupSize(i);
-    if (groupSize < 2) {
+    numGates+=groupSize;
+    if (groupSize == 1) {
       inputReaders[i]=new MutableRecordReader<Record>(this);
     }
- else {
+ else     if (groupSize > 1) {
       @SuppressWarnings("unchecked") MutableRecordReader<Record>[] readers=new MutableRecordReader[groupSize];
       for (int j=0; j < groupSize; ++j) {
         readers[j]=new MutableRecordReader<Record>(this);
       }
       inputReaders[i]=new MutableUnionRecordReader<Record>(readers);
     }
+ else {
+      throw new Exception("Illegal input group size in task configuration: " + groupSize);
+    }
   }
   this.inputReaders=inputReaders;
+  if (numGates != this.config.getNumInputs()) {
+    throw new Exception("Illegal configuration: Number of input gates and group sizes are not consistent.");
+  }
 }
