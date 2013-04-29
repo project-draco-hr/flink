@@ -1,0 +1,41 @@
+{
+  final MemoryManager memMan=getMemoryManager();
+  final IOManager ioMan=getIOManager();
+  this.localStrategies=new CloseableInputProvider[numInputs];
+  this.inputs=new MutableObjectIterator[numInputs];
+  this.excludeFromReset=new boolean[numInputs];
+  this.inputIsCached=new boolean[numInputs];
+  this.inputIsAsyncMaterialized=new boolean[numInputs];
+  this.materializationMemory=new long[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    initInputLocalStrategy(i);
+  }
+  this.resettableInputs=new SpillingResettableMutableObjectIterator[numInputs];
+  this.tempBarriers=new TempBarrier[numInputs];
+  for (int i=0; i < numInputs; i++) {
+    final long memory;
+    final boolean async=this.config.isInputAsynchronouslyMaterialized(i);
+    final boolean cached=this.config.isInputCached(i);
+    this.inputIsAsyncMaterialized[i]=async;
+    this.inputIsCached[i]=cached;
+    if (async || cached) {
+      memory=this.config.getInputMaterializationMemory(i);
+      this.materializationMemory[i]=memory;
+    }
+ else {
+      memory=0;
+    }
+    if (async) {
+      final int pages=memMan.computeNumberOfPages(memory);
+      @SuppressWarnings({"unchecked","rawtypes"}) TempBarrier<?> barrier=new TempBarrier(this,getInput(i),this.inputSerializers[i],memMan,ioMan,pages);
+      barrier.startReading();
+      this.tempBarriers[i]=barrier;
+      this.inputs[i]=null;
+    }
+ else     if (cached) {
+      @SuppressWarnings({"unchecked","rawtypes"}) SpillingResettableMutableObjectIterator<?> iter=new SpillingResettableMutableObjectIterator(getInput(i),this.inputSerializers[i],getMemoryManager(),getIOManager(),memory,this);
+      this.resettableInputs[i]=iter;
+      this.inputs[i]=iter;
+    }
+  }
+}

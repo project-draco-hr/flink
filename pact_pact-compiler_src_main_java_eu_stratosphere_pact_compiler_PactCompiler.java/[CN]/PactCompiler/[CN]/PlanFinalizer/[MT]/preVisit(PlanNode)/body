@@ -1,0 +1,41 @@
+{
+  if (!this.allNodes.add(visitable)) {
+    return false;
+  }
+  if (visitable instanceof SinkPlanNode) {
+    this.sinks.add((SinkPlanNode)visitable);
+  }
+ else   if (visitable instanceof SourcePlanNode) {
+    this.sources.add((SourcePlanNode)visitable);
+  }
+ else   if (visitable instanceof BulkPartialSolutionPlanNode) {
+    final BulkPartialSolutionPlanNode pspn=(BulkPartialSolutionPlanNode)visitable;
+    final IterationPlanNode iteration=this.stackOfIterationNodes.peekLast();
+    if (iteration == null || !(iteration instanceof BulkIterationPlanNode)) {
+      throw new CompilerException("Bug: Error finalizing the plan. " + "Cannot associate the node for a partial solutions with its containing iteration.");
+    }
+    pspn.setContainingIterationNode((BulkIterationPlanNode)iteration);
+  }
+  for (Iterator<Channel> iter=visitable.getInputs(); iter.hasNext(); ) {
+    final Channel conn=iter.next();
+    conn.setTarget(visitable);
+    conn.getSource().addOutgoingChannel(conn);
+  }
+  this.memoryConsumerWeights+=visitable.getMemoryConsumerWeight();
+  for (Iterator<Channel> channels=visitable.getInputs(); channels.hasNext(); ) {
+    final Channel c=channels.next();
+    if (c.getLocalStrategy().dams()) {
+      this.memoryConsumerWeights++;
+    }
+    if (c.getTempMode() != TempMode.NONE) {
+      this.memoryConsumerWeights++;
+    }
+  }
+  if (visitable instanceof IterationPlanNode) {
+    final IterationPlanNode iterNode=(IterationPlanNode)visitable;
+    this.stackOfIterationNodes.addLast(iterNode);
+    ((IterationPlanNode)visitable).acceptForStepFunction(this);
+    this.stackOfIterationNodes.removeLast();
+  }
+  return true;
+}

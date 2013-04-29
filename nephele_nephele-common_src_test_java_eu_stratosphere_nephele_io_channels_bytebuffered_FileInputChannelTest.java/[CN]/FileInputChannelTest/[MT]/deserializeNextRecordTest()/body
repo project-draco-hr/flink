@@ -1,0 +1,44 @@
+{
+  StringRecord record=new StringRecord("abc");
+  this.uncompressedDataBuffer=mock(Buffer.class);
+  @SuppressWarnings("unchecked") final InputGate<StringRecord> inGate=mock(InputGate.class);
+  final ByteBufferedInputChannelBroker inputBroker=mock(ByteBufferedInputChannelBroker.class);
+  when(inputBroker.getReadBufferToConsume()).thenReturn(this.uncompressedDataBuffer);
+  try {
+    when(this.deserializationBuffer.readData(Matchers.any(StringRecord.class),Matchers.any(ReadableByteChannel.class))).thenReturn(null,record);
+  }
+ catch (  IOException e) {
+  }
+  when(this.uncompressedDataBuffer.remaining()).thenReturn(0);
+  final FileInputChannel<StringRecord> fileInputChannel=new FileInputChannel<StringRecord>(inGate,1,this.deserializationBuffer,new ChannelID(),new ChannelID(),CompressionLevel.NO_COMPRESSION);
+  fileInputChannel.setInputChannelBroker(inputBroker);
+  Whitebox.setInternalState(fileInputChannel,"deserializer",this.deserializationBuffer);
+  try {
+    fileInputChannel.readRecord(null);
+  }
+ catch (  IOException e) {
+    fail(StringUtils.stringifyException(e));
+  }
+  try {
+    fileInputChannel.close();
+  }
+ catch (  IOException e) {
+    fail(StringUtils.stringifyException(e));
+  }
+catch (  InterruptedException e) {
+    fail(StringUtils.stringifyException(e));
+  }
+  assertEquals(false,fileInputChannel.isClosed());
+  fileInputChannel.processEvent(new ByteBufferedChannelCloseEvent());
+  assertEquals(true,fileInputChannel.isClosed());
+  try {
+    fileInputChannel.readRecord(null);
+    fail();
+  }
+ catch (  EOFException e) {
+  }
+catch (  IOException e) {
+    e.printStackTrace();
+    fail();
+  }
+}

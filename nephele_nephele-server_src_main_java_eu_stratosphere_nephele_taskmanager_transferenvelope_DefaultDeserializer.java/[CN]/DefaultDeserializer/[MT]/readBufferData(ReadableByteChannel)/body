@@ -1,0 +1,33 @@
+{
+  if (getBuffer() == null) {
+    if (!getDeserializedJobID().equals(this.lastDeserializedJobID) || !getDeserializedSourceID().equals(this.lastDeserializedSourceID)) {
+      try {
+        this.bufferProvider=this.bufferProviderBroker.getBufferProvider(getDeserializedJobID(),getDeserializedSourceID());
+      }
+ catch (      InterruptedException e) {
+        return true;
+      }
+      this.lastDeserializedJobID=getDeserializedJobID();
+      this.lastDeserializedSourceID=getDeserializedSourceID();
+    }
+    final Buffer buf=this.bufferProvider.requestEmptyBuffer(getSizeOfBuffer());
+    if (buf == null) {
+      throw new NoBufferAvailableException(this.bufferProvider);
+    }
+    setBuffer(buf);
+  }
+ else {
+    final Buffer buffer=getBuffer();
+    final int bytesWritten=buffer.write(readableByteChannel);
+    if (!buffer.hasRemaining()) {
+      buffer.finishWritePhase();
+      return false;
+    }
+ else {
+      if (bytesWritten == -1) {
+        throw new IOException("Deserialization error: Expected at least " + buffer.remaining() + " more bytes to follow");
+      }
+    }
+  }
+  return true;
+}

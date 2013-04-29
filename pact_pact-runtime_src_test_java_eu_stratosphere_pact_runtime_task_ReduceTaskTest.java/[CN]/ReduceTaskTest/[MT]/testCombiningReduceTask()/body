@@ -1,0 +1,32 @@
+{
+  final int keyCnt=100;
+  final int valCnt=20;
+  addInputComparator(this.comparator);
+  setOutput(this.outList);
+  getTaskConfig().setDriverStrategy(DriverStrategy.SORTED_GROUP);
+  CombiningUnilateralSortMerger<PactRecord> sorter=null;
+  try {
+    sorter=new CombiningUnilateralSortMerger<PactRecord>(new MockCombiningReduceStub(),getMemoryManager(),getIOManager(),new UniformPactRecordGenerator(keyCnt,valCnt,false),getOwningNepheleTask(),PactRecordSerializer.get(),this.comparator.duplicate(),this.perSortMem,4,0.8f,false);
+    addInput(sorter.getIterator());
+    ReduceDriver<PactRecord,PactRecord> testTask=new ReduceDriver<PactRecord,PactRecord>();
+    testDriver(testTask,MockCombiningReduceStub.class);
+  }
+ catch (  Exception e) {
+    LOG.debug(e);
+    Assert.fail("Invoke method caused exception.");
+  }
+ finally {
+    if (sorter != null) {
+      sorter.close();
+    }
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  Assert.assertTrue("Resultset size was " + this.outList.size() + ". Expected was "+ keyCnt,this.outList.size() == keyCnt);
+  for (  PactRecord record : this.outList) {
+    Assert.assertTrue("Incorrect result",record.getField(1,PactInteger.class).getValue() == expSum - record.getField(0,PactInteger.class).getValue());
+  }
+  this.outList.clear();
+}

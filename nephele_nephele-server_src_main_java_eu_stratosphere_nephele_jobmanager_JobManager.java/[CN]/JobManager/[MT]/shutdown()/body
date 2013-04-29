@@ -1,0 +1,38 @@
+{
+  if (!this.isShutdownInProgress.compareAndSet(false,true)) {
+    return;
+  }
+  if (this.instanceManager != null) {
+    this.instanceManager.shutdown();
+  }
+  DiscoveryService.stopDiscoveryService();
+  if (this.profiler != null) {
+    this.profiler.shutdown();
+  }
+  if (this.jobManagerServer != null) {
+    this.jobManagerServer.stop();
+  }
+  if (this.executorService != null) {
+    this.executorService.shutdown();
+    try {
+      this.executorService.awaitTermination(5000L,TimeUnit.MILLISECONDS);
+    }
+ catch (    InterruptedException e) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(StringUtils.stringifyException(e));
+      }
+    }
+  }
+  final Iterator<JobManagerPlugin> it=this.jobManagerPlugins.values().iterator();
+  while (it.hasNext()) {
+    it.next().shutdown();
+  }
+  if (this.eventCollector != null) {
+    this.eventCollector.shutdown();
+  }
+  if (this.scheduler != null) {
+    this.scheduler.shutdown();
+  }
+  this.isShutDown=true;
+  LOG.debug("Shutdown of job manager completed");
+}

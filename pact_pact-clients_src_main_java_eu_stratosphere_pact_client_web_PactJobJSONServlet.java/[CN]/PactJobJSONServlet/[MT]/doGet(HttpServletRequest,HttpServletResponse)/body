@@ -1,0 +1,54 @@
+{
+  resp.setContentType("application/json");
+  String jobName=req.getParameter(JOB_PARAM_NAME);
+  if (jobName == null) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    return;
+  }
+  File jarFile=new File(jobStoreDirectory,jobName);
+  if (!jarFile.exists()) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    return;
+  }
+  PactProgram pactProgram;
+  try {
+    pactProgram=new PactProgram(jarFile,new String[0]);
+  }
+ catch (  Throwable t) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    resp.getWriter().print(t.getMessage());
+    return;
+  }
+  String jsonPlan=null;
+  String programDescription=null;
+  try {
+    jsonPlan=Client.getPreviewAsJSON(pactProgram);
+  }
+ catch (  Throwable t) {
+  }
+  try {
+    programDescription=pactProgram.getDescription();
+  }
+ catch (  Throwable t) {
+  }
+  if (jsonPlan == null && programDescription == null) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    return;
+  }
+ else {
+    resp.setStatus(HttpServletResponse.SC_OK);
+    PrintWriter wrt=resp.getWriter();
+    wrt.print("{ \"jobname\": \"");
+    wrt.print(jobName);
+    if (jsonPlan != null) {
+      wrt.print("\", \"plan\": ");
+      wrt.println(jsonPlan);
+    }
+    if (programDescription != null) {
+      wrt.print(", \"description\": \"");
+      wrt.print(escapeString(programDescription));
+    }
+    wrt.print("\"");
+    wrt.println("}");
+  }
+}

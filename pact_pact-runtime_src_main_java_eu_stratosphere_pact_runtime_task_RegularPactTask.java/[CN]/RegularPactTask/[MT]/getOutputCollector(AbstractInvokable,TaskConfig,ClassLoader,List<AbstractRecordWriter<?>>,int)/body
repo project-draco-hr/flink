@@ -1,0 +1,84 @@
+{
+  if (numOutputs <= 0) {
+    throw new Exception("BUG: The task must have at least one output");
+  }
+  final TypeSerializerFactory<T> serializerFactory=config.getOutputSerializer(cl);
+  if (serializerFactory.getDataType().equals(PactRecord.class)) {
+    final List<AbstractRecordWriter<PactRecord>> writers=new ArrayList<AbstractRecordWriter<PactRecord>>(numOutputs);
+    for (int i=0; i < numOutputs; i++) {
+      final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+      final TypeComparatorFactory<?> compFact=config.getOutputComparator(i,cl);
+      final PactRecordOutputEmitter oe;
+      if (compFact == null) {
+        oe=new PactRecordOutputEmitter(strategy);
+      }
+ else {
+        if (compFact instanceof PactRecordComparatorFactory) {
+          final PactRecordComparator comparator=((PactRecordComparatorFactory)compFact).createComparator();
+          final DataDistribution distribution=config.getOutputDataDistribution(cl);
+          oe=new PactRecordOutputEmitter(strategy,comparator,distribution);
+        }
+ else {
+          throw new Exception("Incompatibe serializer-/comparator factories.");
+        }
+      }
+      if (strategy == ShipStrategyType.BROADCAST && USE_BROARDCAST_WRITERS) {
+        if (task instanceof AbstractTask) {
+          writers.add(new BroadcastRecordWriter<PactRecord>((AbstractTask)task,PactRecord.class));
+        }
+ else         if (task instanceof AbstractInputTask<?>) {
+          writers.add(new BroadcastRecordWriter<PactRecord>((AbstractInputTask<?>)task,PactRecord.class));
+        }
+      }
+ else {
+        if (task instanceof AbstractTask) {
+          writers.add(new RecordWriter<PactRecord>((AbstractTask)task,PactRecord.class,oe));
+        }
+ else         if (task instanceof AbstractInputTask<?>) {
+          writers.add(new RecordWriter<PactRecord>((AbstractInputTask<?>)task,PactRecord.class,oe));
+        }
+      }
+    }
+    if (eventualOutputs != null) {
+      eventualOutputs.addAll(writers);
+    }
+    @SuppressWarnings("unchecked") final Collector<T> outColl=(Collector<T>)new PactRecordOutputCollector(writers);
+    return outColl;
+  }
+ else {
+    final List<AbstractRecordWriter<SerializationDelegate<T>>> writers=new ArrayList<AbstractRecordWriter<SerializationDelegate<T>>>(numOutputs);
+    @SuppressWarnings("unchecked") final Class<SerializationDelegate<T>> delegateClazz=(Class<SerializationDelegate<T>>)(Class<?>)SerializationDelegate.class;
+    for (int i=0; i < numOutputs; i++) {
+      final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+      final TypeComparatorFactory<T> compFactory=config.getOutputComparator(i,cl);
+      final ChannelSelector<SerializationDelegate<T>> oe;
+      if (compFactory == null) {
+        oe=new OutputEmitter<T>(strategy);
+      }
+ else {
+        final TypeComparator<T> comparator=compFactory.createComparator();
+        oe=new OutputEmitter<T>(strategy,comparator);
+      }
+      if (strategy == ShipStrategyType.BROADCAST && USE_BROARDCAST_WRITERS) {
+        if (task instanceof AbstractTask) {
+          writers.add(new BroadcastRecordWriter<SerializationDelegate<T>>((AbstractTask)task,delegateClazz));
+        }
+ else         if (task instanceof AbstractInputTask<?>) {
+          writers.add(new BroadcastRecordWriter<SerializationDelegate<T>>((AbstractInputTask<?>)task,delegateClazz));
+        }
+      }
+ else {
+        if (task instanceof AbstractTask) {
+          writers.add(new RecordWriter<SerializationDelegate<T>>((AbstractTask)task,delegateClazz,oe));
+        }
+ else         if (task instanceof AbstractInputTask<?>) {
+          writers.add(new RecordWriter<SerializationDelegate<T>>((AbstractInputTask<?>)task,delegateClazz,oe));
+        }
+      }
+    }
+    if (eventualOutputs != null) {
+      eventualOutputs.addAll(writers);
+    }
+    return new OutputCollector<T>(writers,serializerFactory.getSerializer());
+  }
+}

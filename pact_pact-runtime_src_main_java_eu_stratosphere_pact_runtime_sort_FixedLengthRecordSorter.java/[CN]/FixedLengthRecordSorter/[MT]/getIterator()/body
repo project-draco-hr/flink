@@ -1,0 +1,35 @@
+{
+  final SingleSegmentInputView startIn=new SingleSegmentInputView(this.recordsPerSegment * this.recordSize);
+  startIn.set(this.sortBuffer.get(0),0);
+  return new MutableObjectIterator<T>(){
+    private final SingleSegmentInputView in=startIn;
+    private final TypeComparator<T> comp=comparator;
+    private final int numTotal=size();
+    private final int numPerSegment=recordsPerSegment;
+    private int currentTotal=0;
+    private int currentInSegment=0;
+    private int currentSegmentIndex=0;
+    @Override public boolean next(    T target){
+      if (this.currentTotal < this.numTotal) {
+        if (this.currentInSegment >= this.numPerSegment) {
+          this.currentInSegment=0;
+          this.currentSegmentIndex++;
+          this.in.set(sortBuffer.get(this.currentSegmentIndex),0);
+        }
+        this.currentTotal++;
+        this.currentInSegment++;
+        try {
+          this.comp.readWithKeyDenormalization(target,this.in);
+          return true;
+        }
+ catch (        IOException ioe) {
+          throw new RuntimeException(ioe);
+        }
+      }
+ else {
+        return false;
+      }
+    }
+  }
+;
+}

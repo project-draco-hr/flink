@@ -1,0 +1,42 @@
+{
+  final Configuration conf=getPactContract().getParameters();
+  final String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
+  final ShipStrategyType preSet;
+  if (shipStrategy != null) {
+    if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH)) {
+      preSet=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE)) {
+      preSet=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_FORWARD)) {
+      preSet=ShipStrategyType.FORWARD;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet=ShipStrategyType.PARTITION_RANDOM;
+    }
+ else {
+      throw new CompilerException("Unrecognized ship strategy hint: " + shipStrategy);
+    }
+  }
+ else {
+    preSet=null;
+  }
+  List<Contract> children=((SingleInputContract<?>)getPactContract()).getInputs();
+  OptimizerNode pred;
+  PactConnection conn;
+  if (children.size() == 1) {
+    pred=contractToNode.get(children.get(0));
+    conn=new PactConnection(pred,this,pred.getMaxDepth() + 1);
+    if (preSet != null) {
+      conn.setShipStrategy(preSet);
+    }
+  }
+ else {
+    pred=createdUnionCascade(children,contractToNode,preSet);
+    conn=new PactConnection(pred,this,pred.getMaxDepth() + 1);
+    conn.setShipStrategy(ShipStrategyType.FORWARD);
+  }
+  setIncomingConnection(conn);
+  pred.addOutgoingConnection(conn);
+}

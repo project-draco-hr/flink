@@ -1,0 +1,39 @@
+{
+  if (serializer == null || comparator == null || memory == null)   throw new NullPointerException();
+  this.serializer=serializer;
+  this.comparator=comparator;
+  this.useNormKeyUninverted=!comparator.invertNormalizedKey();
+  this.totalNumBuffers=memory.size();
+  if (this.totalNumBuffers < MIN_REQUIRED_BUFFERS) {
+    throw new IllegalArgumentException("Normalized-Key sorter requires at least " + MIN_REQUIRED_BUFFERS + " memory buffers.");
+  }
+  this.segmentSize=memory.get(0).size();
+  this.recordSize=serializer.getLength();
+  this.numKeyBytes=this.comparator.getNormalizeKeyLen();
+  if (this.recordSize <= 0) {
+    throw new IllegalArgumentException("This sorter works only for fixed-length data types.");
+  }
+ else   if (this.recordSize > this.segmentSize) {
+    throw new IllegalArgumentException("This sorter works only for record lengths below the memory segment size.");
+  }
+ else   if (!comparator.supportsSerializationWithKeyNormalization()) {
+    throw new IllegalArgumentException("This sorter requires a comparator that supports serialization with key normalization.");
+  }
+  this.recordsPerSegment=segmentSize / this.recordSize;
+  this.lastEntryOffset=(this.recordsPerSegment - 1) * this.recordSize;
+  this.swapBuffer=new byte[this.recordSize];
+  if (memory instanceof ArrayList<?>) {
+    this.freeMemory=(ArrayList<MemorySegment>)memory;
+  }
+ else {
+    this.freeMemory=new ArrayList<MemorySegment>(memory.size());
+    this.freeMemory.addAll(memory);
+  }
+  this.sortBuffer=new ArrayList<MemorySegment>(16);
+  this.outView=new SingleSegmentOutputView(this.segmentSize);
+  this.inView=new SingleSegmentInputView(this.lastEntryOffset + this.recordSize);
+  this.currentSortBufferSegment=nextMemorySegment();
+  this.sortBuffer.add(this.currentSortBufferSegment);
+  this.outView.set(this.currentSortBufferSegment);
+  this.recordInstance=this.serializer.createInstance();
+}

@@ -1,0 +1,33 @@
+{
+  addInput(new DelayingInfinitiveInputIterator(100));
+  addInputComparator(this.comparator);
+  setOutput(new DiscardingOutputCollector());
+  getTaskConfig().setDriverStrategy(DriverStrategy.SORTED_GROUP);
+  getTaskConfig().setMemoryDriver(COMBINE_MEM);
+  getTaskConfig().setFilehandlesDriver(2);
+  final CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
+  final AtomicBoolean success=new AtomicBoolean(false);
+  Thread taskRunner=new Thread(){
+    @Override public void run(){
+      try {
+        testDriver(testTask,MockFailingCombiningReduceStub.class);
+        success.set(true);
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(1,taskRunner,this);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+  Assert.assertTrue("Exception was thrown despite proper canceling.",success.get());
+}

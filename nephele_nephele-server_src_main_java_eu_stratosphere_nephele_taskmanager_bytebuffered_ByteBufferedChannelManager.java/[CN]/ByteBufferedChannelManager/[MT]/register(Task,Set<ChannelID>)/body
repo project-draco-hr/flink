@@ -1,0 +1,46 @@
+{
+  checkBufferAvailability(task);
+  final Environment environment=task.getEnvironment();
+  final TaskContext taskContext=task.createTaskContext(this,this.localBufferPoolOwner.remove(task.getVertexID()));
+  final Set<GateID> outputGateIDs=environment.getOutputGateIDs();
+  for (final Iterator<GateID> gateIt=outputGateIDs.iterator(); gateIt.hasNext(); ) {
+    final GateID gateID=gateIt.next();
+    final OutputGateContext outputGateContext=taskContext.createOutputGateContext(gateID);
+    final Set<ChannelID> outputChannelIDs=environment.getOutputChannelIDsOfGate(gateID);
+    for (final Iterator<ChannelID> channelIt=outputChannelIDs.iterator(); channelIt.hasNext(); ) {
+      final ChannelID channelID=channelIt.next();
+      final OutputChannelContext previousContext=(OutputChannelContext)this.registeredChannels.get(channelID);
+      final boolean isActive=true;
+      final OutputChannelContext outputChannelContext=outputGateContext.createOutputChannelContext(channelID,previousContext,isActive,this.mergeSpilledBuffers);
+      if (outputChannelContext.getType() == ChannelType.INMEMORY) {
+        addReceiverListHint(outputChannelContext.getChannelID(),outputChannelContext.getConnectedChannelID());
+      }
+      if (outputChannelContext.getType() == ChannelType.NETWORK) {
+        addReceiverListHint(outputChannelContext.getConnectedChannelID(),outputChannelContext.getChannelID());
+      }
+      if (LOG.isDebugEnabled())       LOG.debug("Registering byte buffered output channel " + outputChannelContext.getChannelID() + " ("+ (isActive ? "active" : "inactive")+ ")");
+      this.registeredChannels.put(outputChannelContext.getChannelID(),outputChannelContext);
+    }
+  }
+  final Set<GateID> inputGateIDs=environment.getInputGateIDs();
+  for (final Iterator<GateID> gateIt=inputGateIDs.iterator(); gateIt.hasNext(); ) {
+    final GateID gateID=gateIt.next();
+    final InputGateContext inputGateContext=taskContext.createInputGateContext(gateID);
+    final Set<ChannelID> inputChannelIDs=environment.getInputChannelIDsOfGate(gateID);
+    for (final Iterator<ChannelID> channelIt=inputChannelIDs.iterator(); channelIt.hasNext(); ) {
+      final ChannelID channelID=channelIt.next();
+      final InputChannelContext previousContext=(InputChannelContext)this.registeredChannels.get(channelID);
+      final InputChannelContext inputChannelContext=inputGateContext.createInputChannelContext(channelID,previousContext);
+      if (inputChannelContext.getType() == ChannelType.INMEMORY) {
+        addReceiverListHint(inputChannelContext.getChannelID(),inputChannelContext.getConnectedChannelID());
+      }
+      this.registeredChannels.put(inputChannelContext.getChannelID(),inputChannelContext);
+    }
+    final LocalBufferPoolOwner bufferPoolOwner=inputGateContext.getLocalBufferPoolOwner();
+    if (bufferPoolOwner != null) {
+      this.localBufferPoolOwner.put(inputGateContext.getGateID(),bufferPoolOwner);
+    }
+  }
+  this.localBufferPoolOwner.put(task.getVertexID(),taskContext);
+  redistributeGlobalBuffers();
+}

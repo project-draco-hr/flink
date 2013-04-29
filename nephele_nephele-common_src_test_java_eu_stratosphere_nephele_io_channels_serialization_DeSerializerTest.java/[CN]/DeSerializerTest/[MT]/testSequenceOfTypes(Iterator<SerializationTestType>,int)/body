@@ -1,0 +1,39 @@
+{
+  final ArrayDeque<SerializationTestType> elements=new ArrayDeque<SerializationTestType>(512);
+  final PipeChannel channel=new PipeChannel(bufferSize);
+  final SerializationBuffer<SerializationTestType> serBuffer=new SerializationBuffer<SerializationTestType>();
+  final DefaultDeserializer<SerializationTestType> deserBuffer=new DefaultDeserializer<SerializationTestType>(null);
+  while (sequence.hasNext()) {
+    final SerializationTestType type=sequence.next();
+    serBuffer.serialize(type);
+    elements.addLast(type);
+    while (true) {
+      serBuffer.read(channel);
+      if (serBuffer.dataLeftFromPreviousSerialization()) {
+        channel.flip();
+        while (!elements.isEmpty()) {
+          final SerializationTestType reference=elements.pollFirst();
+          final SerializationTestType result=deserBuffer.readData(reference.getClass().newInstance(),channel);
+          if (result == null) {
+            elements.addFirst(reference);
+            break;
+          }
+ else {
+            assertEquals("The deserialized element is not equal to the serialized element.",reference,result);
+          }
+        }
+        channel.clear();
+      }
+ else {
+        break;
+      }
+    }
+  }
+  channel.flip();
+  while (!elements.isEmpty()) {
+    final SerializationTestType reference=elements.pollFirst();
+    final SerializationTestType result=deserBuffer.readData(reference.getClass().newInstance(),channel);
+    assertNotNull(result);
+    assertEquals("The deserialized element is not equal to the serialized element.",reference,result);
+  }
+}

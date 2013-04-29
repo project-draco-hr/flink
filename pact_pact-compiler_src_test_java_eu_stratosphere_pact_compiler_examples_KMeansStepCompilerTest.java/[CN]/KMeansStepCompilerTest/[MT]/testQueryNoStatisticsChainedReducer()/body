@@ -1,0 +1,21 @@
+{
+  try {
+    KMeansIteration job=new KMeansIteration();
+    Plan p=job.getPlan(DEFAULT_PARALLELISM_STRING,IN_FILE,IN_FILE,OUT_FILE);
+    final OptimizedPlan plan=compileNoStats(p);
+    final OptimizerPlanNodeResolver or=getOptimizerPlanNodeResolver(plan);
+    final SinkPlanNode sink=or.getNode(SINK);
+    final SingleInputPlanNode reducer2=or.getNode(RECOMPUTE_CENTERS_REDUCER);
+    final SingleInputPlanNode combiner2=(SingleInputPlanNode)reducer2.getPredecessor();
+    final SingleInputPlanNode reducer1=or.getNode(NEAREST_CENTER_REDUCER);
+    final SingleInputPlanNode combiner1=reducer1.getPredecessor() instanceof SingleInputPlanNode ? (SingleInputPlanNode)reducer1.getPredecessor() : null;
+    final DualInputPlanNode cross=or.getNode(CROSS_NAME);
+    checkStandardStrategies(reducer1,combiner1,reducer2,combiner2,sink);
+    checkBroadCastSide(cross,false);
+    checkBlockNLChainedReducer(cross,reducer1,combiner1,true,true);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}

@@ -1,0 +1,57 @@
+{
+  final DatagramPacket requestPacket=new DatagramPacket(new byte[64],64);
+  final Map<Integer,Long> packetIDMap=new HashMap<Integer,Long>();
+  while (this.isRunning) {
+    try {
+      this.serverSocket.receive(requestPacket);
+      if (!isPacketForUs(requestPacket,this.magicNumber)) {
+        LOG.debug("Received request packet which is not destined to this Nephele setup");
+        continue;
+      }
+      final Integer packetID=Integer.valueOf(extractPacketID(requestPacket));
+      if (packetIDMap.containsKey(packetID)) {
+        LOG.debug("Request with ID " + packetID.intValue() + " already answered, discarding...");
+        continue;
+      }
+ else {
+        final long currentTime=System.currentTimeMillis();
+        final Iterator<Map.Entry<Integer,Long>> it=packetIDMap.entrySet().iterator();
+        while (it.hasNext()) {
+          final Map.Entry<Integer,Long> entry=it.next();
+          if ((entry.getValue().longValue() + 5000L) < currentTime) {
+            it.remove();
+          }
+        }
+        packetIDMap.put(packetID,Long.valueOf(currentTime));
+      }
+      final int packetTypeID=getPacketTypeID(requestPacket);
+      if (packetTypeID == JM_LOOKUP_REQUEST_ID) {
+        LOG.debug("Received job manager lookup request from " + requestPacket.getSocketAddress());
+        final DatagramPacket responsePacket=createJobManagerLookupReplyPacket(this.ipcPort,this.magicNumber);
+        responsePacket.setAddress(requestPacket.getAddress());
+        responsePacket.setPort(requestPacket.getPort());
+        this.serverSocket.send(responsePacket);
+      }
+ else       if (packetTypeID == TM_ADDRESS_REQUEST_ID) {
+        LOG.debug("Received task manager address request from " + requestPacket.getSocketAddress());
+        final DatagramPacket responsePacket=createTaskManagerAddressReplyPacket(requestPacket.getAddress(),this.magicNumber);
+        responsePacket.setAddress(requestPacket.getAddress());
+        responsePacket.setPort(requestPacket.getPort());
+        this.serverSocket.send(responsePacket);
+      }
+ else {
+        LOG.debug("Received packet of unknown type " + packetTypeID + ", discarding...");
+      }
+    }
+ catch (    SocketTimeoutException ste) {
+      LOG.debug("Discovery service: socket timeout");
+    }
+catch (    IOException ioe) {
+      if (this.isRunning) {
+        LOG.error("Discovery service stopped working with IOException:\n" + ioe.toString());
+      }
+      break;
+    }
+  }
+  this.serverSocket.close();
+}

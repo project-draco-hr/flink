@@ -1,0 +1,25 @@
+{
+  final TransferEnvelope te=new TransferEnvelope(SEQUENCE_NUMBER,JOB_ID,CHANNEL_ID);
+  if (testBufferSize >= 0) {
+    if (testBufferSize > 100) {
+      throw new IllegalStateException("Test buffer size can be 100 bytes at most");
+    }
+    final Queue<ByteBuffer> bufferPool=new ArrayDeque<ByteBuffer>();
+    final ByteBuffer bb=ByteBuffer.allocate(TEST_BUFFER_CAPACITY);
+    final Buffer buffer=BufferFactory.createFromMemory(bb.capacity(),bb,new BufferPoolConnector(bufferPool));
+    final ByteBuffer srcBuffer=ByteBuffer.allocate(testBufferSize);
+    for (int i=0; i < testBufferSize; ++i) {
+      srcBuffer.put((byte)i);
+    }
+    srcBuffer.flip();
+    buffer.write(srcBuffer);
+    buffer.finishWritePhase();
+    te.setBuffer(buffer);
+  }
+  final DefaultSerializer ds=new DefaultSerializer();
+  ds.setTransferEnvelope(te);
+  final InterruptibleByteChannel ibc=new InterruptibleByteChannel(null,readInterruptPositions);
+  while (ds.write(ibc))   ;
+  ibc.switchToReadPhase();
+  return ibc;
+}

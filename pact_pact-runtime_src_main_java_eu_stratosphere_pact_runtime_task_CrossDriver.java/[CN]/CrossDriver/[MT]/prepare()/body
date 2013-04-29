@@ -1,0 +1,43 @@
+{
+  final TaskConfig config=this.taskContext.getTaskConfig();
+  final DriverStrategy ls=config.getDriverStrategy();
+switch (ls) {
+case NESTEDLOOP_BLOCKED_OUTER_FIRST:
+    this.blocked=true;
+  this.firstIsOuter=true;
+break;
+case NESTEDLOOP_BLOCKED_OUTER_SECOND:
+this.blocked=true;
+this.firstIsOuter=false;
+break;
+case NESTEDLOOP_STREAMED_OUTER_FIRST:
+this.blocked=false;
+this.firstIsOuter=true;
+break;
+case NESTEDLOOP_STREAMED_OUTER_SECOND:
+this.blocked=false;
+this.firstIsOuter=false;
+break;
+default :
+throw new RuntimeException("Invalid local strategy for CROSS: " + ls);
+}
+this.memManager=this.taskContext.getMemoryManager();
+final long totalAvailableMemory=config.getMemoryDriver();
+final int numPages=this.memManager.computeNumberOfPages(totalAvailableMemory);
+if (numPages < 2) {
+throw new RuntimeException("The Cross task was initialized with too little memory. " + "Cross requires at least 2 memory pages.");
+}
+if (ls == DriverStrategy.NESTEDLOOP_STREAMED_OUTER_FIRST || ls == DriverStrategy.NESTEDLOOP_STREAMED_OUTER_SECOND) {
+this.memForSpillingSide=totalAvailableMemory;
+this.memForBlockSide=0;
+}
+ else {
+if (numPages > 32) {
+this.memForSpillingSide=2 * this.memManager.getPageSize();
+}
+ else {
+this.memForSpillingSide=this.memManager.getPageSize();
+}
+this.memForBlockSide=totalAvailableMemory - this.memForSpillingSide;
+}
+}

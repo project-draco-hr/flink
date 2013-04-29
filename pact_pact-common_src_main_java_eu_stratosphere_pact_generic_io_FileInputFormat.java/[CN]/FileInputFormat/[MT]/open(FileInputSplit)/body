@@ -1,0 +1,18 @@
+{
+  if (!(split instanceof FileInputSplit)) {
+    throw new IllegalArgumentException("File Input Formats can only be used with FileInputSplits.");
+  }
+  final FileInputSplit fileSplit=(FileInputSplit)split;
+  this.splitStart=fileSplit.getStart();
+  this.splitLength=fileSplit.getLength();
+  if (LOG.isDebugEnabled())   LOG.debug("Opening input split " + fileSplit.getPath() + " ["+ this.splitStart+ ","+ this.splitLength+ "]");
+  final InputSplitOpenThread isot=new InputSplitOpenThread(fileSplit,this.openTimeout);
+  isot.start();
+  try {
+    this.stream=isot.waitForCompletion();
+  }
+ catch (  Throwable t) {
+    throw new IOException("Error opening the Input Split " + fileSplit.getPath() + " ["+ splitStart+ ","+ splitLength+ "]: "+ t.getMessage(),t);
+  }
+  this.stream.seek(this.splitStart);
+}

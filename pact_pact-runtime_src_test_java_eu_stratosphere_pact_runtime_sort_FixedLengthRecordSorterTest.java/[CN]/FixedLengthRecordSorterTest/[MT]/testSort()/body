@@ -1,0 +1,31 @@
+{
+  final int NUM_RECORDS=559273;
+  final int numSegments=MEMORY_SIZE / MEMORY_PAGE_SIZE;
+  final List<MemorySegment> memory=this.memoryManager.allocatePages(new DummyInvokable(),numSegments);
+  FixedLengthRecordSorter<IntPair> sorter=newSortBuffer(memory);
+  RandomIntPairGenerator generator=new RandomIntPairGenerator(SEED);
+  IntPair record=new IntPair();
+  int num=-1;
+  do {
+    generator.next(record);
+    num++;
+  }
+ while (sorter.write(record) && num < NUM_RECORDS);
+  QuickSort qs=new QuickSort();
+  qs.sort(sorter);
+  MutableObjectIterator<IntPair> iter=sorter.getIterator();
+  IntPair readTarget=new IntPair();
+  int current=0;
+  int last=0;
+  iter.next(readTarget);
+  last=readTarget.getKey();
+  while (iter.next(readTarget)) {
+    current=readTarget.getKey();
+    final int cmp=last - current;
+    if (cmp > 0)     Assert.fail("Next key is not larger or equal to previous key.");
+    int tmp=current;
+    current=last;
+    last=tmp;
+  }
+  this.memoryManager.release(sorter.dispose());
+}

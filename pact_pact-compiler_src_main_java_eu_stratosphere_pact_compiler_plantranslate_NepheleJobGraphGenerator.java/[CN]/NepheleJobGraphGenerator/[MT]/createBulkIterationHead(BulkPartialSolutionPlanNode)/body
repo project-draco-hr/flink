@@ -1,0 +1,32 @@
+{
+  final BulkIterationPlanNode iteration=pspn.getContainingIterationNode();
+  final boolean merge;
+  if (pspn.getOutgoingChannels().size() == 1) {
+    final Channel c=pspn.getOutgoingChannels().get(0);
+    final PlanNode successor=c.getTarget();
+    merge=c.getShipStrategy() == ShipStrategyType.FORWARD && c.getLocalStrategy() == LocalStrategy.NONE && successor.getDegreeOfParallelism() == pspn.getDegreeOfParallelism() && successor.getSubtasksPerInstance() == pspn.getSubtasksPerInstance() && !(successor instanceof UnionPlanNode) && successor != iteration.getRootOfStepFunction();
+  }
+ else {
+    merge=false;
+  }
+  final JobTaskVertex toReturn;
+  final JobTaskVertex headVertex;
+  if (merge) {
+    final PlanNode successor=pspn.getOutgoingChannels().get(0).getTarget();
+    headVertex=(JobTaskVertex)this.vertices.get(successor);
+    if (headVertex == null) {
+      throw new CompilerException("Bug: Trying to merge solution set with its sucessor, but successor has not been created.");
+    }
+    headVertex.setTaskClass(IterationHeadPactTask.class);
+    toReturn=null;
+  }
+ else {
+    headVertex=new JobTaskVertex(iteration.getPactContract().getName() + " - Partial Solution",this.jobGraph);
+    headVertex.setTaskClass(IterationHeadPactTask.class);
+    new TaskConfig(headVertex.getConfiguration()).setDriver(NoOpDriver.class);
+    toReturn=headVertex;
+  }
+  final IterationDescriptor descr=new IterationDescriptor(iteration,headVertex);
+  this.iterations.put(iteration,descr);
+  return toReturn;
+}

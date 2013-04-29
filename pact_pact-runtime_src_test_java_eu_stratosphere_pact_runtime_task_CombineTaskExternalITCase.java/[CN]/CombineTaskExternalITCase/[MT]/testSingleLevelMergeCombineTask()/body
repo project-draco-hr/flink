@@ -1,0 +1,41 @@
+{
+  final int keyCnt=40000;
+  final int valCnt=8;
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false));
+  addInputComparator(this.comparator);
+  setOutput(this.outList);
+  getTaskConfig().setDriverStrategy(DriverStrategy.SORTED_GROUP);
+  getTaskConfig().setMemoryDriver(COMBINE_MEM);
+  getTaskConfig().setFilehandlesDriver(2);
+  final CombineDriver<PactRecord> testTask=new CombineDriver<PactRecord>();
+  try {
+    testDriver(testTask,MockCombiningReduceStub.class);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("Invoke method caused exception.");
+  }
+  int expSum=0;
+  for (int i=1; i < valCnt; i++) {
+    expSum+=i;
+  }
+  final HashMap<PactInteger,PactInteger> aggMap=new HashMap<PactInteger,PactInteger>();
+  for (  PactRecord record : this.outList) {
+    PactInteger key=new PactInteger();
+    PactInteger value=new PactInteger();
+    key=record.getField(0,key);
+    value=record.getField(1,value);
+    PactInteger prevVal=aggMap.get(key);
+    if (prevVal != null) {
+      aggMap.put(key,new PactInteger(prevVal.getValue() + value.getValue()));
+    }
+ else {
+      aggMap.put(key,value);
+    }
+  }
+  Assert.assertTrue("Resultset size was " + aggMap.size() + ". Expected was "+ keyCnt,aggMap.size() == keyCnt);
+  for (  PactInteger integer : aggMap.values()) {
+    Assert.assertTrue("Incorrect result",integer.getValue() == expSum);
+  }
+  this.outList.clear();
+}

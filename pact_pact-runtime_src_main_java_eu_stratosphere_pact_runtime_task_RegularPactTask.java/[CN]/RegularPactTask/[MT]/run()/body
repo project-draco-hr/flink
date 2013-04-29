@@ -1,0 +1,51 @@
+{
+  if (!this.running) {
+    return;
+  }
+  boolean stubOpen=false;
+  try {
+    try {
+      this.driver.prepare();
+    }
+ catch (    Throwable t) {
+      throw new Exception("The data preparation for task '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
+    }
+    if (!this.running) {
+      return;
+    }
+    RegularPactTask.openChainedTasks(this.chainedTasks,this);
+    if (this.stub != null) {
+      try {
+        Configuration stubConfig=this.config.getStubParameters();
+        this.stub.open(stubConfig);
+        stubOpen=true;
+      }
+ catch (      Throwable t) {
+        throw new Exception("The user defined 'open()' method caused an exception: " + t.getMessage(),t);
+      }
+    }
+    this.driver.run();
+    if (this.running && this.stub != null) {
+      this.stub.close();
+      stubOpen=false;
+    }
+    this.output.close();
+    RegularPactTask.closeChainedTasks(this.chainedTasks,this);
+  }
+ catch (  Exception ex) {
+    if (stubOpen) {
+      try {
+        this.stub.close();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    RegularPactTask.cancelChainedTasks(this.chainedTasks);
+    if (this.running) {
+      RegularPactTask.logAndThrowException(ex,this);
+    }
+  }
+ finally {
+    this.driver.cleanup();
+  }
+}

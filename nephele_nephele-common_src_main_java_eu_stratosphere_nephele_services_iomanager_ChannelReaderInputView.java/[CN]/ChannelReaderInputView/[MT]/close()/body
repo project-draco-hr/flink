@@ -1,0 +1,22 @@
+{
+  if (this.closed) {
+    throw new IllegalStateException("Already closed.");
+  }
+  this.closed=true;
+  ArrayList<MemorySegment> list=this.freeMem;
+  final MemorySegment current=getCurrentSegment();
+  if (current != null) {
+    list.add(current);
+  }
+  clear();
+  final LinkedBlockingQueue<MemorySegment> queue=this.reader.getReturnQueue();
+  this.reader.close();
+  while (list.size() < this.numSegments) {
+    final MemorySegment m=queue.poll();
+    if (m == null) {
+      throw new RuntimeException("Bug in ChannelReaderInputView: MemorySegments lost.");
+    }
+    list.add(m);
+  }
+  return list;
+}

@@ -1,0 +1,30 @@
+{
+  final int PAIRS=50000000;
+  final RandomIntPairGenerator generator=new RandomIntPairGenerator(12345678,PAIRS);
+  final TypeSerializer<IntPair> serializer=new IntPairSerializer();
+  final TypeComparator<IntPair> comparator=new IntPairComparator();
+  LOG.debug("Initializing sortmerger...");
+  Sorter<IntPair> merger=new UnilateralSortMerger<IntPair>(this.memoryManager,this.ioManager,generator,this.parentTask,serializer,comparator,64 * 1024 * 1024,4,0.7f);
+  LOG.debug("Emitting data...");
+  MutableObjectIterator<IntPair> iterator=merger.getIterator();
+  LOG.debug("Checking results...");
+  int pairsRead=1;
+  int nextStep=PAIRS / 20;
+  IntPair rec1=new IntPair();
+  IntPair rec2=new IntPair();
+  Assert.assertTrue(iterator.next(rec1));
+  while (iterator.next(rec2)) {
+    final int k1=rec1.getKey();
+    final int k2=rec2.getKey();
+    pairsRead++;
+    Assert.assertTrue(k1 - k2 <= 0);
+    IntPair tmp=rec1;
+    rec1=rec2;
+    rec2=tmp;
+    if (pairsRead == nextStep) {
+      nextStep+=PAIRS / 20;
+    }
+  }
+  Assert.assertEquals("Not all pairs were read back in.",PAIRS,pairsRead);
+  merger.close();
+}

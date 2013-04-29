@@ -1,0 +1,70 @@
+{
+  final int REPEATED_VALUE_1=40559;
+  final int REPEATED_VALUE_2=92882;
+  final int REPEATED_VALUE_COUNT_BUILD=200000;
+  final int REPEATED_VALUE_COUNT_PROBE=5;
+  final int NUM_KEYS=1000000;
+  final int BUILD_VALS_PER_KEY=3;
+  final int PROBE_VALS_PER_KEY=10;
+  MutableObjectIterator<PactRecord> build1=new UniformPactRecordGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<PactRecord> build2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT_BUILD);
+  MutableObjectIterator<PactRecord> build3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT_BUILD);
+  List<MutableObjectIterator<PactRecord>> builds=new ArrayList<MutableObjectIterator<PactRecord>>();
+  builds.add(build1);
+  builds.add(build2);
+  builds.add(build3);
+  MutableObjectIterator<PactRecord> buildInput=new UnionIterator<PactRecord>(builds);
+  MutableObjectIterator<PactRecord> probe1=new UniformPactRecordGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<PactRecord> probe2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,5);
+  MutableObjectIterator<PactRecord> probe3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,5);
+  List<MutableObjectIterator<PactRecord>> probes=new ArrayList<MutableObjectIterator<PactRecord>>();
+  probes.add(probe1);
+  probes.add(probe2);
+  probes.add(probe3);
+  MutableObjectIterator<PactRecord> probeInput=new UnionIterator<PactRecord>(probes);
+  List<MemorySegment> memSegments;
+  try {
+    memSegments=this.memManager.allocatePages(MEM_OWNER,896);
+  }
+ catch (  MemoryAllocationException maex) {
+    fail("Memory for the Join could not be provided.");
+    return;
+  }
+  HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
+  final MutableHashTable<PactRecord,PactRecord> join=new MutableHashTable<PactRecord,PactRecord>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager);
+  join.open(buildInput,probeInput);
+  final PactRecord record=new PactRecord();
+  while (join.nextRecord()) {
+    int numBuildValues=0;
+    final PactRecord probeRec=join.getCurrentProbeRecord();
+    int key=probeRec.getField(0,PactInteger.class).getValue();
+    HashBucketIterator<PactRecord,PactRecord> buildSide=join.getBuildSideIterator();
+    if (buildSide.next(record)) {
+      numBuildValues=1;
+      Assert.assertEquals("Probe-side key was different than build-side key.",key,record.getField(0,PactInteger.class).getValue());
+    }
+ else {
+      fail("No build side values found for a probe key.");
+    }
+    while (buildSide.next(record)) {
+      numBuildValues++;
+      Assert.assertEquals("Probe-side key was different than build-side key.",key,record.getField(0,PactInteger.class).getValue());
+    }
+    Long contained=map.get(key);
+    if (contained == null) {
+      contained=new Long(numBuildValues);
+    }
+ else {
+      contained=new Long(contained.longValue() + numBuildValues);
+    }
+    map.put(key,contained);
+  }
+  join.close();
+  Assert.assertEquals("Wrong number of keys",NUM_KEYS,map.size());
+  for (  Map.Entry<Integer,Long> entry : map.entrySet()) {
+    long val=entry.getValue();
+    int key=entry.getKey();
+    Assert.assertEquals("Wrong number of values in per-key cross product for key " + key,(key == REPEATED_VALUE_1 || key == REPEATED_VALUE_2) ? (PROBE_VALS_PER_KEY + REPEATED_VALUE_COUNT_PROBE) * (BUILD_VALS_PER_KEY + REPEATED_VALUE_COUNT_BUILD) : PROBE_VALS_PER_KEY * BUILD_VALS_PER_KEY,val);
+  }
+  this.memManager.release(join.getFreedMemory());
+}

@@ -1,0 +1,21 @@
+{
+  final int numSubtasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  final String ordersPath=(args.length > 1 ? args[1] : "");
+  final String lineitemsPath=(args.length > 2 ? args[2] : "");
+  final String output=(args.length > 3 ? args[3] : "");
+  FileDataSource orders=new FileDataSource(RecordInputFormat.class,ordersPath,"Orders");
+  RecordInputFormat.configureRecordFormat(orders).recordDelimiter('\n').fieldDelimiter('|').field(DecimalTextLongParser.class,0).field(DecimalTextIntParser.class,7).field(VarLengthStringParser.class,2,2).field(VarLengthStringParser.class,4,10).field(VarLengthStringParser.class,5,8);
+  FileDataSource lineitems=new FileDataSource(RecordInputFormat.class,lineitemsPath,"LineItems");
+  RecordInputFormat.configureRecordFormat(lineitems).recordDelimiter('\n').fieldDelimiter('|').field(DecimalTextLongParser.class,0).field(DecimalTextDoubleParser.class,5);
+  MapContract filterO=MapContract.builder(FilterO.class).input(orders).name("FilterO").build();
+  filterO.setParameter(YEAR_FILTER,1993);
+  filterO.setParameter(PRIO_FILTER,"5");
+  filterO.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.05f);
+  MatchContract joinLiO=MatchContract.builder(JoinLiO.class,PactLong.class,0,0).input1(filterO).input2(lineitems).name("JoinLiO").build();
+  ReduceContract aggLiO=ReduceContract.builder(AggLiO.class).keyField(PactLong.class,0).keyField(PactString.class,1).input(joinLiO).name("AggLio").build();
+  FileDataSink result=new FileDataSink(RecordOutputFormat.class,output,aggLiO,"Output");
+  RecordOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter('|').lenient(true).field(PactLong.class,0).field(PactInteger.class,1).field(PactDouble.class,2);
+  Plan plan=new Plan(result,"TPCH Q3");
+  plan.setDefaultParallelism(numSubtasks);
+  return plan;
+}

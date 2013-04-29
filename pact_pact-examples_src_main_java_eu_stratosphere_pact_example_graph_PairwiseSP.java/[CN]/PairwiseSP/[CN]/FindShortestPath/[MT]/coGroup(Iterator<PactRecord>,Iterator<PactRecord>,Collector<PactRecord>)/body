@@ -1,0 +1,62 @@
+{
+  PactRecord pathRec=null;
+  PactString path=null;
+  if (inputRecords.hasNext()) {
+    pathRec=inputRecords.next();
+  }
+ else {
+    pathRec=concatRecords.next();
+  }
+  PactString fromNode=pathRec.getField(0,PactString.class);
+  PactString toNode=pathRec.getField(1,PactString.class);
+  minLength.setValue(pathRec.getField(2,PactInteger.class).getValue());
+  path=new PactString(pathRec.getField(4,PactString.class));
+  shortestPaths.add(path);
+  hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+  while (inputRecords.hasNext()) {
+    pathRec=inputRecords.next();
+    PactInteger length=pathRec.getField(2,PactInteger.class);
+    if (length.getValue() == minLength.getValue()) {
+      path=new PactString(pathRec.getField(4,PactString.class));
+      if (shortestPaths.add(path)) {
+        hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+      }
+    }
+ else     if (length.getValue() < minLength.getValue()) {
+      minLength.setValue(length.getValue());
+      hopCnts.clear();
+      shortestPaths.clear();
+      path=new PactString(pathRec.getField(4,PactString.class));
+      shortestPaths.add(path);
+      hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+    }
+  }
+  while (concatRecords.hasNext()) {
+    pathRec=concatRecords.next();
+    PactInteger length=pathRec.getField(2,PactInteger.class);
+    if (length.getValue() == minLength.getValue()) {
+      path=new PactString(pathRec.getField(4,PactString.class));
+      if (shortestPaths.add(path)) {
+        hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+      }
+    }
+ else     if (length.getValue() < minLength.getValue()) {
+      minLength.setValue(length.getValue());
+      hopCnts.clear();
+      shortestPaths.clear();
+      path=new PactString(pathRec.getField(4,PactString.class));
+      shortestPaths.add(path);
+      hopCnts.put(path,new PactInteger(pathRec.getField(3,PactInteger.class).getValue()));
+    }
+  }
+  outputRecord.setField(0,fromNode);
+  outputRecord.setField(1,toNode);
+  outputRecord.setField(2,minLength);
+  for (  PactString shortestPath : shortestPaths) {
+    outputRecord.setField(3,hopCnts.get(shortestPath));
+    outputRecord.setField(4,shortestPath);
+    out.collect(outputRecord);
+  }
+  hopCnts.clear();
+  shortestPaths.clear();
+}

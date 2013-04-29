@@ -1,0 +1,34 @@
+{
+  final ChannelType channelType;
+  final DistributionPattern distributionPattern;
+switch (channel.getShipStrategy()) {
+case FORWARD:
+case PARTITION_LOCAL_HASH:
+    distributionPattern=DistributionPattern.POINTWISE;
+  channelType=ChannelType.INMEMORY;
+break;
+case PARTITION_RANDOM:
+case BROADCAST:
+case PARTITION_HASH:
+case PARTITION_RANGE:
+distributionPattern=DistributionPattern.BIPARTITE;
+channelType=ChannelType.NETWORK;
+break;
+default :
+throw new RuntimeException("Unknown runtime ship strategy: " + channel.getShipStrategy());
+}
+sourceVertex.connectTo(targetVertex,channelType,CompressionLevel.NO_COMPRESSION,distributionPattern);
+final int outputIndex=sourceConfig.getNumOutputs();
+sourceConfig.addOutputShipStrategy(channel.getShipStrategy());
+if (outputIndex == 0) {
+sourceConfig.setOutputSerializer(channel.getSerializer());
+}
+if (channel.getShipStrategyComparator() != null) {
+sourceConfig.setOutputComparator(channel.getShipStrategyComparator(),outputIndex);
+}
+if (channel.getShipStrategy() == ShipStrategyType.PARTITION_RANGE) {
+throw new CompilerException("Range Partitioner is currently not enabled.");
+}
+targetConfig.addInputToGroup(inputNumber);
+return distributionPattern;
+}

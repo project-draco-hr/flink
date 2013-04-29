@@ -1,0 +1,32 @@
+{
+  final int keyCnt=1000;
+  final int valCnt=2;
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+  addInputComparator(this.comparator);
+  setOutput(new NirvanaOutputList());
+  getTaskConfig().setDriverStrategy(DriverStrategy.SORTED_GROUP);
+  final ReduceDriver<PactRecord,PactRecord> testTask=new ReduceDriver<PactRecord,PactRecord>();
+  final AtomicBoolean success=new AtomicBoolean(false);
+  Thread taskRunner=new Thread(){
+    @Override public void run(){
+      try {
+        testDriver(testTask,MockDelayingReduceStub.class);
+        success.set(true);
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(2,taskRunner,this);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+}

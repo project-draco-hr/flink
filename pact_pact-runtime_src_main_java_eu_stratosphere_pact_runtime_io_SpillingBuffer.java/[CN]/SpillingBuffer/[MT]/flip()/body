@@ -1,0 +1,33 @@
+{
+  if (getCurrentSegment() != null) {
+    if (this.writer == null) {
+      this.fullSegments.add(getCurrentSegment());
+      this.numBytesInLastSegment=getCurrentPositionInSegment();
+      this.inMemInView=new RandomAccessInputView(this.fullSegments,this.segmentSize,this.numBytesInLastSegment);
+    }
+ else {
+      this.writer.writeBlock(this.getCurrentSegment());
+      this.numMemorySegmentsInWriter++;
+      this.numBytesInLastSegment=getCurrentPositionInSegment();
+      this.blockCount++;
+      this.writer.close();
+      for (int i=this.numMemorySegmentsInWriter; i > 0; i--) {
+        this.fullSegments.add(this.writer.getNextReturnedSegment());
+      }
+      this.numMemorySegmentsInWriter=0;
+    }
+    clear();
+  }
+  if (this.writer == null) {
+    this.inMemInView.setReadPosition(0);
+    return this.inMemInView;
+  }
+ else {
+    if (this.externalInView != null) {
+      this.externalInView.close();
+    }
+    final BlockChannelReader reader=this.ioManager.createBlockChannelReader(this.writer.getChannelID());
+    this.externalInView=new HeaderlessChannelReaderInputView(reader,this.fullSegments,this.blockCount,this.numBytesInLastSegment,false);
+    return this.externalInView;
+  }
+}

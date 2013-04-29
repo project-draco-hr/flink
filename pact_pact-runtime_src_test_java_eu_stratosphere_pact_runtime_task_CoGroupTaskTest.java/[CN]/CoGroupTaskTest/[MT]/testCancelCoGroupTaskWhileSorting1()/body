@@ -1,0 +1,42 @@
+{
+  int keyCnt=10;
+  int valCnt=2;
+  setOutput(this.output);
+  addInputComparator(this.comparator1);
+  addInputComparator(this.comparator2);
+  getTaskConfig().setDriverPairComparator(PactRecordPairComparatorFactory.get());
+  getTaskConfig().setDriverStrategy(DriverStrategy.CO_GROUP);
+  final CoGroupDriver<PactRecord,PactRecord,PactRecord> testTask=new CoGroupDriver<PactRecord,PactRecord,PactRecord>();
+  try {
+    addInputSorted(new DelayingInfinitiveInputIterator(1000),this.comparator1.duplicate());
+    addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("The test caused an exception.");
+  }
+  final AtomicBoolean success=new AtomicBoolean(false);
+  Thread taskRunner=new Thread(){
+    @Override public void run(){
+      try {
+        testDriver(testTask,MockCoGroupStub.class);
+        success.set(true);
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(1,taskRunner,this);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+  Assert.assertTrue("Test threw an exception even though it was properly canceled.",success.get());
+}

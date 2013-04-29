@@ -1,0 +1,55 @@
+{
+  if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
+  try {
+    final MutableObjectIterator<IT> reader=this.reader;
+    final OutputFormat<IT> format=this.format;
+    final IT record=this.inputTypeSerializer.createInstance();
+    if (this.taskCanceled) {
+      return;
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(getLogString("Starting to produce output"));
+    }
+    format.open(this.getEnvironment().getIndexInSubtaskGroup() + 1);
+    if (record.getClass() == PactRecord.class && format instanceof FileOutputFormat) {
+      @SuppressWarnings("unchecked") final MutableObjectIterator<PactRecord> pi=(MutableObjectIterator<PactRecord>)reader;
+      final PactRecord pr=(PactRecord)record;
+      final eu.stratosphere.pact.common.io.FileOutputFormat pf=(eu.stratosphere.pact.common.io.FileOutputFormat)format;
+      while (!this.taskCanceled && pi.next(pr)) {
+        pf.writeRecord(pr);
+      }
+    }
+ else {
+      while (!this.taskCanceled && reader.next(record)) {
+        format.writeRecord(record);
+      }
+    }
+    if (!this.taskCanceled) {
+      this.format.close();
+      this.format=null;
+    }
+  }
+ catch (  Exception ex) {
+    if (!this.taskCanceled) {
+      if (LOG.isErrorEnabled())       LOG.error(getLogString("Error in Pact user code: " + ex.getMessage()),ex);
+      throw ex;
+    }
+  }
+ finally {
+    if (this.format != null) {
+      try {
+        this.format.close();
+      }
+ catch (      Throwable t) {
+        if (LOG.isWarnEnabled())         LOG.warn(getLogString("Error closing the ouput format."),t);
+      }
+    }
+  }
+  if (!this.taskCanceled) {
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Finished producing output"));
+    if (LOG.isInfoEnabled())     LOG.info(getLogString("Finished PACT code"));
+  }
+ else {
+    if (LOG.isWarnEnabled())     LOG.warn(getLogString("PACT code cancelled"));
+  }
+}

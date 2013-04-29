@@ -1,0 +1,17 @@
+{
+  String pathPrefix=getFilesystemProvider().getURIPrefix() + getFilesystemProvider().getTempDirPath();
+  FileDataSource input=new FileDataSource(ContractITCaseInputFormat.class,pathPrefix + "/mapInput");
+  DelimitedInputFormat.configureDelimitedFormat(input).recordDelimiter('\n');
+  input.setDegreeOfParallelism(config.getInteger("MapTest#NoSubtasks",1));
+  MapContract testMapper=MapContract.builder(TestMapper.class).build();
+  testMapper.setDegreeOfParallelism(config.getInteger("MapTest#NoSubtasks",1));
+  FileDataSink output=new FileDataSink(ContractITCaseOutputFormat.class,pathPrefix + "/result.txt");
+  output.setDegreeOfParallelism(1);
+  output.addInput(testMapper);
+  testMapper.addInput(input);
+  Plan plan=new Plan(output);
+  PactCompiler pc=new PactCompiler(new DataStatistics());
+  OptimizedPlan op=pc.compile(plan);
+  NepheleJobGraphGenerator jgg=new NepheleJobGraphGenerator();
+  return jgg.compileJobGraph(op);
+}

@@ -1,0 +1,20 @@
+{
+  LOG.info("Trying to cancel job with ID " + jobID);
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  if (eg == null) {
+    return new JobCancelResult(ReturnCode.ERROR,"Cannot find job with ID " + jobID);
+  }
+  final Runnable cancelJobRunnable=new Runnable(){
+    @Override public void run(){
+      eg.updateJobStatus(InternalJobStatus.CANCELING,"Job canceled by user");
+      final TaskCancelResult cancelResult=cancelJob(eg);
+      if (cancelResult != null) {
+        LOG.error(cancelResult.getDescription());
+      }
+    }
+  }
+;
+  eg.executeCommand(cancelJobRunnable);
+  LOG.info("Cancel of job " + jobID + " successfully triggered");
+  return new JobCancelResult(AbstractJobResult.ReturnCode.SUCCESS,null);
+}

@@ -1,0 +1,26 @@
+{
+  final int numSegments=MEMORY_SIZE / MEMORY_PAGE_SIZE;
+  final List<MemorySegment> memory=this.memoryManager.allocatePages(new DummyInvokable(),numSegments);
+  NormalizedKeySorter<PactRecord> sorter=newSortBuffer(memory);
+  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
+  PactRecord record=new PactRecord();
+  int num=-1;
+  do {
+    generator.next(record);
+    num++;
+  }
+ while (sorter.write(record));
+  Random rnd=new Random(SEED << 1);
+  for (int i=0; i < 2 * num; i++) {
+    int pos1=rnd.nextInt(num);
+    int pos2=rnd.nextInt(num);
+    int cmp=sorter.compare(pos1,pos2);
+    if (pos1 < pos2) {
+      Assert.assertTrue(cmp <= 0);
+    }
+ else {
+      Assert.assertTrue(cmp >= 0);
+    }
+  }
+  this.memoryManager.release(sorter.dispose());
+}

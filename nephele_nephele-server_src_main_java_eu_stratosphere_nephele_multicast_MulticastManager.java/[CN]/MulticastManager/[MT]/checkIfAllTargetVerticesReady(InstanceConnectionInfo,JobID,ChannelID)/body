@@ -1,0 +1,29 @@
+{
+  final ExecutionGraph eg=this.scheduler.getExecutionGraphByID(jobID);
+  final ExecutionEdge outputChannel=eg.getEdgeByID(sourceChannelID);
+  final ExecutionGate broadcastGate=outputChannel.getOutputGate();
+  List<ExecutionVertex> verticesToDeploy=null;
+  final int numberOfOutputChannels=broadcastGate.getNumberOfEdges();
+  for (int i=0; i < numberOfOutputChannels; ++i) {
+    final ExecutionEdge c=broadcastGate.getEdge(i);
+    if (c.isBroadcast()) {
+      final ExecutionVertex targetVertex=c.getInputGate().getVertex();
+      if (targetVertex.getExecutionState() == ExecutionState.ASSIGNED) {
+        if (verticesToDeploy == null) {
+          verticesToDeploy=new ArrayList<ExecutionVertex>();
+        }
+        verticesToDeploy.add(targetVertex);
+      }
+ else {
+        if (targetVertex.getExecutionState() != ExecutionState.RUNNING && targetVertex.getExecutionState() != ExecutionState.FINISHING) {
+          return false;
+        }
+      }
+    }
+  }
+  if (verticesToDeploy != null) {
+    this.scheduler.deployAssignedVertices(verticesToDeploy);
+    return false;
+  }
+  return true;
+}

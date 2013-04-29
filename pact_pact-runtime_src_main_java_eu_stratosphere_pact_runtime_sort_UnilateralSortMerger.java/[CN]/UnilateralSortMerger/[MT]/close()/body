@@ -1,0 +1,101 @@
+{
+synchronized (this) {
+    if (this.closed) {
+      return;
+    }
+    this.closed=true;
+  }
+  try {
+synchronized (this.iteratorLock) {
+      if (this.iteratorException == null) {
+        this.iteratorException=new IOException("The sorter has been closed.");
+        this.iteratorLock.notifyAll();
+      }
+    }
+    if (this.readThread != null) {
+      try {
+        this.readThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down reader thread: " + t.getMessage(),t);
+      }
+    }
+    if (this.sortThread != null) {
+      try {
+        this.sortThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down sorter thread: " + t.getMessage(),t);
+      }
+    }
+    if (this.spillThread != null) {
+      try {
+        this.spillThread.shutdown();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error shutting down spilling thread: " + t.getMessage(),t);
+      }
+    }
+    try {
+      if (this.readThread != null) {
+        this.readThread.join();
+      }
+      if (this.sortThread != null) {
+        this.sortThread.join();
+      }
+      if (this.spillThread != null) {
+        this.spillThread.join();
+      }
+    }
+ catch (    InterruptedException iex) {
+      LOG.debug("Closing of sort/merger was interrupted. " + "The reading/sorting/spilling threads may still be working.",iex);
+    }
+  }
+  finally {
+    try {
+      if (!this.writeMemory.isEmpty()) {
+        this.memoryManager.release(this.writeMemory);
+      }
+      this.writeMemory.clear();
+    }
+ catch (    Throwable t) {
+    }
+    try {
+      if (!this.sortReadMemory.isEmpty()) {
+        this.memoryManager.release(this.sortReadMemory);
+      }
+      this.sortReadMemory.clear();
+    }
+ catch (    Throwable t) {
+    }
+    while (!this.openChannels.isEmpty()) {
+      try {
+        for (Iterator<BlockChannelAccess<?,?>> channels=this.openChannels.iterator(); channels.hasNext(); ) {
+          final BlockChannelAccess<?,?> channel=channels.next();
+          channels.remove();
+          channel.closeAndDelete();
+        }
+      }
+ catch (      Throwable t) {
+      }
+    }
+    while (!this.channelsToDeleteAtShutdown.isEmpty()) {
+      try {
+        for (Iterator<Channel.ID> channels=this.channelsToDeleteAtShutdown.iterator(); channels.hasNext(); ) {
+          final Channel.ID channel=channels.next();
+          channels.remove();
+          try {
+            final File f=new File(channel.getPath());
+            if (f.exists()) {
+              f.delete();
+            }
+          }
+ catch (          Throwable t) {
+          }
+        }
+      }
+ catch (      Throwable t) {
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  OptimizerNode n=this.con2node.get(c);
+  if (n.getId() > 0) {
+    return;
+  }
+  n.SetId(this.id);
+  n.setInputs(this.con2node);
+  this.id=n.getId() + 1;
+  if (this.computeEstimates) {
+    n.computeOutputEstimates(this.statistics);
+  }
+  if (n instanceof BulkIterationNode) {
+    final BulkIterationNode iterNode=(BulkIterationNode)n;
+    final BulkIteration iter=iterNode.getIterationContract();
+    final GraphCreatingVisitor recursiveCreator=new GraphCreatingVisitor(this,true,this.statistics,this.maxMachines,iterNode.getDegreeOfParallelism(),this.computeEstimates);
+    iter.getNextPartialSolution().accept(recursiveCreator);
+    OptimizerNode rootOfStepFunction=recursiveCreator.con2node.get(iter.getNextPartialSolution());
+    BulkPartialSolutionNode partialSolution=(BulkPartialSolutionNode)recursiveCreator.con2node.get(iter.getPartialSolution());
+    if (partialSolution == null) {
+      throw new CompilerException("Error: The step functions result does not depend on the partial solution.");
+    }
+    PactConnection rootConn=new PactConnection(rootOfStepFunction);
+    rootOfStepFunction.addOutgoingConnection(rootConn);
+    iterNode.setNextPartialSolution(rootOfStepFunction,rootConn);
+    iterNode.setPartialSolution(partialSolution);
+    this.numMemoryConsumers+=recursiveCreator.numMemoryConsumers;
+    rootOfStepFunction.accept(new StaticDynamicPathIdentifier(iterNode.getCostWeight()));
+  }
+ else   if (n instanceof WorksetIterationNode) {
+    final WorksetIterationNode iterNode=(WorksetIterationNode)n;
+    final WorksetIteration iter=iterNode.getIterationContract();
+    final GraphCreatingVisitor recursiveCreator=new GraphCreatingVisitor(this,true,this.statistics,this.maxMachines,iterNode.getDegreeOfParallelism(),this.computeEstimates);
+    iter.getSolutionSetDelta().accept(recursiveCreator);
+    final WorksetNode worksetNode=(WorksetNode)recursiveCreator.con2node.get(iter.getWorkset());
+    if (worksetNode == null) {
+      throw new CompilerException("The solution set delta does not depend on the workset.");
+    }
+    iter.getNextWorkset().accept(recursiveCreator);
+    final SolutionSetNode solutionSetNode=(SolutionSetNode)recursiveCreator.con2node.get(iter.getSolutionSet());
+    final OptimizerNode nextWorksetNode=recursiveCreator.con2node.get(iter.getNextWorkset());
+    final OptimizerNode solutionSetDeltaNode=recursiveCreator.con2node.get(iter.getSolutionSetDelta());
+    if (solutionSetNode != null) {
+      if (solutionSetNode.getOutgoingConnections().size() > 1) {
+        throw new CompilerException("Error: The solution set may currently be joined with only once.");
+      }
+ else {
+        OptimizerNode successor=solutionSetNode.getOutgoingConnections().get(0).getTarget();
+        if (successor.getClass() != MatchNode.class) {
+          throw new CompilerException("Error: The solution set may currently only be joined with through a Match.!");
+        }
+        if (successor != solutionSetDeltaNode) {
+          throw new CompilerException("Error: The solution set delta must currently be the" + "	same node that joins with the solution set.");
+        }
+      }
+    }
+    iterNode.setPartialSolution(solutionSetNode,worksetNode);
+    iterNode.setNextPartialSolution(solutionSetDeltaNode,nextWorksetNode);
+    this.numMemoryConsumers+=recursiveCreator.numMemoryConsumers;
+    StaticDynamicPathIdentifier pathIdentifier=new StaticDynamicPathIdentifier(iterNode.getCostWeight());
+    nextWorksetNode.accept(pathIdentifier);
+    solutionSetDeltaNode.accept(pathIdentifier);
+  }
+}

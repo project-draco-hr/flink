@@ -1,0 +1,28 @@
+{
+  try {
+    Generator generator1=new Generator(SEED1,INPUT_1_SIZE / 10,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    Generator generator2=new Generator(SEED2,INPUT_2_SIZE,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.GeneratorIterator input1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
+    final TestData.GeneratorIterator input2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
+    final MatchStub matcher=new NoOpMatcher();
+    final Collector<PactRecord> collector=new DiscardingOutputCollector();
+    long start=System.nanoTime();
+    final UnilateralSortMerger<PactRecord> sorter1=new UnilateralSortMerger<PactRecord>(this.memoryManager,this.ioManager,input1,this.parentTask,this.serializer1,this.comparator1.duplicate(),MEMORY_FOR_SORTER,128,0.8f);
+    final UnilateralSortMerger<PactRecord> sorter2=new UnilateralSortMerger<PactRecord>(this.memoryManager,this.ioManager,input2,this.parentTask,this.serializer2,this.comparator2.duplicate(),MEMORY_FOR_SORTER,128,0.8f);
+    final MutableObjectIterator<PactRecord> sortedInput1=sorter1.getIterator();
+    final MutableObjectIterator<PactRecord> sortedInput2=sorter2.getIterator();
+    MergeMatchIterator<PactRecord,PactRecord,PactRecord> iterator=new MergeMatchIterator<PactRecord,PactRecord,PactRecord>(sortedInput1,sortedInput2,this.serializer1,this.comparator1,this.serializer2,this.comparator2,this.pairComparator11,this.memoryManager,this.ioManager,MEMORY_PAGES_FOR_MERGE,this.parentTask);
+    iterator.open();
+    while (iterator.callWithNextKey(matcher,collector))     ;
+    iterator.close();
+    sorter1.close();
+    sorter2.close();
+    long elapsed=System.nanoTime() - start;
+    double msecs=elapsed / (1000 * 1000);
+    System.out.println("Sort-Merge Took " + msecs + " msecs.");
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("An exception occurred during the test: " + e.getMessage());
+  }
+}

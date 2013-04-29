@@ -1,0 +1,38 @@
+{
+  int keyCnt=20;
+  int valCnt=20;
+  setOutput(new NirvanaOutputList());
+  addInputComparator(this.comparator1);
+  addInputComparator(this.comparator2);
+  getTaskConfig().setDriverPairComparator(PactRecordPairComparatorFactory.get());
+  getTaskConfig().setDriverStrategy(DriverStrategy.MERGE);
+  getTaskConfig().setMemoryDriver(BNLJN_MEM);
+  setNumFileHandlesForSort(4);
+  final MatchDriver<PactRecord,PactRecord,PactRecord> testTask=new MatchDriver<PactRecord,PactRecord,PactRecord>();
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true));
+  final AtomicBoolean success=new AtomicBoolean(false);
+  Thread taskRunner=new Thread(){
+    @Override public void run(){
+      try {
+        testDriver(testTask,MockDelayingMatchStub.class);
+        success.set(true);
+      }
+ catch (      Exception ie) {
+        ie.printStackTrace();
+      }
+    }
+  }
+;
+  taskRunner.start();
+  TaskCancelThread tct=new TaskCancelThread(1,taskRunner,this);
+  tct.start();
+  try {
+    tct.join();
+    taskRunner.join();
+  }
+ catch (  InterruptedException ie) {
+    Assert.fail("Joining threads failed");
+  }
+  Assert.assertTrue("Test threw an exception even though it was properly canceled.",success.get());
+}

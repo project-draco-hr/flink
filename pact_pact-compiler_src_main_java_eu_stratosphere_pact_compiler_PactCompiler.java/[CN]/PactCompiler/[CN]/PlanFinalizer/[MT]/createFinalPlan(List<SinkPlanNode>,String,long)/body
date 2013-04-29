@@ -1,0 +1,43 @@
+{
+  if (LOG.isDebugEnabled())   LOG.debug("Available memory per instance: " + memPerInstance);
+  this.memoryPerInstance=memPerInstance;
+  this.memoryConsumerWeights=0;
+  for (  SinkPlanNode node : sinks) {
+    node.accept(this);
+  }
+  if (this.memoryConsumerWeights > 0) {
+    final long memoryPerInstanceAndWeight=this.memoryPerInstance / this.memoryConsumerWeights;
+    if (LOG.isDebugEnabled())     LOG.debug("Memory per consumer weight: " + memoryPerInstanceAndWeight);
+    for (    PlanNode node : this.allNodes) {
+      final int consumerWeight=node.getMemoryConsumerWeight();
+      if (consumerWeight > 0) {
+        final long mem=memoryPerInstanceAndWeight * consumerWeight / node.getSubtasksPerInstance();
+        node.setMemoryPerSubTask(mem);
+        if (LOG.isDebugEnabled()) {
+          final long mib=mem >> 20;
+          LOG.debug("Assigned " + mib + " MiBytes memory to each subtask of "+ node.getPactContract().getName()+ " ("+ mib * node.getDegreeOfParallelism() + " MiBytes total.)");
+        }
+      }
+      for (Iterator<Channel> channels=node.getInputs(); channels.hasNext(); ) {
+        final Channel c=channels.next();
+        if (c.getLocalStrategy().dams()) {
+          final long mem=memoryPerInstanceAndWeight / node.getSubtasksPerInstance();
+          c.setMemoryLocalStrategy(mem);
+          if (LOG.isDebugEnabled()) {
+            final long mib=mem >> 20;
+            LOG.debug("Assigned " + mib + " MiBytes memory to each local strategy instance of "+ c+ " ("+ mib * node.getDegreeOfParallelism() + " MiBytes total.)");
+          }
+        }
+        if (c.getTempMode() != TempMode.NONE) {
+          final long mem=memoryPerInstanceAndWeight / node.getSubtasksPerInstance();
+          c.setTempMemory(mem);
+          if (LOG.isDebugEnabled()) {
+            final long mib=mem >> 20;
+            LOG.debug("Assigned " + mib + " MiBytes memory to each instance of the temp table for "+ c+ " ("+ mib * node.getDegreeOfParallelism() + " MiBytes total.)");
+          }
+        }
+      }
+    }
+  }
+  return new OptimizedPlan(this.sources,this.sinks,this.allNodes,jobName);
+}
