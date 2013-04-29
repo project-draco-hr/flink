@@ -1,17 +1,18 @@
 {
   workerIndex=getRuntimeContext().getIndexOfThisSubtask();
-  currentIteration=ConfigUtils.asInteger("pact.iterations.currentIteration",parameters);
+  currentIteration=getIterationRuntimeContext().getSuperstepNumber();
   failingIteration=ConfigUtils.asInteger("compensation.failingIteration",parameters);
   failingWorkers=ConfigUtils.asIntSet("compensation.failingWorker",parameters);
   numVertices=ConfigUtils.asLong("pageRank.numVertices",parameters);
   numDanglingVertices=ConfigUtils.asLong("pageRank.numDanglingVertices",parameters);
-  aggregator.reset();
   dampingFactor=(1d - BETA) / (double)numVertices;
+  aggregator=(PageRankStatsAggregator)getIterationRuntimeContext().<PageRankStats>getIterationAggregator(AGGREGATOR_NAME);
   if (currentIteration == 1) {
     danglingRankFactor=BETA * (double)numDanglingVertices / ((double)numVertices * (double)numVertices);
   }
  else {
-    PageRankStats previousAggregate=(PageRankStats)IterationContext.instance().getGlobalAggregate(workerIndex);
+    PageRankStats previousAggregate=aggregator.getAggregate();
     danglingRankFactor=BETA * previousAggregate.danglingRank() / (double)numVertices;
   }
+  aggregator.reset();
 }
