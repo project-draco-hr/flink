@@ -1,10 +1,26 @@
 {
+  TaskConfig taskConfig=new TaskConfig(getTaskConfiguration());
+  for (  AggregatorWithName<?> aggWithName : taskConfig.getIterationAggregators()) {
+    Aggregator<?> agg=InstantiationUtil.instantiate(aggWithName.getAggregator(),Aggregator.class);
+    aggregators.put(aggWithName.getName(),agg);
+  }
+  if (taskConfig.usesConvergenceCriterion()) {
+    Class<? extends ConvergenceCriterion<Value>> convClass=taskConfig.getConvergenceCriterion();
+    convergenceCriterion=InstantiationUtil.instantiate(convClass,ConvergenceCriterion.class);
+    convergenceAggregatorName=taskConfig.getConvergenceCriterionAggregatorName();
+    Preconditions.checkNotNull(convergenceAggregatorName);
+  }
+  maxNumberOfIterations=taskConfig.getNumberOfIterations();
+  int numEventsTillEndOfSuperstep=taskConfig.getNumberOfEventsUntilInterruptInIterativeGate(0);
+  eventHandler=new SyncEventHandler(numEventsTillEndOfSuperstep,aggregators);
+  headEventReader.subscribeToEvent(eventHandler,WorkerDoneEvent.class);
+  IntegerRecord dummy=new IntegerRecord();
   while (!terminationRequested()) {
     notifyMonitor(IterationMonitoring.Event.SYNC_STARTING,currentIteration);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + currentIteration + "]"));
     }
-    readHeadEventChannel();
+    readHeadEventChannel(dummy);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + currentIteration + "]"));
     }
@@ -20,11 +36,11 @@
       if (log.isInfoEnabled()) {
         log.info(formatLogString("signaling that all workers are done in iteration [" + currentIteration + "]"));
       }
-      AllWorkersDoneEvent allWorkersDoneEvent=taskConfig.usesConvergenceCriterion() ? new AllWorkersDoneEvent(aggregator.getAggregate()) : new AllWorkersDoneEvent();
-      if (taskConfig.usesConvergenceCriterion()) {
-        aggregator.reset();
-      }
+      AllWorkersDoneEvent allWorkersDoneEvent=new AllWorkersDoneEvent(aggregators);
       sendToAllWorkers(allWorkersDoneEvent);
+      for (      Aggregator<?> agg : aggregators.values()) {
+        agg.reset();
+      }
       notifyMonitor(IterationMonitoring.Event.SYNC_FINISHED,currentIteration);
       currentIteration++;
     }

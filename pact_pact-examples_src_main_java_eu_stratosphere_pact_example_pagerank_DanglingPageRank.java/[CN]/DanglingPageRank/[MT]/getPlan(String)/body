@@ -1,0 +1,33 @@
+{
+  int dop=1;
+  String pageWithRankInputPath="";
+  String adjacencyListInputPath="";
+  String outputPath="";
+  int numIterations=25;
+  long numVertices=5;
+  long numDanglingVertices=1;
+  if (args.length >= 7) {
+    dop=Integer.parseInt(args[0]);
+    pageWithRankInputPath=args[1];
+    adjacencyListInputPath=args[2];
+    outputPath=args[3];
+    numIterations=Integer.parseInt(args[4]);
+    numVertices=Long.parseLong(args[5]);
+    numDanglingVertices=Long.parseLong(args[6]);
+  }
+  FileDataSource pageWithRankInput=new FileDataSource(DanglingPageRankInputFormat.class,pageWithRankInputPath,"DanglingPageWithRankInput");
+  pageWithRankInput.getParameters().setLong(DanglingPageRankInputFormat.NUM_VERTICES_PARAMETER,numVertices);
+  BulkIteration iteration=new BulkIteration("Page Rank Loop");
+  FileDataSource adjacencyListInput=new FileDataSource(ImprovedAdjacencyListInputFormat.class,adjacencyListInputPath,"AdjancencyListInput");
+  MatchContract join=MatchContract.builder(DotProductMatch.class,PactLong.class,0,0).input1(iteration.getPartialSolution()).input2(adjacencyListInput).name("Join with Edges").build();
+  CoGroupContract rankAggregation=CoGroupContract.builder(DotProductCoGroup.class,PactLong.class,0,0).input1(iteration.getPartialSolution()).input2(join).name("Rank Aggregation").build();
+  rankAggregation.getParameters().setLong(DotProductCoGroup.NUM_VERTICES_PARAMETER,numVertices);
+  rankAggregation.getParameters().setLong(DotProductCoGroup.NUM_DANGLING_VERTICES_PARAMETER,numDanglingVertices);
+  iteration.setNextPartialSolution(rankAggregation);
+  iteration.setMaximumNumberOfIterations(numIterations);
+  iteration.getAggregators().registerAggregationConvergenceCriterion(DotProductCoGroup.AGGREGATOR_NAME,PageRankStatsAggregator.class,DiffL1NormConvergenceCriterion.class);
+  FileDataSink out=new FileDataSink(PageWithRankOutFormat.class,outputPath,iteration,"Final Ranks");
+  Plan p=new Plan(out,"Dangling PageRank");
+  p.setDefaultParallelism(dop);
+  return p;
+}

@@ -1,0 +1,19 @@
+{
+  int numSubTasks=args.length > 0 ? Integer.parseInt(args[0]) : 1;
+  String edgeInput=args.length > 1 ? args[1] : "";
+  String output=args.length > 2 ? args[2] : "";
+  FileDataSource edges=new FileDataSource(EdgeWithDegreesInputFormat.class,edgeInput,"Input Edges with Degrees");
+  edges.setParameter(DelimitedInputFormat.RECORD_DELIMITER,"\n");
+  edges.setParameter(EdgeWithDegreesInputFormat.VERTEX_DELIMITER_CHAR,'|');
+  edges.setParameter(EdgeWithDegreesInputFormat.DEGREE_DELIMITER_CHAR,',');
+  MapContract toLowerDegreeEdge=MapContract.builder(ProjectToLowerDegreeVertex.class).input(edges).name("Select lower-degree Edge").build();
+  MapContract projectOutCounts=MapContract.builder(ProjectOutCounts.class).input(edges).name("Project to vertex Ids only").build();
+  ReduceContract buildTriads=ReduceContract.builder(BuildTriads.class,PactInteger.class,0).input(toLowerDegreeEdge).name("Build Triads").build();
+  MatchContract closeTriads=MatchContract.builder(CloseTriads.class,PactInteger.class,1,0).keyField(PactInteger.class,2,1).input1(buildTriads).input2(projectOutCounts).name("Close Triads").build();
+  closeTriads.setParameter("INPUT_SHIP_STRATEGY","SHIP_REPARTITION_HASH");
+  closeTriads.setParameter("LOCAL_STRATEGY","LOCAL_STRATEGY_HASH_BUILD_SECOND");
+  FileDataSink triangles=new FileDataSink(TriangleOutputFormat.class,output,closeTriads,"Triangles");
+  Plan p=new Plan(triangles,"Enumerate Triangles");
+  p.setDefaultParallelism(numSubTasks);
+  return p;
+}

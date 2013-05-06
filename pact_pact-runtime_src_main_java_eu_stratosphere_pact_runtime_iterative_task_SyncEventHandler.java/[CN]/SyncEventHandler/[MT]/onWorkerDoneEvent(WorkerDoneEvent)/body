@@ -1,0 +1,22 @@
+{
+  if (this.endOfSuperstep) {
+    throw new RuntimeException("Encountered WorderDoneEvent when still in End-of-Superstep status.");
+  }
+  workerDoneEventCounter++;
+  if (log.isInfoEnabled()) {
+    log.info("Sync event handler received WorkerDoneEvent event (" + workerDoneEventCounter + ")");
+  }
+  String[] aggNames=workerDoneEvent.getAggregatorNames();
+  Value[] aggregates=workerDoneEvent.getAggregates();
+  if (aggNames.length != aggregates.length) {
+    throw new RuntimeException("Inconsistent WorkerDoneEvent received!");
+  }
+  for (int i=0; i < aggNames.length; i++) {
+    @SuppressWarnings("unchecked") Aggregator<Value> aggregator=(Aggregator<Value>)this.aggregators.get(aggNames[i]);
+    aggregator.aggregate(aggregates[i]);
+  }
+  if (workerDoneEventCounter % numberOfEventsUntilEndOfSuperstep == 0) {
+    endOfSuperstep=true;
+    Thread.currentThread().interrupt();
+  }
+}
