@@ -11,10 +11,13 @@
       vertex=createDataSourceVertex((SourcePlanNode)node);
     }
  else     if (node instanceof BulkIterationPlanNode) {
-      PlanNode root=((BulkIterationPlanNode)node).getRootOfStepFunction();
+      BulkIterationPlanNode iterationNode=(BulkIterationPlanNode)node;
+      PlanNode root=iterationNode.getRootOfStepFunction();
       if (root.getDegreeOfParallelism() != node.getDegreeOfParallelism() || root.getSubtasksPerInstance() != node.getSubtasksPerInstance()) {
         throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
       }
+      IterationDescriptor descr=new IterationDescriptor(iterationNode,this.iterationIdEnumerator++);
+      this.iterations.put(iterationNode,descr);
       vertex=null;
     }
  else     if (node instanceof SingleInputPlanNode) {
@@ -44,6 +47,17 @@
     }
     if (node.getSubtasksPerInstance() >= 1) {
       vertex.setNumberOfSubtasksPerInstance(node.getSubtasksPerInstance());
+    }
+    if (this.currentIteration != null) {
+      PlanNode iterationNode=(PlanNode)this.currentIteration;
+      if (iterationNode.getDegreeOfParallelism() != pd) {
+        throw new CompilerException("Error: All functions that are part of an iteration must have the same degree-of-parallelism as that iteration.");
+      }
+      if (iterationNode.getSubtasksPerInstance() != node.getSubtasksPerInstance()) {
+        throw new CompilerException("Error: All functions that are part of an iteration must have the same subtasks-per-instance as that iteration.");
+      }
+      IterationDescriptor descr=this.iterations.get(this.currentIteration);
+      new TaskConfig(vertex.getConfiguration()).setIterationId(descr.getId());
     }
     this.vertices.put(node,vertex);
   }

@@ -1,5 +1,6 @@
 {
   TaskConfig taskConfig=new TaskConfig(getTaskConfiguration());
+  this.aggregators=new HashMap<String,Aggregator<?>>();
   for (  AggregatorWithName<?> aggWithName : taskConfig.getIterationAggregators()) {
     Aggregator<?> agg=InstantiationUtil.instantiate(aggWithName.getAggregator(),Aggregator.class);
     aggregators.put(aggWithName.getName(),agg);
@@ -16,7 +17,6 @@
   headEventReader.subscribeToEvent(eventHandler,WorkerDoneEvent.class);
   IntegerRecord dummy=new IntegerRecord();
   while (!terminationRequested()) {
-    notifyMonitor(IterationMonitoring.Event.SYNC_STARTING,currentIteration);
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + currentIteration + "]"));
     }
@@ -30,7 +30,6 @@
       }
       requestTermination();
       sendToAllWorkers(new TerminationEvent());
-      notifyMonitor(IterationMonitoring.Event.SYNC_FINISHED,currentIteration);
     }
  else {
       if (log.isInfoEnabled()) {
@@ -41,7 +40,6 @@
       for (      Aggregator<?> agg : aggregators.values()) {
         agg.reset();
       }
-      notifyMonitor(IterationMonitoring.Event.SYNC_FINISHED,currentIteration);
       currentIteration++;
     }
   }
