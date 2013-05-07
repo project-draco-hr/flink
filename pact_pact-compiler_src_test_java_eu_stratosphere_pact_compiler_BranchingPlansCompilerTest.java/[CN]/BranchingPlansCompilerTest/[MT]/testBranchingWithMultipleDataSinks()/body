@@ -1,34 +1,40 @@
 {
-  final String out1Path="file:///test/1";
-  final String out2Path="file:///test/2";
-  final String out3Path="file:///test/3";
-  FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE);
-  FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE);
-  FileDataSource sourceC=new FileDataSource(DummyInputFormat.class,IN_FILE);
-  CoGroupContract co=CoGroupContract.builder(DummyCoGroupStub.class,PactInteger.class,0,0).input1(sourceA).input2(sourceB).build();
-  MapContract ma=MapContract.builder(IdentityMap.class).input(co).build();
-  MatchContract mat1=MatchContract.builder(DummyMatchStub.class,PactInteger.class,0,0).input1(sourceB).input2(sourceC).build();
-  MatchContract mat2=MatchContract.builder(DummyMatchStub.class,PactInteger.class,0,0).input1(ma).input2(mat1).build();
-  ReduceContract r=new ReduceContract.Builder(IdentityReduce.class,PactInteger.class,0).input(ma).build();
-  CrossContract c=CrossContract.builder(DummyCrossStub.class).input1(r).input2(mat2).build();
-  FileDataSink sinkA=new FileDataSink(DummyOutputFormat.class,out1Path,c);
-  FileDataSink sinkB=new FileDataSink(DummyOutputFormat.class,out2Path,mat2);
-  FileDataSink sinkC=new FileDataSink(DummyOutputFormat.class,out3Path,mat2);
-  List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
-  sinks.add(sinkA);
-  sinks.add(sinkB);
-  sinks.add(sinkC);
-  Plan plan=new Plan(sinks,"Branching Plans With Multiple Data Sinks");
-  OptimizedPlan oPlan=compileNoStats(plan);
-  Assert.assertEquals("Wrong number of data sinks.",3,oPlan.getDataSinks().size());
-  Set<String> allSinks=new HashSet<String>();
-  allSinks.add(out1Path);
-  allSinks.add(out2Path);
-  allSinks.add(out3Path);
-  for (  SinkPlanNode n : oPlan.getDataSinks()) {
-    String path=((FileDataSink)n.getSinkNode().getPactContract()).getFilePath();
-    Assert.assertTrue("Invalid data sink.",allSinks.remove(path));
+  try {
+    final String out1Path="file:///test/1";
+    final String out2Path="file:///test/2";
+    final String out3Path="file:///test/3";
+    FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE);
+    FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE);
+    FileDataSource sourceC=new FileDataSource(DummyInputFormat.class,IN_FILE);
+    CoGroupContract co=CoGroupContract.builder(DummyCoGroupStub.class,PactInteger.class,0,0).input1(sourceA).input2(sourceB).build();
+    MapContract ma=MapContract.builder(IdentityMap.class).input(co).build();
+    MatchContract mat1=MatchContract.builder(DummyMatchStub.class,PactInteger.class,0,0).input1(sourceB).input2(sourceC).build();
+    MatchContract mat2=MatchContract.builder(DummyMatchStub.class,PactInteger.class,0,0).input1(ma).input2(mat1).build();
+    ReduceContract r=new ReduceContract.Builder(IdentityReduce.class,PactInteger.class,0).input(ma).build();
+    CrossContract c=CrossContract.builder(DummyCrossStub.class).input1(r).input2(mat2).build();
+    FileDataSink sinkA=new FileDataSink(DummyOutputFormat.class,out1Path,c);
+    FileDataSink sinkB=new FileDataSink(DummyOutputFormat.class,out2Path,mat2);
+    FileDataSink sinkC=new FileDataSink(DummyOutputFormat.class,out3Path,mat2);
+    List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
+    sinks.add(sinkA);
+    sinks.add(sinkB);
+    sinks.add(sinkC);
+    Plan plan=new Plan(sinks,"Branching Plans With Multiple Data Sinks");
+    OptimizedPlan oPlan=compileNoStats(plan);
+    Assert.assertEquals("Wrong number of data sinks.",3,oPlan.getDataSinks().size());
+    Set<String> allSinks=new HashSet<String>();
+    allSinks.add(out1Path);
+    allSinks.add(out2Path);
+    allSinks.add(out3Path);
+    for (    SinkPlanNode n : oPlan.getDataSinks()) {
+      String path=((FileDataSink)n.getSinkNode().getPactContract()).getFilePath();
+      Assert.assertTrue("Invalid data sink.",allSinks.remove(path));
+    }
+    NepheleJobGraphGenerator jobGen=new NepheleJobGraphGenerator();
+    jobGen.compileJobGraph(oPlan);
   }
-  NepheleJobGraphGenerator jobGen=new NepheleJobGraphGenerator();
-  jobGen.compileJobGraph(oPlan);
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
 }

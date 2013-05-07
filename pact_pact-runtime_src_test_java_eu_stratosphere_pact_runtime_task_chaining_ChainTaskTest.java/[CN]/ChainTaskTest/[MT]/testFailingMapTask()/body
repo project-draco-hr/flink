@@ -1,31 +1,37 @@
 {
   int keyCnt=100;
   int valCnt=20;
-  initEnvironment(3 * 1024 * 1024);
-  addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false),1);
-  addOutput(this.outList);
+  try {
+    initEnvironment(3 * 1024 * 1024);
+    addInput(new UniformPactRecordGenerator(keyCnt,valCnt,false),0);
+    addOutput(this.outList);
 {
-    final TaskConfig combineConfig=new TaskConfig(new Configuration());
-    combineConfig.addInputToGroup(0);
-    combineConfig.setInputSerializer(serFact,0);
-    combineConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-    combineConfig.setOutputSerializer(serFact);
-    combineConfig.setDriverStrategy(DriverStrategy.PARTIAL_GROUP);
-    combineConfig.setDriverComparator(compFact,0);
-    combineConfig.setMemoryDriver(3 * 1024 * 1024);
-    combineConfig.setStubClass(MockFailingCombineStub.class);
-    getTaskConfig().addChainedTask(ChainedCombineDriver.class,combineConfig,"combine");
+      final TaskConfig combineConfig=new TaskConfig(new Configuration());
+      combineConfig.addInputToGroup(0);
+      combineConfig.setInputSerializer(serFact,0);
+      combineConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+      combineConfig.setOutputSerializer(serFact);
+      combineConfig.setDriverStrategy(DriverStrategy.PARTIAL_GROUP);
+      combineConfig.setDriverComparator(compFact,0);
+      combineConfig.setMemoryDriver(3 * 1024 * 1024);
+      combineConfig.setStubClass(MockFailingCombineStub.class);
+      getTaskConfig().addChainedTask(ChainedCombineDriver.class,combineConfig,"combine");
+    }
+{
+      final RegularPactTask<GenericMapper<PactRecord,PactRecord>,PactRecord> testTask=new RegularPactTask<GenericMapper<PactRecord,PactRecord>,PactRecord>();
+      super.registerTask(testTask,MapDriver.class,MockMapStub.class);
+      boolean stubFailed=false;
+      try {
+        testTask.invoke();
+      }
+ catch (      Exception e) {
+        stubFailed=true;
+      }
+      Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
+    }
   }
-{
-    final RegularPactTask<GenericMapper<PactRecord,PactRecord>,PactRecord> testTask=new RegularPactTask<GenericMapper<PactRecord,PactRecord>,PactRecord>();
-    super.registerTask(testTask,MapDriver.class,MockMapStub.class);
-    boolean stubFailed=false;
-    try {
-      testTask.invoke();
-    }
- catch (    Exception e) {
-      stubFailed=true;
-    }
-    Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
   }
 }
