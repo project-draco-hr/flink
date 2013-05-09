@@ -39,7 +39,10 @@
     final SolutionSetNode solutionSetNode=(SolutionSetNode)recursiveCreator.con2node.get(iter.getSolutionSet());
     final OptimizerNode nextWorksetNode=recursiveCreator.con2node.get(iter.getNextWorkset());
     final OptimizerNode solutionSetDeltaNode=recursiveCreator.con2node.get(iter.getSolutionSetDelta());
-    if (solutionSetNode != null) {
+    if (solutionSetNode == null || solutionSetNode.getOutgoingConnections() == null || solutionSetNode.getOutgoingConnections().isEmpty()) {
+      throw new CompilerException("Error: The step function does not reference the solution set.");
+    }
+ else {
       if (solutionSetNode.getOutgoingConnections().size() > 1) {
         throw new CompilerException("Error: The solution set may currently be joined with only once.");
       }
@@ -50,6 +53,16 @@
         }
         if (successor != solutionSetDeltaNode) {
           throw new CompilerException("Error: The solution set delta must currently be the" + "	same node that joins with the solution set.");
+        }
+        MatchNode mn=(MatchNode)successor;
+        if (mn.getFirstPredecessorNode() == solutionSetNode) {
+          mn.fixDriverStrategy(DriverStrategy.HYBRIDHASH_BUILD_FIRST);
+        }
+ else         if (mn.getSecondPredecessorNode() == solutionSetNode) {
+          mn.fixDriverStrategy(DriverStrategy.HYBRIDHASH_BUILD_SECOND);
+        }
+ else {
+          throw new CompilerException();
         }
       }
     }
