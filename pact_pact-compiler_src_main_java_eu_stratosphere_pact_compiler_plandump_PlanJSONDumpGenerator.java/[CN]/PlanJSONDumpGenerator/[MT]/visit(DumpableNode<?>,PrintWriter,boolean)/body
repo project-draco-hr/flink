@@ -15,18 +15,24 @@
   writer.print("\t{\n");
   if (node instanceof BulkIterationNode || node instanceof BulkIterationPlanNode) {
     DumpableNode<?> innerChild=node instanceof BulkIterationNode ? ((BulkIterationNode)node).getNextPartialSolution() : ((BulkIterationPlanNode)node).getRootOfStepFunction();
+    DumpableNode<?> begin=node instanceof BulkIterationNode ? ((BulkIterationNode)node).getPartialSolution() : ((BulkIterationPlanNode)node).getPartialSolutionPlanNode();
     writer.print("\t\t\"step_function\": [\n");
     visit(innerChild,writer,true);
     writer.print("\n\t\t],\n");
+    writer.print("\t\t\"partial_solution\": " + this.nodeIds.get(begin) + ",\n");
     writer.print("\t\t\"next_partial_solution\": " + this.nodeIds.get(innerChild) + ",\n");
   }
  else   if (node instanceof WorksetIterationNode || node instanceof WorksetIterationPlanNode) {
     DumpableNode<?> worksetRoot=node instanceof WorksetIterationNode ? ((WorksetIterationNode)node).getNextWorkset() : ((WorksetIterationPlanNode)node).getNextWorkSetPlanNode();
     DumpableNode<?> solutionDelta=node instanceof WorksetIterationNode ? ((WorksetIterationNode)node).getSolutionSetDelta() : ((WorksetIterationPlanNode)node).getSolutionSetDeltaPlanNode();
+    DumpableNode<?> workset=node instanceof WorksetIterationNode ? ((WorksetIterationNode)node).getWorksetNode() : ((WorksetIterationPlanNode)node).getWorksetPlanNode();
+    DumpableNode<?> solutionSet=node instanceof WorksetIterationNode ? ((WorksetIterationNode)node).getSolutionSetNode() : ((WorksetIterationPlanNode)node).getSolutionSetPlanNode();
     writer.print("\t\t\"step_function\": [\n");
     visit(worksetRoot,writer,true);
     visit(solutionDelta,writer,false);
     writer.print("\n\t\t],\n");
+    writer.print("\t\t\"workset\": " + this.nodeIds.get(workset) + ",\n");
+    writer.print("\t\t\"solution_set\": " + this.nodeIds.get(solutionSet) + ",\n");
     writer.print("\t\t\"next_workset\": " + this.nodeIds.get(worksetRoot) + ",\n");
     writer.print("\t\t\"solution_delta\": " + this.nodeIds.get(solutionDelta) + ",\n");
   }
@@ -41,6 +47,14 @@
     type="source";
     contents=n.getPactContract().toString();
   }
+ else   if (n instanceof BulkIterationNode) {
+    type="bulk_iteration";
+    contents=n.getPactContract().getName();
+  }
+ else   if (n instanceof WorksetIterationNode) {
+    type="workset_iteration";
+    contents=n.getPactContract().getName();
+  }
  else   if (n instanceof BinaryUnionNode) {
     type="pact";
     contents="";
@@ -49,8 +63,12 @@
     type="pact";
     contents=n.getPactContract().getName();
   }
+  String name=n.getName();
+  if (name.equals("Reduce") && (node instanceof SingleInputPlanNode) && ((SingleInputPlanNode)node).getDriverStrategy() == DriverStrategy.PARTIAL_GROUP) {
+    name="Combine";
+  }
   writer.print(",\n\t\t\"type\": \"" + type + "\"");
-  writer.print(",\n\t\t\"pact\": \"" + n.getName() + "\"");
+  writer.print(",\n\t\t\"pact\": \"" + name + "\"");
   writer.print(",\n\t\t\"contents\": \"" + contents + "\"");
   writer.print(",\n\t\t\"parallelism\": \"" + (n.getDegreeOfParallelism() >= 1 ? n.getDegreeOfParallelism() : "default") + "\"");
   writer.print(",\n\t\t\"subtasks_per_instance\": \"" + (n.getSubtasksPerInstance() >= 1 ? n.getSubtasksPerInstance() : "default") + "\"");
@@ -250,8 +268,9 @@ addProperty(writer,"Uniqueness",n.getUniqueFields().toString(),false);
 }
 writer.print("\n\t\t]");
 }
-writer.print(",\n\t\t\"properties\": [\n");
-addProperty(writer,"Est. Cardinality",n.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(n.getEstimatedNumRecords()),true);
+writer.print(",\n\t\t\"estimates\": [\n");
+addProperty(writer,"Est. Output Size",n.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(n.getEstimatedOutputSize(),"B"),true);
+addProperty(writer,"Est. Cardinality",n.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(n.getEstimatedNumRecords()),false);
 String estCardinality="(unknown)";
 if (n.getEstimatedCardinalities().size() > 0) {
 estCardinality="";
@@ -260,14 +279,15 @@ estCardinality+="[" + entry.getKey().toString() + "->"+ entry.getValue()+ "]";
 }
 }
 addProperty(writer,"Est. Cardinality/fields",estCardinality,false);
-addProperty(writer,"Est. Output Size",n.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(n.getEstimatedOutputSize(),"B"),false);
 writer.print("\t\t]");
 if (p.getNodeCosts() != null) {
 writer.print(",\n\t\t\"costs\": [\n");
 addProperty(writer,"Network",p.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(p.getNodeCosts().getNetworkCost(),"B"),true);
 addProperty(writer,"Disk I/O",p.getNodeCosts().getDiskCost() == -1 ? "(unknown)" : formatNumber(p.getNodeCosts().getDiskCost(),"B"),false);
+addProperty(writer,"CPU",p.getNodeCosts().getCpuCost() == -1 ? "(unknown)" : formatNumber(p.getNodeCosts().getCpuCost(),""),false);
 addProperty(writer,"Cumulative Network",p.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(p.getCumulativeCosts().getNetworkCost(),"B"),false);
 addProperty(writer,"Cumulative Disk I/O",p.getCumulativeCosts().getDiskCost() == -1 ? "(unknown)" : formatNumber(p.getCumulativeCosts().getDiskCost(),"B"),false);
+addProperty(writer,"Cumulative CPU",p.getCumulativeCosts().getCpuCost() == -1 ? "(unknown)" : formatNumber(p.getCumulativeCosts().getCpuCost(),""),false);
 writer.print("\n\t\t]");
 }
 if (n.getPactContract().getCompilerHints() != null) {
