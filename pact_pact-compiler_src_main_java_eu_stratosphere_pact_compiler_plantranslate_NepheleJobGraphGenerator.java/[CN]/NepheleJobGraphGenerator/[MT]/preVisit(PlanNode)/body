@@ -20,6 +20,20 @@
       this.iterations.put(iterationNode,descr);
       vertex=null;
     }
+ else     if (node instanceof WorksetIterationPlanNode) {
+      WorksetIterationPlanNode iterationNode=(WorksetIterationPlanNode)node;
+      PlanNode nextWorkSet=iterationNode.getNextWorkSetPlanNode();
+      PlanNode solutionSetDelta=iterationNode.getSolutionSetDeltaPlanNode();
+      if (nextWorkSet.getDegreeOfParallelism() != node.getDegreeOfParallelism() || nextWorkSet.getSubtasksPerInstance() != node.getSubtasksPerInstance()) {
+        throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      if (solutionSetDelta.getDegreeOfParallelism() != node.getDegreeOfParallelism() || solutionSetDelta.getSubtasksPerInstance() != node.getSubtasksPerInstance()) {
+        throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      IterationDescriptor descr=new IterationDescriptor(iterationNode,this.iterationIdEnumerator++);
+      this.iterations.put(iterationNode,descr);
+      vertex=null;
+    }
  else     if (node instanceof SingleInputPlanNode) {
       vertex=createSingleInputVertex((SingleInputPlanNode)node);
     }
@@ -31,6 +45,12 @@
     }
  else     if (node instanceof BulkPartialSolutionPlanNode) {
       vertex=createBulkIterationHead((BulkPartialSolutionPlanNode)node);
+    }
+ else     if (node instanceof SolutionSetPlanNode) {
+      throw new UnsupportedOperationException();
+    }
+ else     if (node instanceof WorksetPlanNode) {
+      throw new UnsupportedOperationException();
     }
  else {
       throw new CompilerException("Unrecognized node type: " + node.getClass().getName());
