@@ -1,0 +1,44 @@
+{
+  if (closed) {
+    throw new IllegalStateException("Cannot open probe input because hash join has already been closed");
+  }
+  partitionsBeingBuilt.clear();
+  probeIterator=new ProbeIterator<PT>(probeInput,probeSideSerializer.createInstance());
+  partitionsBeingBuilt.addAll(initialPartitions);
+  if (spilled) {
+    this.currentRecursionDepth=0;
+    initTable(initialBucketCount,initialPartitionFanOut);
+    for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
+      ReOpenableHashPartition<BT,PT> part=(ReOpenableHashPartition<BT,PT>)this.partitionsBeingBuilt.get(i);
+      if (part.isInMemory()) {
+        ensureNumBuffersReturned(part.initialPartitionBuffersCount);
+        part.restorePartitionBuffers(ioManager,availableMemory);
+        final HashPartition<BT,PT>.PartitionIterator pIter=part.getPartitionIterator(this.buildSideComparator);
+        final BT record=this.buildSideSerializer.createInstance();
+        while (pIter.next(record)) {
+          final int hashCode=hash(pIter.getCurrentHashCode(),0);
+          final int posHashCode=hashCode % initialBucketCount;
+          final long pointer=pIter.getPointer();
+          final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+          final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+          final MemorySegment bucket=this.buckets[bucketArrayPos];
+          insertBucketEntry(part,bucket,bucketInSegmentPos,hashCode,pointer);
+        }
+      }
+ else {
+        this.writeBehindBuffersAvailable--;
+        if (this.writeBehindBuffers.size() == 0) {
+          this.writeBehindBuffers.add(getNextBuffer());
+          this.writeBehindBuffersAvailable++;
+        }
+        part.prepareProbePhase(ioManager,currentEnumerator,writeBehindBuffers);
+      }
+    }
+  }
+ else {
+    for (int partIdx=0; partIdx < partitionsBeingBuilt.size(); partIdx++) {
+      final HashPartition<BT,PT> p=partitionsBeingBuilt.get(partIdx);
+      p.prepareProbePhase(ioManager,currentEnumerator,writeBehindBuffers);
+    }
+  }
+}

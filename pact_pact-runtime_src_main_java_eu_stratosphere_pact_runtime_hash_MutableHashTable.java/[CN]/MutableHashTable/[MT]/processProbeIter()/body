@@ -1,0 +1,23 @@
+{
+  final ProbeIterator<PT> probeIter=this.probeIterator;
+  final TypeComparator<PT> probeAccessors=this.probeSideComparator;
+  PT next;
+  while ((next=probeIter.next()) != null) {
+    final int hash=hash(probeAccessors.hash(next),this.currentRecursionDepth);
+    final int posHashCode=hash % this.numBuckets;
+    final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
+    final int bucketInSegmentOffset=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+    final MemorySegment bucket=this.buckets[bucketArrayPos];
+    final int partitionNumber=bucket.get(bucketInSegmentOffset + HEADER_PARTITION_OFFSET);
+    final HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(partitionNumber);
+    if (p.isInMemory()) {
+      this.recordComparator.setReference(next);
+      this.bucketIterator.set(bucket,p.overflowSegments,p,hash,bucketInSegmentOffset);
+      return true;
+    }
+ else {
+      p.insertIntoProbeBuffer(next);
+    }
+  }
+  return false;
+}
