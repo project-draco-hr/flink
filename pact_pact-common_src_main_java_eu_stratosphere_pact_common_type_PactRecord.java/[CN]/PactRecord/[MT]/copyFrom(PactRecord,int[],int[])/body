@@ -1,0 +1,51 @@
+{
+  final int[] sourceOffsets=source.offsets;
+  final int[] sourceLengths=source.lengths;
+  final byte[] sourceBuffer=source.binaryData;
+  final Value[] sourceFields=source.writeFields;
+  boolean anyFieldIsBinary=false;
+  int maxFieldNum=0;
+  for (int i=0; i < sourcePositions.length; i++) {
+    final int sourceFieldNum=sourcePositions[i];
+    final int sourceOffset=sourceOffsets[sourceFieldNum];
+    final int targetFieldNum=targetPositions[i];
+    maxFieldNum=Math.max(targetFieldNum,maxFieldNum);
+    if (sourceOffset == NULL_INDICATOR_OFFSET) {
+      if (targetFieldNum < numFields) {
+        internallySetField(targetFieldNum,null);
+      }
+    }
+ else     if (sourceOffset != MODIFIED_INDICATOR_OFFSET) {
+      anyFieldIsBinary=true;
+    }
+  }
+  if (numFields < maxFieldNum + 1)   setNumFields(maxFieldNum + 1);
+  final int[] targetLengths=this.lengths;
+  final int[] targetOffsets=this.offsets;
+  if (anyFieldIsBinary) {
+    for (int i=0; i < sourcePositions.length; i++) {
+      final int sourceFieldNum=sourcePositions[i];
+      final int sourceOffset=sourceOffsets[sourceFieldNum];
+      if (sourceOffset != MODIFIED_INDICATOR_OFFSET && sourceOffset != NULL_INDICATOR_OFFSET) {
+        final int targetFieldNum=targetPositions[i];
+        targetLengths[targetFieldNum]=sourceLengths[sourceFieldNum];
+        internallySetField(targetFieldNum,RESERVE_SPACE);
+      }
+    }
+    updateBinaryRepresenation();
+  }
+  final byte[] targetBuffer=this.binaryData;
+  for (int i=0; i < sourcePositions.length; i++) {
+    final int sourceFieldNum=sourcePositions[i];
+    final int sourceOffset=sourceOffsets[sourceFieldNum];
+    final int targetFieldNum=targetPositions[i];
+    if (sourceOffset == MODIFIED_INDICATOR_OFFSET) {
+      internallySetField(targetFieldNum,sourceFields[sourceFieldNum]);
+    }
+ else     if (sourceOffset != NULL_INDICATOR_OFFSET) {
+      final int targetOffset=targetOffsets[targetFieldNum];
+      final int length=targetLengths[targetFieldNum];
+      System.arraycopy(sourceBuffer,sourceOffset,targetBuffer,targetOffset,length);
+    }
+  }
+}
