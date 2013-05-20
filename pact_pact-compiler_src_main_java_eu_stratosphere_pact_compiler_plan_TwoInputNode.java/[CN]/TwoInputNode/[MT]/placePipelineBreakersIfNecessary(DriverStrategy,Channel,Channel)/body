@@ -1,0 +1,60 @@
+{
+  if (this.hereJoinedBranchers != null && this.hereJoinedBranchers.size() > 0) {
+    boolean someDamOnLeftPaths=false;
+    boolean damOnAllLeftPaths=true;
+    boolean someDamOnRightPaths=false;
+    boolean damOnAllRightPaths=true;
+    if (strategy.firstDam() == DamBehavior.FULL_DAM || in1.getLocalStrategy().dams()) {
+      someDamOnLeftPaths=true;
+    }
+ else {
+      for (      OptimizerNode brancher : this.hereJoinedBranchers) {
+        PlanNode candAtBrancher=in1.getSource().getCandidateAtBranchPoint(brancher);
+        SourceAndDamReport res=in1.getSource().hasDamOnPathDownTo(candAtBrancher);
+        if (res == NOT_FOUND) {
+          throw new CompilerException("Bug: Tracing dams for deadlock detection is broken.");
+        }
+ else         if (res == FOUND_SOURCE) {
+          damOnAllLeftPaths=false;
+        }
+ else         if (res == FOUND_SOURCE_AND_DAM) {
+          someDamOnLeftPaths=true;
+        }
+ else {
+          throw new CompilerException();
+        }
+      }
+    }
+    if (strategy.secondDam() == DamBehavior.FULL_DAM || in2.getLocalStrategy().dams()) {
+      someDamOnRightPaths=true;
+    }
+ else {
+      for (      OptimizerNode brancher : this.hereJoinedBranchers) {
+        PlanNode candAtBrancher=in2.getSource().getCandidateAtBranchPoint(brancher);
+        SourceAndDamReport res=in2.getSource().hasDamOnPathDownTo(candAtBrancher);
+        if (res == NOT_FOUND) {
+          throw new CompilerException("Bug: Tracing dams for deadlock detection is broken.");
+        }
+ else         if (res == FOUND_SOURCE) {
+          damOnAllRightPaths=false;
+        }
+ else         if (res == FOUND_SOURCE_AND_DAM) {
+          someDamOnRightPaths=true;
+        }
+ else {
+          throw new CompilerException();
+        }
+      }
+    }
+    if ((damOnAllLeftPaths & damOnAllRightPaths) | (!someDamOnLeftPaths & !someDamOnRightPaths)) {
+    }
+ else {
+      if (someDamOnLeftPaths & !damOnAllRightPaths) {
+        in2.setTempMode(in2.getTempMode().makePipelineBreaker());
+      }
+      if (someDamOnRightPaths & !damOnAllLeftPaths) {
+        in1.setTempMode(in1.getTempMode().makePipelineBreaker());
+      }
+    }
+  }
+}

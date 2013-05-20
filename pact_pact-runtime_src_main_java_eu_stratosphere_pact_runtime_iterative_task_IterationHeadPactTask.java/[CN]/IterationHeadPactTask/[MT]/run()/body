@@ -1,50 +1,85 @@
 {
+  final String brokerKey=brokerKey();
   final int workerIndex=getEnvironment().getIndexInSubtaskGroup();
-  BlockingBackChannel backChannel=initBackChannel();
-  SuperstepBarrier barrier=initSuperstepBarrier();
-  this.partialSolutionInput=this.config.getIterationHeadPartialSolutionInputIndex();
-  this.solutionTypeSerializer=getInputSerializer(this.partialSolutionInput);
-  excludeFromReset(this.partialSolutionInput);
-  aggregatorRegistry=new RuntimeAggregatorRegistry(config.getIterationAggregators());
-  IterationGlobalBroker.instance().handIn(brokerKey(),aggregatorRegistry);
-  DataInputView superstepResult=null;
-  while (this.running && !terminationRequested()) {
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
-    }
-    barrier.setup();
-    if (!inFirstIteration()) {
-      feedBackSuperstepResult(superstepResult);
-    }
-    super.run();
-    EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
-    sendEventToAllIterationOutputs(endOfSuperstepEvent);
-    superstepResult=backChannel.getReadEndAfterSuperstepEnded();
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
-    }
-    sendEventToSync(new WorkerDoneEvent(workerIndex,aggregatorRegistry.getAllAggregators()));
-    if (log.isInfoEnabled()) {
-      log.info(formatLogString("waiting for other workers in iteration [" + currentIteration() + "]"));
-    }
-    barrier.waitForOtherWorkers();
-    if (barrier.terminationSignaled()) {
-      if (log.isInfoEnabled()) {
-        log.info(formatLogString("head received termination request in iteration [" + currentIteration() + "]"));
-      }
-      requestTermination();
-      sendEventToAllIterationOutputs(new TerminationEvent());
+  MutableHashTable<X,?> solutionSet=null;
+  try {
+    BlockingBackChannel backChannel=initBackChannel();
+    SuperstepBarrier barrier=initSuperstepBarrier();
+    isWorksetIteration=config.isWorksetIteration();
+    feedbackDataInput=config.getIterationHeadPartialSolutionOrWorksetInputIndex();
+    feedbackTypeSerializer=getInputSerializer(feedbackDataInput);
+    excludeFromReset(feedbackDataInput);
+    if (isWorksetIteration) {
+      initialSolutionSetInput=config.getIterationHeadSolutionSetInputIndex();
+      TypeSerializerFactory<X> solutionTypeSerializerFactory=config.getSolutionSetSerializer(userCodeClassLoader);
+      solutionTypeSerializer=solutionTypeSerializerFactory.getSerializer();
+      solutionSet=initHashTable();
+      @SuppressWarnings("unchecked") MutableObjectIterator<X> solutionSetInput=(MutableObjectIterator<X>)createInputIterator(initialSolutionSetInput,inputReaders[initialSolutionSetInput],solutionTypeSerializer);
+      readInitialSolutionSet(solutionSet,solutionSetInput);
+      Broker<MutableHashTable<?,?>> solutionsetBroker=SolutionsetBroker.instance();
+      solutionsetBroker.handIn(brokerKey(),solutionSet);
     }
  else {
-      incrementIterationCounter();
-      String[] globalAggregateNames=barrier.getAggregatorNames();
-      Value[] globalAggregates=barrier.getAggregates();
-      aggregatorRegistry.updateGlobalAggregatesAndReset(globalAggregateNames,globalAggregates);
+      initialSolutionSetInput=-1;
+      @SuppressWarnings("unchecked") TypeSerializer<X> solSer=(TypeSerializer<X>)feedbackTypeSerializer;
+      solutionTypeSerializer=solSer;
+    }
+    aggregatorRegistry=new RuntimeAggregatorRegistry(config.getIterationAggregators());
+    IterationAggregatorBroker.instance().handIn(brokerKey(),aggregatorRegistry);
+    DataInputView superstepResult=null;
+    while (this.running && !terminationRequested()) {
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
+      }
+      barrier.setup();
+      if (!inFirstIteration()) {
+        feedBackSuperstepResult(superstepResult);
+      }
+      super.run();
+      EndOfSuperstepEvent endOfSuperstepEvent=new EndOfSuperstepEvent();
+      sendEventToAllIterationOutputs(endOfSuperstepEvent);
+      superstepResult=backChannel.getReadEndAfterSuperstepEnded();
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
+      }
+      sendEventToSync(new WorkerDoneEvent(workerIndex,aggregatorRegistry.getAllAggregators()));
+      if (log.isInfoEnabled()) {
+        log.info(formatLogString("waiting for other workers in iteration [" + currentIteration() + "]"));
+      }
+      barrier.waitForOtherWorkers();
+      if (barrier.terminationSignaled()) {
+        if (log.isInfoEnabled()) {
+          log.info(formatLogString("head received termination request in iteration [" + currentIteration() + "]"));
+        }
+        requestTermination();
+        sendEventToAllIterationOutputs(new TerminationEvent());
+      }
+ else {
+        incrementIterationCounter();
+        String[] globalAggregateNames=barrier.getAggregatorNames();
+        Value[] globalAggregates=barrier.getAggregates();
+        aggregatorRegistry.updateGlobalAggregatesAndReset(globalAggregateNames,globalAggregates);
+      }
+    }
+    if (log.isInfoEnabled()) {
+      log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
+    }
+    if (isWorksetIteration) {
+      streamSolutionSetToFinalOutput(solutionSet);
+    }
+ else {
+      streamOutFinalOutputBulk(new InputViewIterator<X>(superstepResult,this.solutionTypeSerializer));
     }
   }
-  if (log.isInfoEnabled()) {
-    log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
+  finally {
+    IterationAggregatorBroker.instance().remove(brokerKey);
+    BlockingBackChannelBroker.instance().remove(brokerKey);
+    if (isWorksetIteration) {
+      SolutionsetBroker.instance().remove(brokerKey);
+    }
+    if (solutionSet != null) {
+      solutionSet.close();
+      solutionSet=null;
+    }
   }
-  streamOutFinalOutputBulk(new InputViewIterator<X>(superstepResult,this.solutionTypeSerializer));
-  IterationGlobalBroker.instance().getAndRemove(brokerKey());
 }

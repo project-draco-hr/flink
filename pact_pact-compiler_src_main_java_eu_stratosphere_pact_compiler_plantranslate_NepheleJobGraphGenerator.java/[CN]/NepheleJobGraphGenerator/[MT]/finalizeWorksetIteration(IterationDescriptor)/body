@@ -1,0 +1,50 @@
+{
+  final WorksetIterationPlanNode iterNode=(WorksetIterationPlanNode)descr.getIterationNode();
+  final JobTaskVertex headVertex=descr.getHeadTask();
+  final TaskConfig headConfig=new TaskConfig(headVertex.getConfiguration());
+  final TaskConfig headFinalOutputConfig=descr.getHeadFinalResultConfig();
+  final int numStepFunctionOuts=headConfig.getNumOutputs();
+  final int numFinalOuts=headFinalOutputConfig.getNumOutputs();
+  headConfig.setIterationHeadFinalOutputConfig(headFinalOutputConfig);
+  headConfig.setIterationHeadIndexOfSyncOutput(numStepFunctionOuts + numFinalOuts);
+  final long mem=iterNode.getMemoryPerSubTask();
+  if (mem <= 0) {
+    throw new CompilerException("Bug: No memory has been assigned to the workset iteration.");
+  }
+  headConfig.setBackChannelMemory(mem / 2);
+  headConfig.setSolutionSetMemory(mem / 2);
+  final JobOutputVertex sync=new JobOutputVertex("Bulk-Iteration Sync (" + iterNode.getPactContract().getName() + ")",this.jobGraph);
+  sync.setOutputClass(IterationSynchronizationSinkTask.class);
+  sync.setNumberOfSubtasks(1);
+  this.auxVertices.add(sync);
+  final TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
+  syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getNumberOfSubtasks());
+  final int maxNumIterations=iterNode.getIterationNode().getIterationContract().getMaximumNumberOfIterations();
+  if (maxNumIterations < 1) {
+    throw new CompilerException("Cannot create workset iteration with unspecified maximum number of iterations.");
+  }
+  syncConfig.setNumberOfIterations(maxNumIterations);
+  try {
+    headVertex.connectTo(sync,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+  }
+ catch (  JobGraphDefinitionException e) {
+    throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
+  }
+  AggregatorRegistry aggs=iterNode.getIterationNode().getIterationContract().getAggregators();
+  Collection<AggregatorWithName<?>> allAggregators=aggs.getAllRegisteredAggregators();
+  for (  AggregatorWithName<?> agg : allAggregators) {
+    if (agg.getName().equals(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME)) {
+      throw new CompilerException("User defined aggregator used the same name as built-in workset " + "termination check aggregator: " + WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME);
+    }
+  }
+  headConfig.addIterationAggregators(allAggregators);
+  syncConfig.addIterationAggregators(allAggregators);
+  String convAggName=aggs.getConvergenceCriterionAggregatorName();
+  Class<? extends ConvergenceCriterion<?>> convCriterion=aggs.getConvergenceCriterion();
+  if (convCriterion != null || convAggName != null) {
+    throw new CompilerException("Error: Cannot use custom convergence criterion with workset iteration. Workset iterations have implicit convergence criterion where workset is empty.");
+  }
+  headConfig.addIterationAggregator(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME,LongSumAggregator.class);
+  syncConfig.addIterationAggregator(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME,LongSumAggregator.class);
+  syncConfig.setConvergenceCriterion(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME,WorksetEmptyConvergenceCriterion.class);
+}

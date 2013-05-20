@@ -1,20 +1,5 @@
 {
-  try {
-    this.driver.setup(this);
-  }
- catch (  Throwable t) {
-    throw new Exception("The pact driver setup for '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
-  }
-  try {
-    final Class<? super S> userCodeFunctionType=this.driver.getStubType();
-    if (userCodeFunctionType != null && (this.stub == null || REINSTANTIATE_STUB_PER_ITERATION)) {
-      this.stub=initStub(userCodeFunctionType);
-      this.stub.setRuntimeContext(getRuntimeContext(getEnvironment().getTaskName()));
-    }
-  }
- catch (  Exception e) {
-    throw new RuntimeException("Initializing the user code and the configuration failed" + e.getMessage() == null ? "." : ": " + e.getMessage(),e);
-  }
+  super.initialize();
   if (this.driver instanceof ResettablePactDriver) {
     final ResettablePactDriver<?,?> resDriver=(ResettablePactDriver<?,?>)this.driver;
     for (int i=0; i < resDriver.getNumberOfInputs(); i++) {
@@ -23,5 +8,14 @@
       }
     }
     resDriver.initialize();
+  }
+  if (config.getUpdateSolutionSet()) {
+    if (config.getUpdateSolutionSetWithoutReprobe()) {
+      @SuppressWarnings("unchecked") MutableHashTable<OT,?> hashTable=(MutableHashTable<OT,?>)SolutionsetBroker.instance().get(brokerKey);
+      this.output=new UpdateSolutionsetOutputCollector<OT>(this.output,hashTable);
+    }
+ else {
+      throw new UnsupportedOperationException("Runtime currently supports only fast updates withpout reprobing.");
+    }
   }
 }
