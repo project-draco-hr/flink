@@ -10,6 +10,48 @@
       this.currentIteration=(IterationPlanNode)node;
       this.currentIteration.acceptForStepFunction(this);
       this.currentIteration=null;
+      if (node instanceof WorksetIterationPlanNode) {
+        WorksetIterationPlanNode wsNode=(WorksetIterationPlanNode)node;
+        AbstractJobVertex headVertex=this.iterations.get(wsNode).getHeadTask();
+        TaskConfig headConfig=new TaskConfig(headVertex.getConfiguration());
+        int inputIndex=headConfig.getDriverStrategy().getNumInputs();
+        headConfig.setIterationHeadSolutionSetInputIndex(inputIndex);
+        translateChannel(wsNode.getInitialSolutionSetInput(),inputIndex,headVertex,headConfig);
+      }
+      return;
+    }
+ else     if (node instanceof SolutionSetPlanNode) {
+      if (node.getOutgoingChannels().size() != 1) {
+        throw new CompilerException("Currently, only one join with the solution set is allowed.");
+      }
+      Channel c=node.getOutgoingChannels().get(0);
+      DualInputPlanNode target=(DualInputPlanNode)c.getTarget();
+      AbstractJobVertex accessingVertex=this.vertices.get(target);
+      TaskConfig conf=new TaskConfig(accessingVertex.getConfiguration());
+      int inputNum=c == target.getInput1() ? 0 : c == target.getInput2() ? 1 : -1;
+      if (inputNum == -1) {
+        throw new CompilerException();
+      }
+      if (!conf.getDriver().equals(MatchDriver.class)) {
+        throw new CompilerException("Found join with solution set using incompatible operator.");
+      }
+      conf.setDriver(inputNum == 0 ? SolutionSetFirstJoinDriver.class : SolutionSetSecondJoinDriver.class);
+      conf.setSolutionSetSerializer(((SolutionSetPlanNode)node).getContainingIterationNode().getSolutionSetSerializer());
+      IterationDescriptor iter=this.iterations.get(((SolutionSetPlanNode)node).getContainingIterationNode());
+      TaskConfig headConf=iter.getHeadConfig();
+      TypeSerializerFactory<?> otherSerializer;
+      TypeComparatorFactory<?> otherComparator;
+      if (inputNum == 0) {
+        otherSerializer=target.getInput2().getSerializer();
+        otherComparator=target.getComparator2();
+      }
+ else {
+        otherSerializer=target.getInput1().getSerializer();
+        otherComparator=target.getComparator1();
+      }
+      headConf.setSolutionSetProberSerializer(otherSerializer);
+      headConf.setSolutionSetProberComparator(otherComparator);
+      headConf.setSolutionSetPairComparator(target.getPairComparator());
       return;
     }
     final AbstractJobVertex targetVertex=this.vertices.get(node);
@@ -47,7 +89,7 @@
         this.chainedTasksInSequence.add(chainedTask);
         return;
       }
- else       if (node instanceof BulkPartialSolutionPlanNode) {
+ else       if (node instanceof BulkPartialSolutionPlanNode || node instanceof WorksetPlanNode) {
         return;
       }
  else {
@@ -60,6 +102,12 @@
       inConns=((BulkPartialSolutionPlanNode)node).getContainingIterationNode().getInputs();
       targetVertexConfig.setIterationHeadPartialSolutionOrWorksetInputIndex(0);
     }
+ else     if (node instanceof WorksetPlanNode) {
+      WorksetPlanNode wspn=(WorksetPlanNode)node;
+      inConns=Collections.singleton(wspn.getContainingIterationNode().getInput2()).iterator();
+      targetVertexConfig.setIterationHeadPartialSolutionOrWorksetInputIndex(0);
+      targetVertexConfig.setIterationHeadSolutionSetInputIndex(1);
+    }
  else {
       inConns=node.getInputs();
     }
@@ -67,79 +115,8 @@
       throw new CompilerException("Bug: Found a non-source task with no input.");
     }
     for (int inputIndex=0; inConns.hasNext(); inputIndex++) {
-      final Channel input=inConns.next();
-      final PlanNode inputPlanNode=input.getSource();
-      final Iterator<Channel> allInChannels;
-      if (inputPlanNode instanceof UnionPlanNode) {
-        allInChannels=((UnionPlanNode)inputPlanNode).getListOfInputs().iterator();
-      }
- else       if (inputPlanNode instanceof BulkPartialSolutionPlanNode) {
-        if (this.vertices.get(inputPlanNode) == null) {
-          final BulkPartialSolutionPlanNode pspn=(BulkPartialSolutionPlanNode)inputPlanNode;
-          final BulkIterationPlanNode iterationNode=pspn.getContainingIterationNode();
-          if (iterationNode.getInput().getSource() instanceof UnionPlanNode) {
-            allInChannels=((UnionPlanNode)iterationNode.getInput().getSource()).getInputs();
-          }
- else {
-            allInChannels=Collections.singletonList(iterationNode.getInput()).iterator();
-          }
-          targetVertexConfig.setIterationHeadPartialSolutionOrWorksetInputIndex(inputIndex);
-        }
- else {
-          allInChannels=Collections.singletonList(input).iterator();
-        }
-      }
- else {
-        allInChannels=Collections.singletonList(input).iterator();
-      }
-      TypeSerializerFactory<?> typeSerFact=null;
-      int numChannelsTotal=0;
-      int numChannelsDynamicPath=0;
-      int numDynamicSenderTasksTotal=0;
-      while (allInChannels.hasNext()) {
-        final Channel inConn=allInChannels.next();
-        if (typeSerFact == null) {
-          typeSerFact=inConn.getSerializer();
-        }
- else         if (!typeSerFact.equals(inConn.getSerializer())) {
-          throw new CompilerException("Conflicting types in union operator.");
-        }
-        final PlanNode sourceNode=inConn.getSource();
-        AbstractJobVertex sourceVertex=this.vertices.get(sourceNode);
-        TaskConfig sourceVertexConfig;
-        if (sourceVertex == null) {
-          final TaskInChain chainedTask;
-          final IterationDescriptor iteration;
-          if ((chainedTask=this.chainedTasks.get(sourceNode)) != null) {
-            if (chainedTask.getContainingVertex() == null)             throw new IllegalStateException("Bug: Chained task has not been assigned its containing vertex when connecting.");
-            sourceVertex=chainedTask.getContainingVertex();
-            sourceVertexConfig=chainedTask.getTaskConfig();
-          }
- else           if ((iteration=this.iterations.get(sourceNode)) != null) {
-            sourceVertex=iteration.getHeadTask();
-            sourceVertexConfig=iteration.getHeadFinalResultConfig();
-          }
- else {
-            throw new CompilerException("Bug: Could not resolve source node for a channel.");
-          }
-        }
- else {
-          sourceVertexConfig=new TaskConfig(sourceVertex.getConfiguration());
-        }
-        DistributionPattern pattern=connectJobVertices(inConn,inputIndex,sourceVertex,sourceVertexConfig,targetVertex,targetVertexConfig);
-        numChannelsTotal++;
-        if (inConn.isOnDynamicPath()) {
-          numChannelsDynamicPath++;
-          numDynamicSenderTasksTotal+=getNumberOfSendersPerReceiver(pattern,sourceVertex.getNumberOfSubtasks(),targetVertex.getNumberOfSubtasks());
-        }
-      }
-      if (numChannelsDynamicPath > 0 && numChannelsTotal != numChannelsDynamicPath) {
-        throw new CompilerException("Error: It is currently not supported to union between dynamic and static path in an iteration.");
-      }
-      if (numDynamicSenderTasksTotal > 0) {
-        targetVertexConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(inputIndex,numDynamicSenderTasksTotal);
-      }
-      addLocalInfoFromChannelToConfig(input,targetVertexConfig,inputIndex);
+      Channel input=inConns.next();
+      translateChannel(input,inputIndex,targetVertex,targetVertexConfig);
     }
   }
  catch (  Exception e) {

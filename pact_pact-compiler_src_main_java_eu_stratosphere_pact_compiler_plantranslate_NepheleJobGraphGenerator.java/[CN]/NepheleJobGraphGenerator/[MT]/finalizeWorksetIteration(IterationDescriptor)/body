@@ -3,32 +3,89 @@
   final JobTaskVertex headVertex=descr.getHeadTask();
   final TaskConfig headConfig=new TaskConfig(headVertex.getConfiguration());
   final TaskConfig headFinalOutputConfig=descr.getHeadFinalResultConfig();
-  final int numStepFunctionOuts=headConfig.getNumOutputs();
-  final int numFinalOuts=headFinalOutputConfig.getNumOutputs();
-  headConfig.setIterationHeadFinalOutputConfig(headFinalOutputConfig);
-  headConfig.setIterationHeadIndexOfSyncOutput(numStepFunctionOuts + numFinalOuts);
-  final long mem=iterNode.getMemoryPerSubTask();
-  if (mem <= 0) {
-    throw new CompilerException("Bug: No memory has been assigned to the workset iteration.");
+{
+    final int numStepFunctionOuts=headConfig.getNumOutputs();
+    final int numFinalOuts=headFinalOutputConfig.getNumOutputs();
+    headConfig.setIterationHeadFinalOutputConfig(headFinalOutputConfig);
+    headConfig.setIterationHeadIndexOfSyncOutput(numStepFunctionOuts + numFinalOuts);
+    final long mem=iterNode.getMemoryPerSubTask();
+    if (mem <= 0) {
+      throw new CompilerException("Bug: No memory has been assigned to the workset iteration.");
+    }
+    headConfig.setWorksetIteration();
+    headConfig.setBackChannelMemory(mem / 2);
+    headConfig.setSolutionSetMemory(mem / 2);
+    headConfig.setSolutionSetSerializer(iterNode.getSolutionSetSerializer());
+    headConfig.setSolutionSetComparator(iterNode.getSolutionSetComparator());
   }
-  headConfig.setBackChannelMemory(mem / 2);
-  headConfig.setSolutionSetMemory(mem / 2);
-  final JobOutputVertex sync=new JobOutputVertex("Bulk-Iteration Sync (" + iterNode.getPactContract().getName() + ")",this.jobGraph);
-  sync.setOutputClass(IterationSynchronizationSinkTask.class);
-  sync.setNumberOfSubtasks(1);
-  this.auxVertices.add(sync);
-  final TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
-  syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getNumberOfSubtasks());
-  final int maxNumIterations=iterNode.getIterationNode().getIterationContract().getMaximumNumberOfIterations();
-  if (maxNumIterations < 1) {
-    throw new CompilerException("Cannot create workset iteration with unspecified maximum number of iterations.");
+  final TaskConfig syncConfig;
+{
+    final JobOutputVertex sync=new JobOutputVertex("Workset-Iteration Sync (" + iterNode.getPactContract().getName() + ")",this.jobGraph);
+    sync.setOutputClass(IterationSynchronizationSinkTask.class);
+    sync.setNumberOfSubtasks(1);
+    this.auxVertices.add(sync);
+    syncConfig=new TaskConfig(sync.getConfiguration());
+    syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getNumberOfSubtasks());
+    final int maxNumIterations=iterNode.getIterationNode().getIterationContract().getMaximumNumberOfIterations();
+    if (maxNumIterations < 1) {
+      throw new CompilerException("Cannot create workset iteration with unspecified maximum number of iterations.");
+    }
+    syncConfig.setNumberOfIterations(maxNumIterations);
+    try {
+      headVertex.connectTo(sync,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+    }
+ catch (    JobGraphDefinitionException e) {
+      throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
+    }
   }
-  syncConfig.setNumberOfIterations(maxNumIterations);
-  try {
-    headVertex.connectTo(sync,ChannelType.NETWORK,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+{
+    final PlanNode nextWorksetNode=iterNode.getNextWorkSetPlanNode();
+    final TaskConfig tailConfig;
+    JobTaskVertex nextWorksetVertex=(JobTaskVertex)this.vertices.get(nextWorksetNode);
+    if (nextWorksetVertex == null) {
+      final TaskInChain taskInChain=this.chainedTasks.get(nextWorksetNode);
+      if (taskInChain == null) {
+        throw new CompilerException("Bug: Tail of step function not found as vertex or chained task.");
+      }
+      nextWorksetVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+      tailConfig=taskInChain.getTaskConfig();
+    }
+ else {
+      tailConfig=new TaskConfig(nextWorksetVertex.getConfiguration());
+    }
+    nextWorksetVertex.setTaskClass(IterationTailPactTask.class);
+    tailConfig.setOutputSerializer(iterNode.getWorksetSerializer());
+    JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
+    fakeTail.setOutputClass(FakeOutputTask.class);
+    fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+    fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
+    this.auxVertices.add(fakeTail);
+    try {
+      nextWorksetVertex.connectTo(fakeTail,ChannelType.INMEMORY,CompressionLevel.NO_COMPRESSION,DistributionPattern.POINTWISE);
+    }
+ catch (    JobGraphDefinitionException e) {
+      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
+    }
+    tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    tailConfig.setWorksetIteration();
   }
- catch (  JobGraphDefinitionException e) {
-    throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
+{
+    final PlanNode solutionDeltaNode=iterNode.getSolutionSetDeltaPlanNode();
+    final TaskConfig solutionDeltaConfig;
+    JobTaskVertex solutionDeltaVertex=(JobTaskVertex)this.vertices.get(solutionDeltaNode);
+    if (solutionDeltaVertex == null) {
+      final TaskInChain taskInChain=this.chainedTasks.get(solutionDeltaNode);
+      if (taskInChain == null) {
+        throw new CompilerException("Bug: Solution Set Delta not found as vertex or chained task.");
+      }
+      solutionDeltaVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+      solutionDeltaConfig=taskInChain.getTaskConfig();
+    }
+ else {
+      solutionDeltaConfig=new TaskConfig(solutionDeltaVertex.getConfiguration());
+    }
+    solutionDeltaConfig.setUpdateSolutionSet();
+    solutionDeltaConfig.setUpdateSolutionSetWithoutReprobe();
   }
   AggregatorRegistry aggs=iterNode.getIterationNode().getIterationContract().getAggregators();
   Collection<AggregatorWithName<?>> allAggregators=aggs.getAllRegisteredAggregators();
