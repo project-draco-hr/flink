@@ -1,0 +1,32 @@
+{
+  GenericDataSink sink=sinkPlanNode.getSinkNode().getPactContract();
+  Class<? extends OutputFormat<?>> format=sink.getFormatClass();
+  if (ArrayModelOutputFormat.class.isAssignableFrom(format)) {
+    Class<? extends ArrayModelOutputFormat> formatClass=format.asSubclass(ArrayModelOutputFormat.class);
+    ArrayModelOutputFormat formatInstance=InstantiationUtil.instantiate(formatClass,ArrayModelOutputFormat.class);
+    Class<? extends Value>[] types=formatInstance.getDataTypes();
+    try {
+      addToSchema(types,schema);
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new RuntimeException("Bug! Conflict on first set of type entries in the data sink.");
+    }
+    Ordering partitioning=sink.getPartitionOrdering();
+    Ordering sorting=sink.getLocalOrder();
+    try {
+      if (partitioning != null) {
+        addOrderingToSchema(partitioning,schema);
+      }
+      if (sorting != null) {
+        addOrderingToSchema(sorting,schema);
+      }
+    }
+ catch (    ConflictingFieldTypeInfoException ex) {
+      throw new CompilerPostPassException("Conflicting information found when adding data sink types.");
+    }
+    schema.setNumFields(types.length);
+  }
+ else {
+    throw new CompilerException("Incompatibe input format type. Array model programs require an " + ArrayModelOutputFormat.class.getName());
+  }
+}
