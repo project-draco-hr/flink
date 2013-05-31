@@ -15,20 +15,16 @@ synchronized (this.queuedEnvelopes) {
     final int expectedSequenceNumber=this.lastReceivedEnvelope + 1;
     if (sequenceNumber != expectedSequenceNumber) {
       if (sequenceNumber > expectedSequenceNumber) {
-        if (!this.isReexecuted) {
-          this.byteBufferedInputChannel.reportIOException(new IOException("Expected data packet " + expectedSequenceNumber + " but received "+ sequenceNumber));
-          this.byteBufferedInputChannel.checkForNetworkEvents();
+        this.byteBufferedInputChannel.reportIOException(new IOException("Expected data packet " + expectedSequenceNumber + " but received "+ sequenceNumber));
+        this.byteBufferedInputChannel.checkForNetworkEvents();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Input channel " + getChannelName() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
         }
       }
  else {
         eventToSend=lookForCloseEvent(transferEnvelope);
         if (eventToSend == null) {
           eventToSend=new UnexpectedEnvelopeEvent(expectedSequenceNumber - 1);
-        }
-      }
-      if (!this.isReexecuted || sequenceNumber > expectedSequenceNumber) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Input channel " + getChannelName() + " expected envelope "+ expectedSequenceNumber+ " but received "+ sequenceNumber);
         }
       }
       final Buffer buffer=transferEnvelope.getBuffer();
@@ -39,7 +35,7 @@ synchronized (this.queuedEnvelopes) {
  else {
       this.queuedEnvelopes.add(transferEnvelope);
       this.lastReceivedEnvelope=sequenceNumber;
-      this.envelopeConsumptionLog.reportEnvelopeAvailability(this.byteBufferedInputChannel);
+      this.byteBufferedInputChannel.checkForNetworkEvents();
     }
   }
   if (eventToSend != null) {

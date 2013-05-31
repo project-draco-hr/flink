@@ -19,28 +19,10 @@
   final AbstractByteBufferedOutputChannel<? extends Record> outputChannel=(AbstractByteBufferedOutputChannel<? extends Record>)channel;
   RuntimeOutputChannelBroker outputChannelBroker;
   AbstractOutputChannelForwarder last;
-  if (outputChannel.getType() == ChannelType.FILE) {
-    final EphemeralCheckpoint checkpoint=this.taskContext.getEphemeralCheckpoint();
-    if (checkpoint == null) {
-      throw new IllegalStateException("No ephemeral checkpoint for file channel " + outputChannel.getID());
-    }
-    final EphemeralCheckpointForwarder checkpointForwarder=new EphemeralCheckpointForwarder(checkpoint,null);
-    outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,checkpointForwarder);
-    last=checkpointForwarder;
-  }
- else {
-    final RuntimeDispatcher runtimeDispatcher=new RuntimeDispatcher(this.taskContext.getTransferEnvelopeDispatcher());
-    final ForwardingBarrier forwardingBarrier=new ForwardingBarrier(channelID,runtimeDispatcher);
-    final EphemeralCheckpoint checkpoint=this.taskContext.getEphemeralCheckpoint();
-    if (checkpoint != null) {
-      final EphemeralCheckpointForwarder checkpointForwarder=new EphemeralCheckpointForwarder(checkpoint,forwardingBarrier);
-      outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,checkpointForwarder);
-    }
- else {
-      outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,forwardingBarrier);
-    }
-    last=runtimeDispatcher;
-  }
+  final RuntimeDispatcher runtimeDispatcher=new RuntimeDispatcher(this.taskContext.getTransferEnvelopeDispatcher());
+  final ForwardingBarrier forwardingBarrier=new ForwardingBarrier(channelID,runtimeDispatcher);
+  outputChannelBroker=new RuntimeOutputChannelBroker(this,outputChannel,forwardingBarrier);
+  last=runtimeDispatcher;
   final OutputChannelForwardingChain forwardingChain=new OutputChannelForwardingChain(outputChannelBroker,last);
   outputChannelBroker.setForwardingChain(forwardingChain);
   return new RuntimeOutputChannelContext(outputChannel,forwardingChain);

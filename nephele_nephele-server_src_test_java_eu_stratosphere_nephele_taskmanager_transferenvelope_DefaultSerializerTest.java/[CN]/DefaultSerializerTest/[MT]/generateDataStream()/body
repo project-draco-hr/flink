@@ -2,20 +2,20 @@
   final File outputFile=new File(ServerTestUtils.getTempDir() + File.separator + ServerTestUtils.getRandomFilename());
   final FileOutputStream outputStream=new FileOutputStream(outputFile);
   final FileChannel fileChannel=outputStream.getChannel();
-  final Deque<ByteBuffer> recycleQueue=new ArrayDeque<ByteBuffer>();
+  final Deque<MemorySegment> recycleQueue=new ArrayDeque<MemorySegment>();
   final DefaultSerializer serializer=new DefaultSerializer();
-  final ByteBuffer byteBuffer=ByteBuffer.allocate(BUFFER_SIZE);
+  final MemorySegment byteBuffer=new MemorySegment(new byte[BUFFER_SIZE]);
   final ByteBuffer initBuffer=ByteBuffer.allocate(1);
   initBuffer.put(BUFFER_CONTENT);
   initBuffer.flip();
   recycleQueue.add(byteBuffer);
   for (int i=0; i < BUFFER_SIZE; i++) {
-    final Buffer buffer=BufferFactory.createFromMemory(i,recycleQueue.poll(),new BufferPoolConnector(recycleQueue));
+    final MemoryBuffer buffer=BufferFactory.createFromMemory(i,recycleQueue.poll(),new BufferPoolConnector(recycleQueue));
     for (int j=0; j < i; j++) {
       buffer.write(initBuffer);
       initBuffer.position(0);
     }
-    buffer.finishWritePhase();
+    buffer.flip();
     final TransferEnvelope transferEnvelope=new TransferEnvelope(i,this.jobID,this.sourceChannelID);
     transferEnvelope.setBuffer(buffer);
     serializer.setTransferEnvelope(transferEnvelope);
