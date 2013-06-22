@@ -1,0 +1,47 @@
+{
+  if (args.length < 2) {
+    System.out.println("KMeansDataGenerator <numberOfDataPoints> <numberOfClusterCenters> [<centroid range>] [<seed>]");
+    System.exit(1);
+  }
+  final int numDataPoints=Integer.parseInt(args[0]);
+  final int k=Integer.parseInt(args[1]);
+  final double range=args.length > 2 ? Double.parseDouble(args[2]) : DEFAULT_VALUE_RANGE;
+  final long firstSeed=args.length > 3 ? Long.parseLong(args[3]) : DEFAULT_SEED;
+  final double absoluteStdDev=RELATIVE_STDDEV * range;
+  final Random random=new Random(firstSeed);
+  final double[][] means=uniformRandomCenters(random,k,DIMENSIONALITY,range);
+  BufferedWriter pointsOut=null;
+  try {
+    pointsOut=new BufferedWriter(new FileWriter(new File(POINTS_FILE)));
+    StringBuilder buffer=new StringBuilder();
+    double[] point=new double[DIMENSIONALITY];
+    int nextCentroid=0;
+    for (int i=1; i <= numDataPoints; i++) {
+      double[] centroid=means[nextCentroid];
+      for (int d=0; d < DIMENSIONALITY; d++) {
+        point[d]=(random.nextGaussian() * absoluteStdDev) + centroid[d];
+      }
+      write(i,point,buffer,pointsOut);
+      nextCentroid=(nextCentroid + 1) % k;
+    }
+  }
+  finally {
+    if (pointsOut != null) {
+      pointsOut.close();
+    }
+  }
+  BufferedWriter centersOut=null;
+  try {
+    centersOut=new BufferedWriter(new FileWriter(new File(CENTERS_FILE)));
+    StringBuilder buffer=new StringBuilder();
+    double[][] centers=uniformRandomCenters(random,k,DIMENSIONALITY,range);
+    for (int i=0; i < k; i++) {
+      write(i + 1,centers[i],buffer,centersOut);
+    }
+  }
+  finally {
+    if (centersOut != null) {
+      centersOut.close();
+    }
+  }
+}
