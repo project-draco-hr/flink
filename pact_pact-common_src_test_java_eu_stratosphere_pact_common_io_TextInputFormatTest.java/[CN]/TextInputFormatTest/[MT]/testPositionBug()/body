@@ -1,0 +1,26 @@
+{
+  File tempFile=File.createTempFile("TextInputFormatTest",null);
+  tempFile.setWritable(true);
+  PrintStream ps=new PrintStream(tempFile);
+  ps.println("First line");
+  ps.println("Second line");
+  ps.close();
+  tempFile.deleteOnExit();
+  TextInputFormat inputFormat=new TextInputFormat();
+  Configuration parameters=new Configuration();
+  parameters.setString(FileInputFormat.FILE_PARAMETER_KEY,"file://" + tempFile.getAbsolutePath());
+  inputFormat.configure(parameters);
+  FileInputSplit[] splits=inputFormat.createInputSplits(1);
+  assertTrue("expected at least one input split",splits.length >= 1);
+  inputFormat.open(splits[0]);
+  PactRecord r=new PactRecord();
+  assertTrue("Expecting first record here",inputFormat.nextRecord(r));
+  try {
+    assertTrue("Expecting second record here",inputFormat.nextRecord(r));
+  }
+ catch (  IllegalArgumentException iae) {
+    iae.printStackTrace();
+    fail("TextInputFormat is unable to read the file");
+  }
+  assertFalse("The input file is over",inputFormat.nextRecord(r));
+}
