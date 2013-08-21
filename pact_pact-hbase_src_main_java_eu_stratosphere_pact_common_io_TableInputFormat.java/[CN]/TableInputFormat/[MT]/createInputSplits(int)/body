@@ -1,0 +1,27 @@
+{
+  if (this.table == null) {
+    throw new IOException("No table was provided.");
+  }
+  final Pair<byte[][],byte[][]> keys=this.table.getStartEndKeys();
+  if (keys == null || keys.getFirst() == null || keys.getFirst().length == 0) {
+    throw new IOException("Expecting at least one region.");
+  }
+  int count=0;
+  final List<TableInputSplit> splits=new ArrayList<TableInputSplit>(keys.getFirst().length);
+  for (int i=0; i < keys.getFirst().length; i++) {
+    if (!includeRegionInSplit(keys.getFirst()[i],keys.getSecond()[i])) {
+      continue;
+    }
+    final String regionLocation=this.table.getRegionLocation(keys.getFirst()[i],false).getHostnamePort();
+    final byte[] startRow=this.scan.getStartRow();
+    final byte[] stopRow=this.scan.getStopRow();
+    if ((startRow.length == 0 || keys.getSecond()[i].length == 0 || Bytes.compareTo(startRow,keys.getSecond()[i]) < 0) && (stopRow.length == 0 || Bytes.compareTo(stopRow,keys.getFirst()[i]) > 0)) {
+      final byte[] splitStart=startRow.length == 0 || Bytes.compareTo(keys.getFirst()[i],startRow) >= 0 ? keys.getFirst()[i] : startRow;
+      final byte[] splitStop=(stopRow.length == 0 || Bytes.compareTo(keys.getSecond()[i],stopRow) <= 0) && keys.getSecond()[i].length > 0 ? keys.getSecond()[i] : stopRow;
+      final TableInputSplit split=new TableInputSplit(splits.size(),new String[]{regionLocation},this.table.getTableName(),splitStart,splitStop);
+      splits.add(split);
+      if (LOG.isDebugEnabled())       LOG.debug("getSplits: split -> " + (count++) + " -> "+ split);
+    }
+  }
+  return splits.toArray(new TableInputSplit[0]);
+}
