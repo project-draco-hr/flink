@@ -1,0 +1,38 @@
+{
+  if (running) {
+    return;
+  }
+  Configuration conf=NepheleMiniCluster.getMiniclusterDefaultConfig(JOBMANAGER_RPC_PORT,6500,7501,7533,null,true);
+  GlobalConfiguration.includeConfiguration(conf);
+  JobManager jobManager;
+  try {
+    jobManager=new JobManager(ExecutionMode.CLUSTER);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    return;
+  }
+  JobManagerThread jobManagerThread=new JobManagerThread(jobManager);
+  jobManagerThread.setDaemon(true);
+  jobManagerThread.start();
+  List<LocalTaskManagerThread> tms=new ArrayList<LocalTaskManagerThread>();
+  for (int tm=0; tm < numTaskMgr; tm++) {
+    Configuration tmConf=new Configuration();
+    tmConf.setInteger(ConfigConstants.TASK_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_IPC_PORT + tm + numTaskMgr);
+    tmConf.setInteger(ConfigConstants.TASK_MANAGER_DATA_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_DATA_PORT + tm);
+    GlobalConfiguration.includeConfiguration(tmConf);
+    LocalTaskManagerThread t=new LocalTaskManagerThread("LocalDistributedExecutor: LocalTaskManagerThread-#" + tm,numTaskMgr);
+    t.start();
+    tms.add(t);
+  }
+  final int sleepTime=100;
+  final int maxSleep=1000 * 2 * numTaskMgr;
+  int slept=0;
+  while (jobManager.getNumberOfTaskTrackers() < numTaskMgr) {
+    Thread.sleep(sleepTime);
+    if (slept >= maxSleep) {
+      throw new RuntimeException("Waited for more than 2 seconds per TaskManager to register at " + "the JobManager.");
+    }
+  }
+  this.running=true;
+}
