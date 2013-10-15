@@ -1,0 +1,25 @@
+{
+  int keyCnt=100;
+  int valCnt=20;
+  super.initEnvironment(4 * 1024 * 1024);
+  super.addInput(new UniformPactRecordGenerator(keyCnt,valCnt,true),0);
+  DataSinkTask<PactRecord> testTask=new DataSinkTask<PactRecord>();
+  Configuration stubParams=new Configuration();
+  super.getTaskConfig().setStubParameters(stubParams);
+  super.getTaskConfig().setInputLocalStrategy(0,LocalStrategy.SORT);
+  super.getTaskConfig().setInputComparator(new PactRecordComparatorFactory(new int[]{1},((Class<? extends Key>[])new Class[]{PactInteger.class})),0);
+  super.getTaskConfig().setMemoryInput(0,4 * 1024 * 1024);
+  super.getTaskConfig().setFilehandlesInput(0,8);
+  super.getTaskConfig().setSpillingThresholdInput(0,0.8f);
+  super.registerFileOutputTask(testTask,MockFailingOutputFormat.class,"file://" + this.tempTestPath);
+  boolean stubFailed=false;
+  try {
+    testTask.invoke();
+  }
+ catch (  Exception e) {
+    stubFailed=true;
+  }
+  Assert.assertTrue("Stub exception was not forwarded.",stubFailed);
+  File tempTestFile=new File(this.tempTestPath);
+  Assert.assertTrue("Temp output file does not exist",tempTestFile.exists());
+}
