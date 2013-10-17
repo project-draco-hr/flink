@@ -1,0 +1,65 @@
+{
+  Configuration config=GlobalConfiguration.getConfiguration();
+  if (nepheleConfig == null) {
+    nepheleConfig=config;
+  }
+  this.jobmanager=jobmanager;
+  String basePath=nepheleConfig.getString(ConfigConstants.STRATOSPHERE_BASE_DIR_PATH_KEY,"");
+  File webDir;
+  String webDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ROOT_PATH);
+  if (webDirPath.startsWith("/")) {
+    webDir=new File(webDirPath);
+  }
+ else {
+    webDir=new File(basePath + "/" + webDirPath);
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Setting up web info server, using web-root directory '" + webDir.getAbsolutePath() + "'.");
+    LOG.info("Web info server will display information about nephele job-manager on " + nepheleConfig.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ port+ ".");
+  }
+  this.port=port;
+  server=new Server(port);
+  if (!webDir.exists()) {
+    throw new FileNotFoundException("The directory containing the web documents does not exist: " + webDir.getAbsolutePath());
+  }
+  ServletContextHandler servletContext=new ServletContextHandler(ServletContextHandler.SESSIONS);
+  servletContext.setContextPath("/");
+  servletContext.addServlet(new ServletHolder(new JobmanagerInfoServlet(jobmanager)),"/jobsInfo");
+  servletContext.addServlet(new ServletHolder(new LogfileInfoServlet(new File(basePath + "/log"))),"/logInfo");
+  ResourceHandler resourceHandler=new ResourceHandler();
+  resourceHandler.setDirectoriesListed(false);
+  resourceHandler.setResourceBase(webDir.getAbsolutePath());
+  HandlerList handlers=new HandlerList();
+  handlers.addHandler(servletContext);
+  handlers.addHandler(resourceHandler);
+  File af=null;
+  String authFile=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ACCESS_FILE_KEY,null);
+  if (authFile != null) {
+    af=new File(authFile);
+    if (!af.exists()) {
+      LOG.error("The specified file '" + af.getAbsolutePath() + "' with the authentication information is missing. Starting server without HTTP authentication.");
+      af=null;
+    }
+  }
+  if (af != null) {
+    HashLoginService loginService=new HashLoginService("Stratosphere Jobmanager Interface",authFile);
+    server.addBean(loginService);
+    Constraint constraint=new Constraint();
+    constraint.setName(Constraint.__BASIC_AUTH);
+    constraint.setAuthenticate(true);
+    constraint.setRoles(new String[]{"user"});
+    ConstraintMapping mapping=new ConstraintMapping();
+    mapping.setPathSpec("/*");
+    mapping.setConstraint(constraint);
+    ConstraintSecurityHandler sh=new ConstraintSecurityHandler();
+    sh.addConstraintMapping(mapping);
+    sh.setAuthenticator(new BasicAuthenticator());
+    sh.setLoginService(loginService);
+    sh.setStrict(true);
+    sh.setHandler(handlers);
+    server.setHandler(sh);
+  }
+ else {
+    server.setHandler(handlers);
+  }
+}
