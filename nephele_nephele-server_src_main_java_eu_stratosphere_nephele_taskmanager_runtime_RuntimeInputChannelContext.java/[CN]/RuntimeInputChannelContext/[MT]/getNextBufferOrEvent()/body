@@ -1,0 +1,35 @@
+{
+  if (this.pendingEvents != null) {
+    BufferOrEvent next=new BufferOrEvent(this.pendingEvents.next());
+    if (!this.pendingEvents.hasNext()) {
+      this.pendingEvents=null;
+    }
+    return next;
+  }
+  TransferEnvelope nextEnvelope;
+synchronized (this.queuedEnvelopes) {
+    if (this.queuedEnvelopes.isEmpty()) {
+      return null;
+    }
+    nextEnvelope=this.queuedEnvelopes.poll();
+  }
+  if (nextEnvelope.getEventList() != null) {
+    Iterator<AbstractEvent> events=nextEnvelope.getEventList().iterator();
+    if (events.hasNext()) {
+      this.pendingEvents=events;
+    }
+  }
+  if (nextEnvelope.getBuffer() != null) {
+    return new BufferOrEvent(nextEnvelope.getBuffer());
+  }
+ else   if (this.pendingEvents != null) {
+    BufferOrEvent next=new BufferOrEvent(this.pendingEvents.next());
+    if (!this.pendingEvents.hasNext()) {
+      this.pendingEvents=null;
+    }
+    return next;
+  }
+ else {
+    throw new IOException("Received an envelope with neither data nor events.");
+  }
+}

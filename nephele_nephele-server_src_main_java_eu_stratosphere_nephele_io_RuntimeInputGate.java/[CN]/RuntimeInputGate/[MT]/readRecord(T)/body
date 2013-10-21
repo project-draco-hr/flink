@@ -1,30 +1,31 @@
 {
-  T record=null;
-  while (true) {
-    if (this.channelToReadFrom == -1) {
-      if (this.isClosed()) {
-        return null;
-      }
-      if (Thread.interrupted()) {
-        throw new InterruptedException();
-      }
-      this.channelToReadFrom=waitForAnyChannelToBecomeAvailable();
+  if (this.channelToReadFrom == -1) {
+    if (this.isClosed()) {
+      return InputChannelResult.END_OF_STREAM;
     }
-    try {
-      record=this.getInputChannel(this.channelToReadFrom).readRecord(target);
+    if (Thread.interrupted()) {
+      throw new InterruptedException();
     }
- catch (    EOFException e) {
-      if (this.isClosed()) {
-        this.channelToReadFrom=-1;
-        return null;
-      }
-    }
-    if (record != null) {
-      break;
-    }
- else {
-      this.channelToReadFrom=-1;
-    }
+    this.channelToReadFrom=waitForAnyChannelToBecomeAvailable();
   }
-  return record;
+  InputChannelResult result=this.getInputChannel(this.channelToReadFrom).readRecord(target);
+switch (result) {
+case INTERMEDIATE_RECORD_FROM_BUFFER:
+    return InputChannelResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+case LAST_RECORD_FROM_BUFFER:
+  this.channelToReadFrom=-1;
+return InputChannelResult.LAST_RECORD_FROM_BUFFER;
+case EVENT:
+this.currentEvent=this.getInputChannel(this.channelToReadFrom).getCurrentEvent();
+this.channelToReadFrom=-1;
+return InputChannelResult.EVENT;
+case NONE:
+this.channelToReadFrom=-1;
+return InputChannelResult.NONE;
+case END_OF_STREAM:
+this.channelToReadFrom=-1;
+return isClosed() ? InputChannelResult.END_OF_STREAM : InputChannelResult.NONE;
+default :
+throw new RuntimeException();
+}
 }

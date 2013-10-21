@@ -1,20 +1,24 @@
 {
   this.deserializer.clear();
   if (this.dataBuffer != null) {
-    releasedConsumedReadBuffer();
+    releasedConsumedReadBuffer(this.dataBuffer);
+    this.dataBuffer=null;
   }
-  if (this.getType() == ChannelType.NETWORK || this.getType() == ChannelType.INMEMORY) {
-    while (!this.brokerAggreedToCloseChannel) {
-      requestReadBufferFromBroker();
-      if (this.dataBuffer != null) {
-        releasedConsumedReadBuffer();
-        continue;
+  while (!this.brokerAggreedToCloseChannel) {
+    BufferOrEvent next=this.inputChannelBroker.getNextBufferOrEvent();
+    if (next != null) {
+      if (next.isEvent()) {
+        if (next.getEvent() instanceof ByteBufferedChannelCloseEvent) {
+          this.brokerAggreedToCloseChannel=true;
+        }
       }
+ else {
+        releasedConsumedReadBuffer(next.getBuffer());
+      }
+    }
+ else {
       Thread.sleep(200);
     }
   }
-  final ChannelType type=getType();
-  if (type == ChannelType.NETWORK || type == ChannelType.INMEMORY) {
-    transferEvent(new ByteBufferedChannelCloseEvent());
-  }
+  transferEvent(new ByteBufferedChannelCloseEvent());
 }

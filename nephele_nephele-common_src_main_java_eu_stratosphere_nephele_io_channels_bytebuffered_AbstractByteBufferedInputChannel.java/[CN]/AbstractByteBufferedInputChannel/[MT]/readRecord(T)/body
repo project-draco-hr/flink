@@ -1,6 +1,38 @@
 {
-  if (isClosed()) {
-    throw new EOFException();
+  if (this.dataBuffer == null) {
+    if (isClosed()) {
+      return InputChannelResult.END_OF_STREAM;
+    }
+    BufferOrEvent boe=this.inputChannelBroker.getNextBufferOrEvent();
+    if (boe.isEvent()) {
+      if (this.deserializer.hasUnfinishedData()) {
+        throw new IOException("Channel received an event before completing the current partial record.");
+      }
+      AbstractEvent evt=boe.getEvent();
+      if (evt instanceof ByteBufferedChannelCloseEvent) {
+        this.brokerAggreedToCloseChannel=true;
+        return InputChannelResult.END_OF_STREAM;
+      }
+ else       if (evt instanceof AbstractTaskEvent) {
+        this.currentEvent=(AbstractTaskEvent)evt;
+        return InputChannelResult.EVENT;
+      }
+ else {
+        LOG.error("Received unknown event: " + evt);
+        return InputChannelResult.NONE;
+      }
+    }
+ else {
+      this.dataBuffer=boe.getBuffer();
+    }
   }
-  return deserializeNextRecord(target);
+  T nextRecord=this.deserializer.readData(target,this.dataBuffer);
+  if (this.dataBuffer.remaining() == 0) {
+    releasedConsumedReadBuffer(this.dataBuffer);
+    this.dataBuffer=null;
+    return nextRecord == null ? InputChannelResult.NONE : InputChannelResult.LAST_RECORD_FROM_BUFFER;
+  }
+ else {
+    return nextRecord == null ? InputChannelResult.NONE : InputChannelResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+  }
 }
