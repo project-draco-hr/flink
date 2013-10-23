@@ -42,7 +42,7 @@
  else {
         pactProgram=new PactProgram(jarFile,assemblerClass,options);
       }
-      optPlan=client.getOptimizedPlan(pactProgram);
+      optPlan=client.getOptimizedPlan(pactProgram.getPlanWithJars());
     }
  catch (    ProgramInvocationException pie) {
       showErrorPage(resp,"An error occurred while invoking the pact program: <br/>" + pie.getMessage());
@@ -80,17 +80,20 @@ catch (    Throwable t) {
       new PlanJSONDumpGenerator().dumpOptimizerPlanAsJSON(optPlan,jsonFile);
       if (!suspend) {
         try {
-          this.client.run(pactProgram,optPlan);
+          this.client.run(pactProgram.getPlanWithJars(),optPlan);
         }
  catch (        Throwable t) {
           LOG.error("Error submitting job to the job-manager.",t);
           showErrorPage(resp,t.getMessage());
           return;
         }
+ finally {
+          pactProgram.deleteExtractedLibraries();
+        }
       }
  else {
         try {
-          this.submittedJobs.put(uid,new ProgramJobGraphPair(pactProgram,this.client.getJobGraph(pactProgram,optPlan)));
+          this.submittedJobs.put(uid,new ProgramJobGraphPair(pactProgram,this.client.getJobGraph(pactProgram.getPlanWithJars(),optPlan)));
         }
  catch (        ProgramInvocationException piex) {
           LOG.error("Error creating JobGraph from optimized plan.",piex);
@@ -107,13 +110,16 @@ catch (        Throwable t) {
     }
  else {
       try {
-        client.run(pactProgram);
+        client.run(pactProgram.getPlanWithJars());
       }
  catch (      Exception ex) {
         LOG.error("Error submitting job to the job-manager.",ex);
         String errorMessage=ex.getMessage().split("\n")[0];
         showErrorPage(resp,errorMessage);
         return;
+      }
+ finally {
+        pactProgram.deleteExtractedLibraries();
       }
       resp.sendRedirect(START_PAGE_URL);
     }
@@ -137,7 +143,7 @@ catch (        Throwable t) {
       return;
     }
     try {
-      client.run(job.getProgram(),job.getJobGraph());
+      client.run(job.getProgram().getPlanWithJars(),job.getJobGraph());
     }
  catch (    Exception ex) {
       LOG.error("Error submitting job to the job-manager.",ex);
@@ -145,6 +151,9 @@ catch (        Throwable t) {
       String errorMessage=ex.getMessage().split("\n")[0];
       resp.getWriter().print(errorMessage);
       return;
+    }
+ finally {
+      job.getProgram().deleteExtractedLibraries();
     }
     resp.sendRedirect(START_PAGE_URL);
   }
