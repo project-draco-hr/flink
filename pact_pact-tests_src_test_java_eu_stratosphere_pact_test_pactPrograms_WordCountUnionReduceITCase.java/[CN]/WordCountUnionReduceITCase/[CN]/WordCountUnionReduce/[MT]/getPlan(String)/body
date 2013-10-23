@@ -1,0 +1,14 @@
+{
+  String inputPath=args.length >= 1 ? args[0] : "";
+  String outputPath=args.length >= 3 ? args[2] : "";
+  int numSubtasks=args.length >= 4 ? Integer.parseInt(args[3]) : 1;
+  FileDataSource source=new FileDataSource(TextInputFormat.class,inputPath,"First Input");
+  MapContract wordsFirstInput=MapContract.builder(TokenizeLine.class).input(source).name("Words (First Input)").build();
+  MapContract wordsSecondInput=MapContract.builder(TokenizeLine.class).input(source).name("Words (Second Input)").build();
+  ReduceContract counts=ReduceContract.builder(CountWords.class,PactString.class,0).input(wordsFirstInput,wordsSecondInput).name("Word Counts").build();
+  FileDataSink sink=new FileDataSink(RecordOutputFormat.class,outputPath,counts);
+  RecordOutputFormat.configureRecordFormat(sink).recordDelimiter('\n').fieldDelimiter(' ').field(PactString.class,0).field(PactInteger.class,1);
+  Plan plan=new Plan(sink,"WordCount Union Reduce");
+  plan.setDefaultParallelism(numSubtasks);
+  return plan;
+}
