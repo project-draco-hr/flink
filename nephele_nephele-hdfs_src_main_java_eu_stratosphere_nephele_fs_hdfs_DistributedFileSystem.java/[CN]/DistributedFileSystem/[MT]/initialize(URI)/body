@@ -1,6 +1,38 @@
 {
-  if (name.getAuthority() == null) {
-    name=URI.create(this.conf.get("fs.default.name"));
+  if (path.getAuthority() == null) {
+    String configEntry=this.conf.get("fs.default.name",null);
+    if (configEntry == null) {
+      throw new IOException(getMissingAuthorityErrorPrefix(path) + "Either no default hdfs configuration was registered, " + "or that configuration did not contain an entry for the default hdfs.");
+    }
+ else {
+      try {
+        URI initURI=URI.create(configEntry);
+        if (initURI.getAuthority() == null) {
+          throw new IOException(getMissingAuthorityErrorPrefix(path) + "Either no default hdfs configuration was registered, " + "or the provided configuration contains no valid hdfs namenode address (fs.default.name) describing the hdfs namenode host and port.");
+        }
+ else         if (!initURI.getScheme().equalsIgnoreCase("hdfs")) {
+          throw new IOException(getMissingAuthorityErrorPrefix(path) + "Either no default hdfs configuration was registered, " + "or the provided configuration describes a file system with scheme '"+ initURI.getScheme()+ "'other than the Hadoop Distributed File System (HDFS).");
+        }
+ else {
+          try {
+            this.fs.initialize(initURI,this.conf);
+          }
+ catch (          Exception e) {
+            throw new IOException(getMissingAuthorityErrorPrefix(path) + "Could not initialize the file system connection with the given address of the HDFS Namenode" + e.getMessage() != null ? ": " + e.getMessage() : ".",e);
+          }
+        }
+      }
+ catch (      IllegalArgumentException e) {
+        throw new IOException(getMissingAuthorityErrorPrefix(path) + "The configuration contains an invalid hdfs default name (fs.default.name): " + configEntry);
+      }
+    }
   }
-  this.fs.initialize(name,this.conf);
+ else {
+    try {
+      this.fs.initialize(path,this.conf);
+    }
+ catch (    Exception e) {
+      throw new IOException("The given file URI (" + path.toString() + ") described the host and port of an HDFS Namenode, but the File System could not be initialized with that address"+ (e.getMessage() != null ? ": " + e.getMessage() : "."),e);
+    }
+  }
 }
