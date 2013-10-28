@@ -6,16 +6,18 @@
   final int NUM_BUCKETS=137;
   final float BUCKET_WIDTH=DISTR_RANGE / ((float)NUM_BUCKETS);
   final int NUM_ELEMENTS=10000000;
-  final DataDistribution distri=new IntegerUniformDistribution(DISTR_MIN,DISTR_MAX);
-  @SuppressWarnings("unchecked") final PactRecordComparator intComp=new PactRecordComparator(new int[]{0},new Class[]{PactInteger.class});
-  final ChannelSelector<PactRecord> oe=new PactRecordOutputEmitter(ShipStrategyType.PARTITION_RANGE,intComp,distri);
+  final DataDistribution<PactRecord> distri=new IntegerUniformDistribution(DISTR_MIN,DISTR_MAX);
+  @SuppressWarnings("unchecked") final TypeComparator<PactRecord> intComp=new PactRecordComparatorFactory(new int[]{0},new Class[]{PactInteger.class}).createComparator();
+  final ChannelSelector<SerializationDelegate<PactRecord>> oe=new OutputEmitter<PactRecord>(ShipStrategyType.PARTITION_RANGE,intComp,distri);
+  final SerializationDelegate<PactRecord> delegate=new SerializationDelegate<PactRecord>(new PactRecordSerializerFactory().getSerializer());
   final PactInteger integer=new PactInteger();
   final PactRecord rec=new PactRecord();
   for (int i=0; i < NUM_ELEMENTS; i++) {
     final int nextValue=rnd.nextInt(DISTR_RANGE) + DISTR_MIN;
     integer.setValue(nextValue);
     rec.setField(0,integer);
-    final int[] channels=oe.selectChannels(rec,NUM_BUCKETS);
+    delegate.setInstance(rec);
+    final int[] channels=oe.selectChannels(delegate,NUM_BUCKETS);
     if (channels.length != 1) {
       Assert.fail("Resulting channels array has more than one channel.");
     }
