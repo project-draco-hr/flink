@@ -1,7 +1,4 @@
 {
-  if (this.extractedTempLibraries != null) {
-    return this.extractedTempLibraries;
-  }
   Random rnd=new Random();
   try {
     final JarFile jar=new JarFile(jarFile);
@@ -15,42 +12,58 @@
       }
     }
     if (containedJarFileEntries.isEmpty()) {
-      this.extractedTempLibraries=Collections.emptyList();
-      return this.extractedTempLibraries;
+      return Collections.emptyList();
     }
-    this.extractedTempLibraries=new ArrayList<File>(containedJarFileEntries.size());
-    for (int i=0; i < this.extractedTempLibraries.size(); i++) {
-      final JarEntry entry=containedJarFileEntries.get(i);
-      String name=entry.getName();
-      name=name.replace(File.separatorChar,'_');
-      File tempFile=File.createTempFile(String.valueOf(Math.abs(rnd.nextInt()) + "_"),name);
-      this.extractedTempLibraries.set(i,tempFile);
-      OutputStream out=null;
-      InputStream in=null;
+ else {
+      final List<File> extractedTempLibraries=new ArrayList<File>(containedJarFileEntries.size());
+      final byte[] buffer=new byte[4096];
+      boolean incomplete=true;
       try {
-        out=new FileOutputStream(tempFile);
-        in=new BufferedInputStream(jar.getInputStream(entry));
-        byte[] buffer=new byte[1024];
-        int numRead=0;
-        while ((numRead=in.read(buffer)) != -1) {
-          out.write(buffer,0,numRead);
+        for (int i=0; i < containedJarFileEntries.size(); i++) {
+          final JarEntry entry=containedJarFileEntries.get(i);
+          String name=entry.getName();
+          name=name.replace(File.separatorChar,'_');
+          File tempFile;
+          try {
+            tempFile=File.createTempFile(String.valueOf(Math.abs(rnd.nextInt()) + "_"),name);
+          }
+ catch (          IOException e) {
+            throw new ProgramInvocationException("An I/O error occurred while creating temporary file to extract nested library '" + entry.getName() + "'.",e);
+          }
+          extractedTempLibraries.add(tempFile);
+          OutputStream out=null;
+          InputStream in=null;
+          try {
+            out=new FileOutputStream(tempFile);
+            in=new BufferedInputStream(jar.getInputStream(entry));
+            int numRead=0;
+            while ((numRead=in.read(buffer)) != -1) {
+              out.write(buffer,0,numRead);
+            }
+          }
+ catch (          IOException e) {
+            throw new ProgramInvocationException("An I/O error occurred while extracting nested library '" + entry.getName() + "' to temporary file '"+ tempFile.getAbsolutePath()+ "'.");
+          }
+ finally {
+            if (out != null) {
+              out.close();
+            }
+            if (in != null) {
+              in.close();
+            }
+          }
         }
+        incomplete=false;
       }
   finally {
-        if (out != null) {
-          out.close();
-        }
-        if (in != null) {
-          in.close();
+        if (incomplete) {
+          deleteExtractedLibraries(extractedTempLibraries);
         }
       }
+      return extractedTempLibraries;
     }
-    return this.extractedTempLibraries;
   }
- catch (  IOException ioex) {
-    throw ioex;
-  }
-catch (  Throwable t) {
-    throw new IOException("Unknown I/O error while extracting contained jar files.",t);
+ catch (  Throwable t) {
+    throw new ProgramInvocationException("Unknown I/O error while extracting contained jar files.",t);
   }
 }
