@@ -2,24 +2,24 @@
   BufferedReader lineReader=null;
   try {
     lineReader=new BufferedReader(new FileReader(LINUX_MEMORY_INFO_PATH));
-    String line=lineReader.readLine();
-    while (line != null) {
-      final Matcher matcher=LINUX_MEMORY_REGEX.matcher(line);
+    String line=null;
+    while ((line=lineReader.readLine()) != null) {
+      Matcher matcher=LINUX_MEMORY_REGEX.matcher(line);
       if (matcher.matches()) {
-        final String totalMemory=matcher.group(1);
-        try {
-          return Long.parseLong(totalMemory) * 1024L;
-        }
- catch (        NumberFormatException nfe) {
-          LOG.error(nfe);
-          return -1;
-        }
+        String totalMemory=matcher.group(1);
+        return Long.parseLong(totalMemory) * 1024L;
       }
-      line=lineReader.readLine();
     }
+    LOG.error("Cannot determine the size of the physical memory using '/proc/meminfo'. Unexpected format.");
+    return -1;
   }
- catch (  IOException e) {
-    LOG.error(e);
+ catch (  NumberFormatException e) {
+    LOG.error("Cannot determine the size of the physical memory using '/proc/meminfo'. Unexpected format.");
+    return -1;
+  }
+catch (  IOException e) {
+    LOG.error("Cannot determine the size of the physical memory using '/proc/meminfo': " + e.getMessage(),e);
+    return -1;
   }
  finally {
     try {
@@ -27,9 +27,7 @@
         lineReader.close();
       }
     }
- catch (    IOException ioe) {
-      LOG.error(ioe);
+ catch (    Throwable t) {
     }
   }
-  return -1;
 }
