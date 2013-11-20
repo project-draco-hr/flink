@@ -1,30 +1,47 @@
 {
-  final String filePath=parameters.getString(FILE_PARAMETER_KEY,null);
-  if (filePath == null) {
-    throw new IllegalArgumentException("Configuration file FileInputFormat does not contain the file path.");
+  String filePath=parameters.getString(FILE_PARAMETER_KEY,null);
+  if (filePath != null) {
+    try {
+      this.filePath=new Path(filePath);
+    }
+ catch (    RuntimeException rex) {
+      throw new RuntimeException("Could not create a valid URI from the given file path name: " + rex.getMessage());
+    }
   }
-  try {
-    this.filePath=new Path(filePath);
+ else   if (this.filePath == null) {
+    throw new IllegalArgumentException("File path was not specified in input format, or configuration.");
   }
- catch (  RuntimeException rex) {
-    throw new RuntimeException("Could not create a valid URI from the given file path name: " + rex.getMessage());
+  int desiredSplits=parameters.getInteger(DESIRED_NUMBER_OF_SPLITS_PARAMETER_KEY,-1);
+  if (desiredSplits != -1) {
+    if (desiredSplits == 0 || desiredSplits < -1) {
+      this.numSplits=-1;
+      if (LOG.isWarnEnabled())       LOG.warn("Ignoring invalid parameter for number of splits: " + desiredSplits);
+    }
+ else {
+      this.numSplits=desiredSplits;
+    }
   }
-  this.numSplits=parameters.getInteger(DESIRED_NUMBER_OF_SPLITS_PARAMETER_KEY,-1);
-  if (this.numSplits == 0 || this.numSplits < -1) {
-    this.numSplits=-1;
-    if (LOG.isWarnEnabled())     LOG.warn("Ignoring invalid parameter for number of splits: " + this.numSplits);
+  long minSplitSize=parameters.getLong(MINIMAL_SPLIT_SIZE_PARAMETER_KEY,-1);
+  if (minSplitSize != -1) {
+    if (minSplitSize < 0) {
+      this.minSplitSize=0;
+      if (LOG.isWarnEnabled())       LOG.warn("Ignoring invalid parameter for minimal split size (requires a positive value): " + minSplitSize);
+    }
+ else {
+      this.minSplitSize=minSplitSize;
+    }
   }
-  this.minSplitSize=parameters.getLong(MINIMAL_SPLIT_SIZE_PARAMETER_KEY,1);
-  if (this.minSplitSize < 1) {
-    this.minSplitSize=1;
-    if (LOG.isWarnEnabled())     LOG.warn("Ignoring invalid parameter for minimal split size (requires a positive value): " + this.numSplits);
-  }
-  this.openTimeout=parameters.getLong(INPUT_STREAM_OPEN_TIMEOUT_KEY,DEFAULT_OPENING_TIMEOUT);
-  if (this.openTimeout < 0) {
-    this.openTimeout=DEFAULT_OPENING_TIMEOUT;
-    if (LOG.isWarnEnabled())     LOG.warn("Ignoring invalid parameter for stream opening timeout (requires a positive value or zero=infinite): " + this.openTimeout);
-  }
- else   if (this.openTimeout == 0) {
-    this.openTimeout=Long.MAX_VALUE;
+  long openTimeout=parameters.getLong(INPUT_STREAM_OPEN_TIMEOUT_KEY,-1);
+  if (openTimeout != -1) {
+    if (openTimeout < 0) {
+      this.openTimeout=DEFAULT_OPENING_TIMEOUT;
+      if (LOG.isWarnEnabled())       LOG.warn("Ignoring invalid parameter for stream opening timeout (requires a positive value or zero=infinite): " + openTimeout);
+    }
+ else     if (openTimeout == 0) {
+      this.openTimeout=Long.MAX_VALUE;
+    }
+ else {
+      this.openTimeout=openTimeout;
+    }
   }
 }

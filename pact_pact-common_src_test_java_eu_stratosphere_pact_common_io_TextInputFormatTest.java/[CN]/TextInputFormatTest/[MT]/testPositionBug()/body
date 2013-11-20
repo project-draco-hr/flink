@@ -1,26 +1,31 @@
 {
-  File tempFile=File.createTempFile("TextInputFormatTest",null);
-  tempFile.setWritable(true);
-  PrintStream ps=new PrintStream(tempFile);
-  ps.println("First line");
-  ps.println("Second line");
-  ps.close();
-  tempFile.deleteOnExit();
-  TextInputFormat inputFormat=new TextInputFormat();
-  Configuration parameters=new Configuration();
-  parameters.setString(FileInputFormat.FILE_PARAMETER_KEY,tempFile.toURI().toString());
-  inputFormat.configure(parameters);
-  FileInputSplit[] splits=inputFormat.createInputSplits(1);
-  assertTrue("expected at least one input split",splits.length >= 1);
-  inputFormat.open(splits[0]);
-  PactRecord r=new PactRecord();
-  assertTrue("Expecting first record here",inputFormat.nextRecord(r));
+  final String FIRST="First line";
+  final String SECOND="Second line";
   try {
+    File tempFile=File.createTempFile("TextInputFormatTest","tmp");
+    tempFile.deleteOnExit();
+    tempFile.setWritable(true);
+    PrintStream ps=new PrintStream(tempFile);
+    ps.println(FIRST);
+    ps.println(SECOND);
+    ps.close();
+    TextInputFormat inputFormat=new TextInputFormat();
+    inputFormat.setFilePath(tempFile.toURI().toString());
+    Configuration parameters=new Configuration();
+    inputFormat.configure(parameters);
+    FileInputSplit[] splits=inputFormat.createInputSplits(1);
+    assertTrue("expected at least one input split",splits.length >= 1);
+    inputFormat.open(splits[0]);
+    PactRecord r=new PactRecord();
+    assertTrue("Expecting first record here",inputFormat.nextRecord(r));
+    assertEquals(FIRST,r.getField(0,PactString.class).getValue());
     assertTrue("Expecting second record here",inputFormat.nextRecord(r));
+    assertEquals(SECOND,r.getField(0,PactString.class).getValue());
+    assertFalse("The input file is over",inputFormat.nextRecord(r));
   }
- catch (  IllegalArgumentException iae) {
-    iae.printStackTrace();
-    fail("TextInputFormat is unable to read the file");
+ catch (  Throwable t) {
+    System.err.println("test failed with exception: " + t.getMessage());
+    t.printStackTrace(System.err);
+    fail("Test erroneous");
   }
-  assertFalse("The input file is over",inputFormat.nextRecord(r));
 }

@@ -1,0 +1,45 @@
+{
+  boolean[] fieldIncluded=this.fieldIncluded;
+  int startPos=offset;
+  final int limit=offset + numBytes;
+  for (int field=0, output=0; field < fieldIncluded.length; field++) {
+    if (startPos >= limit) {
+      if (lenient) {
+        return false;
+      }
+ else {
+        throw new ParseException("Row too short: " + new String(bytes,offset,numBytes));
+      }
+    }
+    if (fieldIncluded[field]) {
+      FieldParser<Value> parser=this.fieldParsers[output];
+      Value val=valueHolders[output];
+      startPos=parser.parseField(bytes,startPos,limit,this.fieldDelim,val);
+      if (startPos < 0) {
+        if (lenient) {
+          return false;
+        }
+ else {
+          String lineAsString=new String(bytes,offset,numBytes);
+          throw new ParseException("Line could not be parsed: " + lineAsString);
+        }
+      }
+      output++;
+    }
+ else {
+      int skipCnt=1;
+      while (!fieldIncluded[field + skipCnt]) {
+        skipCnt++;
+      }
+      startPos=skipFields(bytes,startPos,limit,fieldDelim,skipCnt);
+      if (startPos >= 0) {
+        field+=(skipCnt - 1);
+      }
+ else {
+        String lineAsString=new String(bytes,offset,numBytes);
+        throw new ParseException("Line could not be parsed: " + lineAsString);
+      }
+    }
+  }
+  return true;
+}
