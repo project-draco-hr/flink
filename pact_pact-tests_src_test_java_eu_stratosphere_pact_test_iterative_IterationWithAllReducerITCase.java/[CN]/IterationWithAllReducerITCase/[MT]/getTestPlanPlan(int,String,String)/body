@@ -1,0 +1,14 @@
+{
+  FileDataSource initialInput=new FileDataSource(TextInputFormat.class,input,"input");
+  BulkIteration iteration=new BulkIteration("Loop");
+  iteration.setInput(initialInput);
+  iteration.setMaximumNumberOfIterations(2);
+  Assert.assertTrue(iteration.getMaximumNumberOfIterations() > 1);
+  ReduceContract sumReduce=ReduceContract.builder(new SumReducer()).input(iteration.getPartialSolution()).name("Compute sum (Reduce)").build();
+  iteration.setNextPartialSolution(sumReduce);
+  FileDataSink finalResult=new FileDataSink(RecordOutputFormat.class,output,iteration,"Output");
+  RecordOutputFormat.configureRecordFormat(finalResult).recordDelimiter('\n').fieldDelimiter(' ').field(PactString.class,0);
+  Plan plan=new Plan(finalResult,"Iteration with AllReducer (keyless Reducer)");
+  plan.setDefaultParallelism(numSubTasks);
+  return plan;
+}
