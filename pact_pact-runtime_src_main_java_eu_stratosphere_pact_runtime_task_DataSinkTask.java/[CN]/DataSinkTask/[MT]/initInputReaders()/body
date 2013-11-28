@@ -1,0 +1,33 @@
+{
+  MutableReader<?> inputReader;
+  int numGates=0;
+  final int groupSize=this.config.getGroupSize(0);
+  numGates+=groupSize;
+  if (groupSize == 1) {
+    inputReader=new MutableRecordReader<DeserializationDelegate<IT>>(this);
+  }
+ else   if (groupSize > 1) {
+    MutableRecordReader<Record>[] readers=new MutableRecordReader[groupSize];
+    for (int j=0; j < groupSize; ++j) {
+      readers[j]=new MutableRecordReader<Record>(this);
+    }
+    inputReader=new MutableUnionRecordReader<Record>(readers);
+  }
+ else {
+    throw new Exception("Illegal input group size in task configuration: " + groupSize);
+  }
+  final TypeSerializerFactory<IT> serializerFactory=this.config.getInputSerializer(0,this.userCodeClassLoader);
+  this.inputTypeSerializer=serializerFactory.getSerializer();
+  if (this.inputTypeSerializer.getClass() == PactRecordSerializer.class) {
+    MutableReader<PactRecord> reader=(MutableReader<PactRecord>)inputReader;
+    this.reader=(MutableObjectIterator<IT>)new PactRecordNepheleReaderIterator(reader);
+  }
+ else {
+    MutableReader<DeserializationDelegate<?>> reader=(MutableReader<DeserializationDelegate<?>>)inputReader;
+    @SuppressWarnings({"rawtypes"}) final MutableObjectIterator<?> iter=new NepheleReaderIterator(reader,this.inputTypeSerializer);
+    this.reader=(MutableObjectIterator<IT>)iter;
+  }
+  if (numGates != this.config.getNumInputs()) {
+    throw new Exception("Illegal configuration: Number of input gates and group sizes are not consistent.");
+  }
+}
