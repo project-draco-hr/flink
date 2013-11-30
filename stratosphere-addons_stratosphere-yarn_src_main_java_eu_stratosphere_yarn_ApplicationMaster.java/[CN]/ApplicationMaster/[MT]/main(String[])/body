@@ -1,0 +1,108 @@
+{
+  Configuration conf=Utils.initializeYarnConfiguration();
+  FileSystem fs=FileSystem.get(conf);
+  Map<String,String> envs=System.getenv();
+  final String currDir=envs.get(Environment.PWD.key());
+  final String ownHostname=envs.get(Environment.NM_HOST.key());
+  int appId=Integer.valueOf(envs.get(Client.ENV_APP_ID));
+  final String localDirs=envs.get(Environment.LOCAL_DIRS.key());
+  final String applicationMasterHost=envs.get(Environment.NM_HOST.key());
+  final String remoteStratosphereJarPath=envs.get(Client.STRATOSPHERE_JAR_PATH);
+  final int taskManagerCount=Integer.valueOf(envs.get(Client.ENV_TM_COUNT));
+  final int memoryPerTaskManager=Integer.valueOf(envs.get(Client.ENV_TM_MEMORY));
+  final int coresPerTaskManager=Integer.valueOf(envs.get(Client.ENV_TM_CORES));
+  final int heapLimit=(int)((float)memoryPerTaskManager * 0.7);
+  if (currDir == null)   throw new RuntimeException("Current directory unknown");
+  if (ownHostname == null)   throw new RuntimeException("Own hostname (" + Environment.NM_HOST + ") not set.");
+  LOG.info("Working directory " + currDir);
+  FileInputStream fis=new FileInputStream(currDir + "/stratosphere-conf.yaml");
+  BufferedReader br=new BufferedReader(new InputStreamReader(fis));
+  Writer output=new BufferedWriter(new FileWriter(currDir + "/stratosphere-conf-modified.yaml"));
+  String line;
+  while ((line=br.readLine()) != null) {
+    if (line.contains(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY)) {
+      output.append(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY + ": " + ownHostname+ "\n");
+    }
+ else     if (localDirs != null && line.contains(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY)) {
+      output.append(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY + ": " + localDirs+ "\n");
+    }
+ else {
+      output.append(line + "\n");
+    }
+  }
+  output.close();
+  br.close();
+  LOG.info("Wrote to: " + currDir + "/stratosphere-conf-modified.yaml");
+  File newConf=new File(currDir + "/stratosphere-conf-modified.yaml");
+  if (!newConf.exists()) {
+    LOG.warn("modified yaml does not exist!");
+  }
+  File cd=new File(".");
+  File[] candidates=cd.listFiles(new FilenameFilter(){
+    @Override public boolean accept(    final File dir,    final String name){
+      LOG.info("Files in this directory: " + name);
+      return name != null && name.endsWith(".yaml");
+    }
+  }
+);
+  JobManagerRunner jmr=new JobManagerRunner(currDir + "/stratosphere-conf-modified.yaml");
+  LOG.info("Starting JobManager");
+  jmr.start();
+  AMRMClient<ContainerRequest> rmClient=AMRMClient.createAMRMClient();
+  rmClient.init(conf);
+  rmClient.start();
+  NMClient nmClient=NMClient.createNMClient();
+  nmClient.init(conf);
+  nmClient.start();
+  LOG.info("registering ApplicationMaster");
+  rmClient.registerApplicationMaster(applicationMasterHost,0,"http://" + applicationMasterHost + ":"+ GlobalConfiguration.getString(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,"undefined"));
+  Priority priority=Records.newRecord(Priority.class);
+  priority.setPriority(0);
+  Resource capability=Records.newRecord(Resource.class);
+  capability.setMemory(memoryPerTaskManager);
+  capability.setVirtualCores(coresPerTaskManager);
+  for (int i=0; i < taskManagerCount; ++i) {
+    ContainerRequest containerAsk=new ContainerRequest(capability,null,null,priority);
+    LOG.info("Requesting TaskManager container " + i);
+    rmClient.addContainerRequest(containerAsk);
+  }
+  LocalResource stratosphereJar=Records.newRecord(LocalResource.class);
+  LocalResource stratosphereConf=Records.newRecord(LocalResource.class);
+  final Path remoteJarPath=new Path(remoteStratosphereJarPath);
+  Utils.registerLocalResource(fs,remoteJarPath,stratosphereJar);
+  Utils.setupLocalResource(conf,fs,appId,new Path("file://" + currDir + "/stratosphere-conf-modified.yaml"),stratosphereConf);
+  LOG.info("Prepared localresource for modified yaml: " + stratosphereConf);
+  int allocatedContainers=0;
+  while (allocatedContainers < taskManagerCount) {
+    AllocateResponse response=rmClient.allocate(0);
+    for (    Container container : response.getAllocatedContainers()) {
+      ++allocatedContainers;
+      ContainerLaunchContext ctx=Records.newRecord(ContainerLaunchContext.class);
+      String tmCommand="$JAVA_HOME/bin/java -Xmx" + heapLimit + "m "+ " eu.stratosphere.nephele.taskmanager.TaskManager -configDir . "+ " 1>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/stdout"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/stderr";
+      ctx.setCommands(Collections.singletonList(tmCommand));
+      LOG.info("Starting TM with command=" + tmCommand);
+      Map<String,LocalResource> localResources=new HashMap<String,LocalResource>(2);
+      localResources.put("stratosphere.jar",stratosphereJar);
+      localResources.put("stratosphere-conf.yaml",stratosphereConf);
+      ctx.setLocalResources(localResources);
+      Map<String,String> containerEnv=new HashMap<String,String>();
+      Utils.setupEnv(conf,containerEnv);
+      ctx.setEnvironment(containerEnv);
+      LOG.info("Launching container " + allocatedContainers);
+      nmClient.startContainer(container,ctx);
+    }
+    Thread.sleep(100);
+  }
+  int completedContainers=0;
+  while (completedContainers < taskManagerCount) {
+    AllocateResponse response=rmClient.allocate(completedContainers / taskManagerCount);
+    for (    ContainerStatus status : response.getCompletedContainersStatuses()) {
+      ++completedContainers;
+      System.out.println("Completed container " + completedContainers);
+    }
+    Thread.sleep(5000);
+  }
+  jmr.shutdown();
+  jmr.join(500);
+  rmClient.unregisterApplicationMaster(FinalApplicationStatus.SUCCEEDED,"","");
+}
