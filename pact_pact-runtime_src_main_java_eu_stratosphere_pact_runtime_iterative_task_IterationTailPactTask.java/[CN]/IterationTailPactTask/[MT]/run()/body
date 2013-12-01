@@ -1,26 +1,24 @@
 {
-  LongSumAggregator worksetElementsAggregator=null;
-  if (config.isWorksetIteration()) {
-    worksetElementsAggregator=(LongSumAggregator)getIterationAggregators().<PactLong>getAggregator(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME);
-    if (worksetElementsAggregator == null) {
-      throw new Exception("Error: Iteration tail in workset iteration did not find workset elements count aggregator.");
-    }
-  }
   while (this.running && !terminationRequested()) {
     if (log.isInfoEnabled()) {
       log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
     }
     super.run();
     checkForTerminationAndResetEndOfSuperstepState();
-    long elementsCollected=outputCollector.getElementsCollectedAndReset();
-    if (worksetElementsAggregator != null) {
-      worksetElementsAggregator.aggregate(elementsCollected);
+    if (isWorksetUpdate && isWorksetIteration) {
+      long numCollected=worksetUpdateOutputCollector.getElementsCollectedAndReset();
+      worksetAggregator.aggregate(numCollected);
     }
     if (log.isInfoEnabled()) {
       log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
     }
     if (!terminationRequested()) {
-      backChannel.notifyOfEndOfSuperstep();
+      if (isWorksetUpdate) {
+        worksetBackChannel.notifyOfEndOfSuperstep();
+      }
+ else       if (isSolutionSetUpdate) {
+        solutionSetUpdateBarrier.notifySolutionSetUpdate();
+      }
       incrementIterationCounter();
     }
   }

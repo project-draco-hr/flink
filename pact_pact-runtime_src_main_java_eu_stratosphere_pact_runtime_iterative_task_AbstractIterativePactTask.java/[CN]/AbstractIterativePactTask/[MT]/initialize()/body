@@ -9,13 +9,16 @@
     }
     resDriver.initialize();
   }
-  if (config.getUpdateSolutionSet()) {
-    if (config.getUpdateSolutionSetWithoutReprobe()) {
-      @SuppressWarnings("unchecked") MutableHashTable<OT,?> hashTable=(MutableHashTable<OT,?>)SolutionsetBroker.instance().get(brokerKey);
-      this.output=new UpdateSolutionsetOutputCollector<OT>(this.output,hashTable);
-    }
- else {
-      throw new UnsupportedOperationException("Runtime currently supports only fast updates withpout reprobing.");
+  isWorksetIteration=config.getIsWorksetIteration();
+  isWorksetUpdate=config.getIsWorksetUpdate();
+  isSolutionSetUpdate=config.getIsSolutionSetUpdate();
+  if (isWorksetUpdate) {
+    worksetBackChannel=BlockingBackChannelBroker.instance().getAndRemove(brokerKey());
+    if (isWorksetIteration) {
+      worksetAggregator=(LongSumAggregator)getIterationAggregators().<PactLong>getAggregator(WorksetEmptyConvergenceCriterion.AGGREGATOR_NAME);
+      if (worksetAggregator == null) {
+        throw new RuntimeException("Missing workset elements count aggregator.");
+      }
     }
   }
 }

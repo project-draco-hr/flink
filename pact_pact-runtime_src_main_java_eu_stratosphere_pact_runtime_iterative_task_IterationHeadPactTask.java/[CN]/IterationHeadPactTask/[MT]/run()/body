@@ -2,10 +2,11 @@
   final String brokerKey=brokerKey();
   final int workerIndex=getEnvironment().getIndexInSubtaskGroup();
   MutableHashTable<X,?> solutionSet=null;
+  boolean waitForSolutionSetUpdate=config.getWaitForSolutionSetUpdate();
   try {
     BlockingBackChannel backChannel=initBackChannel();
     SuperstepBarrier barrier=initSuperstepBarrier();
-    isWorksetIteration=config.isWorksetIteration();
+    SolutionSetUpdateBarrier solutionSetUpdateBarrier=null;
     feedbackDataInput=config.getIterationHeadPartialSolutionOrWorksetInputIndex();
     feedbackTypeSerializer=getInputSerializer(feedbackDataInput);
     excludeFromReset(feedbackDataInput);
@@ -16,8 +17,11 @@
       solutionSet=initHashTable();
       @SuppressWarnings("unchecked") MutableObjectIterator<X> solutionSetInput=(MutableObjectIterator<X>)createInputIterator(initialSolutionSetInput,inputReaders[initialSolutionSetInput],solutionTypeSerializer);
       readInitialSolutionSet(solutionSet,solutionSetInput);
-      Broker<MutableHashTable<?,?>> solutionsetBroker=SolutionsetBroker.instance();
-      solutionsetBroker.handIn(brokerKey(),solutionSet);
+      SolutionSetBroker.instance().handIn(brokerKey,solutionSet);
+      if (waitForSolutionSetUpdate) {
+        solutionSetUpdateBarrier=new SolutionSetUpdateBarrier();
+        SolutionSetUpdateBarrierBroker.instance().handIn(brokerKey,solutionSetUpdateBarrier);
+      }
     }
  else {
       initialSolutionSetInput=-1;
@@ -25,18 +29,24 @@
       solutionTypeSerializer=solSer;
     }
     aggregatorRegistry=new RuntimeAggregatorRegistry(config.getIterationAggregators());
-    IterationAggregatorBroker.instance().handIn(brokerKey(),aggregatorRegistry);
+    IterationAggregatorBroker.instance().handIn(brokerKey,aggregatorRegistry);
     DataInputView superstepResult=null;
     while (this.running && !terminationRequested()) {
       if (log.isInfoEnabled()) {
         log.info(formatLogString("starting iteration [" + currentIteration() + "]"));
       }
       barrier.setup();
+      if (waitForSolutionSetUpdate) {
+        solutionSetUpdateBarrier.setup();
+      }
       if (!inFirstIteration()) {
         feedBackSuperstepResult(superstepResult);
       }
       super.run();
       sendEndOfSuperstepToAllIterationOutputs();
+      if (waitForSolutionSetUpdate) {
+        solutionSetUpdateBarrier.waitForSolutionSetUpdate();
+      }
       superstepResult=backChannel.getReadEndAfterSuperstepEnded();
       if (log.isInfoEnabled()) {
         log.info(formatLogString("finishing iteration [" + currentIteration() + "]"));
@@ -73,7 +83,10 @@
     IterationAggregatorBroker.instance().remove(brokerKey);
     BlockingBackChannelBroker.instance().remove(brokerKey);
     if (isWorksetIteration) {
-      SolutionsetBroker.instance().remove(brokerKey);
+      SolutionSetBroker.instance().remove(brokerKey);
+      if (waitForSolutionSetUpdate) {
+        SolutionSetUpdateBarrierBroker.instance().remove(brokerKey);
+      }
     }
     if (solutionSet != null) {
       solutionSet.close();

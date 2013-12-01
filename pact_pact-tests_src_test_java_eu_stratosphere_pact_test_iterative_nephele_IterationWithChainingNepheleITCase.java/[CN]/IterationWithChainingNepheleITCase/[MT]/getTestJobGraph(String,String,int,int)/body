@@ -1,0 +1,81 @@
+{
+  final JobGraph jobGraph=new JobGraph("Iteration Tail with Chaining");
+  final TypeSerializerFactory<PactRecord> serializer=PactRecordSerializerFactory.get();
+  @SuppressWarnings("unchecked") final TypeComparatorFactory<PactRecord> comparator=new PactRecordComparatorFactory(new int[]{0},new Class[]{PactInteger.class});
+  final long MEM_PER_CONSUMER=10;
+  final int ITERATION_ID=1;
+  JobInputVertex input=JobGraphUtils.createInput(new PointInFormat(),inputPath,"Input",jobGraph,numSubTasks,numSubTasks);
+  TaskConfig inputConfig=new TaskConfig(input.getConfiguration());
+{
+    inputConfig.setOutputSerializer(serializer);
+    inputConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+  }
+  JobTaskVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"Iteration Head",jobGraph,numSubTasks,numSubTasks);
+  TaskConfig headConfig=new TaskConfig(head.getConfiguration());
+{
+    headConfig.setIterationId(ITERATION_ID);
+    headConfig.addInputToGroup(0);
+    headConfig.setInputSerializer(serializer,0);
+    headConfig.setInputLocalStrategy(0,LocalStrategy.NONE);
+    headConfig.setIterationHeadPartialSolutionOrWorksetInputIndex(0);
+    headConfig.setOutputSerializer(serializer);
+    headConfig.addOutputShipStrategy(ShipStrategyType.PARTITION_HASH);
+    headConfig.setOutputComparator(comparator,0);
+    TaskConfig headFinalOutConfig=new TaskConfig(new Configuration());
+    headFinalOutConfig.setOutputSerializer(serializer);
+    headFinalOutConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    headConfig.setIterationHeadFinalOutputConfig(headFinalOutConfig);
+    headConfig.setIterationHeadIndexOfSyncOutput(2);
+    headConfig.setDriver(MapDriver.class);
+    headConfig.setDriverStrategy(DriverStrategy.MAP);
+    headConfig.setStubWrapper(new UserCodeClassWrapper<DummyMapper>(DummyMapper.class));
+    headConfig.setBackChannelMemory(MEM_PER_CONSUMER * JobGraphUtils.MEGABYTE);
+  }
+  JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"Chained Iteration Tail",jobGraph,numSubTasks,numSubTasks);
+  TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
+{
+    tailConfig.setIterationId(ITERATION_ID);
+    tailConfig.setIsWorksetUpdate();
+    tailConfig.addInputToGroup(0);
+    tailConfig.setInputSerializer(serializer,0);
+    tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    tailConfig.setOutputSerializer(serializer);
+    tailConfig.setDriver(ReduceDriver.class);
+    tailConfig.setDriverStrategy(DriverStrategy.SORTED_GROUP);
+    tailConfig.setDriverComparator(comparator,0);
+    tailConfig.setStubWrapper(new UserCodeClassWrapper<DummyReducer>(DummyReducer.class));
+    TaskConfig chainedMapperConfig=new TaskConfig(new Configuration());
+    chainedMapperConfig.setDriverStrategy(DriverStrategy.MAP);
+    chainedMapperConfig.setStubWrapper(new UserCodeClassWrapper<IncrementCoordinatesMapper>(IncrementCoordinatesMapper.class));
+    chainedMapperConfig.setInputLocalStrategy(0,LocalStrategy.NONE);
+    chainedMapperConfig.setInputSerializer(serializer,0);
+    chainedMapperConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    chainedMapperConfig.setOutputSerializer(serializer);
+    tailConfig.addChainedTask(ChainedMapDriver.class,chainedMapperConfig,"Chained ID Mapper");
+  }
+  JobOutputVertex output=JobGraphUtils.createFileOutput(jobGraph,"Output",numSubTasks,numSubTasks);
+  TaskConfig outputConfig=new TaskConfig(output.getConfiguration());
+{
+    outputConfig.addInputToGroup(0);
+    outputConfig.setInputSerializer(serializer,0);
+    outputConfig.setStubWrapper(new UserCodeClassWrapper<PointOutFormat>(PointOutFormat.class));
+    outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,outputPath);
+  }
+  JobOutputVertex fakeTail=JobGraphUtils.createFakeOutput(jobGraph,"Fake Tail",numSubTasks,numSubTasks);
+  JobOutputVertex sync=JobGraphUtils.createSync(jobGraph,numSubTasks);
+  TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
+  syncConfig.setNumberOfIterations(maxIterations);
+  syncConfig.setIterationId(ITERATION_ID);
+  JobGraphUtils.connect(input,head,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(head,tail,ChannelType.INMEMORY,DistributionPattern.BIPARTITE);
+  tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,numSubTasks);
+  JobGraphUtils.connect(head,output,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(tail,fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+  input.setVertexToShareInstancesWith(head);
+  tail.setVertexToShareInstancesWith(head);
+  output.setVertexToShareInstancesWith(head);
+  sync.setVertexToShareInstancesWith(head);
+  fakeTail.setVertexToShareInstancesWith(tail);
+  return jobGraph;
+}
