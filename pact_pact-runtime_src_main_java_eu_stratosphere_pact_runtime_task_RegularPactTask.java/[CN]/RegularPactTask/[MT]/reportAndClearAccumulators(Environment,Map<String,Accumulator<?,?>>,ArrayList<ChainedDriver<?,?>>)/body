@@ -1,0 +1,23 @@
+{
+  for (  ChainedDriver<?,?> chainedTask : chainedTasks) {
+    Map<String,Accumulator<?,?>> chainedAccumulators=chainedTask.getStub().getRuntimeContext().getAllAccumulators();
+    System.out.println("MERGE IN (" + chainedTask.getTaskName() + "):");
+    System.out.println(AccumulatorHelper.getAccumulatorsFormated(chainedAccumulators));
+    AccumulatorHelper.mergeInto(accumulators,chainedAccumulators);
+  }
+  if (accumulators.size() == 0) {
+    return;
+  }
+synchronized (env.getAccumulatorProtocolProxy()) {
+    try {
+      env.getAccumulatorProtocolProxy().reportAccumulatorResult(new AccumulatorEvent(env.getJobID(),accumulators,true));
+    }
+ catch (    IOException e) {
+      LOG.error(StringUtils.stringifyException(e));
+    }
+  }
+  AccumulatorHelper.resetAndClearAccumulators(accumulators);
+  for (  ChainedDriver<?,?> chainedTask : chainedTasks) {
+    AccumulatorHelper.resetAndClearAccumulators(chainedTask.getStub().getRuntimeContext().getAllAccumulators());
+  }
+}
