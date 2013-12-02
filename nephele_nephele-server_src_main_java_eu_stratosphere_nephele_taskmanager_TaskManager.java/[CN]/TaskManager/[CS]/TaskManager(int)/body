@@ -2,37 +2,21 @@
   final String address=GlobalConfiguration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
   InetSocketAddress jobManagerAddress=null;
   if (address == null) {
-    LOG.info("Using discovery service to locate job manager");
-    try {
-      jobManagerAddress=DiscoveryService.getJobManagerAddress();
-    }
- catch (    DiscoveryException e) {
-      throw new Exception("Failed to locate job manager via discovery: " + e.getMessage(),e);
-    }
+    throw new Exception("Job manager address not configured");
   }
- else {
-    LOG.info("Reading location of job manager from configuration");
-    final int port=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
-    try {
-      final InetAddress tmpAddress=InetAddress.getByName(address);
-      jobManagerAddress=new InetSocketAddress(tmpAddress,port);
-    }
- catch (    UnknownHostException e) {
-      throw new Exception("Failed to locate job manager based on configuration: " + e.getMessage(),e);
-    }
+  LOG.info("Reading location of job manager from configuration");
+  final int port=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
+  try {
+    final InetAddress tmpAddress=InetAddress.getByName(address);
+    jobManagerAddress=new InetSocketAddress(tmpAddress,port);
   }
-  LOG.info("Determined address of job manager to be " + jobManagerAddress);
+ catch (  UnknownHostException e) {
+    throw new Exception("Failed to locate job manager based on configuration: " + e.getMessage(),e);
+  }
+  LOG.info("Job manager address: " + jobManagerAddress);
   final int ipcPort=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_IPC_PORT);
   final int dataPort=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_DATA_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_DATA_PORT);
   InetAddress taskManagerAddress=null;
-  try {
-    taskManagerAddress=DiscoveryService.getTaskManagerAddress(jobManagerAddress.getAddress());
-  }
- catch (  DiscoveryException e) {
-    throw new Exception("Failed to initialize discovery service. " + e.getMessage(),e);
-  }
-  this.localInstanceConnectionInfo=new InstanceConnectionInfo(taskManagerAddress,ipcPort,dataPort);
-  LOG.info("Announcing connection information " + this.localInstanceConnectionInfo + " to job manager");
   JobManagerProtocol jobManager=null;
   try {
     jobManager=RPC.getProxy(JobManagerProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
@@ -42,6 +26,14 @@
     throw new Exception("Failed to initialize connection to JobManager: " + e.getMessage(),e);
   }
   this.jobManager=jobManager;
+  try {
+    taskManagerAddress=getTaskManagerAddress(jobManagerAddress);
+  }
+ catch (  IOException ioe) {
+    throw new RuntimeException("The TaskManager failed to determine its own network address",ioe);
+  }
+  this.localInstanceConnectionInfo=new InstanceConnectionInfo(taskManagerAddress,ipcPort,dataPort);
+  LOG.info("Announcing connection information " + this.localInstanceConnectionInfo + " to job manager");
   InputSplitProviderProtocol globalInputSplitProvider=null;
   try {
     globalInputSplitProvider=RPC.getProxy(InputSplitProviderProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
