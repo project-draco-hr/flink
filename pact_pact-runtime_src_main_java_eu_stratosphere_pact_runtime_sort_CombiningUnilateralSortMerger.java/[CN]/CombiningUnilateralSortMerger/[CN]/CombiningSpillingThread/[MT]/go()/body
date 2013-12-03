@@ -34,14 +34,16 @@
     if (LOG.isDebugEnabled())     LOG.debug("Releasing unused sort-buffer memory.");
     disposeSortBuffers(true);
     MutableObjectIterator<E> resIter=iterators.isEmpty() ? EmptyMutableObjectIterator.<E>get() : iterators.size() == 1 ? iterators.get(0) : new MergeIterator<E>(iterators,this.serializer,this.comparator);
-    if (CombiningUnilateralSortMerger.this.combineLastMerge) {
-      KeyGroupedIterator<E> iter=new KeyGroupedIterator<E>(resIter,this.serializer,this.comparator2);
-      setResultIterator(new CombiningIterator<E>(CombiningUnilateralSortMerger.this.combineStub,iter,this.serializer));
-    }
- else {
-      setResultIterator(resIter);
-    }
+    setResultIterator(resIter);
     return;
+  }
+  final GenericReducer<E,?> combineStub=CombiningUnilateralSortMerger.this.combineStub;
+  try {
+    Configuration conf=CombiningUnilateralSortMerger.this.udfConfig;
+    combineStub.open(conf == null ? new Configuration() : conf);
+  }
+ catch (  Throwable t) {
+    throw new IOException("The user-defined combiner failed in its 'open()' method.",t);
   }
   final Channel.Enumerator enumerator=this.ioManager.createChannelEnumerator();
   List<ChannelWithBlockCount> channelIDs=new ArrayList<ChannelWithBlockCount>();
@@ -72,7 +74,6 @@
     final InMemorySorter<E> buffer=element.buffer;
     final CombineValueIterator<E> iter=new CombineValueIterator<E>(buffer,this.serializer.createInstance());
     final WriterCollector<E> collector=new WriterCollector<E>(output,this.serializer);
-    final GenericReducer<E,?> combineStub=CombiningUnilateralSortMerger.this.combineStub;
     int i=0;
     int stop=buffer.size() - 1;
     try {
@@ -109,6 +110,14 @@
     LOG.debug("Releasing sort-buffer memory.");
   }
   disposeSortBuffers(false);
+  if (LOG.isDebugEnabled())   LOG.debug("Closing combiner user code.");
+  try {
+    combineStub.close();
+  }
+ catch (  Throwable t) {
+    throw new IOException("The user-defined combiner failed in its 'close()' method.",t);
+  }
+  if (LOG.isDebugEnabled())   LOG.debug("User code closed.");
   while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
     channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
   }
@@ -122,13 +131,7 @@
     List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
     getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
     final MergeIterator<E> mergeIterator=getMergingIterator(channelIDs,readBuffers,new ArrayList<BlockChannelAccess<?,?>>(channelIDs.size()));
-    if (CombiningUnilateralSortMerger.this.combineLastMerge) {
-      KeyGroupedIterator<E> iter=new KeyGroupedIterator<E>(mergeIterator,this.serializer,this.comparator2);
-      setResultIterator(new CombiningIterator<E>(CombiningUnilateralSortMerger.this.combineStub,iter,this.serializer));
-    }
- else {
-      setResultIterator(mergeIterator);
-    }
+    setResultIterator(mergeIterator);
   }
   if (LOG.isDebugEnabled())   LOG.debug("Spilling and merging thread done.");
 }
