@@ -1,0 +1,74 @@
+{
+  try {
+    wrt.write("[");
+    ManagementGraph jobManagementGraph=jobmanager.getManagementGraph(jobEvent.getJobID());
+    wrt.write("{");
+    wrt.write("\"jobid\": \"" + jobEvent.getJobID() + "\",");
+    wrt.write("\"jobname\": \"" + jobEvent.getJobName() + "\",");
+    wrt.write("\"status\": \"" + jobEvent.getJobStatus() + "\",");
+    wrt.write("\"SCHEDULED\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.SCHEDULED) + ",");
+    wrt.write("\"RUNNING\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.RUNNING) + ",");
+    wrt.write("\"FINISHED\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.FINISHED) + ",");
+    wrt.write("\"FAILED\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.FAILED) + ",");
+    wrt.write("\"CANCELED\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.CANCELED) + ",");
+    wrt.write("\"CREATED\": " + jobmanager.getArchive().getJobTime(jobEvent.getJobID(),JobStatus.CREATED) + ",");
+    wrt.write("\"groupvertices\": [");
+    boolean first=true;
+    for (    ManagementGroupVertex groupVertex : jobManagementGraph.getGroupVerticesInTopologicalOrder()) {
+      if (first) {
+        first=false;
+      }
+ else {
+        wrt.write(",");
+      }
+      wrt.write(groupVertex.toJson());
+    }
+    wrt.write("],");
+    wrt.write("\"groupverticetimes\": {");
+    first=true;
+    for (    ManagementGroupVertex groupVertex : jobManagementGraph.getGroupVerticesInTopologicalOrder()) {
+      if (first) {
+        first=false;
+      }
+ else {
+        wrt.write(",");
+      }
+      long started=Long.MAX_VALUE;
+      long ended=0;
+      for (int j=0; j < groupVertex.getNumberOfGroupMembers(); j++) {
+        ManagementVertex vertex=groupVertex.getGroupMember(j);
+        long running=jobmanager.getArchive().getVertexTime(jobEvent.getJobID(),vertex.getID(),ExecutionState.RUNNING);
+        if (running != 0 && running < started) {
+          started=running;
+        }
+        long finished=jobmanager.getArchive().getVertexTime(jobEvent.getJobID(),vertex.getID(),ExecutionState.FINISHED);
+        long canceled=jobmanager.getArchive().getVertexTime(jobEvent.getJobID(),vertex.getID(),ExecutionState.CANCELED);
+        long failed=jobmanager.getArchive().getVertexTime(jobEvent.getJobID(),vertex.getID(),ExecutionState.FAILED);
+        if (finished != 0 && finished > ended) {
+          ended=finished;
+        }
+        if (canceled != 0 && canceled > ended) {
+          ended=canceled;
+        }
+        if (failed != 0 && failed > ended) {
+          ended=failed;
+        }
+      }
+      wrt.write("\"" + groupVertex.getID() + "\": {");
+      wrt.write("\"groupvertexid\": \"" + groupVertex.getID() + "\",");
+      wrt.write("\"groupvertexname\": \"" + groupVertex + "\",");
+      wrt.write("\"STARTED\": " + started + ",");
+      wrt.write("\"ENDED\": " + ended);
+      wrt.write("}");
+    }
+    wrt.write("}");
+    wrt.write("}");
+    wrt.write("]");
+  }
+ catch (  EofException eof) {
+    LOG.info("Info server for jobmanager: Connection closed by client, EofException");
+  }
+catch (  IOException ioe) {
+    LOG.info("Info server for jobmanager: Connection closed by client, IOException");
+  }
+}
