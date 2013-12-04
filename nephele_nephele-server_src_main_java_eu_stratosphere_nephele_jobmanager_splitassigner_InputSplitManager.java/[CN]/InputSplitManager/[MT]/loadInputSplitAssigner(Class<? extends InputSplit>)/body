@@ -1,18 +1,21 @@
 {
-  final String typeClassName=inputSplitType.getSimpleName();
-  final String assignerKey=INPUT_SPLIT_CONFIG_KEY_PREFIX + typeClassName;
-  LOG.info("Trying to load input split assigner for type " + typeClassName);
+  final String className=inputSplitType.getName();
+  final String assignerKey=INPUT_SPLIT_CONFIG_KEY_PREFIX + className;
+  LOG.info("Trying to load input split assigner for type " + className);
   String assignerClassName=GlobalConfiguration.getString(assignerKey,null);
   if (assignerClassName == null) {
-    if (FileInputSplit.class.getSimpleName().equals(typeClassName)) {
-      assignerClassName=FileInputSplitAssigner.class.getName();
+    if (FileInputSplit.class == inputSplitType) {
+      return new FileInputSplitAssigner();
+    }
+ else     if (GenericInputSplit.class == inputSplitType) {
+      return new DefaultInputSplitAssigner();
     }
  else {
       return null;
     }
   }
   try {
-    @SuppressWarnings("unchecked") final Class<? extends InputSplitAssigner> assignerClass=(Class<? extends InputSplitAssigner>)Class.forName(assignerClassName);
+    final Class<? extends InputSplitAssigner> assignerClass=Class.forName(assignerClassName).asSubclass(InputSplitAssigner.class);
     return assignerClass.newInstance();
   }
  catch (  Exception e) {
