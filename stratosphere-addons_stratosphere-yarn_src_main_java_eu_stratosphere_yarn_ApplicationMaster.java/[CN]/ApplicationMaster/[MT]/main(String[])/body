@@ -73,6 +73,7 @@
   Utils.setupLocalResource(conf,fs,appId,new Path("file://" + currDir + "/stratosphere-conf-modified.yaml"),stratosphereConf);
   LOG.info("Prepared localresource for modified yaml: " + stratosphereConf);
   int allocatedContainers=0;
+  int completedContainers=0;
   while (allocatedContainers < taskManagerCount) {
     AllocateResponse response=rmClient.allocate(0);
     for (    Container container : response.getAllocatedContainers()) {
@@ -91,14 +92,17 @@
       LOG.info("Launching container " + allocatedContainers);
       nmClient.startContainer(container,ctx);
     }
+    for (    ContainerStatus status : response.getCompletedContainersStatuses()) {
+      ++completedContainers;
+      LOG.info("Completed container " + status.getContainerId() + ". Total Completed:"+ completedContainers);
+    }
     Thread.sleep(100);
   }
-  int completedContainers=0;
   while (completedContainers < taskManagerCount) {
     AllocateResponse response=rmClient.allocate(completedContainers / taskManagerCount);
     for (    ContainerStatus status : response.getCompletedContainersStatuses()) {
       ++completedContainers;
-      System.out.println("Completed container " + completedContainers);
+      LOG.info("Completed container " + status.getContainerId() + ". Total Completed:"+ completedContainers);
     }
     Thread.sleep(5000);
   }
