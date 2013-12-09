@@ -1,0 +1,24 @@
+{
+  FileDataSource solutionSetInput=new FileDataSource(new DummyInputFormat(),IN_FILE,"Solution Set");
+  FileDataSource worksetInput=new FileDataSource(new DummyInputFormat(),IN_FILE,"Workset");
+  FileDataSource invariantInput=new FileDataSource(new DummyInputFormat(),IN_FILE,"Invariant Input");
+  WorksetIteration iteration=new WorksetIteration(0,ITERATION_NAME);
+  iteration.setInitialSolutionSet(solutionSetInput);
+  iteration.setInitialWorkset(worksetInput);
+  iteration.setMaximumNumberOfIterations(100);
+  MatchContract joinWithInvariant=MatchContract.builder(new DummyMatchStub(),PactLong.class,0,0).input1(iteration.getWorkset()).input2(invariantInput).name(JOIN_WITH_INVARIANT_NAME).build();
+  MatchContract joinWithSolutionSet=MatchContract.builder(joinPreservesSolutionSet ? new DummyMatchStub() : new DummyNonPreservingMatchStub(),PactLong.class,0,0).input1(iteration.getSolutionSet()).input2(joinWithInvariant).name(JOIN_WITH_SOLUTION_SET).build();
+  ReduceContract nextWorkset=ReduceContract.builder(new IdentityReduce(),PactLong.class,0).input(joinWithSolutionSet).name(NEXT_WORKSET_REDUCER_NAME).build();
+  if (mapBeforeSolutionDelta) {
+    MapContract mapper=MapContract.builder(new IdentityMap()).input(joinWithSolutionSet).name(SOLUTION_DELTA_MAPPER_NAME).build();
+    iteration.setSolutionSetDelta(mapper);
+  }
+ else {
+    iteration.setSolutionSetDelta(joinWithSolutionSet);
+  }
+  iteration.setNextWorkset(nextWorkset);
+  FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,iteration,"Sink");
+  Plan plan=new Plan(sink);
+  plan.setDefaultParallelism(DEFAULT_PARALLELISM);
+  return plan;
+}

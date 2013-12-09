@@ -33,12 +33,21 @@
     iter.getSolutionSetDelta().accept(recursiveCreator);
     final WorksetNode worksetNode=(WorksetNode)recursiveCreator.con2node.get(iter.getWorkset());
     if (worksetNode == null) {
-      throw new CompilerException("The solution set delta does not depend on the workset.");
+      throw new CompilerException("In the given plan, the solution set delta does not depend on the workset. This is a prerequisite in workset iterations.");
     }
     iter.getNextWorkset().accept(recursiveCreator);
     final SolutionSetNode solutionSetNode=(SolutionSetNode)recursiveCreator.con2node.get(iter.getSolutionSet());
     final OptimizerNode nextWorksetNode=recursiveCreator.con2node.get(iter.getNextWorkset());
-    final OptimizerNode solutionSetDeltaNode=recursiveCreator.con2node.get(iter.getSolutionSetDelta());
+    final UnaryOperatorNode solutionSetDeltaNode;
+{
+      OptimizerNode initialDeltaNode=recursiveCreator.con2node.get(iter.getSolutionSetDelta());
+      solutionSetDeltaNode=new UnaryOperatorNode("Solution-Set Delta",new SolutionSetDeltaOperator(iterNode.getSolutionSetKeyFields()));
+      PactConnection conn=new PactConnection(initialDeltaNode,solutionSetDeltaNode,-1);
+      solutionSetDeltaNode.setIncomingConnection(conn);
+      initialDeltaNode.addOutgoingConnection(conn);
+      solutionSetDeltaNode.setDegreeOfParallelism(iterNode.getDegreeOfParallelism());
+      solutionSetDeltaNode.setSubtasksPerInstance(iterNode.getSubtasksPerInstance());
+    }
     if (solutionSetNode == null || solutionSetNode.getOutgoingConnections() == null || solutionSetNode.getOutgoingConnections().isEmpty()) {
       throw new CompilerException("Error: The step function does not reference the solution set.");
     }
@@ -48,9 +57,6 @@
       }
  else {
         OptimizerNode successor=solutionSetNode.getOutgoingConnections().get(0).getTarget();
-        if (successor != solutionSetDeltaNode) {
-          throw new CompilerException("Error: The solution set delta must currently be the" + "	same node that joins with the solution set (this will change later).");
-        }
         if (successor.getClass() == MatchNode.class) {
           MatchNode mn=(MatchNode)successor;
           if (mn.getFirstPredecessorNode() == solutionSetNode) {
