@@ -1,10 +1,22 @@
 {
-  this.solutionSetDelta=solutionSetDelta;
+  if (solutionSetDelta instanceof TwoInputNode) {
+    TwoInputNode solutionDeltaTwoInput=(TwoInputNode)solutionSetDelta;
+    if (solutionDeltaTwoInput.getFirstPredecessorNode() == this.solutionSetNode || solutionDeltaTwoInput.getSecondPredecessorNode() == this.solutionSetNode) {
+      this.solutionDeltaImmediatelyAfterSolutionJoin=true;
+    }
+  }
+  UnaryOperatorNode solutionSetDeltaUpdateAux=new UnaryOperatorNode("Solution-Set Delta",getSolutionSetKeyFields(),new SolutionSetDeltaOperator(getSolutionSetKeyFields()));
+  PactConnection conn=new PactConnection(solutionSetDelta,solutionSetDeltaUpdateAux,-1);
+  solutionSetDeltaUpdateAux.setIncomingConnection(conn);
+  solutionSetDelta.addOutgoingConnection(conn);
+  solutionSetDeltaUpdateAux.setDegreeOfParallelism(getDegreeOfParallelism());
+  solutionSetDeltaUpdateAux.setSubtasksPerInstance(getSubtasksPerInstance());
+  this.solutionSetDelta=solutionSetDeltaUpdateAux;
   this.nextWorkset=nextWorkset;
   this.singleRoot=new SingleRootJoiner();
-  this.solutionSetDeltaRootConnection=new PactConnection(solutionSetDelta,this.singleRoot,-1);
+  this.solutionSetDeltaRootConnection=new PactConnection(solutionSetDeltaUpdateAux,this.singleRoot,-1);
   this.nextWorksetRootConnection=new PactConnection(nextWorkset,this.singleRoot,-1);
   this.singleRoot.setInputs(this.solutionSetDeltaRootConnection,this.nextWorksetRootConnection);
-  solutionSetDelta.addOutgoingConnection(this.solutionSetDeltaRootConnection);
+  solutionSetDeltaUpdateAux.addOutgoingConnection(this.solutionSetDeltaRootConnection);
   nextWorkset.addOutgoingConnection(this.nextWorksetRootConnection);
 }

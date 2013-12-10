@@ -17,8 +17,8 @@
   if (worksetCandidates.isEmpty()) {
     return;
   }
-  for (Iterator<PlanNode> planDeleter=solutionSetDeltaCandidates.iterator(); planDeleter.hasNext(); ) {
-    PlanNode candidate=planDeleter.next();
+  for (Iterator<PlanNode> deltaPlans=solutionSetDeltaCandidates.iterator(); deltaPlans.hasNext(); ) {
+    SingleInputPlanNode candidate=(SingleInputPlanNode)deltaPlans.next();
     GlobalProperties gp=candidate.getGlobalProperties();
     if (gp.getPartitioning() != PartitioningProperty.HASH_PARTITIONED || gp.getPartitioningFields() == null || !gp.getPartitioningFields().equals(this.solutionSetKeyFields)) {
       throw new CompilerException("Bug: The solution set delta is not partitioned.");
@@ -32,7 +32,21 @@
   for (  PlanNode solutionSetCandidate : solutionSetDeltaCandidates) {
     for (    PlanNode worksetCandidate : worksetCandidates) {
       if (this.singleRoot.areBranchCompatible(solutionSetCandidate,worksetCandidate)) {
+        SingleInputPlanNode siSolutionDeltaCandidate=(SingleInputPlanNode)solutionSetCandidate;
+        boolean immediateDeltaUpdate;
+        if (siSolutionDeltaCandidate.getInput().getShipStrategy() == ShipStrategyType.FORWARD && this.solutionDeltaImmediatelyAfterSolutionJoin) {
+          if (siSolutionDeltaCandidate.getDriverStrategy() != DriverStrategy.UNARY_NO_OP || siSolutionDeltaCandidate.getInput().getLocalStrategy() != LocalStrategy.NONE) {
+            throw new CompilerException("Invalid Solution set delta node.");
+          }
+          solutionSetCandidate=siSolutionDeltaCandidate.getInput().getSource();
+          immediateDeltaUpdate=true;
+        }
+ else {
+          siSolutionDeltaCandidate.getInput().setTempMode(TempMode.PIPELINE_BREAKER);
+          immediateDeltaUpdate=false;
+        }
         WorksetIterationPlanNode wsNode=new WorksetIterationPlanNode(this,solutionSetIn,worksetIn,sspn,wspn,worksetCandidate,solutionSetCandidate);
+        wsNode.setImmediateSolutionSetUpdate(immediateDeltaUpdate);
         wsNode.initProperties(gp,lp);
         target.add(wsNode);
       }

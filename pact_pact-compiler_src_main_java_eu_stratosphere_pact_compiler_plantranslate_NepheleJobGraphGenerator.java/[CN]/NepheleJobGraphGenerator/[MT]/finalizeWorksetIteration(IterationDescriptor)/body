@@ -40,55 +40,82 @@
   }
 {
     final PlanNode nextWorksetNode=iterNode.getNextWorkSetPlanNode();
-    final TaskConfig tailConfig;
-    JobTaskVertex nextWorksetVertex=(JobTaskVertex)this.vertices.get(nextWorksetNode);
-    if (nextWorksetVertex == null) {
-      final TaskInChain taskInChain=this.chainedTasks.get(nextWorksetNode);
-      if (taskInChain == null) {
-        throw new CompilerException("Bug: Tail of step function not found as vertex or chained task.");
-      }
-      nextWorksetVertex=(JobTaskVertex)taskInChain.getContainingVertex();
-      tailConfig=taskInChain.getTaskConfig();
-    }
- else {
-      tailConfig=new TaskConfig(nextWorksetVertex.getConfiguration());
-    }
-    nextWorksetVertex.setTaskClass(IterationTailPactTask.class);
-    tailConfig.setOutputSerializer(iterNode.getWorksetSerializer());
-    tailConfig.setIsWorksetIteration();
-    tailConfig.setIsWorksetUpdate();
-    tailConfig.setIsSolutionSetUpdate();
-    JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
-    fakeTail.setOutputClass(FakeOutputTask.class);
-    fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
-    fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
-    this.auxVertices.add(fakeTail);
-    try {
-      nextWorksetVertex.connectTo(fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
-    }
- catch (    JobGraphDefinitionException e) {
-      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
-    }
-    tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-    tailConfig.setIsWorksetIteration();
-  }
-{
     final PlanNode solutionDeltaNode=iterNode.getSolutionSetDeltaPlanNode();
-    final TaskConfig solutionDeltaConfig;
-    JobTaskVertex solutionDeltaVertex=(JobTaskVertex)this.vertices.get(solutionDeltaNode);
-    if (solutionDeltaVertex == null) {
-      final TaskInChain taskInChain=this.chainedTasks.get(solutionDeltaNode);
-      if (taskInChain == null) {
-        throw new CompilerException("Bug: Solution Set Delta not found as vertex or chained task.");
+    final boolean hasWorksetTail=nextWorksetNode.getOutgoingChannels().isEmpty();
+    final boolean hasSolutionSetTail=(!iterNode.isImmediateSolutionSetUpdate()) || (!hasWorksetTail);
+{
+      final TaskConfig worksetTailConfig;
+      JobTaskVertex nextWorksetVertex=(JobTaskVertex)this.vertices.get(nextWorksetNode);
+      if (nextWorksetVertex == null) {
+        TaskInChain taskInChain=this.chainedTasks.get(nextWorksetNode);
+        if (taskInChain == null) {
+          throw new CompilerException("Bug: Next workset node not found as vertex or chained task.");
+        }
+        nextWorksetVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+        worksetTailConfig=taskInChain.getTaskConfig();
       }
-      solutionDeltaVertex=(JobTaskVertex)taskInChain.getContainingVertex();
-      solutionDeltaConfig=taskInChain.getTaskConfig();
-    }
  else {
-      solutionDeltaConfig=new TaskConfig(solutionDeltaVertex.getConfiguration());
+        worksetTailConfig=new TaskConfig(nextWorksetVertex.getConfiguration());
+      }
+      worksetTailConfig.setIsWorksetIteration();
+      worksetTailConfig.setIsWorksetUpdate();
+      if (hasWorksetTail) {
+        nextWorksetVertex.setTaskClass(IterationTailPactTask.class);
+        worksetTailConfig.setOutputSerializer(iterNode.getWorksetSerializer());
+        worksetTailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+        JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
+        fakeTail.setOutputClass(FakeOutputTask.class);
+        fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+        fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
+        this.auxVertices.add(fakeTail);
+        try {
+          nextWorksetVertex.connectTo(fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+        }
+ catch (        JobGraphDefinitionException e) {
+          throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
+        }
+      }
     }
-    solutionDeltaConfig.setIsSolutionSetUpdate();
-    solutionDeltaConfig.setIsSolutionSetUpdateWithoutReprobe();
+{
+      final TaskConfig solutionDeltaConfig;
+      JobTaskVertex solutionDeltaVertex=(JobTaskVertex)this.vertices.get(solutionDeltaNode);
+      if (solutionDeltaVertex == null) {
+        TaskInChain taskInChain=this.chainedTasks.get(solutionDeltaNode);
+        if (taskInChain == null) {
+          throw new CompilerException("Bug: Solution Set Delta not found as vertex or chained task.");
+        }
+        solutionDeltaVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+        solutionDeltaConfig=taskInChain.getTaskConfig();
+      }
+ else {
+        solutionDeltaConfig=new TaskConfig(solutionDeltaVertex.getConfiguration());
+      }
+      solutionDeltaConfig.setIsWorksetIteration();
+      solutionDeltaConfig.setIsSolutionSetUpdate();
+      if (hasSolutionSetTail) {
+        solutionDeltaVertex.setTaskClass(IterationTailPactTask.class);
+        solutionDeltaConfig.setOutputSerializer(iterNode.getSolutionSetSerializer());
+        solutionDeltaConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+        JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
+        fakeTail.setOutputClass(FakeOutputTask.class);
+        fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+        fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
+        this.auxVertices.add(fakeTail);
+        try {
+          solutionDeltaVertex.connectTo(fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+        }
+ catch (        JobGraphDefinitionException e) {
+          throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
+        }
+        headConfig.setWaitForSolutionSetUpdate();
+      }
+ else {
+        if (!iterNode.isImmediateSolutionSetUpdate()) {
+          throw new CompilerException("A solution set update without dedicated tail is not set to perform immediate updates.");
+        }
+        solutionDeltaConfig.setIsSolutionSetUpdateWithoutReprobe();
+      }
+    }
   }
   AggregatorRegistry aggs=iterNode.getIterationNode().getIterationContract().getAggregators();
   Collection<AggregatorWithName<?>> allAggregators=aggs.getAllRegisteredAggregators();

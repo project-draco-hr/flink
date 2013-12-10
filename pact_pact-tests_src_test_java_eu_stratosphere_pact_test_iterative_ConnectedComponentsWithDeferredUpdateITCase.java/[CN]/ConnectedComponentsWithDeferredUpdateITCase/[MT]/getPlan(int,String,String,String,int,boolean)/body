@@ -1,0 +1,24 @@
+{
+  FileDataSource initialVertices=new FileDataSource(new DuplicateLongInputFormat(),verticesInput,"Vertices");
+  WorksetIteration iteration=new WorksetIteration(0,"Connected Components Iteration");
+  iteration.setInitialSolutionSet(initialVertices);
+  iteration.setInitialWorkset(initialVertices);
+  iteration.setMaximumNumberOfIterations(maxIterations);
+  FileDataSource edges=new FileDataSource(new LongLongInputFormat(),edgeInput,"Edges");
+  MatchContract joinWithNeighbors=MatchContract.builder(new NeighborWithComponentIDJoin(),PactLong.class,0,0).input1(iteration.getWorkset()).input2(edges).name("Join Candidate Id With Neighbor").build();
+  ReduceContract minCandidateId=ReduceContract.builder(new MinimumComponentIDReduce(),PactLong.class,0).input(joinWithNeighbors).name("Find Minimum Candidate Id").build();
+  MatchContract updateComponentId=MatchContract.builder(new UpdateComponentIdMatchNonPreserving(),PactLong.class,0,0).input1(minCandidateId).input2(iteration.getSolutionSet()).name("Update Component Id").build();
+  if (extraMap) {
+    MapContract mapper=MapContract.builder(IdentityMap.class).input(updateComponentId).name("idmap").build();
+    iteration.setSolutionSetDelta(mapper);
+  }
+ else {
+    iteration.setSolutionSetDelta(updateComponentId);
+  }
+  iteration.setNextWorkset(updateComponentId);
+  FileDataSink result=new FileDataSink(new RecordOutputFormat(),output,iteration,"Result");
+  RecordOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter(' ').field(PactLong.class,0).field(PactLong.class,1);
+  Plan plan=new Plan(result,"Workset Connected Components");
+  plan.setDefaultParallelism(numSubTasks);
+  return plan;
+}
