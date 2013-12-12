@@ -1,6 +1,7 @@
 {
-  @SuppressWarnings("unchecked") final PactRecordComparator multiComp=new PactRecordComparator(new int[]{0,1,3},new Class[]{PactInteger.class,PactString.class,PactDouble.class});
-  final ChannelSelector<PactRecord> oe1=new PactRecordOutputEmitter(ShipStrategyType.PARTITION_HASH,multiComp);
+  @SuppressWarnings("unchecked") final TypeComparator<PactRecord> multiComp=new PactRecordComparatorFactory(new int[]{0,1,3},new Class[]{PactInteger.class,PactString.class,PactDouble.class}).createComparator();
+  final ChannelSelector<SerializationDelegate<PactRecord>> oe1=new OutputEmitter<PactRecord>(ShipStrategyType.PARTITION_HASH,multiComp);
+  final SerializationDelegate<PactRecord> delegate=new SerializationDelegate<PactRecord>(new PactRecordSerializerFactory().getSerializer());
   int numChannels=100;
   int numRecords=5000;
   int[] hit=new int[numChannels];
@@ -9,7 +10,8 @@
     rec.setField(0,new PactInteger(i));
     rec.setField(1,new PactString("AB" + i + "CD"+ i));
     rec.setField(3,new PactDouble(i * 3.141d));
-    int[] chans=oe1.selectChannels(rec,hit.length);
+    delegate.setInstance(rec);
+    int[] chans=oe1.selectChannels(delegate,hit.length);
     for (int j=0; j < chans.length; j++) {
       hit[chans[j]]++;
     }
