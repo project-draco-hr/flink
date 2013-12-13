@@ -1,0 +1,21 @@
+{
+  for (  ChainedDriver<?,?> chainedTask : chainedTasks) {
+    Map<String,Accumulator<?,?>> chainedAccumulators=chainedTask.getStub().getRuntimeContext().getAllAccumulators();
+    AccumulatorHelper.mergeInto(accumulators,chainedAccumulators);
+  }
+  if (accumulators.size() == 0) {
+    return;
+  }
+synchronized (env.getAccumulatorProtocolProxy()) {
+    try {
+      env.getAccumulatorProtocolProxy().reportAccumulatorResult(new AccumulatorEvent(env.getJobID(),accumulators,true));
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Communication with JobManager is broken. Could not send accumulators.",e);
+    }
+  }
+  AccumulatorHelper.resetAndClearAccumulators(accumulators);
+  for (  ChainedDriver<?,?> chainedTask : chainedTasks) {
+    AccumulatorHelper.resetAndClearAccumulators(chainedTask.getStub().getRuntimeContext().getAllAccumulators());
+  }
+}

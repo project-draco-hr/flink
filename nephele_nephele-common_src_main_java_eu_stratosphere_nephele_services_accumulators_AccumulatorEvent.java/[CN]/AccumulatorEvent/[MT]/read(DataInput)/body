@@ -1,0 +1,34 @@
+{
+  this.useUserClassLoader=in.readBoolean();
+  jobID=new JobID();
+  jobID.read(in);
+  int numberOfMapEntries=in.readInt();
+  this.accumulators=new HashMap<String,Accumulator<?,?>>(numberOfMapEntries);
+  ClassLoader classLoader=null;
+  if (this.useUserClassLoader) {
+    classLoader=LibraryCacheManager.getClassLoader(jobID);
+  }
+ else {
+    classLoader=this.getClass().getClassLoader();
+  }
+  for (int i=0; i < numberOfMapEntries; i++) {
+    String key=in.readUTF();
+    final String valueType=in.readUTF();
+    Class<Accumulator<?,?>> valueClass=null;
+    try {
+      valueClass=(Class<Accumulator<?,?>>)Class.forName(valueType,true,classLoader);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+    Accumulator<?,?> value=null;
+    try {
+      value=valueClass.newInstance();
+    }
+ catch (    Exception e) {
+      throw new IOException(StringUtils.stringifyException(e));
+    }
+    value.read(in);
+    this.accumulators.put(key,value);
+  }
+}
