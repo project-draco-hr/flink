@@ -1,0 +1,29 @@
+{
+  DualInputContract<?> contract=node.getTwoInputNode().getPactContract();
+  if (!(contract instanceof RecordOperator)) {
+    throw new CompilerPostPassException("Error: Contract is not a Pact Record based contract. Wrong compiler invokation.");
+  }
+  RecordOperator recContract=(RecordOperator)contract;
+  int[] localPositions1=contract.getKeyColumns(0);
+  int[] localPositions2=contract.getKeyColumns(1);
+  Class<? extends Key>[] types=recContract.getKeyClasses();
+  if (localPositions1.length != localPositions2.length) {
+    throw new CompilerException("Error: The keys for the first and second input have a different number of fields.");
+  }
+  for (int i=0; i < localPositions1.length; i++) {
+    input1Schema.addType(localPositions1[i],types[i]);
+  }
+  for (int i=0; i < localPositions2.length; i++) {
+    input2Schema.addType(localPositions2[i],types[i]);
+  }
+  if (contract instanceof CoGroupOperator) {
+    Ordering groupOrder1=((CoGroupOperator)contract).getGroupOrderForInputOne();
+    Ordering groupOrder2=((CoGroupOperator)contract).getGroupOrderForInputTwo();
+    if (groupOrder1 != null) {
+      addOrderingToSchema(groupOrder1,input1Schema);
+    }
+    if (groupOrder2 != null) {
+      addOrderingToSchema(groupOrder2,input2Schema);
+    }
+  }
+}

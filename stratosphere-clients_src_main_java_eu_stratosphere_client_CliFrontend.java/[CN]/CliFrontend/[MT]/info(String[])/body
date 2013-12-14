@@ -1,0 +1,103 @@
+{
+  File jarFile=null;
+  String assemblerClass=null;
+  String[] programArgs=null;
+  boolean description;
+  boolean plan;
+  CommandLine line=null;
+  try {
+    line=parser.parse(this.options.get(ACTION_INFO),args,false);
+  }
+ catch (  Exception e) {
+    handleError(e);
+  }
+  if (line.hasOption(JAR_OPTION.getOpt())) {
+    jarFile=new File(line.getOptionValue(JAR_OPTION.getOpt()));
+    if (!jarFile.exists()) {
+      System.err.println("Error: Jar file does not exist.");
+      printHelp();
+      System.exit(1);
+    }
+ else     if (!jarFile.isFile()) {
+      System.err.println("Error: Jar file is not a file.");
+      printHelp();
+      System.exit(1);
+    }
+  }
+ else {
+    System.err.println("Error: Jar file is not set.");
+    printHelp();
+    System.exit(1);
+  }
+  if (line.hasOption(CLASS_OPTION.getOpt())) {
+    assemblerClass=line.getOptionValue(CLASS_OPTION.getOpt());
+  }
+  if (line.hasOption(ARGS_OPTION.getOpt())) {
+    programArgs=line.getOptionValues(ARGS_OPTION.getOpt());
+  }
+  description=line.hasOption(DESCR_OPTION.getOpt());
+  plan=line.hasOption(PLAN_OPTION.getOpt());
+  if (!description && !plan) {
+    System.err.println("ERROR: Specify the information to display.");
+    printHelp();
+    System.exit(1);
+  }
+  PackagedProgram program=null;
+  try {
+    if (assemblerClass == null) {
+      program=new PackagedProgram(jarFile,programArgs);
+    }
+ else {
+      program=new PackagedProgram(jarFile,assemblerClass,programArgs);
+    }
+  }
+ catch (  ProgramInvocationException e) {
+    handleError(e);
+  }
+  if (description) {
+    String descr=null;
+    try {
+      descr=program.getDescription();
+    }
+ catch (    Exception e) {
+      handleError(e);
+    }
+    if (descr != null) {
+      System.out.println("------------------ PACT Program Description ------------------");
+      System.out.println(descr);
+      System.out.println("--------------------------------------------------------------");
+    }
+ else {
+      System.err.println("No description available for this plan.");
+    }
+  }
+  if (plan) {
+    String jsonPlan=null;
+    Configuration configuration=getConfiguration();
+    Client client=new Client(configuration);
+    try {
+      jsonPlan=client.getOptimizerPlanAsJSON(program.getPlanWithJars());
+    }
+ catch (    ProgramInvocationException e) {
+      handleError(e);
+    }
+catch (    ErrorInPlanAssemblerException e) {
+      handleError(e);
+    }
+catch (    CompilerException e) {
+      handleError(e);
+    }
+catch (    IOException e) {
+      handleError(e);
+    }
+    if (jsonPlan != null) {
+      System.out.println("-------------------- PACT Execution Plan ---------------------");
+      System.out.println(jsonPlan);
+      System.out.println("--------------------------------------------------------------");
+    }
+ else {
+      System.err.println("JSON plan could not be compiled.");
+    }
+  }
+  program.deleteExtractedLibraries();
+}
