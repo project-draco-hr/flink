@@ -1,0 +1,31 @@
+{
+  int numSubtasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String ordersPath=(args.length > 1 ? args[1] : "");
+  String customerPath=(args.length > 2 ? args[2] : "");
+  String output=(args.length > 3 ? args[3] : "");
+  FileDataSource orders=new FileDataSource(new CsvInputFormat(),ordersPath,"Orders");
+  orders.setDegreeOfParallelism(numSubtasks);
+  CsvInputFormat.configureRecordFormat(orders).recordDelimiter('\n').fieldDelimiter('|').field(PactInteger.class,1);
+  orders.getCompilerHints().setAvgBytesPerRecord(5);
+  orders.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),10);
+  FileDataSource customers=new FileDataSource(new CsvInputFormat(),customerPath,"Customers");
+  customers.setDegreeOfParallelism(numSubtasks);
+  CsvInputFormat.configureRecordFormat(customers).recordDelimiter('\n').fieldDelimiter('|').field(PactInteger.class,0).field(PactString.class,6);
+  customers.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  customers.getCompilerHints().setAvgBytesPerRecord(20);
+  JoinOperator joinCO=JoinOperator.builder(new JoinCO(),PactInteger.class,0,0).name("JoinCO").build();
+  joinCO.setDegreeOfParallelism(numSubtasks);
+  joinCO.getCompilerHints().setAvgBytesPerRecord(17);
+  ReduceOperator aggCO=ReduceOperator.builder(new AggCO(),PactString.class,1).name("AggCo").build();
+  aggCO.setDegreeOfParallelism(numSubtasks);
+  aggCO.getCompilerHints().setAvgBytesPerRecord(17);
+  aggCO.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  FileDataSink result=new FileDataSink(new CsvOutputFormat(),output,"Output");
+  result.setDegreeOfParallelism(numSubtasks);
+  CsvOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter('|').field(PactInteger.class,0).field(PactString.class,1);
+  result.addInput(aggCO);
+  aggCO.addInput(joinCO);
+  joinCO.addFirstInput(orders);
+  joinCO.addSecondInput(customers);
+  return new Job(result,"TPCH Asterix");
+}

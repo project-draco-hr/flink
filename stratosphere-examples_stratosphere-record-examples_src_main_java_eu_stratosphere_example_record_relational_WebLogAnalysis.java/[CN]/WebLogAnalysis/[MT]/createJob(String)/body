@@ -1,0 +1,33 @@
+{
+  int numSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  String docsInput=(args.length > 1 ? args[1] : "");
+  String ranksInput=(args.length > 2 ? args[2] : "");
+  String visitsInput=(args.length > 3 ? args[3] : "");
+  String output=(args.length > 4 ? args[4] : "");
+  @SuppressWarnings("unchecked") CsvInputFormat docsFormat=new CsvInputFormat('|',PactString.class,PactString.class);
+  FileDataSource docs=new FileDataSource(docsFormat,docsInput,"Docs Input");
+  FileDataSource ranks=new FileDataSource(new CsvInputFormat(),ranksInput,"Ranks input");
+  CsvInputFormat.configureRecordFormat(ranks).recordDelimiter('\n').fieldDelimiter('|').field(PactString.class,1).field(PactInteger.class,0).field(PactInteger.class,2);
+  @SuppressWarnings("unchecked") CsvInputFormat visitsFormat=new CsvInputFormat('|',null,PactString.class,PactString.class);
+  FileDataSource visits=new FileDataSource(visitsFormat,visitsInput,"Visits input:q");
+  MapOperator filterDocs=MapOperator.builder(new FilterDocs()).input(docs).name("Filter Docs").build();
+  filterDocs.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.15f);
+  filterDocs.getCompilerHints().setAvgBytesPerRecord(60);
+  filterDocs.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  MapOperator filterRanks=MapOperator.builder(new FilterRanks()).input(ranks).name("Filter Ranks").build();
+  filterRanks.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.25f);
+  filterRanks.getCompilerHints().setAvgNumRecordsPerDistinctFields(new FieldSet(new int[]{0}),1);
+  MapOperator filterVisits=MapOperator.builder(new FilterVisits()).input(visits).name("Filter Visits").build();
+  filterVisits.getCompilerHints().setAvgBytesPerRecord(60);
+  filterVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.2f);
+  JoinOperator joinDocsRanks=JoinOperator.builder(new JoinDocRanks(),PactString.class,0,0).input1(filterDocs).input2(filterRanks).name("Join Docs Ranks").build();
+  joinDocsRanks.setDegreeOfParallelism(numSubTasks);
+  CoGroupOperator antiJoinVisits=CoGroupOperator.builder(new AntiJoinVisits(),PactString.class,0,0).input1(joinDocsRanks).input2(filterVisits).name("Antijoin DocsVisits").build();
+  antiJoinVisits.getCompilerHints().setAvgRecordsEmittedPerStubCall(0.8f);
+  FileDataSink result=new FileDataSink(new CsvOutputFormat(),output,antiJoinVisits,"Result");
+  result.setDegreeOfParallelism(numSubTasks);
+  CsvOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter('|').lenient(true).field(PactInteger.class,1).field(PactString.class,0).field(PactInteger.class,2);
+  Job p=new Job(result,"Weblog Analysis");
+  p.setDefaultParallelism(numSubTasks);
+  return p;
+}
