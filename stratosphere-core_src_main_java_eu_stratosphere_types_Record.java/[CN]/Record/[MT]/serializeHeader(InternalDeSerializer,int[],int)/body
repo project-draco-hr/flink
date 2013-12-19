@@ -1,0 +1,58 @@
+{
+  try {
+    if (numFields > 0) {
+      int slp=serializer.position;
+      if (numFields <= 8) {
+        int mask=0;
+        for (int i=numFields - 1; i > 0; i--) {
+          if (offsets[i] != NULL_INDICATOR_OFFSET) {
+            slp=serializer.position;
+            serializer.writeValLenIntBackwards(offsets[i]);
+            mask|=0x1;
+          }
+          mask<<=1;
+        }
+        if (offsets[0] != NULL_INDICATOR_OFFSET) {
+          mask|=0x1;
+        }
+ else {
+          serializer.position=slp;
+        }
+        serializer.writeByte(mask);
+      }
+ else {
+        for (int i=numFields - 1; i > 0; i--) {
+          if (offsets[i] != NULL_INDICATOR_OFFSET) {
+            slp=serializer.position;
+            serializer.writeValLenIntBackwards(offsets[i]);
+          }
+        }
+        if (offsets[0] == NULL_INDICATOR_OFFSET) {
+          serializer.position=slp;
+        }
+        int col=numFields - 1;
+        int mask=0;
+        int i=numFields & 0x7;
+        if (i > 0) {
+          for (; i > 0; i--, col--) {
+            mask<<=1;
+            mask|=(offsets[col] != NULL_INDICATOR_OFFSET) ? 0x1 : 0x0;
+          }
+          serializer.writeByte(mask);
+        }
+        for (i=numFields >>> 3; i > 0; i--) {
+          mask=0;
+          for (int k=0; k < 8; k++, col--) {
+            mask<<=1;
+            mask|=(offsets[col] != NULL_INDICATOR_OFFSET) ? 0x1 : 0x0;
+          }
+          serializer.writeByte(mask);
+        }
+      }
+    }
+    serializer.writeValLenIntBackwards(numFields);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Error serializing Record header: " + e.getMessage(),e);
+  }
+}

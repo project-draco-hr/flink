@@ -1,0 +1,28 @@
+{
+  StringValue str=this.theString;
+  if (this.ascii) {
+    str.setValueAscii(bytes,offset,numBytes);
+  }
+ else {
+    ByteBuffer byteWrapper=this.byteWrapper;
+    if (bytes != byteWrapper.array()) {
+      byteWrapper=ByteBuffer.wrap(bytes,0,bytes.length);
+      this.byteWrapper=byteWrapper;
+    }
+    byteWrapper.limit(offset + numBytes);
+    byteWrapper.position(offset);
+    try {
+      CharBuffer result=this.decoder.decode(byteWrapper);
+      str.setValue(result);
+    }
+ catch (    CharacterCodingException e) {
+      byte[] copy=new byte[numBytes];
+      System.arraycopy(bytes,offset,copy,0,numBytes);
+      LOG.warn("Line could not be encoded: " + Arrays.toString(copy),e);
+      return false;
+    }
+  }
+  target.clear();
+  target.setField(this.pos,str);
+  return true;
+}

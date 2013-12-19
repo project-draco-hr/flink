@@ -2,8 +2,8 @@
   final int NUM_KEYS=1000000;
   final int BUILD_VALS_PER_KEY=3;
   final int PROBE_VALS_PER_KEY=10;
-  MutableObjectIterator<PactRecord> buildInput=new UniformPactRecordGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
-  MutableObjectIterator<PactRecord> probeInput=new UniformPactRecordGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
+  MutableObjectIterator<Record> buildInput=new UniformRecordGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<Record> probeInput=new UniformRecordGenerator(NUM_KEYS,PROBE_VALS_PER_KEY,true);
   List<MemorySegment> memSegments;
   try {
     memSegments=this.memManager.allocatePages(MEM_OWNER,896);
@@ -13,16 +13,16 @@
     return;
   }
   HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
-  final MutableHashTable<PactRecord,PactRecord> join=new MutableHashTable<PactRecord,PactRecord>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager);
+  final MutableHashTable<Record,Record> join=new MutableHashTable<Record,Record>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager);
   join.open(buildInput,probeInput);
-  final PactRecord record=new PactRecord();
+  final Record record=new Record();
   while (join.nextRecord()) {
     int numBuildValues=0;
     int key=0;
-    HashBucketIterator<PactRecord,PactRecord> buildSide=join.getBuildSideIterator();
+    HashBucketIterator<Record,Record> buildSide=join.getBuildSideIterator();
     if (buildSide.next(record)) {
       numBuildValues=1;
-      key=record.getField(0,PactInteger.class).getValue();
+      key=record.getField(0,IntValue.class).getValue();
     }
  else {
       fail("No build side values found for a probe key.");
@@ -33,8 +33,8 @@
     if (numBuildValues != 3) {
       fail("Other than 3 build values!!!");
     }
-    PactRecord pr=join.getCurrentProbeRecord();
-    Assert.assertEquals("Probe-side key was different than build-side key.",key,pr.getField(0,PactInteger.class).getValue());
+    Record pr=join.getCurrentProbeRecord();
+    Assert.assertEquals("Probe-side key was different than build-side key.",key,pr.getField(0,IntValue.class).getValue());
     Long contained=map.get(key);
     if (contained == null) {
       contained=new Long(numBuildValues);

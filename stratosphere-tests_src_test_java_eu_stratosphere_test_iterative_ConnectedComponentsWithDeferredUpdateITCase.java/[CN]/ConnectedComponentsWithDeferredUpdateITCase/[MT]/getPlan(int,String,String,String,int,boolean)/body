@@ -1,14 +1,14 @@
 {
-  FileDataSource initialVertices=new FileDataSource(new CsvInputFormat(' ',PactLong.class),verticesInput,"Vertices");
+  FileDataSource initialVertices=new FileDataSource(new CsvInputFormat(' ',LongValue.class),verticesInput,"Vertices");
   MapOperator verticesWithId=MapOperator.builder(DuplicateLongMap.class).input(initialVertices).name("Assign Vertex Ids").build();
   WorksetIteration iteration=new WorksetIteration(0,"Connected Components Iteration");
   iteration.setInitialSolutionSet(verticesWithId);
   iteration.setInitialWorkset(verticesWithId);
   iteration.setMaximumNumberOfIterations(maxIterations);
-  FileDataSource edges=new FileDataSource(new CsvInputFormat(' ',PactLong.class,PactLong.class),edgeInput,"Edges");
-  JoinOperator joinWithNeighbors=JoinOperator.builder(new NeighborWithComponentIDJoin(),PactLong.class,0,0).input1(iteration.getWorkset()).input2(edges).name("Join Candidate Id With Neighbor").build();
-  ReduceOperator minCandidateId=ReduceOperator.builder(new MinimumComponentIDReduce(),PactLong.class,0).input(joinWithNeighbors).name("Find Minimum Candidate Id").build();
-  JoinOperator updateComponentId=JoinOperator.builder(new UpdateComponentIdMatchNonPreserving(),PactLong.class,0,0).input1(minCandidateId).input2(iteration.getSolutionSet()).name("Update Component Id").build();
+  FileDataSource edges=new FileDataSource(new CsvInputFormat(' ',LongValue.class,LongValue.class),edgeInput,"Edges");
+  JoinOperator joinWithNeighbors=JoinOperator.builder(new NeighborWithComponentIDJoin(),LongValue.class,0,0).input1(iteration.getWorkset()).input2(edges).name("Join Candidate Id With Neighbor").build();
+  ReduceOperator minCandidateId=ReduceOperator.builder(new MinimumComponentIDReduce(),LongValue.class,0).input(joinWithNeighbors).name("Find Minimum Candidate Id").build();
+  JoinOperator updateComponentId=JoinOperator.builder(new UpdateComponentIdMatchNonPreserving(),LongValue.class,0,0).input1(minCandidateId).input2(iteration.getSolutionSet()).name("Update Component Id").build();
   if (extraMap) {
     MapOperator mapper=MapOperator.builder(IdentityMap.class).input(updateComponentId).name("idmap").build();
     iteration.setSolutionSetDelta(mapper);
@@ -18,7 +18,7 @@
   }
   iteration.setNextWorkset(updateComponentId);
   FileDataSink result=new FileDataSink(new CsvOutputFormat(),output,iteration,"Result");
-  CsvOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter(' ').field(PactLong.class,0).field(PactLong.class,1);
+  CsvOutputFormat.configureRecordFormat(result).recordDelimiter('\n').fieldDelimiter(' ').field(LongValue.class,0).field(LongValue.class,1);
   Plan plan=new Plan(result,"Workset Connected Components");
   plan.setDefaultParallelism(numSubTasks);
   return plan;
