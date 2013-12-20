@@ -2,20 +2,43 @@
   try {
     Path p=this.path;
     final FileSystem fs=p.getFileSystem();
-    if (fs.exists(p) && fs.getFileStatus(p).isDir()) {
+    if (this.numTasks == 1) {
+      if (!fs.isDistributedFS()) {
+        if (!fs.initOutPathLocalFS(p,writeMode,false)) {
+          throw new IOException("Output path could not be initialized. Canceling task.");
+        }
+      }
+      this.fdos=fs.create(p,false);
+    }
+ else     if (this.numTasks > 1) {
+      if (!fs.isDistributedFS()) {
+        if (!fs.initOutPathLocalFS(p,writeMode,true)) {
+          throw new IOException("Output directory could not be created. Canceling task.");
+        }
+      }
       p=p.suffix("/" + this.taskIndex);
-    }
-    if (fs.exists(p)) {
-      fs.delete(p,false);
-    }
+switch (writeMode) {
+case CREATE:
+        this.fdos=fs.create(p,false);
+      break;
+case OVERWRITE:
     this.fdos=fs.create(p,true);
-    if (this.aborted) {
-      final FSDataOutputStream f=this.fdos;
-      this.fdos=null;
-      f.close();
-    }
-  }
- catch (  Throwable t) {
-    this.error=t;
-  }
+  break;
+default :
+throw new IllegalArgumentException("Invalid write mode: " + writeMode);
+}
+this.fdos=fs.create(p,true);
+}
+ else {
+throw new IllegalArgumentException("Invalid number of subtasks. Canceling task.");
+}
+if (this.aborted) {
+final FSDataOutputStream f=this.fdos;
+this.fdos=null;
+f.close();
+}
+}
+ catch (Throwable t) {
+this.error=t;
+}
 }

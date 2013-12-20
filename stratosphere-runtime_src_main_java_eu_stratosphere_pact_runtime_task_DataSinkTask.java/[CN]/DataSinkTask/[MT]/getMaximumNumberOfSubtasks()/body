@@ -3,6 +3,7 @@
     return -1;
   }
   final String pathName=this.config.getStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,null);
+  final WriteMode writeMode=((FileOutputFormat<?>)this.format).getWriteMode();
   final Path path;
   if (pathName == null) {
     return 0;
@@ -14,33 +15,22 @@
     return 0;
   }
   try {
+    int dop=getTaskConfiguration().getInteger(DEGREE_OF_PARALLELISM_KEY,-1);
     final FileSystem fs=path.getFileSystem();
-    try {
-      final FileStatus f=fs.getFileStatus(path);
-      if (f == null) {
-        return 1;
-      }
-      if (f.isDir()) {
-        return -1;
-      }
- else {
-        fs.delete(path,false);
-        int dop=getTaskConfiguration().getInteger(DEGREE_OF_PARALLELISM_KEY,-1);
-        if (dop == 1) {
-          return 1;
-        }
- else {
-          fs.mkdirs(path);
-          return -1;
+    if (dop == 1) {
+      if (fs.isDistributedFS()) {
+        if (!fs.initOutPathDistFS(path,writeMode,false)) {
+          throw new IOException("Output path could not be initialized.");
         }
       }
+      return 1;
     }
- catch (    FileNotFoundException fnfex) {
-      int dop=getTaskConfiguration().getInteger(DEGREE_OF_PARALLELISM_KEY,-1);
-      if (dop == 1) {
-        return 1;
+ else {
+      if (fs.isDistributedFS()) {
+        if (!fs.initOutPathDistFS(path,writeMode,true)) {
+          throw new IOException("Output directory could not be created.");
+        }
       }
-      fs.mkdirs(path);
       return -1;
     }
   }
