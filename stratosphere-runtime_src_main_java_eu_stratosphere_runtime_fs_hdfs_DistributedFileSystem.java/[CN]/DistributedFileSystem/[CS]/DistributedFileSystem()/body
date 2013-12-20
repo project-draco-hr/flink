@@ -1,5 +1,5 @@
 {
-  this.conf=new Configuration();
+  this.conf=new org.apache.hadoop.conf.Configuration();
   final String hdfsDefaultPath=GlobalConfiguration.getString(ConfigConstants.HDFS_DEFAULT_CONFIG,null);
   if (hdfsDefaultPath != null) {
     this.conf.addResource(new org.apache.hadoop.fs.Path(hdfsDefaultPath));
@@ -28,39 +28,65 @@
     if (new File(possibleHadoopConfPaths[i]).exists()) {
       if (new File(possibleHadoopConfPaths[i] + "/core-site.xml").exists()) {
         conf.addResource(new org.apache.hadoop.fs.Path(possibleHadoopConfPaths[i] + "/core-site.xml"));
-        LOG.debug("Adding " + possibleHadoopConfPaths[i] + "/core-site.xml to hadoop configuration");
+        if (LOG.isDebugEnabled())         LOG.debug("Adding " + possibleHadoopConfPaths[i] + "/core-site.xml to hadoop configuration");
       }
       if (new File(possibleHadoopConfPaths[i] + "/hdfs-site.xml").exists()) {
         conf.addResource(new org.apache.hadoop.fs.Path(possibleHadoopConfPaths[i] + "/hdfs-site.xml"));
-        LOG.debug("Adding " + possibleHadoopConfPaths[i] + "/hdfs-site.xml to hadoop configuration");
+        if (LOG.isDebugEnabled())         LOG.debug("Adding " + possibleHadoopConfPaths[i] + "/hdfs-site.xml to hadoop configuration");
       }
     }
   }
-  if (conf.get(HDFS_IMPLEMENTATION_KEY,null) == null) {
-    conf.set(HDFS_IMPLEMENTATION_KEY,"org.apache.hadoop.hdfs.DistributedFileSystem");
-  }
-  Class<?> clazz=null;
-  try {
-    Method newApi=org.apache.hadoop.fs.FileSystem.class.getMethod("getFileSystemClass",String.class,org.apache.hadoop.conf.Configuration.class);
-    clazz=(Class<?>)newApi.invoke(null,"hdfs",conf);
-  }
- catch (  Exception e) {
-  }
-  if (clazz == null) {
-    clazz=conf.getClass(HDFS_IMPLEMENTATION_KEY,null);
-    if (clazz == null) {
-      this.fs=org.apache.hadoop.fs.FileSystem.get(conf);
-    }
-  }
- else {
+  Class<? extends org.apache.hadoop.fs.FileSystem> fsClass=null;
+{
+    LOG.debug("Trying to load HDFS class Hadoop 2.x style.");
+    Object fsHandle=null;
     try {
-      this.fs=(org.apache.hadoop.fs.FileSystem)clazz.newInstance();
+      Method newApi=org.apache.hadoop.fs.FileSystem.class.getMethod("getFileSystemClass",String.class,org.apache.hadoop.conf.Configuration.class);
+      fsHandle=newApi.invoke(null,"hdfs",conf);
     }
- catch (    InstantiationException e) {
-      throw new IOException("InstantiationException occured: " + StringUtils.stringifyException(e));
+ catch (    Exception e) {
     }
-catch (    IllegalAccessException e) {
-      throw new IOException("IllegalAccessException occured: " + StringUtils.stringifyException(e));
+    if (fsHandle != null) {
+      if (fsHandle instanceof Class && org.apache.hadoop.fs.FileSystem.class.isAssignableFrom((Class<?>)fsHandle)) {
+        fsClass=((Class<?>)fsHandle).asSubclass(org.apache.hadoop.fs.FileSystem.class);
+        if (LOG.isDebugEnabled())         LOG.debug("Loaded '" + fsClass.getName() + "' as HDFS class.");
+      }
+ else {
+        LOG.debug("Unexpected return type from 'org.apache.hadoop.fs.FileSystem.getFileSystemClass(String, Configuration)'.");
+        throw new RuntimeException("The value returned from org.apache.hadoop.fs.FileSystem.getFileSystemClass(String, Configuration) is not a valid subclass of org.apache.hadoop.fs.FileSystem.");
+      }
     }
   }
+  if (fsClass == null) {
+    if (LOG.isDebugEnabled())     LOG.debug("Falling back to loading HDFS class old Hadoop style. Looking for HDFS class configuration entry '" + HDFS_IMPLEMENTATION_KEY + "'.");
+    Class<?> classFromConfig=conf.getClass(HDFS_IMPLEMENTATION_KEY,null);
+    if (classFromConfig != null) {
+      if (org.apache.hadoop.fs.FileSystem.class.isAssignableFrom(classFromConfig)) {
+        fsClass=classFromConfig.asSubclass(org.apache.hadoop.fs.FileSystem.class);
+        if (LOG.isDebugEnabled())         LOG.debug("Loaded HDFS class '" + fsClass.getName() + "' as specified in configuration.");
+      }
+ else {
+        if (LOG.isDebugEnabled())         LOG.debug("HDFS class specified by " + HDFS_IMPLEMENTATION_KEY + " is of wrong type.");
+        throw new IOException("HDFS class specified by " + HDFS_IMPLEMENTATION_KEY + " cannot be cast to a FileSystem type.");
+      }
+    }
+ else {
+      if (LOG.isDebugEnabled())       LOG.debug("Trying to load default HDFS implementation " + DEFAULT_HDFS_CLASS);
+      try {
+        Class<?> reflectedClass=Class.forName(DEFAULT_HDFS_CLASS);
+        if (org.apache.hadoop.fs.FileSystem.class.isAssignableFrom(reflectedClass)) {
+          fsClass=reflectedClass.asSubclass(org.apache.hadoop.fs.FileSystem.class);
+        }
+ else {
+          if (LOG.isDebugEnabled())           LOG.debug("Default HDFS class is of wrong type.");
+          throw new IOException("The default HDFS class '" + DEFAULT_HDFS_CLASS + "' cannot be cast to a FileSystem type.");
+        }
+      }
+ catch (      ClassNotFoundException e) {
+        if (LOG.isDebugEnabled())         LOG.debug("Default HDFS class cannot be loaded.");
+        throw new IOException("No HDFS class has been configured and the default class '" + DEFAULT_HDFS_CLASS + "' cannot be loaded.");
+      }
+    }
+  }
+  this.fs=instantiateFileSystem(fsClass);
 }
