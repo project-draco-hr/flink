@@ -1,0 +1,24 @@
+{
+  this.deserializer.clear();
+  if (this.dataBuffer != null) {
+    releasedConsumedReadBuffer(this.dataBuffer);
+    this.dataBuffer=null;
+  }
+  while (!this.brokerAggreedToCloseChannel) {
+    BufferOrEvent next=getNextBufferOrEvent();
+    if (next != null) {
+      if (next.isEvent()) {
+        if (next.getEvent() instanceof ChannelCloseEvent) {
+          this.brokerAggreedToCloseChannel=true;
+        }
+      }
+ else {
+        releasedConsumedReadBuffer(next.getBuffer());
+      }
+    }
+ else {
+      Thread.sleep(200);
+    }
+  }
+  transferEventToOutputChannel(new ChannelCloseEvent());
+}

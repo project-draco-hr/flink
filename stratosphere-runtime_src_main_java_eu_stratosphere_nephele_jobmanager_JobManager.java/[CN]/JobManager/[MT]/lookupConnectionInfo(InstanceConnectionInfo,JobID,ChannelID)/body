@@ -22,7 +22,7 @@
     }
     final ExecutionState executionState=connectedVertex.getExecutionState();
     if (executionState == ExecutionState.FINISHED) {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady();
+      return ConnectionInfoLookupResponse.createReceiverNotFound();
     }
     if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING) {
       return ConnectionInfoLookupResponse.createReceiverNotReady();
@@ -32,43 +32,35 @@
     }
  else {
       final InstanceConnectionInfo ici=assignedInstance.getInstanceConnectionInfo();
-      final InetSocketAddress isa=new InetSocketAddress(ici.getAddress(),ici.getDataPort());
+      final InetSocketAddress isa=new InetSocketAddress(ici.address(),ici.dataPort());
       return ConnectionInfoLookupResponse.createReceiverFoundAndReady(new RemoteReceiver(isa,edge.getConnectionID()));
     }
   }
-  if (edge.isBroadcast()) {
-    return multicastManager.lookupConnectionInfo(caller,jobID,sourceChannelID);
-  }
- else {
-    final ExecutionVertex targetVertex=edge.getInputGate().getVertex();
-    final ExecutionState executionState=targetVertex.getExecutionState();
-    if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING && executionState != ExecutionState.FINISHED) {
-      if (executionState == ExecutionState.ASSIGNED) {
-        final Runnable command=new Runnable(){
-          /** 
- * {@inheritDoc}
- */
-          @Override public void run(){
-            scheduler.deployAssignedVertices(targetVertex);
-          }
+  final ExecutionVertex targetVertex=edge.getInputGate().getVertex();
+  final ExecutionState executionState=targetVertex.getExecutionState();
+  if (executionState != ExecutionState.RUNNING && executionState != ExecutionState.FINISHING && executionState != ExecutionState.FINISHED) {
+    if (executionState == ExecutionState.ASSIGNED) {
+      final Runnable command=new Runnable(){
+        @Override public void run(){
+          scheduler.deployAssignedVertices(targetVertex);
         }
-;
-        eg.executeCommand(command);
       }
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
+;
+      eg.executeCommand(command);
     }
-    final AbstractInstance assignedInstance=targetVertex.getAllocatedResource().getInstance();
-    if (assignedInstance == null) {
-      LOG.error("Cannot resolve lookup: vertex found for channel ID " + edge.getInputChannelID() + " but no instance assigned");
-      return ConnectionInfoLookupResponse.createReceiverNotReady();
-    }
-    if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(edge.getInputChannelID());
-    }
+    return ConnectionInfoLookupResponse.createReceiverNotReady();
+  }
+  final AbstractInstance assignedInstance=targetVertex.getAllocatedResource().getInstance();
+  if (assignedInstance == null) {
+    LOG.error("Cannot resolve lookup: vertex found for channel ID " + edge.getInputChannelID() + " but no instance assigned");
+    return ConnectionInfoLookupResponse.createReceiverNotReady();
+  }
+  if (assignedInstance.getInstanceConnectionInfo().equals(caller)) {
+    return ConnectionInfoLookupResponse.createReceiverFoundAndReady(edge.getInputChannelID());
+  }
  else {
-      final InstanceConnectionInfo ici=assignedInstance.getInstanceConnectionInfo();
-      final InetSocketAddress isa=new InetSocketAddress(ici.getAddress(),ici.getDataPort());
-      return ConnectionInfoLookupResponse.createReceiverFoundAndReady(new RemoteReceiver(isa,edge.getConnectionID()));
-    }
+    final InstanceConnectionInfo ici=assignedInstance.getInstanceConnectionInfo();
+    final InetSocketAddress isa=new InetSocketAddress(ici.address(),ici.dataPort());
+    return ConnectionInfoLookupResponse.createReceiverFoundAndReady(new RemoteReceiver(isa,edge.getConnectionID()));
   }
 }

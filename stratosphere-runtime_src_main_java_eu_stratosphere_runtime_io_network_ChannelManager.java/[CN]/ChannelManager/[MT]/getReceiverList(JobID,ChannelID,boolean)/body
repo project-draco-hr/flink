@@ -1,0 +1,53 @@
+{
+  EnvelopeReceiverList receiverList=this.receiverCache.get(sourceChannelID);
+  if (receiverList != null) {
+    return receiverList;
+  }
+  while (true) {
+    ConnectionInfoLookupResponse lookupResponse;
+synchronized (this.channelLookupService) {
+      lookupResponse=this.channelLookupService.lookupConnectionInfo(this.connectionInfo,jobID,sourceChannelID);
+    }
+    if (lookupResponse.receiverReady()) {
+      receiverList=new EnvelopeReceiverList(lookupResponse);
+      break;
+    }
+ else     if (lookupResponse.receiverNotReady()) {
+      try {
+        Thread.sleep(500);
+      }
+ catch (      InterruptedException e) {
+        if (reportException) {
+          throw new IOException("Lookup was interrupted.");
+        }
+ else {
+          return null;
+        }
+      }
+    }
+ else     if (lookupResponse.isJobAborting()) {
+      if (reportException) {
+        throw new CancelTaskException();
+      }
+ else {
+        return null;
+      }
+    }
+ else     if (lookupResponse.receiverNotFound()) {
+      if (reportException) {
+        throw new IOException("Could not find the receiver for Job " + jobID + ", channel with source id "+ sourceChannelID);
+      }
+ else {
+        return null;
+      }
+    }
+ else {
+      throw new IllegalStateException("Unrecognized response to channel lookup.");
+    }
+  }
+  this.receiverCache.put(sourceChannelID,receiverList);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Receivers for source channel ID " + sourceChannelID + " at task manager "+ this.connectionInfo+ ": "+ receiverList);
+  }
+  return receiverList;
+}

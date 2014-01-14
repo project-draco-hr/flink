@@ -1,0 +1,61 @@
+{
+  if (this.currentHeaderBuffer != null) {
+    ByteBuffer header=this.currentHeaderBuffer;
+    channel.read(header);
+    if (header.hasRemaining()) {
+      return DeserializationState.PENDING;
+    }
+ else {
+      this.currentHeaderBuffer=null;
+      Envelope env=constructEnvelopeFromHeader(header);
+      this.pendingEnvelope=env;
+      int eventsSize=getEventListSize(header);
+      int bufferSize=getBufferSize(header);
+      if (eventsSize > 0) {
+        this.currentEventsList=ByteBuffer.allocate(eventsSize);
+      }
+      if (bufferSize > 0) {
+        this.bufferRequestPendingWithSize=bufferSize;
+      }
+    }
+  }
+  if (this.currentEventsList != null) {
+    channel.read(this.currentEventsList);
+    if (this.currentEventsList.hasRemaining()) {
+      return DeserializationState.PENDING;
+    }
+ else {
+      this.currentEventsList.flip();
+      this.pendingEnvelope.setEventsSerialized(this.currentEventsList);
+      this.currentEventsList=null;
+    }
+  }
+  if (this.bufferRequestPendingWithSize > 0) {
+    Buffer b=getBufferForTarget(this.pendingEnvelope.getJobID(),this.pendingEnvelope.getSource(),this.bufferRequestPendingWithSize);
+    if (b == null) {
+      return DeserializationState.NO_BUFFER_AVAILABLE;
+    }
+ else {
+      this.pendingEnvelope.setBuffer(b);
+      this.currentDataBuffer=b.getMemorySegment().wrap(0,this.bufferRequestPendingWithSize);
+      this.bufferRequestPendingWithSize=0;
+    }
+  }
+  if (this.currentDataBuffer != null) {
+    channel.read(this.currentDataBuffer);
+    if (this.currentDataBuffer.hasRemaining()) {
+      return DeserializationState.PENDING;
+    }
+ else {
+      this.currentDataBuffer=null;
+    }
+  }
+  if (this.pendingEnvelope != null) {
+    this.constructedEnvelope=this.pendingEnvelope;
+    this.pendingEnvelope=null;
+    return DeserializationState.COMPLETE;
+  }
+ else {
+    throw new IllegalStateException("Error: read() was called before reserializer was reset after the last envelope.");
+  }
+}

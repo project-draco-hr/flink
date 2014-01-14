@@ -1,0 +1,33 @@
+{
+  final Thread executingThread=this.environment.getExecutingThread();
+  if (executingThread == null) {
+    return;
+  }
+  LOG.info("Canceling " + this.environment.getTaskNameWithIndex());
+  this.isCanceled=true;
+  executionStateChanged(ExecutionState.CANCELING,null);
+  try {
+    final AbstractInvokable invokable=this.environment.getInvokable();
+    if (invokable != null) {
+      invokable.cancel();
+    }
+  }
+ catch (  Throwable e) {
+    LOG.error("Error while canceling task",e);
+  }
+  while (true) {
+    executingThread.interrupt();
+    if (!executingThread.isAlive()) {
+      break;
+    }
+    try {
+      executingThread.join(1000);
+    }
+ catch (    InterruptedException e) {
+    }
+    if (!executingThread.isAlive()) {
+      break;
+    }
+    if (LOG.isDebugEnabled())     LOG.debug("Sending repeated canceling  signal to " + this.environment.getTaskName() + " with state "+ this.executionState);
+  }
+}

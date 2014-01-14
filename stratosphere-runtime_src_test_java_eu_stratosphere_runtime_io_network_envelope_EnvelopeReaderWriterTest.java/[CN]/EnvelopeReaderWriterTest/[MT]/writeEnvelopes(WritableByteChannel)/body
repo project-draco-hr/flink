@@ -1,0 +1,26 @@
+{
+  final BufferRecycler recycler=new DiscardingRecycler();
+  final Random rand=new Random(RANDOM_SEED);
+  final EnvelopeWriter serializer=new EnvelopeWriter();
+  final int NUM_ENVS=BUFFER_SIZES.length;
+  for (int i=0; i < NUM_ENVS; i++) {
+    int seqNum=Math.abs(rand.nextInt());
+    JobID jid=new JobID(rand.nextLong(),rand.nextLong());
+    ChannelID sid=new ChannelID(rand.nextLong(),rand.nextLong());
+    Envelope env=new Envelope(seqNum,jid,sid);
+    if (EVENT_LISTS[i].length > 0) {
+      env.serializeEventList(Arrays.asList(EVENT_LISTS[i]));
+    }
+    int bufferSize=BUFFER_SIZES[i];
+    if (bufferSize > 0) {
+      MemorySegment ms=new MemorySegment(new byte[BUFFER_SIZE]);
+      for (int x=0; x < bufferSize; x++) {
+        ms.put(x,BUFFER_CONTENT);
+      }
+      Buffer mb=new Buffer(ms,bufferSize,recycler);
+      env.setBuffer(mb);
+    }
+    serializer.setEnvelopeForWriting(env);
+    while (serializer.writeNextChunk(channel))     ;
+  }
+}

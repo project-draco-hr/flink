@@ -1,0 +1,34 @@
+{
+  final Random rand=new Random(RANDOM_SEED);
+  final EnvelopeReader reader=new EnvelopeReader(new OneForAllBroker(BUFFER_SIZE,probabilityForNoBufferCurrently));
+  final int NUM_ENVS=BUFFER_SIZES.length;
+  for (int i=0; i < NUM_ENVS; i++) {
+    int expectedSeqNum=Math.abs(rand.nextInt());
+    JobID expectedJid=new JobID(rand.nextLong(),rand.nextLong());
+    ChannelID expectedSid=new ChannelID(rand.nextLong(),rand.nextLong());
+    while (reader.readNextChunk(channel) != EnvelopeReader.DeserializationState.COMPLETE)     ;
+    Envelope env=reader.getFullyDeserializedTransferEnvelope();
+    Assert.assertEquals(expectedSeqNum,env.getSequenceNumber());
+    Assert.assertEquals(expectedJid,env.getJobID());
+    Assert.assertEquals(expectedSid,env.getSource());
+    List<? extends AbstractEvent> events=env.deserializeEvents();
+    Assert.assertEquals(EVENT_LISTS[i].length,events.size());
+    for (int n=0; n < EVENT_LISTS[i].length; n++) {
+      AbstractEvent expectedEvent=EVENT_LISTS[i][n];
+      AbstractEvent actualEvent=events.get(n);
+      Assert.assertEquals(expectedEvent.getClass(),actualEvent.getClass());
+      Assert.assertEquals(expectedEvent,actualEvent);
+    }
+    Buffer buf=env.getBuffer();
+    if (buf == null) {
+      Assert.assertTrue(BUFFER_SIZES[i] == 0);
+    }
+ else {
+      Assert.assertEquals(BUFFER_SIZES[i],buf.size());
+      for (int k=0; k < BUFFER_SIZES[i]; k++) {
+        Assert.assertEquals(BUFFER_CONTENT,buf.getMemorySegment().get(k));
+      }
+    }
+    reader.reset();
+  }
+}
