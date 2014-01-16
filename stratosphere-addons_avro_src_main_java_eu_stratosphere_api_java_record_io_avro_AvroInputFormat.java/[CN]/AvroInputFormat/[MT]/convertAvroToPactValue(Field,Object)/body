@@ -4,27 +4,23 @@
   }
   final Type type=checkTypeConstraintsAndGetType(field.schema());
 switch (type) {
-case STRING:
-    sString.setValue((CharSequence)avroRecord);
-  return sString;
-case INT:
-sInt.setValue((Integer)avroRecord);
-return sInt;
-case BOOLEAN:
-sBool.setValue((Boolean)avroRecord);
-return sBool;
-case DOUBLE:
-sDouble.setValue((Double)avroRecord);
-return sDouble;
-case FLOAT:
-sFloat.setValue((Float)avroRecord);
-return sFloat;
-case LONG:
-sLong.setValue((Long)avroRecord);
-return sLong;
-case NULL:
-return NullValue.getInstance();
+case ARRAY:
+    final Type elementType=field.schema().getElementType().getType();
+  final List<?> avroList=(List<?>)avroRecord;
+return convertAvroArrayToListValue(elementType,avroList);
+case ENUM:
+final List<String> symbols=field.schema().getEnumSymbols();
+final String avroRecordString=avroRecord.toString();
+if (!symbols.contains(avroRecordString)) {
+throw new RuntimeException("The given Avro file contains field with a invalid enum symbol");
+}
+sString.setValue(avroRecordString);
+return sString;
+case MAP:
+final Type valueType=field.schema().getValueType().getType();
+final Map<CharSequence,?> avroMap=(Map<CharSequence,?>)avroRecord;
+return convertAvroMapToMapValue(valueType,avroMap);
 default :
-throw new RuntimeException("Type " + type + " for AvroInputFormat is not implemented. Open an issue on GitHub.");
+return convertAvroPrimitiveToValue(type,avroRecord);
 }
 }
