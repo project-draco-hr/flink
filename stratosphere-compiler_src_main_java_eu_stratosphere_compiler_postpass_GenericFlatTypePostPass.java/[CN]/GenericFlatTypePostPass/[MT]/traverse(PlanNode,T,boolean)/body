@@ -42,12 +42,32 @@
     if (iterationNode.getRootOfStepFunction() instanceof NAryUnionPlanNode) {
       throw new CompilerException("Optimizer cannot compile an iteration step function where next partial solution is created by a Union node.");
     }
+    if (iterationNode.getRootOfTerminationCriterion() != null) {
+      SingleInputPlanNode addMapper=(SingleInputPlanNode)iterationNode.getRootOfTerminationCriterion();
+      traverse(addMapper.getInput().getSource(),createEmptySchema(),false);
+      try {
+        addMapper.getInput().setSerializer(createSerializer(createEmptySchema()));
+      }
+ catch (      MissingFieldTypeInfoException e) {
+        throw new RuntimeException(e);
+      }
+    }
     traverse(iterationNode.getRootOfStepFunction(),schema,false);
     T pss=(T)iterationNode.getPartialSolutionPlanNode().postPassHelper;
     if (pss == null) {
       throw new CompilerException("Error in Optimizer Post Pass: Partial solution schema is null after first traversal of the step function.");
     }
     traverse(iterationNode.getRootOfStepFunction(),pss,createUtilities);
+    if (iterationNode.getRootOfTerminationCriterion() != null) {
+      SingleInputPlanNode addMapper=(SingleInputPlanNode)iterationNode.getRootOfTerminationCriterion();
+      traverse(addMapper.getInput().getSource(),createEmptySchema(),createUtilities);
+      try {
+        addMapper.getInput().setSerializer(createSerializer(createEmptySchema()));
+      }
+ catch (      MissingFieldTypeInfoException e) {
+        throw new RuntimeException(e);
+      }
+    }
     addSchemaToSchema(pss,schema,iterationNode.getPactContract().getName());
     if (createUtilities) {
       iterationNode.setSerializerForIterationChannel(createSerializer(pss,iterationNode.getPartialSolutionPlanNode()));

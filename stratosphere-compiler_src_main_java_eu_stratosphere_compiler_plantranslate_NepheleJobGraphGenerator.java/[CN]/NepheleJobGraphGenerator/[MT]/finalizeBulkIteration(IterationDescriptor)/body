@@ -29,6 +29,7 @@
  catch (  JobGraphDefinitionException e) {
     throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
   }
+  final PlanNode rootOfTerminationCriterion=bulkNode.getRootOfTerminationCriterion();
   final PlanNode rootOfStepFunction=bulkNode.getRootOfStepFunction();
   final TaskConfig tailConfig;
   JobTaskVertex rootOfStepFunctionVertex=(JobTaskVertex)this.vertices.get(rootOfStepFunction);
@@ -43,20 +44,53 @@
  else {
     tailConfig=new TaskConfig(rootOfStepFunctionVertex.getConfiguration());
   }
-  rootOfStepFunctionVertex.setTaskClass(IterationTailPactTask.class);
   tailConfig.setIsWorksetUpdate();
-  tailConfig.setOutputSerializer(bulkNode.getSerializerForIterationChannel());
-  tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-  JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
-  fakeTail.setOutputClass(FakeOutputTask.class);
-  fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
-  fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
-  this.auxVertices.add(fakeTail);
-  try {
-    rootOfStepFunctionVertex.connectTo(fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+  if (rootOfStepFunction.getOutgoingChannels().isEmpty()) {
+    rootOfStepFunctionVertex.setTaskClass(IterationTailPactTask.class);
+    tailConfig.setOutputSerializer(bulkNode.getSerializerForIterationChannel());
+    tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    JobOutputVertex fakeTail=new JobOutputVertex("Fake Tail",this.jobGraph);
+    fakeTail.setOutputClass(FakeOutputTask.class);
+    fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+    fakeTail.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
+    this.auxVertices.add(fakeTail);
+    try {
+      rootOfStepFunctionVertex.connectTo(fakeTail,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+    }
+ catch (    JobGraphDefinitionException e) {
+      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
+    }
   }
- catch (  JobGraphDefinitionException e) {
-    throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
+  final TaskConfig tailConfigOfTerminationCriterion;
+  if (rootOfTerminationCriterion != null && rootOfTerminationCriterion.getOutgoingChannels().isEmpty()) {
+    JobTaskVertex rootOfTerminationCriterionVertex=(JobTaskVertex)this.vertices.get(rootOfTerminationCriterion);
+    if (rootOfTerminationCriterionVertex == null) {
+      final TaskInChain taskInChain=this.chainedTasks.get(rootOfTerminationCriterion);
+      if (taskInChain == null) {
+        throw new CompilerException("Bug: Tail of termination criterion not found as vertex or chained task.");
+      }
+      rootOfTerminationCriterionVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+      tailConfigOfTerminationCriterion=taskInChain.getTaskConfig();
+    }
+ else {
+      tailConfigOfTerminationCriterion=new TaskConfig(rootOfTerminationCriterionVertex.getConfiguration());
+    }
+    rootOfTerminationCriterionVertex.setTaskClass(IterationTailPactTask.class);
+    tailConfigOfTerminationCriterion.setIsSolutionSetUpdate();
+    tailConfigOfTerminationCriterion.setOutputSerializer(bulkNode.getSerializerForIterationChannel());
+    tailConfigOfTerminationCriterion.addOutputShipStrategy(ShipStrategyType.FORWARD);
+    JobOutputVertex fakeTailTerminationCriterion=new JobOutputVertex("Fake Tail for Termination Criterion",this.jobGraph);
+    fakeTailTerminationCriterion.setOutputClass(FakeOutputTask.class);
+    fakeTailTerminationCriterion.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+    fakeTailTerminationCriterion.setNumberOfSubtasksPerInstance(headVertex.getNumberOfSubtasksPerInstance());
+    this.auxVertices.add(fakeTailTerminationCriterion);
+    try {
+      rootOfTerminationCriterionVertex.connectTo(fakeTailTerminationCriterion,ChannelType.INMEMORY,DistributionPattern.POINTWISE);
+    }
+ catch (    JobGraphDefinitionException e) {
+      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task for termination criterion");
+    }
+    headConfig.setWaitForSolutionSetUpdate();
   }
   AggregatorRegistry aggs=bulkNode.getIterationNode().getIterationContract().getAggregators();
   Collection<AggregatorWithName<?>> allAggregators=aggs.getAllRegisteredAggregators();
