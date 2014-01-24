@@ -5,12 +5,24 @@
   try {
     while (null != current) {
       Object newCurrent=null;
+      boolean hasCustomSerialization=false;
+      Method customSerializer=null;
+      Method customDeserializer=null;
+      try {
+        customSerializer=current.getClass().getDeclaredMethod("writeObject",java.io.ObjectOutputStream.class);
+        customDeserializer=current.getClass().getDeclaredMethod("readObject",java.io.ObjectInputStream.class);
+      }
+ catch (      Exception e) {
+      }
+      if (customSerializer != null && customDeserializer != null) {
+        hasCustomSerialization=true;
+      }
       for (      Field f : current.getClass().getDeclaredFields()) {
         f.setAccessible(true);
         if (f.getName().contains("$outer")) {
           newCurrent=f.get(current);
         }
-        if (!Modifier.isTransient(f.getModifiers()) && !Modifier.isStatic(f.getModifiers()) && f.get(current) != null && !(f.get(current) instanceof Serializable)) {
+        if (!hasCustomSerialization && !Modifier.isStatic(f.getModifiers()) && f.get(current) != null && !(f.get(current) instanceof Serializable)) {
           throw new RuntimeException("User code object " + userCodeObject + " contains non-serializable field "+ f.getName()+ " = "+ f.get(current));
         }
       }
