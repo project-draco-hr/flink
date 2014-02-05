@@ -49,7 +49,7 @@
       LOG.debug("The execution is limited to a maximum number of " + maxMachinesJob + " machines.");
     }
   }
-  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(this.statistics,maxMachinesJob,defaultParallelism,true);
+  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(maxMachinesJob,defaultParallelism);
   pactPlan.accept(graphCreator);
   OptimizerNode rootNode;
   if (graphCreator.sinks.size() == 1) {
@@ -58,16 +58,14 @@
  else   if (graphCreator.sinks.size() > 1) {
     Iterator<DataSinkNode> iter=graphCreator.sinks.iterator();
     rootNode=iter.next();
-    int id=graphCreator.getId();
     while (iter.hasNext()) {
       rootNode=new SinkJoiner(rootNode,iter.next());
-      rootNode.setId(id++);
     }
   }
  else {
     throw new CompilerException("Bug: The optimizer plan representation has no sinks.");
   }
-  rootNode.accept(new MemoryDistributer(graphCreator.getMemoryConsumerCount() == 0 ? 0 : memoryPerInstance / graphCreator.getMemoryConsumerCount()));
+  rootNode.accept(new IdAndMemoryAndEstimatesVisitor(this.statistics,graphCreator.getMemoryConsumerCount() == 0 ? 0 : memoryPerInstance / graphCreator.getMemoryConsumerCount()));
   InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
   rootNode.accept(propsVisitor);
   BranchesVisitor branchingVisitor=new BranchesVisitor();
