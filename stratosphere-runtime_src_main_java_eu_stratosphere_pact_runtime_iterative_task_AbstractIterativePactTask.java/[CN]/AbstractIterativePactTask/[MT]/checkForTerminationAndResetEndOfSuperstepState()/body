@@ -2,14 +2,29 @@
   if (this.iterativeInputs.isEmpty())   throw new IllegalStateException();
   boolean anyClosed=false;
   boolean allClosed=true;
-  for (  MutableReader<?> reader : this.iterativeInputs) {
+  for (  int inputNum : this.iterativeInputs) {
+    MutableReader<?> reader=this.inputReaders[inputNum];
     if (reader.isInputClosed()) {
       anyClosed=true;
     }
  else {
-      allClosed=false;
+      if (reader.hasReachedEndOfSuperstep()) {
+        allClosed=false;
+        reader.startNextSuperstep();
+      }
+ else {
+        @SuppressWarnings("unchecked") MutableObjectIterator<Object> inIter=(MutableObjectIterator<Object>)this.inputIterators[inputNum];
+        Object o=this.inputSerializers[inputNum].createInstance();
+        while (inIter.next(o))         ;
+        if (reader.isInputClosed()) {
+          anyClosed=true;
+        }
+ else {
+          allClosed=false;
+          reader.startNextSuperstep();
+        }
+      }
     }
-    reader.startNextSuperstep();
   }
   if (allClosed != anyClosed) {
     throw new IllegalStateException("Inconsistent state: Iteration termination received on some, but not all inputs.");
