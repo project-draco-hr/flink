@@ -1,0 +1,20 @@
+{
+  final int numSubTasks=(args.length > 0 ? Integer.parseInt(args[0]) : 1);
+  final String dataPointInput=(args.length > 1 ? args[1] : "");
+  final String clusterInput=(args.length > 2 ? args[2] : "");
+  final String output=(args.length > 3 ? args[3] : "");
+  final int numIterations=(args.length > 4 ? Integer.parseInt(args[4]) : 1);
+  FileDataSource initialClusterPoints=new FileDataSource(new PointInFormat(),clusterInput,"Centers");
+  initialClusterPoints.setDegreeOfParallelism(1);
+  BulkIteration iteration=new BulkIteration("K-Means Loop");
+  iteration.setInput(initialClusterPoints);
+  iteration.setMaximumNumberOfIterations(numIterations);
+  FileDataSource dataPoints=new FileDataSource(new PointInFormat(),dataPointInput,"Data Points");
+  MapOperator findNearestClusterCenters=MapOperator.builder(new FindNearestCenterBroadcast()).setBroadcastVariable("centers",iteration.getPartialSolution()).input(dataPoints).name("Find Nearest Centers").build();
+  ReduceOperator recomputeClusterCenter=ReduceOperator.builder(new RecomputeClusterCenter(),IntValue.class,0).input(findNearestClusterCenters).name("Recompute Center Positions").build();
+  iteration.setNextPartialSolution(recomputeClusterCenter);
+  FileDataSink finalResult=new FileDataSink(new PointOutFormat(),output,iteration,"New Center Positions");
+  Plan plan=new Plan(finalResult,"Iterative KMeans");
+  plan.setDefaultParallelism(numSubTasks);
+  return plan;
+}
