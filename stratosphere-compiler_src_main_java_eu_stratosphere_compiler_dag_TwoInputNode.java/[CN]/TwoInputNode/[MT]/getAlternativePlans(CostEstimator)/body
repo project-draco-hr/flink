@@ -6,9 +6,20 @@
   final List<? extends PlanNode> subPlans2=getSecondPredecessorNode().getAlternativePlans(estimator);
   final Set<RequestedGlobalProperties> intGlobal1=this.input1.getInterestingProperties().getGlobalProperties();
   final Set<RequestedGlobalProperties> intGlobal2=this.input2.getInterestingProperties().getGlobalProperties();
-  final List<List<? extends PlanNode>> broadcastPlans=new ArrayList<List<? extends PlanNode>>();
-  for (  PactConnection broadcastConnection : getBroadcastConnections()) {
-    broadcastPlans.add(broadcastConnection.getSource().getAlternativePlans(estimator));
+  final List<Set<? extends NamedChannel>> broadcastPlanChannels=new ArrayList<Set<? extends NamedChannel>>();
+  List<PactConnection> broadcastConnections=getBroadcastConnections();
+  List<String> broadcastConnectionNames=getBroadcastConnectionNames();
+  for (int i=0; i < broadcastConnections.size(); i++) {
+    PactConnection broadcastConnection=broadcastConnections.get(i);
+    String broadcastConnectionName=broadcastConnectionNames.get(i);
+    List<PlanNode> broadcastPlanCandidates=broadcastConnection.getSource().getAlternativePlans(estimator);
+    HashSet<NamedChannel> broadcastChannels=new HashSet<NamedChannel>(broadcastPlanCandidates.size());
+    for (    PlanNode plan : broadcastPlanCandidates) {
+      final NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
+      c.setShipStrategy(ShipStrategyType.BROADCAST);
+      broadcastChannels.add(c);
+    }
+    broadcastPlanChannels.add(broadcastChannels);
   }
   final GlobalPropertiesPair[] allGlobalPairs;
   final LocalPropertiesPair[] allLocalPairs;
@@ -93,7 +104,7 @@
           }
           for (          GlobalPropertiesPair gpp : allGlobalPairs) {
             if (gpp.getProperties1().isMetBy(c1.getGlobalProperties()) && gpp.getProperties2().isMetBy(c2.getGlobalProperties())) {
-              addLocalCandidates(c1,c2,igps1,igps2,outputPlans,allLocalPairs,estimator);
+              addLocalCandidates(c1,c2,broadcastPlanChannels,igps1,igps2,outputPlans,allLocalPairs,estimator);
               break;
             }
           }

@@ -4,9 +4,20 @@
   }
   final List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
   final Set<RequestedGlobalProperties> intGlobal=this.inConn.getInterestingProperties().getGlobalProperties();
-  final List<List<? extends PlanNode>> broadcastPlans=new ArrayList<List<? extends PlanNode>>();
-  for (  PactConnection broadcastConnection : getBroadcastConnections()) {
-    broadcastPlans.add(broadcastConnection.getSource().getAlternativePlans(estimator));
+  final List<Set<? extends NamedChannel>> broadcastPlanChannels=new ArrayList<Set<? extends NamedChannel>>();
+  List<PactConnection> broadcastConnections=getBroadcastConnections();
+  List<String> broadcastConnectionNames=getBroadcastConnectionNames();
+  for (int i=0; i < broadcastConnections.size(); i++) {
+    PactConnection broadcastConnection=broadcastConnections.get(i);
+    String broadcastConnectionName=broadcastConnectionNames.get(i);
+    List<PlanNode> broadcastPlanCandidates=broadcastConnection.getSource().getAlternativePlans(estimator);
+    HashSet<NamedChannel> broadcastChannels=new HashSet<NamedChannel>(broadcastPlanCandidates.size());
+    for (    PlanNode plan : broadcastPlanCandidates) {
+      final NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
+      c.setShipStrategy(ShipStrategyType.BROADCAST);
+      broadcastChannels.add(c);
+    }
+    broadcastPlanChannels.add(broadcastChannels);
   }
   final RequestedGlobalProperties[] allValidGlobals;
 {
@@ -38,7 +49,7 @@
         }
         for (        RequestedGlobalProperties rgps : allValidGlobals) {
           if (rgps.isMetBy(c.getGlobalProperties())) {
-            addLocalCandidates(c,igps,outputPlans,estimator);
+            addLocalCandidates(c,broadcastPlanChannels,igps,outputPlans,estimator);
             break;
           }
         }
@@ -60,7 +71,7 @@
       }
       for (      RequestedGlobalProperties rgps : allValidGlobals) {
         if (rgps.isMetBy(c.getGlobalProperties())) {
-          addLocalCandidates(c,rgps,outputPlans,estimator);
+          addLocalCandidates(c,broadcastPlanChannels,rgps,outputPlans,estimator);
           break;
         }
       }

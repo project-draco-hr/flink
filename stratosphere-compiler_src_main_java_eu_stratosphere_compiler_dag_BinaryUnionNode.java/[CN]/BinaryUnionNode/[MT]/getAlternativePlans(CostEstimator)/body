@@ -4,6 +4,21 @@
   }
   final List<? extends PlanNode> subPlans1=getFirstPredecessorNode().getAlternativePlans(estimator);
   final List<? extends PlanNode> subPlans2=getSecondPredecessorNode().getAlternativePlans(estimator);
+  final List<Set<? extends NamedChannel>> broadcastPlanChannels=new ArrayList<Set<? extends NamedChannel>>();
+  List<PactConnection> broadcastConnections=getBroadcastConnections();
+  List<String> broadcastConnectionNames=getBroadcastConnectionNames();
+  for (int i=0; i < broadcastConnections.size(); i++) {
+    PactConnection broadcastConnection=broadcastConnections.get(i);
+    String broadcastConnectionName=broadcastConnectionNames.get(i);
+    List<PlanNode> broadcastPlanCandidates=broadcastConnection.getSource().getAlternativePlans(estimator);
+    HashSet<NamedChannel> broadcastChannels=new HashSet<NamedChannel>(broadcastPlanCandidates.size());
+    for (    PlanNode plan : broadcastPlanCandidates) {
+      final NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
+      c.setShipStrategy(ShipStrategyType.BROADCAST);
+      broadcastChannels.add(c);
+    }
+    broadcastPlanChannels.add(broadcastChannels);
+  }
   final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
   final BinaryUnionOpDescriptor operator=new BinaryUnionOpDescriptor();
   final RequestedLocalProperties noLocalProps=new RequestedLocalProperties();
@@ -102,7 +117,7 @@
             throw new CompilerException("Bug in Plan Enumeration for Union Node.");
           }
         }
-        instantiate(operator,c1,c2,outputPlans,estimator,igps,igps,noLocalProps,noLocalProps);
+        instantiate(operator,c1,c2,broadcastPlanChannels,outputPlans,estimator,igps,igps,noLocalProps,noLocalProps);
       }
     }
   }
