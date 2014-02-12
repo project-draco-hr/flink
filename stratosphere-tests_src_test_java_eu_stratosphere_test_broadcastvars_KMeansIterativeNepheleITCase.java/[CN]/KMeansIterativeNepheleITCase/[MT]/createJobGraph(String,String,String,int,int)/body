@@ -1,0 +1,32 @@
+{
+  final TypeSerializerFactory<?> serializer=RecordSerializerFactory.get();
+  @SuppressWarnings("unchecked") final TypeComparatorFactory<?> int0Comparator=new RecordComparatorFactory(new int[]{0},new Class[]{IntValue.class});
+  JobGraph jobGraph=new JobGraph("KMeans Iterative");
+  JobInputVertex points=createPointsInput(jobGraph,pointsPath,numSubTasks,serializer);
+  JobInputVertex centers=createCentersInput(jobGraph,centersPath,numSubTasks,serializer);
+  JobTaskVertex head=createIterationHead(jobGraph,numSubTasks,serializer);
+  JobTaskVertex mapper=createMapper(jobGraph,numSubTasks,serializer,serializer,serializer,int0Comparator);
+  JobTaskVertex reducer=createReducer(jobGraph,numSubTasks,serializer,int0Comparator,serializer);
+  JobOutputVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",numSubTasks,numSubTasks);
+  JobOutputVertex sync=createSync(jobGraph,numIterations,numSubTasks);
+  JobOutputVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
+  JobGraphUtils.connect(points,mapper,ChannelType.NETWORK,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(centers,head,ChannelType.NETWORK,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(head,mapper,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+  new TaskConfig(mapper.getConfiguration()).setBroadcastGateIterativeWithNumberOfEventsUntilInterrupt(0,numSubTasks);
+  new TaskConfig(mapper.getConfiguration()).setInputCached(0,true);
+  new TaskConfig(mapper.getConfiguration()).setInputMaterializationMemory(0,MEMORY_PER_CONSUMER * JobGraphUtils.MEGABYTE);
+  JobGraphUtils.connect(mapper,reducer,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+  new TaskConfig(reducer.getConfiguration()).setGateIterativeWithNumberOfEventsUntilInterrupt(0,numSubTasks);
+  JobGraphUtils.connect(reducer,fakeTailOutput,ChannelType.NETWORK,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(head,output,ChannelType.NETWORK,DistributionPattern.POINTWISE);
+  JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+  points.setVertexToShareInstancesWith(output);
+  centers.setVertexToShareInstancesWith(output);
+  head.setVertexToShareInstancesWith(output);
+  mapper.setVertexToShareInstancesWith(output);
+  reducer.setVertexToShareInstancesWith(output);
+  fakeTailOutput.setVertexToShareInstancesWith(output);
+  sync.setVertexToShareInstancesWith(output);
+  return jobGraph;
+}

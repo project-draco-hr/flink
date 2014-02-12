@@ -6,6 +6,40 @@
       int numBroadcastInputs=this.config.getNumBroadcastInputs();
       initInputsSerializersAndComparators(numInputs);
       initBroadcastInputsSerializers(numBroadcastInputs);
+{
+        List<Integer> iterativeInputs=new ArrayList<Integer>();
+        for (int i=0; i < numInputs; i++) {
+          final int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeGate(i);
+          if (numberOfEventsUntilInterrupt < 0) {
+            throw new IllegalArgumentException();
+          }
+ else           if (numberOfEventsUntilInterrupt > 0) {
+            this.inputReaders[i].setIterative(numberOfEventsUntilInterrupt);
+            iterativeInputs.add(i);
+            if (LOG.isDebugEnabled()) {
+              LOG.debug(formatLogString("Input [" + i + "] reads in supersteps with ["+ +numberOfEventsUntilInterrupt+ "] event(s) till next superstep."));
+            }
+          }
+        }
+        this.iterativeInputs=asArray(iterativeInputs);
+      }
+{
+        List<Integer> iterativeBcInputs=new ArrayList<Integer>();
+        for (int i=0; i < numBroadcastInputs; i++) {
+          final int numberOfEventsUntilInterrupt=getTaskConfig().getNumberOfEventsUntilInterruptInIterativeBroadcastGate(i);
+          if (numberOfEventsUntilInterrupt < 0) {
+            throw new IllegalArgumentException();
+          }
+ else           if (numberOfEventsUntilInterrupt > 0) {
+            this.broadcastInputReaders[i].setIterative(numberOfEventsUntilInterrupt);
+            iterativeBcInputs.add(i);
+            if (LOG.isDebugEnabled()) {
+              LOG.debug(formatLogString("Broadcast input [" + i + "] reads in supersteps with ["+ +numberOfEventsUntilInterrupt+ "] event(s) till next superstep."));
+            }
+          }
+        }
+        this.iterativeBroadcastInputs=asArray(iterativeBcInputs);
+      }
       initLocalStrategies(numInputs);
     }
  catch (    Exception e) {
@@ -16,6 +50,10 @@
       return;
     }
     initialize();
+    for (int i=0; i < this.config.getNumBroadcastInputs(); i++) {
+      final String name=this.config.getBroadcastInputName(i);
+      readAndSetBroadcastInput(i,name,this.runtimeUdfContext);
+    }
     run();
   }
   finally {
