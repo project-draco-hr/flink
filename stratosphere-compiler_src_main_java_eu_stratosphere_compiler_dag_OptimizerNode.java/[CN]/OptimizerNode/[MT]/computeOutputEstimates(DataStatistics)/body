@@ -4,82 +4,31 @@
       throw new CompilerException("Bug: Estimate computation called before inputs have been set.");
     }
   }
+  computeOperatorSpecificDefaultEstimates(statistics);
+  if (getPactContract() == null || getPactContract().getCompilerHints() == null) {
+    return;
+  }
   CompilerHints hints=getPactContract().getCompilerHints();
-  computeUniqueFields();
-  boolean outputCardEstimated=true;
-  this.estimatedNumRecords=0;
-  int count=0;
-  for (  Entry<FieldSet,Long> cardinality : hints.getDistinctCounts().entrySet()) {
-    float avgNumValues=hints.getAvgNumRecordsPerDistinctFields(cardinality.getKey());
-    if (avgNumValues != -1) {
-      this.estimatedNumRecords+=cardinality.getValue() * avgNumValues;
-      count++;
-    }
+  if (hints.getOutputSize() >= 0) {
+    this.estimatedOutputSize=hints.getOutputSize();
   }
-  if (count > 0) {
-    this.estimatedNumRecords=(this.estimatedNumRecords / count) >= 1 ? (this.estimatedNumRecords / count) : 1;
+  if (hints.getOutputCardinality() >= 0) {
+    this.estimatedNumRecords=hints.getOutputCardinality();
   }
- else {
-    this.estimatedNumRecords=this.computeNumberOfStubCalls();
-    if (hints.getAvgRecordsEmittedPerStubCall() != -1.0 && this.computeNumberOfStubCalls() != -1) {
-      this.estimatedNumRecords=(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall() >= 1) ? (long)(this.computeNumberOfStubCalls() * hints.getAvgRecordsEmittedPerStubCall()) : 1;
-    }
- else {
-      outputCardEstimated=false;
-    }
-  }
-  this.estimatedCardinality.putAll(hints.getDistinctCounts());
-  for (  FieldSet uniqueFieldSet : getUniqueFields()) {
-    if (this.estimatedCardinality.get(uniqueFieldSet) == null) {
-      this.estimatedCardinality.put(uniqueFieldSet,this.estimatedNumRecords);
-    }
-  }
-  for (int input=0; input < getIncomingConnections().size(); input++) {
-    int[] keyColumns;
-    if ((keyColumns=getConstantKeySet(input)) != null) {
-      long estimatedKeyCardinality;
-      if (hints.getAvgRecordsEmittedPerStubCall() > 1.0) {
-        double probToKeepKey=1.0 - Math.pow((1.0 - hints.getAvgRecordsEmittedPerStubCall()),this.computeStubCallsPerProcessedKey());
-        estimatedKeyCardinality=(this.computeNumberOfProcessedKeys() * probToKeepKey >= 1) ? (long)(this.computeNumberOfProcessedKeys() * probToKeepKey) : 1;
-      }
- else {
-        estimatedKeyCardinality=this.computeNumberOfProcessedKeys();
-      }
-      FieldSet fieldSet=new FieldSet(keyColumns);
-      if (estimatedCardinality.get(fieldSet) == null) {
-        estimatedCardinality.put(fieldSet,estimatedKeyCardinality);
+  if (hints.getFilterFactor() >= 0.0f) {
+    if (this instanceof SingleInputNode) {
+      OptimizerNode pred=((SingleInputNode)this).getPredecessorNode();
+      if (pred != null && pred.getEstimatedNumRecords() >= 0) {
+        this.estimatedNumRecords=(long)(pred.getEstimatedNumRecords() * hints.getFilterFactor());
       }
     }
   }
-  if (this.estimatedNumRecords != -1) {
-    for (    Entry<FieldSet,Float> avgNumValues : hints.getAvgNumRecordsPerDistinctFields().entrySet()) {
-      if (estimatedCardinality.get(avgNumValues.getKey()) == null) {
-        long estimatedCard=(this.estimatedNumRecords / avgNumValues.getValue() >= 1) ? (long)(this.estimatedNumRecords / avgNumValues.getValue()) : 1;
-        estimatedCardinality.put(avgNumValues.getKey(),estimatedCard);
-      }
+  if (hints.getAvgBytesPerOutputRecord() >= 1) {
+    if (this.estimatedNumRecords == -1 && this.estimatedOutputSize >= 0) {
+      this.estimatedNumRecords=(long)(this.estimatedOutputSize / hints.getAvgBytesPerOutputRecord());
     }
-  }
-  if (!outputCardEstimated) {
-    long newEstimatedNumRecords=0;
-    count=0;
-    for (    Entry<FieldSet,Long> cardinality : estimatedCardinality.entrySet()) {
-      float avgNumValues=hints.getAvgNumRecordsPerDistinctFields(cardinality.getKey());
-      if (avgNumValues != -1) {
-        newEstimatedNumRecords+=cardinality.getValue() * avgNumValues;
-        count++;
-      }
-    }
-    if (count > 0) {
-      newEstimatedNumRecords=(newEstimatedNumRecords / count) >= 1 ? (newEstimatedNumRecords / count) : 1;
-    }
-  }
-  double estAvgRecordWidth=this.computeAverageRecordWidth();
-  if (this.estimatedNumRecords != -1 && estAvgRecordWidth != -1) {
-    this.estimatedOutputSize=(this.estimatedNumRecords * estAvgRecordWidth) >= 1 ? (long)(this.estimatedNumRecords * estAvgRecordWidth) : 1;
-  }
-  for (  Entry<FieldSet,Long> cardinality : this.estimatedCardinality.entrySet()) {
-    if (cardinality.getValue() > this.estimatedNumRecords) {
-      cardinality.setValue(this.estimatedNumRecords);
+ else     if (this.estimatedOutputSize == -1 && this.estimatedNumRecords >= 0) {
+      this.estimatedOutputSize=(long)(this.estimatedNumRecords * hints.getAvgBytesPerOutputRecord());
     }
   }
 }
