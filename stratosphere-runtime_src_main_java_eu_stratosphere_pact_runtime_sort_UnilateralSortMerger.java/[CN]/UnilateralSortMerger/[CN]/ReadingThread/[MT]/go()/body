@@ -1,6 +1,6 @@
 {
   final MutableObjectIterator<E> reader=this.reader;
-  final E current=this.readTarget;
+  E current=this.readTarget;
   E leftoverRecord=null;
   CircularElement<E> element=null;
   long bytesUntilSpilling=this.startSpillingBytes;
@@ -39,7 +39,9 @@
     boolean available=true;
     if (bytesUntilSpilling > 0 && buffer.getCapacity() >= bytesUntilSpilling) {
       boolean fullBuffer=false;
-      while (isRunning() && (available=reader.next(current))) {
+      E newCurrent;
+      while (isRunning() && (available=(newCurrent=reader.next(current)) != null)) {
+        current=newCurrent;
         if (!buffer.write(current)) {
           leftoverRecord=current;
           fullBuffer=true;
@@ -78,7 +80,9 @@
       }
     }
     if (available) {
-      while (isRunning() && reader.next(current)) {
+      E newCurrent;
+      while (isRunning() && ((newCurrent=reader.next(current)) != null)) {
+        current=newCurrent;
         if (!buffer.write(current)) {
           leftoverRecord=current;
           break;

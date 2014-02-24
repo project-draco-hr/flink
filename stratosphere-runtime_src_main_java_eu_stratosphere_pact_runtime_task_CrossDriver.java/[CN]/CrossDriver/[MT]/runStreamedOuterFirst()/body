@@ -8,14 +8,16 @@
   final TypeSerializer<T2> serializer2=this.taskContext.getInputSerializer(1);
   final SpillingResettableMutableObjectIterator<T2> spillVals=new SpillingResettableMutableObjectIterator<T2>(in2,serializer2,this.memManager,this.taskContext.getIOManager(),this.memPagesForSpillingSide,this.taskContext.getOwningNepheleTask());
   this.spillIter=spillVals;
-  final T1 val1=serializer1.createInstance();
-  final T1 val1Copy=serializer1.createInstance();
-  final T2 val2=serializer2.createInstance();
+  T1 val1;
+  final T1 val1Reuse=serializer1.createInstance();
+  T1 val1Copy=serializer1.createInstance();
+  T2 val2;
+  final T2 val2Reuse=serializer2.createInstance();
   final GenericCrosser<T1,T2,OT> crosser=this.taskContext.getStub();
   final Collector<OT> collector=this.taskContext.getOutputCollector();
-  while (this.running && in1.next(val1)) {
-    while (this.running && spillVals.next(val2)) {
-      serializer1.copyTo(val1,val1Copy);
+  while (this.running && ((val1=in1.next(val1Reuse)) != null)) {
+    while (this.running && ((val2=spillVals.next(val2Reuse)) != null)) {
+      val1Copy=serializer1.copy(val1,val1Copy);
       crosser.cross(val1Copy,val2,collector);
     }
     spillVals.reset();
