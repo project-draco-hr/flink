@@ -1,0 +1,30 @@
+{
+  if (this.ascii) {
+    reuse.setValueAscii(bytes,offset,numBytes);
+    return reuse;
+  }
+ else {
+    ByteBuffer byteWrapper=this.byteWrapper;
+    if (bytes != byteWrapper.array()) {
+      byteWrapper=ByteBuffer.wrap(bytes,0,bytes.length);
+      this.byteWrapper=byteWrapper;
+    }
+    byteWrapper.limit(offset + numBytes);
+    byteWrapper.position(offset);
+    try {
+      CharBuffer result=this.decoder.decode(byteWrapper);
+      reuse.setValue(result);
+      return reuse;
+    }
+ catch (    CharacterCodingException e) {
+      if (skipInvalidLines) {
+        return null;
+      }
+ else {
+        byte[] copy=new byte[numBytes];
+        System.arraycopy(bytes,offset,copy,0,numBytes);
+        throw new RuntimeException("Line could not be encoded: " + Arrays.toString(copy),e);
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  if (node instanceof SinkPlanNode) {
+    SinkPlanNode sn=(SinkPlanNode)node;
+    Channel inchannel=sn.getInput();
+    traverseChannel(inchannel);
+  }
+ else   if (node instanceof SourcePlanNode) {
+    TypeInformation<?> typeInfo=getTypeInfoFromSource((SourcePlanNode)node);
+    ((SourcePlanNode)node).setSerializer(createSerializer(typeInfo));
+  }
+ else   if (node instanceof SingleInputPlanNode) {
+    SingleInputPlanNode sn=(SingleInputPlanNode)node;
+    if (!(sn.getOptimizerNode().getPactContract() instanceof UnaryJavaPlanNode)) {
+      throw new RuntimeException("Wrong operator type found in post pass.");
+    }
+    UnaryJavaPlanNode<?,?> javaNode=(UnaryJavaPlanNode<?,?>)sn.getOptimizerNode().getPactContract();
+    if (sn.getDriverStrategy().requiresComparator()) {
+      sn.setComparator(createComparator(javaNode.getInputType(),sn.getKeys(),getSortOrders(sn.getKeys(),sn.getSortOrders())));
+    }
+    traverseChannel(sn.getInput());
+    for (    Channel c : sn.getBroadcastInputs()) {
+      traverseChannel(c);
+    }
+  }
+ else   if (node instanceof DualInputPlanNode) {
+    DualInputPlanNode dn=(DualInputPlanNode)node;
+    if (!(dn.getOptimizerNode().getPactContract() instanceof BinaryJavaPlanNode)) {
+      throw new RuntimeException("Wrong operator type found in post pass.");
+    }
+    BinaryJavaPlanNode<?,?,?> javaNode=(BinaryJavaPlanNode<?,?,?>)dn.getOptimizerNode().getPactContract();
+    if (dn.getDriverStrategy().requiresComparator()) {
+      dn.setComparator1(createComparator(javaNode.getInputType1(),dn.getKeysForInput1(),getSortOrders(dn.getKeysForInput1(),dn.getSortOrders())));
+      dn.setComparator2(createComparator(javaNode.getInputType2(),dn.getKeysForInput2(),getSortOrders(dn.getKeysForInput2(),dn.getSortOrders())));
+      dn.setPairComparator(createPairComparator(javaNode.getInputType1(),javaNode.getInputType2()));
+    }
+    traverseChannel(dn.getInput1());
+    traverseChannel(dn.getInput2());
+    for (    Channel c : dn.getBroadcastInputs()) {
+      traverseChannel(c);
+    }
+  }
+ else {
+    throw new CompilerPostPassException("Unknown node type encountered: " + node.getClass().getName());
+  }
+}

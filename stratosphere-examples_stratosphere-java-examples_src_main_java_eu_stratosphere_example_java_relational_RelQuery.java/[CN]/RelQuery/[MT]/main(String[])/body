@@ -1,0 +1,26 @@
+{
+  if (args.length < 3) {
+    System.out.println("Usage: <input orders> <input lineitem> <output path>");
+    return;
+  }
+  final String ordersPath=args[0];
+  final String lineitemsPath=args[1];
+  final String outputPath=args[2];
+  final String prioFilter="0";
+  final int yearFilter=1990;
+  final ExecutionEnvironment context=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Tuple5<Long,String,String,String,String>> orders=context.readCsvFile(ordersPath).includeFields("10101101").types(Long.class,String.class,String.class,String.class,String.class);
+  DataSet<Tuple2<Long,Double>> lineitem=context.readCsvFile(lineitemsPath).includeFields("TFFFFT").types(Long.class,Double.class);
+  DataSet<Tuple5<Long,String,String,String,String>> filtered=orders.filter(new FilterFunction<Tuple5<Long,String,String,String,String>>(){
+    @Override public boolean filter(    Tuple5<Long,String,String,String,String> value) throws Exception {
+      String orderStatus=value.T2();
+      String orderPrio=value.T4();
+      String orderDate=value.T3();
+      return orderStatus.equals("F") && orderPrio.startsWith(prioFilter) && Integer.parseInt(orderDate.substring(0,4)) > yearFilter;
+    }
+  }
+);
+  DataSet<Tuple3<Long,String,Double>> joined=filtered.join(lineitem).where(0).equalTo(0).with(new OLiJoinFunction());
+  DataSet<Tuple3<Long,String,Double>> result=joined.groupBy(0,1).aggregate(SUM,2);
+  result.writeAsCsv(outputPath);
+}

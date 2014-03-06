@@ -1,43 +1,44 @@
 {
-  if (LOG.isInfoEnabled())   LOG.info(getLogString("Start PACT code"));
+  if (LOG.isDebugEnabled())   LOG.debug(getLogString("Starting data source operator"));
   try {
     RegularPactTask.openChainedTasks(this.chainedTasks,this);
     final Iterator<InputSplit> splitIterator=getInputSplits();
-    final OT record=this.serializer.createInstance();
     while (!this.taskCanceled && splitIterator.hasNext()) {
       final InputSplit split=splitIterator.next();
+      OT record=this.serializer.createInstance();
       if (LOG.isDebugEnabled())       LOG.debug(getLogString("Opening input split " + split.toString()));
       final InputFormat<OT,InputSplit> format=this.format;
       format.open(split);
       if (LOG.isDebugEnabled())       LOG.debug(getLogString("Starting to read input from split " + split.toString()));
       try {
         if (record.getClass() == Record.class) {
-          final Record pactRecord=(Record)record;
+          Record typedRecord=(Record)record;
           @SuppressWarnings("unchecked") final InputFormat<Record,InputSplit> inFormat=(InputFormat<Record,InputSplit>)format;
           if (this.output instanceof RecordOutputCollector) {
             final RecordOutputCollector output=(RecordOutputCollector)this.output;
             while (!this.taskCanceled && !inFormat.reachedEnd()) {
-              pactRecord.clear();
-              if (inFormat.nextRecord(pactRecord)) {
-                output.collect(pactRecord);
+              typedRecord.clear();
+              Record returnedRecord=null;
+              if ((returnedRecord=inFormat.nextRecord(typedRecord)) != null) {
+                output.collect(returnedRecord);
               }
             }
           }
- else           if (this.output instanceof ChainedMapDriver) {
-            @SuppressWarnings("unchecked") final ChainedMapDriver<Record,?> output=(ChainedMapDriver<Record,?>)this.output;
+ else           if (this.output instanceof ChainedCollectorMapDriver) {
+            @SuppressWarnings("unchecked") final ChainedCollectorMapDriver<Record,?> output=(ChainedCollectorMapDriver<Record,?>)this.output;
             while (!this.taskCanceled && !inFormat.reachedEnd()) {
-              pactRecord.clear();
-              if (inFormat.nextRecord(pactRecord)) {
-                output.collect(pactRecord);
+              typedRecord.clear();
+              if ((typedRecord=inFormat.nextRecord(typedRecord)) != null) {
+                output.collect(typedRecord);
               }
             }
           }
  else {
             @SuppressWarnings("unchecked") final Collector<Record> output=(Collector<Record>)this.output;
             while (!this.taskCanceled && !inFormat.reachedEnd()) {
-              pactRecord.clear();
-              if (inFormat.nextRecord(pactRecord)) {
-                output.collect(pactRecord);
+              typedRecord.clear();
+              if ((typedRecord=inFormat.nextRecord(typedRecord)) != null) {
+                output.collect(typedRecord);
               }
             }
           }
@@ -46,15 +47,15 @@
           if (this.output instanceof OutputCollector) {
             final OutputCollector<OT> output=(OutputCollector<OT>)this.output;
             while (!this.taskCanceled && !format.reachedEnd()) {
-              if (format.nextRecord(record)) {
+              if ((record=format.nextRecord(record)) != null) {
                 output.collect(record);
               }
             }
           }
- else           if (this.output instanceof ChainedMapDriver) {
-            @SuppressWarnings("unchecked") final ChainedMapDriver<OT,?> output=(ChainedMapDriver<OT,?>)this.output;
+ else           if (this.output instanceof ChainedCollectorMapDriver) {
+            @SuppressWarnings("unchecked") final ChainedCollectorMapDriver<OT,?> output=(ChainedCollectorMapDriver<OT,?>)this.output;
             while (!this.taskCanceled && !format.reachedEnd()) {
-              if (format.nextRecord(record)) {
+              if ((record=format.nextRecord(record)) != null) {
                 output.collect(record);
               }
             }
@@ -62,7 +63,7 @@
  else {
             final Collector<OT> output=this.output;
             while (!this.taskCanceled && !format.reachedEnd()) {
-              if (format.nextRecord(record)) {
+              if ((record=format.nextRecord(record)) != null) {
                 output.collect(record);
               }
             }
@@ -92,9 +93,9 @@
     }
   }
   if (!this.taskCanceled) {
-    if (LOG.isInfoEnabled())     LOG.info(getLogString("Finished PACT code"));
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Finished data source operator"));
   }
  else {
-    if (LOG.isWarnEnabled())     LOG.warn(getLogString("PACT code cancelled"));
+    if (LOG.isDebugEnabled())     LOG.debug(getLogString("Data source operator cancelled"));
   }
 }
