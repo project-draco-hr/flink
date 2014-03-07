@@ -9,7 +9,17 @@
   }
  else   if (grouper.getKeys() instanceof Keys.FieldPositionKeys) {
     int[] logicalKeyPositions=grouper.getKeys().computeLogicalKeyPositions();
-    return new UnaryNodeTranslation(new PlanGroupReduceOperator<IN,OUT>(function,logicalKeyPositions,name,getInputType(),getResultType()));
+    PlanGroupReduceOperator<IN,OUT> reduceOp=new PlanGroupReduceOperator<IN,OUT>(function,logicalKeyPositions,name,getInputType(),getResultType());
+    if (grouper.getGroupSortKeyPositions() != null) {
+      int[] sortKeyPositions=grouper.getGroupSortKeyPositions();
+      Order[] sortOrders=grouper.getGroupSortOrders();
+      Ordering o=new Ordering();
+      for (int i=0; i < sortKeyPositions.length; i++) {
+        o.appendOrdering(sortKeyPositions[i],null,sortOrders[i]);
+      }
+      reduceOp.setGroupOrder(o);
+    }
+    return new UnaryNodeTranslation(reduceOp);
   }
  else {
     throw new UnsupportedOperationException("Unrecognized key type.");
