@@ -1,0 +1,24 @@
+{
+  FileDataSource source=new FileDataSource(DummyInputFormat.class,IN_FILE,"source");
+  MapOperator mappedSource=MapOperator.builder(IdentityMap.class).input(source).name("Identity mapped source").build();
+  ReduceOperator reducedSource=ReduceOperator.builder(IdentityReduce.class).input(source).name("Identity reduce source").build();
+  DeltaIteration iteration=new DeltaIteration(0,"Loop");
+  iteration.setMaximumNumberOfIterations(10);
+  iteration.setInitialSolutionSet(source);
+  iteration.setInitialWorkset(mappedSource);
+  JoinOperator nextWorkset=JoinOperator.builder(DummyNonPreservingMatchStub.class,IntValue.class,0,0).input1(iteration.getWorkset()).input2(reducedSource).name("Next work set").build();
+  JoinOperator solutionSetDelta=JoinOperator.builder(DummyNonPreservingMatchStub.class,IntValue.class,0,0).input1(iteration.getSolutionSet()).input2(nextWorkset).name("Solution set delta").build();
+  iteration.setNextWorkset(nextWorkset);
+  iteration.setSolutionSetDelta(solutionSetDelta);
+  FileDataSink sink=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Iteration sink");
+  List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
+  sinks.add(sink);
+  Plan plan=new Plan(sinks);
+  try {
+    compileNoStats(plan);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}

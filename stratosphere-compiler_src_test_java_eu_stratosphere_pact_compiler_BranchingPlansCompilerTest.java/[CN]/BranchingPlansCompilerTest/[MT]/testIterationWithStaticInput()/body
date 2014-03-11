@@ -1,0 +1,21 @@
+{
+  FileDataSource source=new FileDataSource(DummyInputFormat.class,IN_FILE,"source");
+  MapOperator mappedSource=MapOperator.builder(IdentityMap.class).input(source).name("Identity mapped source").build();
+  ReduceOperator reducedSource=ReduceOperator.builder(IdentityReduce.class).input(source).name("Identity reduce source").build();
+  BulkIteration iteration=new BulkIteration("Loop");
+  iteration.setInput(mappedSource);
+  iteration.setMaximumNumberOfIterations(10);
+  JoinOperator nextPartialSolution=JoinOperator.builder(DummyMatchStub.class,IntValue.class,0,0).input1(iteration.getPartialSolution()).input2(reducedSource).name("Next partial solution").build();
+  iteration.setNextPartialSolution(nextPartialSolution);
+  FileDataSink sink=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Iteration sink");
+  List<GenericDataSink> sinks=new ArrayList<GenericDataSink>();
+  sinks.add(sink);
+  Plan plan=new Plan(sinks);
+  try {
+    compileNoStats(plan);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}
