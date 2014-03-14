@@ -1,4 +1,7 @@
 {
+  if (UserGroupInformation.isSecurityEnabled()) {
+    throw new RuntimeException("Stratosphere YARN client does not have security support right now." + "File a bug, we will fix it asap");
+  }
   Options options=new Options();
   options.addOption(VERBOSE);
   options.addOption(STRATOSPHERE_CONF_DIR);
@@ -87,7 +90,7 @@
       }
     }
   }
-  List<File> shipFiles=null;
+  List<File> shipFiles=new ArrayList<File>();
   if (cmd.hasOption(SHIP_PATH.getOpt())) {
     String shipPath=cmd.getOptionValue(SHIP_PATH.getOpt());
     File shipDir=new File(shipPath);
@@ -104,7 +107,7 @@
     }
   }
   boolean hasLog4j=false;
-  if (confDirPath != null) {
+  if (confDirPath.length() > 0) {
     File l4j=new File(confDirPath + "/log4j.properties");
     if (l4j.exists()) {
       shipFiles.add(l4j);
@@ -206,7 +209,6 @@
   FsPermission permission=new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL);
   fs.setPermission(paths[2],permission);
   Utils.setTokensFor(amContainer,paths,this.conf);
-  LOG.debug("Security is enabled: " + UserGroupInformation.isSecurityEnabled());
   amContainer.setLocalResources(localResources);
   fs.close();
   Map<String,String> appMasterEnv=new HashMap<String,String>();
@@ -218,6 +220,7 @@
   appMasterEnv.put(Client.ENV_APP_ID,appId.toString());
   appMasterEnv.put(Client.ENV_CLIENT_HOME_DIR,fs.getHomeDirectory().toString());
   appMasterEnv.put(Client.ENV_CLIENT_SHIP_FILES,envShipFileList.toString());
+  appMasterEnv.put(Client.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
   amContainer.setEnvironment(appMasterEnv);
   Resource capability=Records.newRecord(Resource.class);
   capability.setMemory(jmMemory);

@@ -1,8 +1,16 @@
 {
   Credentials credentials=new Credentials();
   TokenCache.obtainTokensForNamenodes(credentials,paths,conf);
+  UserGroupInformation currUsr=UserGroupInformation.getCurrentUser();
+  Collection<Token<? extends TokenIdentifier>> usrTok=currUsr.getTokens();
+  for (  Token<? extends TokenIdentifier> token : usrTok) {
+    final Text id=new Text(token.getIdentifier());
+    LOG.info("Adding user token " + id + " with "+ token);
+    credentials.addToken(id,token);
+  }
   DataOutputBuffer dob=new DataOutputBuffer();
   credentials.writeTokenStorageToStream(dob);
+  LOG.debug("Wrote tokens. Credentials buffer length: " + dob.getLength());
   ByteBuffer securityTokens=ByteBuffer.wrap(dob.getData(),0,dob.getLength());
   amContainer.setTokens(securityTokens);
 }
