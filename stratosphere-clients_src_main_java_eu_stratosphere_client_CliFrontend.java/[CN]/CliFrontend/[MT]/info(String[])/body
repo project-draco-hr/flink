@@ -1,33 +1,48 @@
 {
+  CommandLine line;
+  try {
+    line=parser.parse(INFO_OPTIONS,args,false);
+    evaluateGeneralOptions(line);
+  }
+ catch (  MissingOptionException e) {
+    System.out.println(e.getMessage());
+    printHelpForInfo();
+    return 1;
+  }
+catch (  UnrecognizedOptionException e) {
+    System.out.println(e.getMessage());
+    printHelpForInfo();
+    return 2;
+  }
+catch (  Exception e) {
+    return handleError(e);
+  }
+  if (printHelp) {
+    printHelpForInfo();
+    return 0;
+  }
   File jarFile=null;
   String assemblerClass=null;
   String[] programArgs=null;
   boolean description;
   boolean plan;
-  CommandLine line=null;
-  try {
-    line=parser.parse(this.options.get(ACTION_INFO),args,false);
-  }
- catch (  Exception e) {
-    handleError(e);
-  }
   if (line.hasOption(JAR_OPTION.getOpt())) {
     jarFile=new File(line.getOptionValue(JAR_OPTION.getOpt()));
     if (!jarFile.exists()) {
-      System.err.println("Error: Jar file does not exist.");
-      printHelp();
-      System.exit(1);
+      System.out.println("Error: Jar file does not exist.");
+      printHelpForInfo();
+      return 1;
     }
  else     if (!jarFile.isFile()) {
-      System.err.println("Error: Jar file is not a file.");
-      printHelp();
-      System.exit(1);
+      System.out.println("Error: Jar file is not a file.");
+      printHelpForInfo();
+      return 1;
     }
   }
  else {
-    System.err.println("Error: Jar file is not set.");
-    printHelp();
-    System.exit(1);
+    System.out.println("Error: Jar file is not set.");
+    printHelpForInfo();
+    return 1;
   }
   if (line.hasOption(CLASS_OPTION.getOpt())) {
     assemblerClass=line.getOptionValue(CLASS_OPTION.getOpt());
@@ -35,14 +50,17 @@
   if (line.hasOption(ARGS_OPTION.getOpt())) {
     programArgs=line.getOptionValues(ARGS_OPTION.getOpt());
   }
+ else {
+    programArgs=line.getArgs();
+  }
   description=line.hasOption(DESCR_OPTION.getOpt());
   plan=line.hasOption(PLAN_OPTION.getOpt());
   if (!description && !plan) {
-    System.err.println("ERROR: Specify the information to display.");
-    printHelp();
-    System.exit(1);
+    System.out.println("ERROR: Specify the information to display.");
+    printHelpForInfo();
+    return 1;
   }
-  PackagedProgram program=null;
+  PackagedProgram program;
   try {
     if (assemblerClass == null) {
       program=new PackagedProgram(jarFile,programArgs);
@@ -52,52 +70,51 @@
     }
   }
  catch (  ProgramInvocationException e) {
-    handleError(e);
+    return handleError(e);
   }
-  if (description) {
-    String descr=null;
-    try {
-      descr=program.getDescription();
-    }
- catch (    Exception e) {
-      handleError(e);
-    }
-    if (descr != null) {
-      System.out.println("-------------------- Program Description ---------------------");
-      System.out.println(descr);
-      System.out.println("--------------------------------------------------------------");
-    }
+  try {
+    if (description) {
+      String descr=null;
+      try {
+        descr=program.getDescription();
+      }
+ catch (      Exception e) {
+        return handleError(e);
+      }
+      if (descr != null) {
+        System.out.println("-------------------- Program Description ---------------------");
+        System.out.println(descr);
+        System.out.println("--------------------------------------------------------------");
+      }
  else {
-      System.err.println("No description available for this plan.");
+        System.out.println("No description available for this plan.");
+      }
     }
-  }
-  if (plan) {
-    String jsonPlan=null;
-    Configuration configuration=getConfiguration();
-    Client client=new Client(configuration);
-    try {
-      jsonPlan=client.getOptimizerPlanAsJSON(program.getPlanWithJars());
-    }
- catch (    ProgramInvocationException e) {
-      handleError(e);
-    }
-catch (    JobInstantiationException e) {
-      handleError(e);
-    }
-catch (    CompilerException e) {
-      handleError(e);
-    }
-catch (    IOException e) {
-      handleError(e);
-    }
-    if (jsonPlan != null) {
-      System.out.println("----------------------- Execution Plan -----------------------");
-      System.out.println(jsonPlan);
-      System.out.println("--------------------------------------------------------------");
-    }
+    if (plan) {
+      String jsonPlan=null;
+      Configuration configuration=getConfiguration();
+      Client client=new Client(configuration);
+      try {
+        jsonPlan=client.getOptimizedPlanAsJson(program);
+      }
+ catch (      ProgramInvocationException e) {
+        return handleError(e);
+      }
+catch (      CompilerException e) {
+        return handleError(e);
+      }
+      if (jsonPlan != null) {
+        System.out.println("----------------------- Execution Plan -----------------------");
+        System.out.println(jsonPlan);
+        System.out.println("--------------------------------------------------------------");
+      }
  else {
-      System.err.println("JSON plan could not be compiled.");
+        System.out.println("JSON plan could not be compiled.");
+      }
     }
+    return 0;
   }
-  program.deleteExtractedLibraries();
+  finally {
+    program.deleteExtractedLibraries();
+  }
 }

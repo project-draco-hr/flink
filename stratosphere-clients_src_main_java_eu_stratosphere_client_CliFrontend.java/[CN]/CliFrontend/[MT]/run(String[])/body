@@ -1,16 +1,31 @@
 {
+  CommandLine line;
+  try {
+    line=parser.parse(RUN_OPTIONS,args,false);
+    evaluateGeneralOptions(line);
+  }
+ catch (  MissingOptionException e) {
+    System.out.println(e.getMessage());
+    printHelpForRun();
+    return 1;
+  }
+catch (  UnrecognizedOptionException e) {
+    System.out.println(e.getMessage());
+    printHelpForRun();
+    return 2;
+  }
+catch (  Exception e) {
+    return handleError(e);
+  }
+  if (printHelp) {
+    printHelpForRun();
+    return 0;
+  }
   File jarFile=null;
-  String assemblerClass=null;
+  String entryPointClass=null;
   String[] programArgs=null;
   String address=null;
   boolean wait=false;
-  CommandLine line=null;
-  try {
-    line=parser.parse(this.options.get(ACTION_RUN),args,false);
-  }
- catch (  Exception e) {
-    handleError(e);
-  }
   if (line.hasOption(ADDRESS_OPTION.getOpt())) {
     address=line.getOptionValue(ADDRESS_OPTION.getOpt());
   }
@@ -18,26 +33,29 @@
     String jarFilePath=line.getOptionValue(JAR_OPTION.getOpt());
     jarFile=new File(jarFilePath);
     if (!jarFile.exists()) {
-      System.err.println("Error: Jar file does not exist.");
-      printHelp();
-      System.exit(1);
+      System.out.println("Error: Jar file does not exist.");
+      printHelpForRun();
+      return 1;
     }
  else     if (!jarFile.isFile()) {
-      System.err.println("Error: Jar file is not a file.");
-      printHelp();
-      System.exit(1);
+      System.out.println("Error: Jar file is not a file.");
+      printHelpForRun();
+      return 1;
     }
   }
  else {
-    System.err.println("Error: Jar file is not set.");
-    printHelp();
-    System.exit(1);
+    System.out.println("Error: Jar file is not set.");
+    printHelpForRun();
+    return 1;
   }
   if (line.hasOption(CLASS_OPTION.getOpt())) {
-    assemblerClass=line.getOptionValue(CLASS_OPTION.getOpt());
+    entryPointClass=line.getOptionValue(CLASS_OPTION.getOpt());
   }
   if (line.hasOption(ARGS_OPTION.getOpt())) {
     programArgs=line.getOptionValues(ARGS_OPTION.getOpt());
+  }
+ else {
+    programArgs=line.getArgs();
   }
   String loc=getConfigurationDirectory();
   File jmAddressFile=new File(loc + "/.yarn-jobmanager");
@@ -50,17 +68,17 @@
     }
   }
   wait=line.hasOption(WAIT_OPTION.getOpt());
-  PackagedProgram program=null;
+  PackagedProgram program;
   try {
-    if (assemblerClass == null) {
+    if (entryPointClass == null) {
       program=new PackagedProgram(jarFile,programArgs);
     }
  else {
-      program=new PackagedProgram(jarFile,assemblerClass,programArgs);
+      program=new PackagedProgram(jarFile,entryPointClass,programArgs);
     }
   }
  catch (  ProgramInvocationException e) {
-    handleError(e);
+    return handleError(e);
   }
   Configuration configuration=getConfiguration();
   Client client;
@@ -73,23 +91,17 @@
     client=new Client(configuration);
   }
   client.setPrintStatusDuringExecution(true);
-  JobExecutionResult execResult=null;
+  JobExecutionResult execResult;
   try {
-    execResult=client.run(program.getPlanWithJars(),wait);
+    execResult=client.run(program,wait);
   }
  catch (  ProgramInvocationException e) {
-    handleError(e);
-  }
-catch (  JobInstantiationException e) {
-    handleError(e);
-  }
-catch (  IOException e) {
-    handleError(e);
+    return handleError(e);
   }
  finally {
     program.deleteExtractedLibraries();
   }
-  if (wait) {
+  if (wait && execResult != null) {
     System.out.println("Job Runtime: " + execResult.getNetRuntime());
     Map<String,Object> accumulatorsResult=execResult.getAllAccumulatorResults();
     if (accumulatorsResult.size() > 0) {
@@ -105,4 +117,5 @@ catch (  IOException e) {
       System.out.println("Job successfully submitted. Use -w (or --wait) option to track the progress here.\n" + "JobManager web interface: http://" + configuration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ":"+ configuration.getInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_FRONTEND_PORT));
     }
   }
+  return 0;
 }

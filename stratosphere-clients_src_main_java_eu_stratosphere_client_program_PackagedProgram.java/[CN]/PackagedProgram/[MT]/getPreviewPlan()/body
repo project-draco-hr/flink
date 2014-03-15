@@ -1,9 +1,30 @@
 {
-  Plan plan=getPlan();
-  if (plan != null) {
-    return PactCompiler.createPreOptimizedPlan(plan);
+  List<DataSinkNode> previewPlan;
+  if (isUsingProgramEntryPoint()) {
+    previewPlan=PactCompiler.createPreOptimizedPlan(getPlan());
+  }
+ else   if (isUsingInteractiveMode()) {
+    PreviewPlanEnvironment env=new PreviewPlanEnvironment();
+    env.setAsContext();
+    try {
+      invokeInteractiveModeForExecution();
+    }
+ catch (    Throwable t) {
+    }
+    previewPlan=env.previewPlan;
   }
  else {
-    return null;
+    throw new RuntimeException();
   }
+  PlanJSONDumpGenerator jsonGen=new PlanJSONDumpGenerator();
+  StringWriter string=new StringWriter(1024);
+  PrintWriter pw=null;
+  try {
+    pw=new PrintWriter(string);
+    jsonGen.dumpPactPlanAsJSON(previewPlan,pw);
+  }
+  finally {
+    pw.close();
+  }
+  return string.toString();
 }
