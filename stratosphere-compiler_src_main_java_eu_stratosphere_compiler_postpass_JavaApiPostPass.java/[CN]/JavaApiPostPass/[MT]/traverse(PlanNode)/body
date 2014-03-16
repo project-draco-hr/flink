@@ -8,6 +8,16 @@
     TypeInformation<?> typeInfo=getTypeInfoFromSource((SourcePlanNode)node);
     ((SourcePlanNode)node).setSerializer(createSerializer(typeInfo));
   }
+ else   if (node instanceof BulkIterationPlanNode) {
+    BulkIterationPlanNode iterationNode=(BulkIterationPlanNode)node;
+    if (iterationNode.getRootOfStepFunction() instanceof NAryUnionPlanNode) {
+      throw new CompilerException("Optimizer cannot compile an iteration step function where next partial solution is created by a Union node.");
+    }
+    PlanBulkIterationOperator<?> operator=(PlanBulkIterationOperator<?>)iterationNode.getPactContract();
+    iterationNode.setSerializerForIterationChannel(createSerializer(operator.getReturnType()));
+    traverseChannel(iterationNode.getInput());
+    traverse(iterationNode.getRootOfStepFunction());
+  }
  else   if (node instanceof SingleInputPlanNode) {
     SingleInputPlanNode sn=(SingleInputPlanNode)node;
     if (!(sn.getOptimizerNode().getPactContract() instanceof UnaryJavaPlanNode)) {
@@ -38,6 +48,8 @@
     for (    Channel c : dn.getBroadcastInputs()) {
       traverseChannel(c);
     }
+  }
+ else   if (node instanceof BulkPartialSolutionPlanNode || node instanceof SolutionSetPlanNode || node instanceof WorksetPlanNode) {
   }
  else {
     throw new CompilerPostPassException("Unknown node type encountered: " + node.getClass().getName());

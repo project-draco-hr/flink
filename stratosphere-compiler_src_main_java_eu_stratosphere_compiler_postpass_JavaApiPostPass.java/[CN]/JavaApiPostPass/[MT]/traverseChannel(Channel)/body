@@ -1,11 +1,15 @@
 {
   PlanNode source=channel.getSource();
   Operator javaOp=source.getPactContract();
-  if (!(javaOp instanceof JavaPlanNode)) {
-    throw new RuntimeException("Wrong operator type found in post pass.");
+  TypeInformation<?> type=null;
+  if (javaOp instanceof JavaPlanNode<?>) {
+    JavaPlanNode<?> javaNode=(JavaPlanNode<?>)javaOp;
+    type=javaNode.getReturnType();
   }
-  JavaPlanNode<?> javaNode=(JavaPlanNode<?>)javaOp;
-  TypeInformation<?> type=javaNode.getReturnType();
+ else   if (javaOp instanceof BulkIteration.PartialSolutionPlaceHolder) {
+    BulkIteration.PartialSolutionPlaceHolder partialSolutionPlaceHolder=(BulkIteration.PartialSolutionPlaceHolder)javaOp;
+    type=((PlanBulkIterationOperator<?>)partialSolutionPlaceHolder.getContainingBulkIteration()).getReturnType();
+  }
   channel.setSerializer(createSerializer(type));
   if (channel.getShipStrategy().requiresComparator()) {
     channel.setShipStrategyComparator(createComparator(type,channel.getShipStrategyKeys(),getSortOrders(channel.getShipStrategyKeys(),channel.getShipStrategySortOrder())));
