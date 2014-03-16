@@ -33,16 +33,16 @@
       params.remove(0);
     }
     String[] options=params.isEmpty() ? new String[0] : (String[])params.toArray(new String[params.size()]);
-    PackagedProgram pactProgram=null;
-    OptimizedPlan optPlan=null;
+    PackagedProgram program;
+    OptimizedPlan optPlan;
     try {
       if (assemblerClass == null) {
-        pactProgram=new PackagedProgram(jarFile,options);
+        program=new PackagedProgram(jarFile,options);
       }
  else {
-        pactProgram=new PackagedProgram(jarFile,assemblerClass,options);
+        program=new PackagedProgram(jarFile,assemblerClass,options);
       }
-      optPlan=client.getOptimizedPlan(pactProgram.getPlanWithJars());
+      optPlan=client.getOptimizedPlan(program);
     }
  catch (    ProgramInvocationException e) {
       StringWriter sw=new StringWriter();
@@ -76,7 +76,7 @@ catch (    Throwable t) {
       new PlanJSONDumpGenerator().dumpOptimizerPlanAsJSON(optPlan,jsonFile);
       if (!suspend) {
         try {
-          this.client.run(pactProgram.getPlanWithJars(),optPlan);
+          this.client.run(program,optPlan,false);
         }
  catch (        Throwable t) {
           LOG.error("Error submitting job to the job-manager.",t);
@@ -84,12 +84,12 @@ catch (    Throwable t) {
           return;
         }
  finally {
-          pactProgram.deleteExtractedLibraries();
+          program.deleteExtractedLibraries();
         }
       }
  else {
         try {
-          this.submittedJobs.put(uid,new ProgramJobGraphPair(pactProgram,this.client.getJobGraph(pactProgram.getPlanWithJars(),optPlan)));
+          this.submittedJobs.put(uid,this.client.getJobGraph(program,optPlan));
         }
  catch (        ProgramInvocationException piex) {
           LOG.error("Error creating JobGraph from optimized plan.",piex);
@@ -106,7 +106,7 @@ catch (        Throwable t) {
     }
  else {
       try {
-        client.run(pactProgram.getPlanWithJars());
+        client.run(program,false);
       }
  catch (      Exception ex) {
         LOG.error("Error submitting job to the job-manager.",ex);
@@ -115,7 +115,7 @@ catch (        Throwable t) {
         return;
       }
  finally {
-        pactProgram.deleteExtractedLibraries();
+        program.deleteExtractedLibraries();
       }
       resp.sendRedirect(START_PAGE_URL);
     }
@@ -133,13 +133,13 @@ catch (        Throwable t) {
       showErrorPage(resp,"An invalid id for the job was provided.");
       return;
     }
-    ProgramJobGraphPair job=submittedJobs.remove(uid);
+    JobGraph job=submittedJobs.remove(uid);
     if (job == null) {
       resp.sendError(HttpServletResponse.SC_BAD_REQUEST,"No job with the given uid was retained for later submission.");
       return;
     }
     try {
-      client.run(job.getProgram().getPlanWithJars(),job.getJobGraph());
+      client.run(job,false);
     }
  catch (    Exception ex) {
       LOG.error("Error submitting job to the job-manager.",ex);
@@ -147,9 +147,6 @@ catch (        Throwable t) {
       String errorMessage=ex.getMessage().split("\n")[0];
       resp.getWriter().print(errorMessage);
       return;
-    }
- finally {
-      job.getProgram().deleteExtractedLibraries();
     }
     resp.sendRedirect(START_PAGE_URL);
   }
