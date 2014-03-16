@@ -1,8 +1,14 @@
 {
-  super(input.getDataSet(),input.getDataSet().getType());
-  if (input == null || function == null)   throw new NullPointerException();
-  if (field < 0 || field >= input.getDataSet().getType().getArity())   throw new IllegalArgumentException("Aggregation field position is out of range.");
-  this.aggregationFunctions=new Aggregations[]{function};
-  this.fields=new int[]{field};
-  this.groupingFields=null;
+  super(Validate.notNull(input).getDataSet(),input.getDataSet().getType());
+  Validate.notNull(function);
+  if (!input.getDataSet().getType().isTupleType()) {
+    throw new InvalidProgramException("Aggregating on field positions is only possible on tuple data types.");
+  }
+  TupleTypeInfo<?> inType=(TupleTypeInfo<?>)input.getDataSet().getType();
+  if (field < 0 || field >= inType.getArity())   throw new IllegalArgumentException("Aggregation field position is out of range.");
+  AggregationFunctionFactory factory=function.getFactory();
+  AggregationFunction<?> aggFunct=factory.createAggregationFunction(inType.getTypeAt(field).getTypeClass());
+  this.aggregationFunctions.add(aggFunct);
+  this.fields.add(field);
+  this.grouping=input;
 }
