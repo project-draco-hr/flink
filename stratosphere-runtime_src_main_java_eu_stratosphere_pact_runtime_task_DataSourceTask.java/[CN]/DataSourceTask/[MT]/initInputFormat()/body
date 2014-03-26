@@ -1,0 +1,29 @@
+{
+  if (this.userCodeClassLoader == null) {
+    try {
+      this.userCodeClassLoader=LibraryCacheManager.getClassLoader(getEnvironment().getJobID());
+    }
+ catch (    IOException ioe) {
+      throw new RuntimeException("Usercode ClassLoader could not be obtained for job: " + getEnvironment().getJobID(),ioe);
+    }
+  }
+  Configuration taskConf=getTaskConfiguration();
+  taskConf.setClassLoader(this.userCodeClassLoader);
+  this.config=new TaskConfig(taskConf);
+  try {
+    this.format=config.<InputFormat<OT,InputSplit>>getStubWrapper(this.userCodeClassLoader).getUserCodeObject(InputFormat.class,this.userCodeClassLoader);
+    if (!InputFormat.class.isAssignableFrom(this.format.getClass())) {
+      throw new RuntimeException("The class '" + this.format.getClass().getName() + "' is not a subclass of '"+ InputFormat.class.getName()+ "' as is required.");
+    }
+  }
+ catch (  ClassCastException ccex) {
+    throw new RuntimeException("The stub class is not a proper subclass of " + InputFormat.class.getName(),ccex);
+  }
+  try {
+    this.format.configure(this.config.getStubParameters());
+  }
+ catch (  Throwable t) {
+    throw new RuntimeException("The user defined 'configure()' method caused an error: " + t.getMessage(),t);
+  }
+  this.serializerFactory=this.config.getOutputSerializer(cl);
+}
