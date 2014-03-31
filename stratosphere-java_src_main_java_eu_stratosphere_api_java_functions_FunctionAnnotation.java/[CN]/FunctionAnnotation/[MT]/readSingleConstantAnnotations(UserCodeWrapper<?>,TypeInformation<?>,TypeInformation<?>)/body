@@ -1,0 +1,50 @@
+{
+  if (!input.isTupleType() || !output.isTupleType()) {
+    return null;
+  }
+  AllFieldsConstants allConstants=udf.getUserCodeAnnotation(AllFieldsConstants.class);
+  ConstantFields constantSet=udf.getUserCodeAnnotation(ConstantFields.class);
+  ConstantFieldsExcept notConstantSet=udf.getUserCodeAnnotation(ConstantFieldsExcept.class);
+  ReadFields readfieldSet=udf.getUserCodeAnnotation(ReadFields.class);
+  int inputArity=input.getArity();
+  int outputArity=output.getArity();
+  if (notConstantSet != null && (constantSet != null || allConstants != null)) {
+    throw new RuntimeException("Either ConstantFields or ConstantFieldsExcept can be specified, not both.");
+  }
+  if (constantSet != null && !checkValidity(constantSet)) {
+    throw new RuntimeException("Only two parameters of the annotation should be used at once.");
+  }
+  SingleInputSemanticProperties semanticProperties=new SingleInputSemanticProperties();
+  if (readfieldSet != null && readfieldSet.value().length > 0) {
+    semanticProperties.setReadFields(new FieldSet(readfieldSet.value()));
+  }
+  if (notConstantSet != null && notConstantSet.value().length > 0) {
+    for (int i=0; i < inputArity && i < outputArity; i++) {
+      if (!Ints.contains(notConstantSet.value(),i)) {
+        semanticProperties.addForwardedField(i,i);
+      }
+      ;
+    }
+  }
+  if (allConstants != null) {
+    for (int i=0; i < inputArity && i < outputArity; i++) {
+      semanticProperties.addForwardedField(i,i);
+    }
+  }
+  if (constantSet != null) {
+    if (constantSet.outTuplePos().length == 0 && constantSet.value().length > 0) {
+      for (      int value : constantSet.value()) {
+        semanticProperties.addForwardedField(value,value);
+      }
+    }
+ else     if (constantSet.value().length == constantSet.outTuplePos().length && constantSet.value().length > 0) {
+      for (int i=0; i < constantSet.value().length; i++) {
+        semanticProperties.addForwardedField(constantSet.value()[i],constantSet.outTuplePos()[i]);
+      }
+    }
+ else {
+      throw new RuntimeException("Field 'from' and 'to' of the annotation should have the same length.");
+    }
+  }
+  return semanticProperties;
+}
