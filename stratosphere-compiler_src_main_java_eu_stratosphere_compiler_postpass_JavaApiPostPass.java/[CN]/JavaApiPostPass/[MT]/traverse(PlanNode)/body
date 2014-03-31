@@ -1,4 +1,7 @@
 {
+  if (!alreadyDone.add(node)) {
+    return;
+  }
   if (node instanceof SinkPlanNode) {
     SinkPlanNode sn=(SinkPlanNode)node;
     Channel inchannel=sn.getInput();
@@ -17,6 +20,23 @@
     iterationNode.setSerializerForIterationChannel(createSerializer(operator.getReturnType()));
     traverseChannel(iterationNode.getInput());
     traverse(iterationNode.getRootOfStepFunction());
+  }
+ else   if (node instanceof WorksetIterationPlanNode) {
+    WorksetIterationPlanNode iterationNode=(WorksetIterationPlanNode)node;
+    if (iterationNode.getNextWorkSetPlanNode() instanceof NAryUnionPlanNode) {
+      throw new CompilerException("Optimizer cannot compile a workset iteration step function where the next workset is produced by a Union node.");
+    }
+    if (iterationNode.getSolutionSetDeltaPlanNode() instanceof NAryUnionPlanNode) {
+      throw new CompilerException("Optimizer cannot compile a workset iteration step function where the solution set delta is produced by a Union node.");
+    }
+    PlanDeltaIterationOperator<?,?> operator=(PlanDeltaIterationOperator<?,?>)iterationNode.getPactContract();
+    iterationNode.setSolutionSetSerializer(createSerializer(operator.getSolutionsetType()));
+    iterationNode.setWorksetSerializer(createSerializer(operator.getWorksetType()));
+    iterationNode.setSolutionSetComparator(createComparator(operator.getSolutionsetType(),iterationNode.getSolutionSetKeyFields(),getSortOrders(iterationNode.getSolutionSetKeyFields(),null)));
+    traverseChannel(iterationNode.getInput1());
+    traverseChannel(iterationNode.getInput2());
+    traverse(iterationNode.getSolutionSetDeltaPlanNode());
+    traverse(iterationNode.getNextWorkSetPlanNode());
   }
  else   if (node instanceof SingleInputPlanNode) {
     SingleInputPlanNode sn=(SingleInputPlanNode)node;
