@@ -1,0 +1,34 @@
+{
+  String sourceTable="books";
+  String targetTable="newbooks";
+  String driverPath="org.apache.derby.jdbc.EmbeddedDriver";
+  String dbUrl="jdbc:derby:memory:ebookshop";
+  jdbcOutputFormat=JDBCOutputFormat.buildJDBCOutputFormat().setDBUrl(dbUrl).setDrivername(driverPath).setQuery("insert into " + targetTable + " (id, title, author, price, qty) values (?,?,?,?,?)").finish();
+  jdbcOutputFormat.open(0,1);
+  jdbcInputFormat=JDBCInputFormat.buildJDBCInputFormat().setDrivername(driverPath).setDBUrl(dbUrl).setQuery("select * from " + sourceTable).finish();
+  jdbcInputFormat.open(null);
+  Tuple5 tuple=new Tuple5();
+  while (!jdbcInputFormat.reachedEnd()) {
+    jdbcInputFormat.nextRecord(tuple);
+    jdbcOutputFormat.writeRecord(tuple);
+  }
+  jdbcOutputFormat.close();
+  jdbcInputFormat.close();
+  jdbcInputFormat=JDBCInputFormat.buildJDBCInputFormat().setDrivername(driverPath).setDBUrl(dbUrl).setQuery("select * from " + targetTable).finish();
+  jdbcInputFormat.open(null);
+  int recordCount=0;
+  while (!jdbcInputFormat.reachedEnd()) {
+    jdbcInputFormat.nextRecord(tuple);
+    Assert.assertEquals("Field 0 should be int",Integer.class,tuple.getField(0).getClass());
+    Assert.assertEquals("Field 1 should be String",String.class,tuple.getField(1).getClass());
+    Assert.assertEquals("Field 2 should be String",String.class,tuple.getField(2).getClass());
+    Assert.assertEquals("Field 3 should be float",Double.class,tuple.getField(3).getClass());
+    Assert.assertEquals("Field 4 should be int",Integer.class,tuple.getField(4).getClass());
+    for (int x=0; x < 5; x++) {
+      Assert.assertEquals(dbData[recordCount][x],tuple.getField(x));
+    }
+    recordCount++;
+  }
+  Assert.assertEquals(5,recordCount);
+  jdbcInputFormat.close();
+}
