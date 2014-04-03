@@ -1,0 +1,75 @@
+{
+  final String lineitemPath;
+  final String customerPath;
+  final String ordersPath;
+  if (args.length < 3) {
+    throw new IllegalArgumentException("Invalid number of parameters: [lineitem.tbl] [customer.tbl] [orders.tbl]");
+  }
+ else {
+    lineitemPath=args[0];
+    customerPath=args[1];
+    ordersPath=args[2];
+  }
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Lineitem> li=env.readCsvFile(lineitemPath).fieldDelimiter('|').includeFields("1000011000100000").tupleType(Lineitem.class);
+  DataSet<Order> or=env.readCsvFile(ordersPath).fieldDelimiter('|').includeFields("100010010").tupleType(Order.class);
+  DataSet<Customer> cust=env.readCsvFile(customerPath).fieldDelimiter('|').includeFields("10000010").tupleType(Customer.class);
+  cust=cust.filter(new FilterFunction<Customer>(){
+    @Override public boolean filter(    Customer value){
+      return value.getMktsegment().equals("AUTOMOBILE");
+    }
+  }
+);
+  or=or.filter(new FilterFunction<Order>(){
+    private DateFormat format=new SimpleDateFormat("yyyy-MM-dd");
+    private Date date;
+{
+      Calendar cal=Calendar.getInstance();
+      cal.set(1995,3,12);
+      date=cal.getTime();
+    }
+    @Override public boolean filter(    Order value) throws ParseException {
+      Date orderDate=format.parse(value.getOrderdate());
+      return orderDate.before(date);
+    }
+  }
+);
+  li=li.filter(new FilterFunction<Lineitem>(){
+    private DateFormat format=new SimpleDateFormat("yyyy-MM-dd");
+    private Date date;
+{
+      Calendar cal=Calendar.getInstance();
+      cal.set(1995,3,12);
+      date=cal.getTime();
+    }
+    @Override public boolean filter(    Lineitem value) throws ParseException {
+      Date shipDate=format.parse(value.getShipdate());
+      return shipDate.after(date);
+    }
+  }
+);
+  DataSet<ShippingPriorityItem> customerWithOrders=cust.join(or).where(0).equalTo(0).with(new JoinFunction<Customer,Order,ShippingPriorityItem>(){
+    @Override public ShippingPriorityItem join(    Customer first,    Order second) throws Exception {
+      ShippingPriorityItem it=new ShippingPriorityItem(0,0.0,second.getOrderdate(),second.getShippriority(),second.getOrderkey());
+      return it;
+    }
+  }
+);
+  DataSet<ShippingPriorityItem> joined=customerWithOrders.join(li).where(4).equalTo(0).with(new JoinFunction<ShippingPriorityItem,Lineitem,ShippingPriorityItem>(){
+    @Override public ShippingPriorityItem join(    ShippingPriorityItem first,    Lineitem second) throws Exception {
+      first.setL_Orderkey(second.getOrderkey());
+      first.setRevenue(second.getExtendedprice() * (1 - second.getDiscount()));
+      return first;
+    }
+  }
+);
+  joined=joined.groupBy(0,2,3).reduce(new ReduceFunction<TPCH3.ShippingPriorityItem>(){
+    @Override public ShippingPriorityItem reduce(    ShippingPriorityItem value1,    ShippingPriorityItem value2) throws Exception {
+      value1.setRevenue(value1.getRevenue() + value2.getRevenue());
+      return value1;
+    }
+  }
+);
+  joined.print();
+  env.execute();
+}
