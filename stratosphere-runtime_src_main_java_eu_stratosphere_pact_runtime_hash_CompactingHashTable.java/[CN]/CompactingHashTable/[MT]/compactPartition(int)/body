@@ -4,8 +4,8 @@
   }
   this.compactionMemory.clearAllMemory(availableMemory);
   this.compactionMemory.allocateSegments(1);
-  T tempHolder=this.serializer.createInstance();
-  InMemoryPartition<T> partition=this.partitions.remove(partitionNumber);
+  BT tempHolder=this.buildSideSerializer.createInstance();
+  InMemoryPartition<BT> partition=this.partitions.remove(partitionNumber);
   final int numPartitions=this.partitions.size() + 1;
   long pointer=0L;
   int pointerOffset=0;
@@ -29,6 +29,7 @@
       long overflowPointer=segment.getLong(bucketOffset + HEADER_FORWARD_OFFSET);
       if (overflowPointer != BUCKET_FORWARD_POINTER_NOT_SET) {
         int current=NUM_ENTRIES_PER_BUCKET;
+        bucketOffset=(int)(overflowPointer & 0xffffffff);
         pointerOffset=((int)(overflowPointer & 0xffffffff)) + BUCKET_POINTER_START_OFFSET;
         int overflowSegNum=(int)(overflowPointer >>> 32);
         count+=partition.overflowSegments[overflowSegNum].getInt(bucketOffset + HEADER_COUNT_OFFSET);
@@ -45,6 +46,7 @@
               break;
             }
             overflowSegNum=(int)(overflowPointer >>> 32);
+            bucketOffset=(int)(overflowPointer & 0xffffffff);
             pointerOffset=((int)(overflowPointer & 0xffffffff)) + BUCKET_POINTER_START_OFFSET;
           }
  else {
@@ -64,7 +66,7 @@
   this.compactionMemory.resetRecordCounter();
   this.compactionMemory.setPartitionNumber(-1);
   int maxSegmentNumber=0;
-  for (  InMemoryPartition<T> e : this.partitions) {
+  for (  InMemoryPartition<BT> e : this.partitions) {
     if (e.getBlockCount() > maxSegmentNumber) {
       maxSegmentNumber=e.getBlockCount();
     }
