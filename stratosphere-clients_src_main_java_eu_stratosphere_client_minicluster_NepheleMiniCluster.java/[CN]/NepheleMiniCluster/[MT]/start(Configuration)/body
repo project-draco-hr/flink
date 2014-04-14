@@ -7,6 +7,9 @@ synchronized (startStopLock) {
       Configuration conf=getMiniclusterDefaultConfig(jobManagerRpcPort,taskManagerRpcPort,taskManagerDataPort,memorySize,hdfsConfigFile,lazyMemoryAllocation,defaultOverwriteFiles,defaultAlwaysCreateDirectory);
       GlobalConfiguration.includeConfiguration(conf);
     }
+    if (config != null) {
+      GlobalConfiguration.includeConfiguration(config);
+    }
     initializeIOFormatClasses();
     Thread[] allThreads=new Thread[Thread.activeCount()];
     int numThreads=Thread.enumerate(allThreads);
@@ -17,9 +20,6 @@ synchronized (startStopLock) {
         t.join();
       }
     }
-    Configuration tmConf=new Configuration();
-    tmConf.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,numTaskManagers);
-    GlobalConfiguration.includeConfiguration(tmConf);
     jobManager=new JobManager(ExecutionMode.LOCAL);
     runner=new Thread("JobManager Task Loop"){
       @Override public void run(){
@@ -29,6 +29,6 @@ synchronized (startStopLock) {
 ;
     runner.setDaemon(true);
     runner.start();
-    waitForJobManagerToBecomeReady(numTaskManagers);
+    waitForJobManagerToBecomeReady(GlobalConfiguration.getInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,1));
   }
 }
