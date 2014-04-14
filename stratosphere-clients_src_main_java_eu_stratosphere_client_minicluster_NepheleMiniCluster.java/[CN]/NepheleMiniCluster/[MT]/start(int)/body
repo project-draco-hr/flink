@@ -1,0 +1,34 @@
+{
+synchronized (startStopLock) {
+    if (this.configDir != null) {
+      GlobalConfiguration.loadConfiguration(configDir);
+    }
+ else {
+      Configuration conf=getMiniclusterDefaultConfig(jobManagerRpcPort,taskManagerRpcPort,taskManagerDataPort,memorySize,hdfsConfigFile,lazyMemoryAllocation,defaultOverwriteFiles,defaultAlwaysCreateDirectory);
+      GlobalConfiguration.includeConfiguration(conf);
+    }
+    initializeIOFormatClasses();
+    Thread[] allThreads=new Thread[Thread.activeCount()];
+    int numThreads=Thread.enumerate(allThreads);
+    for (int i=0; i < numThreads; i++) {
+      Thread t=allThreads[i];
+      String name=t.getName();
+      if (name.startsWith("IPC")) {
+        t.join();
+      }
+    }
+    Configuration tmConf=new Configuration();
+    tmConf.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,numTaskManagers);
+    GlobalConfiguration.includeConfiguration(tmConf);
+    jobManager=new JobManager(ExecutionMode.LOCAL);
+    runner=new Thread("JobManager Task Loop"){
+      @Override public void run(){
+        jobManager.runTaskLoop();
+      }
+    }
+;
+    runner.setDaemon(true);
+    runner.start();
+    waitForJobManagerToBecomeReady(numTaskManagers);
+  }
+}

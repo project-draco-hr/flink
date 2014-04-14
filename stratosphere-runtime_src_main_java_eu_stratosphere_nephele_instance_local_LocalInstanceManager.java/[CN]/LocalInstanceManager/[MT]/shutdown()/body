@@ -1,14 +1,30 @@
 {
-  if (this.taskManager != null) {
-    this.taskManager.shutdown();
-  }
-  if (this.instanceTypeDescriptionMap != null) {
-    this.instanceTypeDescriptionMap.clear();
-  }
-synchronized (this.synchronizationObject) {
-    if (this.localInstance != null) {
-      this.localInstance.destroyProxies();
-      this.localInstance=null;
+  int numTMShutDown;
+  do {
+    numTMShutDown=0;
+    for (    LocalTaskManagerThread thread : localTaskManagerThreads) {
+      if (!thread.isShutDown()) {
+        thread.interrupt();
+      }
+ else {
+        numTMShutDown++;
+      }
     }
+    if (numTMShutDown < localTaskManagerThreads.size()) {
+      try {
+        Thread.sleep(100);
+      }
+ catch (      InterruptedException e) {
+        break;
+      }
+    }
+  }
+ while (numTMShutDown < localTaskManagerThreads.size());
+  instanceTypeDescriptionMap.clear();
+synchronized (this.synchronizationObject) {
+    for (    LocalInstance instance : this.localInstances.values()) {
+      instance.destroyProxies();
+    }
+    localInstances.clear();
   }
 }
