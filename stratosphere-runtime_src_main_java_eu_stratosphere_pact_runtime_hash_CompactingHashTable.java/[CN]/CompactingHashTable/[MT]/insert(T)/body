@@ -1,0 +1,26 @@
+{
+  final int hashCode=hash(this.buildSideComparator.hash(record));
+  final int posHashCode=hashCode % this.numBuckets;
+  final int bucketArrayPos=posHashCode >>> this.bucketsPerSegmentBits;
+  final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
+  final MemorySegment bucket=this.buckets[bucketArrayPos];
+  final int partitionNumber=bucket.get(bucketInSegmentPos + HEADER_PARTITION_OFFSET);
+  final InMemoryPartition<T> p=this.partitions.get(partitionNumber);
+  long pointer;
+  try {
+    pointer=p.appendRecord(record);
+    if ((pointer >> this.pageSizeInBits) > this.compactionMemory.getBlockCount()) {
+      this.compactionMemory.allocateSegments((int)(pointer >> this.pageSizeInBits));
+    }
+  }
+ catch (  EOFException e) {
+    try {
+      compactPartition(partitionNumber);
+      pointer=this.partitions.get(partitionNumber).appendRecord(record);
+    }
+ catch (    EOFException ex) {
+      throw new RuntimeException("Memory ran out. Compaction failed. Message: " + ex.getMessage());
+    }
+  }
+  insertBucketEntryFromStart(p,bucket,bucketInSegmentPos,hashCode,pointer);
+}

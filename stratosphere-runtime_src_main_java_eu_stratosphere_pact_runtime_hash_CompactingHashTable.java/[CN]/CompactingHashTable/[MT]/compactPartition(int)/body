@@ -1,0 +1,78 @@
+{
+  if (this.partitions.get(partitionNumber).isCompacted()) {
+    return;
+  }
+  this.compactionMemory.clearAllMemory(availableMemory);
+  this.compactionMemory.allocateSegments(1);
+  T tempHolder=this.buildSideSerializer.createInstance();
+  InMemoryPartition<T> partition=this.partitions.remove(partitionNumber);
+  final int numPartitions=this.partitions.size() + 1;
+  long pointer=0L;
+  int pointerOffset=0;
+  int bucketOffset=0;
+  final int bucketsPerSegment=this.bucketsPerSegmentMask + 1;
+  for (int i=0, bucket=partitionNumber; i < this.buckets.length && bucket < this.numBuckets; i++) {
+    MemorySegment segment=this.buckets[i];
+    for (int k=bucket % bucketsPerSegment; k < bucketsPerSegment && bucket < this.numBuckets; k+=numPartitions, bucket+=numPartitions) {
+      bucketOffset=k * HASH_BUCKET_SIZE;
+      if ((int)segment.get(bucketOffset + HEADER_PARTITION_OFFSET) != partitionNumber) {
+        throw new IOException("Accessed wrong bucket! ");
+      }
+      int count=segment.getInt(bucketOffset + HEADER_COUNT_OFFSET);
+      for (int j=0; j < NUM_ENTRIES_PER_BUCKET && j < count; j++) {
+        pointerOffset=bucketOffset + BUCKET_POINTER_START_OFFSET + (j * POINTER_LEN);
+        pointer=segment.getLong(pointerOffset);
+        partition.readRecordAt(pointer,tempHolder);
+        pointer=this.compactionMemory.appendRecord(tempHolder);
+        segment.putLong(pointerOffset,pointer);
+      }
+      long overflowPointer=segment.getLong(bucketOffset + HEADER_FORWARD_OFFSET);
+      if (overflowPointer != BUCKET_FORWARD_POINTER_NOT_SET) {
+        int current=NUM_ENTRIES_PER_BUCKET;
+        bucketOffset=(int)(overflowPointer & 0xffffffff);
+        pointerOffset=((int)(overflowPointer & 0xffffffff)) + BUCKET_POINTER_START_OFFSET;
+        int overflowSegNum=(int)(overflowPointer >>> 32);
+        count+=partition.overflowSegments[overflowSegNum].getInt(bucketOffset + HEADER_COUNT_OFFSET);
+        while (current < count) {
+          pointer=partition.overflowSegments[overflowSegNum].getLong(pointerOffset);
+          partition.readRecordAt(pointer,tempHolder);
+          pointer=this.compactionMemory.appendRecord(tempHolder);
+          partition.overflowSegments[overflowSegNum].putLong(pointerOffset,pointer);
+          current++;
+          if (current % NUM_ENTRIES_PER_BUCKET == 0) {
+            count+=partition.overflowSegments[overflowSegNum].getInt(bucketOffset + HEADER_COUNT_OFFSET);
+            overflowPointer=partition.overflowSegments[overflowSegNum].getLong(bucketOffset + HEADER_FORWARD_OFFSET);
+            if (overflowPointer == BUCKET_FORWARD_POINTER_NOT_SET) {
+              break;
+            }
+            overflowSegNum=(int)(overflowPointer >>> 32);
+            bucketOffset=(int)(overflowPointer & 0xffffffff);
+            pointerOffset=((int)(overflowPointer & 0xffffffff)) + BUCKET_POINTER_START_OFFSET;
+          }
+ else {
+            pointerOffset+=POINTER_LEN;
+          }
+        }
+      }
+    }
+  }
+  this.compactionMemory.setPartitionNumber(partitionNumber);
+  this.partitions.add(partitionNumber,compactionMemory);
+  this.compactionMemory=partition;
+  this.partitions.get(partitionNumber).overflowSegments=this.compactionMemory.overflowSegments;
+  this.partitions.get(partitionNumber).numOverflowSegments=this.compactionMemory.numOverflowSegments;
+  this.partitions.get(partitionNumber).nextOverflowBucket=this.compactionMemory.nextOverflowBucket;
+  this.partitions.get(partitionNumber).setCompaction(true);
+  this.compactionMemory.resetRecordCounter();
+  this.compactionMemory.setPartitionNumber(-1);
+  int maxSegmentNumber=0;
+  for (  InMemoryPartition<T> e : this.partitions) {
+    if (e.getBlockCount() > maxSegmentNumber) {
+      maxSegmentNumber=e.getBlockCount();
+    }
+  }
+  this.compactionMemory.allocateSegments(maxSegmentNumber);
+  if (this.compactionMemory.getBlockCount() > maxSegmentNumber) {
+    this.compactionMemory.releaseSegments(maxSegmentNumber,availableMemory);
+  }
+}

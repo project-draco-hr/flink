@@ -1,0 +1,47 @@
+{
+  if (currentBucketIndex >= table.numBuckets) {
+    return false;
+  }
+  MemorySegment bucket=table.buckets[currentSegmentIndex];
+  final int partitionNumber=bucket.get(currentBucketOffset + HEADER_PARTITION_OFFSET);
+  final InMemoryPartition<T> partition=table.partitions.get(partitionNumber);
+  final MemorySegment[] overflowSegments=partition.overflowSegments;
+  int countInSegment=bucket.getInt(currentBucketOffset + HEADER_COUNT_OFFSET);
+  int numInSegment=0;
+  int posInSegment=currentBucketOffset + BUCKET_POINTER_START_OFFSET;
+  int bucketOffset=currentBucketOffset;
+  while (true) {
+    while (numInSegment < countInSegment) {
+      long pointer=bucket.getLong(posInSegment);
+      posInSegment+=POINTER_LEN;
+      numInSegment++;
+      T target=table.buildSideSerializer.createInstance();
+      try {
+        partition.readRecordAt(pointer,target);
+        cache.add(target);
+      }
+ catch (      IOException e) {
+        throw new RuntimeException("Error deserializing record from the hashtable: " + e.getMessage(),e);
+      }
+    }
+    final long forwardPointer=bucket.getLong(bucketOffset + HEADER_FORWARD_OFFSET);
+    if (forwardPointer == BUCKET_FORWARD_POINTER_NOT_SET) {
+      break;
+    }
+    final int overflowSegNum=(int)(forwardPointer >>> 32);
+    bucket=overflowSegments[overflowSegNum];
+    bucketOffset=(int)(forwardPointer & 0xffffffff);
+    countInSegment=bucket.getInt(bucketOffset + HEADER_COUNT_OFFSET);
+    posInSegment=bucketOffset + BUCKET_POINTER_START_OFFSET;
+    numInSegment=0;
+  }
+  currentBucketIndex++;
+  if (currentBucketIndex % bucketsPerSegment == 0) {
+    currentSegmentIndex++;
+    currentBucketOffset=0;
+  }
+ else {
+    currentBucketOffset+=HASH_BUCKET_SIZE;
+  }
+  return true;
+}
