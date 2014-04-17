@@ -1,0 +1,21 @@
+{
+  if (taskContext instanceof AbstractIterativePactTask) {
+    AbstractIterativePactTask<?,?> iterativeTaskContext=(AbstractIterativePactTask<?,?>)taskContext;
+    String identifier=iterativeTaskContext.brokerKey();
+    this.hashTable=(CompactingHashTable<IT2>)SolutionSetBroker.instance().get(identifier);
+  }
+ else {
+    throw new Exception("The task context of this driver is no iterative task context.");
+  }
+  TaskConfig config=taskContext.getTaskConfig();
+  ClassLoader classLoader=taskContext.getUserCodeClassLoader();
+  TypeSerializer<IT2> solutionSetSerializer=this.hashTable.getBuildSideSerializer();
+  TypeSerializer<IT1> probeSideSerializer=taskContext.getInputSerializer(0);
+  TypeComparatorFactory<IT1> probeSideComparatorFactory=config.getDriverComparator(0,classLoader);
+  TypeComparator<IT2> solutionSetComparator=this.hashTable.getBuildSideComparator().duplicate();
+  this.probeSideComparator=probeSideComparatorFactory.createComparator();
+  solutionSideRecord=solutionSetSerializer.createInstance();
+  probeSideRecord=probeSideSerializer.createInstance();
+  TypePairComparatorFactory<IT1,IT2> factory=taskContext.getTaskConfig().getPairComparatorFactory(taskContext.getUserCodeClassLoader());
+  pairComparator=factory.createComparator12(this.probeSideComparator,solutionSetComparator);
+}

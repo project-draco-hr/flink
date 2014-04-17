@@ -1,0 +1,20 @@
+{
+  final GenericCoGrouper<IT1,IT2,OT> coGroupStub=taskContext.getStub();
+  final Collector<OT> collector=taskContext.getOutputCollector();
+  IT2 buildSideRecord=solutionSideRecord;
+  final CompactingHashTable<IT2> join=hashTable;
+  final KeyGroupedIterator<IT1> probeSideInput=new KeyGroupedIterator<IT1>(taskContext.<IT1>getInput(0),probeSideSerializer,probeSideComparator);
+  final SingleElementIterator<IT2> siIter=new SingleElementIterator<IT2>();
+  final Iterator<IT2> emptySolutionSide=EmptyIterator.<IT2>get();
+  final CompactingHashTable<IT2>.HashTableProber<IT1> prober=join.getProber(this.probeSideComparator,this.pairComparator);
+  while (this.running && probeSideInput.nextKey()) {
+    IT1 current=probeSideInput.getCurrent();
+    if (prober.getMatchFor(current,buildSideRecord)) {
+      siIter.set(buildSideRecord);
+      coGroupStub.coGroup(probeSideInput.getValues(),siIter,collector);
+    }
+ else {
+      coGroupStub.coGroup(probeSideInput.getValues(),emptySolutionSide,collector);
+    }
+  }
+}
