@@ -1,0 +1,33 @@
+{
+  if (this.aggregationFunctions.isEmpty() || this.aggregationFunctions.size() != this.fields.size()) {
+    throw new IllegalStateException();
+  }
+  AggregationFunction<Object>[] aggFunctions=new AggregationFunction[this.aggregationFunctions.size()];
+  int[] fields=new int[this.fields.size()];
+  StringBuilder genName=new StringBuilder();
+  for (int i=0; i < fields.length; i++) {
+    aggFunctions[i]=(AggregationFunction<Object>)this.aggregationFunctions.get(i);
+    fields[i]=this.fields.get(i);
+    genName.append(aggFunctions[i].toString()).append('(').append(fields[i]).append(')').append(',');
+  }
+  genName.setLength(genName.length() - 1);
+  @SuppressWarnings("rawtypes") GroupReduceFunction<IN,IN> function=new AggregatingUdf(aggFunctions,fields);
+  String name=getName() != null ? getName() : genName.toString();
+  if (this.grouping == null) {
+    PlanGroupReduceOperator<IN,IN> po=new PlanGroupReduceOperator<IN,IN>(function,new int[0],name,getInputType(),getResultType());
+    po.setInput(input);
+    return po;
+  }
+  if (this.grouping.getKeys() instanceof Keys.FieldPositionKeys) {
+    int[] logicalKeyPositions=this.grouping.getKeys().computeLogicalKeyPositions();
+    PlanGroupReduceOperator<IN,IN> po=new PlanGroupReduceOperator<IN,IN>(function,logicalKeyPositions,name,getInputType(),getResultType());
+    po.setInput(input);
+    return po;
+  }
+ else   if (this.grouping.getKeys() instanceof Keys.SelectorFunctionKeys) {
+    throw new UnsupportedOperationException("Aggregate does not support grouping with KeySelector functions, yet.");
+  }
+ else {
+    throw new UnsupportedOperationException("Unrecognized key type.");
+  }
+}

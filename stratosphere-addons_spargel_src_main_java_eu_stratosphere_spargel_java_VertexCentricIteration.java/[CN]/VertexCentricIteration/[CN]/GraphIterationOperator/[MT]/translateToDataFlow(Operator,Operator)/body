@@ -1,0 +1,20 @@
+{
+  final String name=(getName() != null) ? getName() : "Vertex-centric iteration (" + updateFunction + " | "+ messagingFunction+ ")";
+  final int[] zeroKeyPos=new int[]{0};
+  final PlanDeltaIterationOperator<Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,VertexValue>> iteration=new PlanDeltaIterationOperator<Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,VertexValue>>(zeroKeyPos,name,getInput1Type(),getInput1Type());
+  iteration.setMaximumNumberOfIterations(maximumNumberOfIterations);
+  for (  Map.Entry<String,Class<? extends Aggregator<?>>> entry : aggregators.entrySet()) {
+    iteration.getAggregators().registerAggregator(entry.getKey(),entry.getValue());
+  }
+  final PlanCogroupOperator<EdgeType,Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,Message>> messenger=new PlanCogroupOperator<EdgeType,Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,Message>>(messagingFunction,zeroKeyPos,zeroKeyPos,"Messaging",edges.getType(),getInput1Type(),messageType);
+  messenger.setSecondInput(iteration.getWorkset());
+  final PlanCogroupOperator<Tuple2<VertexKey,Message>,Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,VertexValue>> updater=new PlanCogroupOperator<Tuple2<VertexKey,Message>,Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,VertexValue>>(updateFunction,zeroKeyPos,zeroKeyPos,"Vertex State Updates",messageType,getInput1Type(),getInput1Type());
+  updater.setFirstInput(messenger);
+  updater.setSecondInput(iteration.getSolutionSet());
+  iteration.setSolutionSetDelta(updater);
+  iteration.setNextWorkset(updater);
+  iteration.setFirstInput(input1);
+  iteration.setSecondInput(input1);
+  messenger.setFirstInput(input2);
+  return iteration;
+}
