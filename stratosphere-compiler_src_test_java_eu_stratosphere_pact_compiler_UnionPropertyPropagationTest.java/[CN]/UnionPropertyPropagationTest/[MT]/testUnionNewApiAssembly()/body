@@ -1,14 +1,10 @@
 {
+  final int NUM_INPUTS=4;
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
   DataSet<String> source=env.readTextFile(IN_FILE);
-  DataSet<Tuple2<String,Integer>> lastUnion=null;
-  for (int i=0; i < NUM_INPUTS; i++) {
-    if (lastUnion == null) {
-      lastUnion=source.flatMap(new DummyFlatMap());
-    }
- else {
-      lastUnion=lastUnion.union(source.flatMap(new DummyFlatMap()));
-    }
+  DataSet<Tuple2<String,Integer>> lastUnion=source.flatMap(new DummyFlatMap());
+  for (int i=1; i < NUM_INPUTS; i++) {
+    lastUnion=lastUnion.union(source.flatMap(new DummyFlatMap()));
   }
   DataSet<Tuple2<String,Integer>> result=lastUnion.groupBy(0).aggregate(Aggregations.SUM,1);
   result.writeAsText(OUT_FILE);
@@ -29,7 +25,7 @@
           final Channel inConn=inputs.next();
           PlanNode inNode=inConn.getSource();
           Assert.assertTrue("Input of Union should be FlatMapOperators",inNode.getPactContract() instanceof PlanFlatMapOperator);
-          Assert.assertTrue("Shipment strategy under union should partition the data",inConn.getShipStrategy() != ShipStrategyType.FORWARD && inConn.getShipStrategy() != ShipStrategyType.NONE);
+          Assert.assertTrue("Shipment strategy under union should partition the data",inConn.getShipStrategy() == ShipStrategyType.PARTITION_HASH);
         }
         Assert.assertTrue("NAryUnion should have " + NUM_INPUTS + " inputs",numberInputs == NUM_INPUTS);
         return false;
