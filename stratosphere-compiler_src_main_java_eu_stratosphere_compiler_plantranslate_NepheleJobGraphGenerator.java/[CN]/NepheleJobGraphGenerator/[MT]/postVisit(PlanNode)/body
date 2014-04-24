@@ -1,6 +1,6 @@
 {
   try {
-    if (node instanceof SourcePlanNode || node instanceof NAryUnionPlanNode) {
+    if (node instanceof SourcePlanNode || node instanceof NAryUnionPlanNode || node instanceof SolutionSetPlanNode) {
       return;
     }
     if (node instanceof IterationPlanNode) {
@@ -18,30 +18,6 @@
         headConfig.setIterationHeadSolutionSetInputIndex(inputIndex);
         translateChannel(wsNode.getInitialSolutionSetInput(),inputIndex,headVertex,headConfig,false);
       }
-      return;
-    }
- else     if (node instanceof SolutionSetPlanNode) {
-      if (node.getOutgoingChannels().size() != 1) {
-        throw new CompilerException("Currently, only one join with the solution set is allowed.");
-      }
-      Channel c=node.getOutgoingChannels().get(0);
-      DualInputPlanNode target=(DualInputPlanNode)c.getTarget();
-      AbstractJobVertex accessingVertex=this.vertices.get(target);
-      TaskConfig conf=new TaskConfig(accessingVertex.getConfiguration());
-      int inputNum=c == target.getInput1() ? 0 : c == target.getInput2() ? 1 : -1;
-      if (inputNum == -1) {
-        throw new CompilerException();
-      }
-      if (conf.getDriver().equals(MatchDriver.class)) {
-        conf.setDriver(inputNum == 0 ? JoinWithSolutionSetFirstDriver.class : JoinWithSolutionSetSecondDriver.class);
-      }
- else       if (conf.getDriver().equals(CoGroupDriver.class)) {
-        conf.setDriver(inputNum == 0 ? CoGroupWithSolutionSetFirstDriver.class : CoGroupWithSolutionSetSecondDriver.class);
-      }
- else {
-        throw new CompilerException("Found join with solution set using incompatible operator (only Join/CoGroup are valid.");
-      }
-      conf.setSolutionSetSerializer(((SolutionSetPlanNode)node).getContainingIterationNode().getSolutionSetSerializer());
       return;
     }
     final AbstractJobVertex targetVertex=this.vertices.get(node);

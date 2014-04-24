@@ -47,6 +47,25 @@
       vertex=createBulkIterationHead((BulkPartialSolutionPlanNode)node);
     }
  else     if (node instanceof SolutionSetPlanNode) {
+      for (      Channel c : node.getOutgoingChannels()) {
+        DualInputPlanNode target=(DualInputPlanNode)c.getTarget();
+        AbstractJobVertex accessingVertex=this.vertices.get(target);
+        TaskConfig conf=new TaskConfig(accessingVertex.getConfiguration());
+        int inputNum=c == target.getInput1() ? 0 : c == target.getInput2() ? 1 : -1;
+        if (inputNum == -1) {
+          throw new CompilerException();
+        }
+        if (conf.getDriver().equals(MatchDriver.class)) {
+          conf.setDriver(inputNum == 0 ? JoinWithSolutionSetFirstDriver.class : JoinWithSolutionSetSecondDriver.class);
+        }
+ else         if (conf.getDriver().equals(CoGroupDriver.class)) {
+          conf.setDriver(inputNum == 0 ? CoGroupWithSolutionSetFirstDriver.class : CoGroupWithSolutionSetSecondDriver.class);
+        }
+ else {
+          throw new CompilerException("Found join with solution set using incompatible operator (only Join/CoGroup are valid).");
+        }
+      }
+      this.chainedTasks.put(node,ALREADY_VISITED_PLACEHOLDER);
       vertex=null;
     }
  else     if (node instanceof WorksetPlanNode) {
