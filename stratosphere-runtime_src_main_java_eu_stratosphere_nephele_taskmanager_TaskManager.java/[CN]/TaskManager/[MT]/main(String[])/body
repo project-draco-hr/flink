@@ -1,7 +1,6 @@
 {
   Option configDirOpt=OptionBuilder.withArgName("config directory").hasArg().withDescription("Specify configuration directory.").create("configDir");
   configDirOpt.setRequired(true);
-  ;
   Options options=new Options();
   options.addOption(configDirOpt);
   CommandLineParser parser=new GnuParser();
@@ -11,19 +10,24 @@
   }
  catch (  ParseException e) {
     System.err.println("CLI Parsing failed. Reason: " + e.getMessage());
-    System.exit(FAILURERETURNCODE);
+    System.exit(FAILURE_RETURN_CODE);
   }
   String configDir=line.getOptionValue(configDirOpt.getOpt(),null);
   GlobalConfiguration.loadConfiguration(configDir);
   LOG.info("Current user " + UserGroupInformation.getCurrentUser().getShortUserName());
   TaskManager taskManager=null;
   try {
-    taskManager=new TaskManager(1);
+    taskManager=new TaskManager();
   }
  catch (  Exception e) {
-    LOG.fatal("Taskmanager startup failed:" + StringUtils.stringifyException(e));
-    System.exit(FAILURERETURNCODE);
+    LOG.fatal("Taskmanager startup failed: " + e.getMessage(),e);
+    System.exit(FAILURE_RETURN_CODE);
   }
-  taskManager.runIOLoop();
-  taskManager.shutdown();
+  try {
+    taskManager.runHeartbeatLoop();
+  }
+ catch (  Exception e) {
+    LOG.fatal("Taskmanager heart beat loop failed: " + e.getMessage(),e);
+    System.exit(FAILURE_RETURN_CODE);
+  }
 }

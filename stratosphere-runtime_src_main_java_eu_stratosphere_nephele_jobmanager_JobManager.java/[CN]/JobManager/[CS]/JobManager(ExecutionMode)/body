@@ -6,8 +6,7 @@
       ipcAddress=InetAddress.getByName(ipcAddressString);
     }
  catch (    UnknownHostException e) {
-      LOG.error("Cannot convert " + ipcAddressString + " to an IP address: "+ StringUtils.stringifyException(e));
-      System.exit(FAILURERETURNCODE);
+      throw new Exception("Cannot convert " + ipcAddressString + " to an IP address: "+ e.getMessage(),e);
     }
   }
   final int ipcPort=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
@@ -18,7 +17,9 @@
     this.archive=new MemoryArchivist(archived_items);
     this.eventCollector.registerArchivist(archive);
   }
- else   this.archive=null;
+ else {
+    this.archive=null;
+  }
   this.accumulatorManager=new AccumulatorManager(Math.min(1,archived_items));
   this.inputSplitManager=new InputSplitManager();
   final InetSocketAddress rpcServerAddress=new InetSocketAddress(ipcAddress,ipcPort);
@@ -27,18 +28,16 @@
     this.jobManagerServer=RPC.getServer(this,rpcServerAddress.getHostName(),rpcServerAddress.getPort(),handlerCount);
     this.jobManagerServer.start();
   }
- catch (  IOException ioe) {
-    LOG.error("Cannot start RPC server: " + StringUtils.stringifyException(ioe));
-    System.exit(FAILURERETURNCODE);
+ catch (  IOException e) {
+    throw new Exception("Cannot start RPC server: " + e.getMessage(),e);
   }
   LOG.info("Starting job manager in " + executionMode + " mode");
   if (executionMode == ExecutionMode.LOCAL) {
     try {
       this.instanceManager=new LocalInstanceManager();
     }
- catch (    RuntimeException rte) {
-      LOG.fatal("Cannot instantiate local instance manager: " + StringUtils.stringifyException(rte));
-      System.exit(FAILURERETURNCODE);
+ catch (    Throwable t) {
+      throw new Exception("Cannot instantiate local instance manager: " + t.getMessage(),t);
     }
   }
  else {
@@ -46,24 +45,21 @@
     LOG.info("Trying to load " + instanceManagerClassName + " as instance manager");
     this.instanceManager=JobManagerUtils.loadInstanceManager(instanceManagerClassName);
     if (this.instanceManager == null) {
-      LOG.error("Unable to load instance manager " + instanceManagerClassName);
-      System.exit(FAILURERETURNCODE);
+      throw new Exception("Unable to load instance manager " + instanceManagerClassName);
     }
   }
   final String schedulerClassName=JobManagerUtils.getSchedulerClassName(executionMode);
   LOG.info("Trying to load " + schedulerClassName + " as scheduler");
   this.scheduler=JobManagerUtils.loadScheduler(schedulerClassName,this,this.instanceManager);
   if (this.scheduler == null) {
-    LOG.error("Unable to load scheduler " + schedulerClassName);
-    System.exit(FAILURERETURNCODE);
+    throw new Exception("Unable to load scheduler " + schedulerClassName);
   }
   this.multicastManager=new MulticastManager(this.scheduler);
   if (GlobalConfiguration.getBoolean(ProfilingUtils.ENABLE_PROFILING_KEY,false)) {
     final String profilerClassName=GlobalConfiguration.getString(ProfilingUtils.JOBMANAGER_CLASSNAME_KEY,"eu.stratosphere.nephele.profiling.impl.JobManagerProfilerImpl");
     this.profiler=ProfilingUtils.loadJobManagerProfiler(profilerClassName,ipcAddress);
     if (this.profiler == null) {
-      LOG.error("Cannot load profiler");
-      System.exit(FAILURERETURNCODE);
+      throw new Exception("Cannot load profiler");
     }
   }
  else {

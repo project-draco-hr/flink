@@ -2,25 +2,18 @@
   if (this.running) {
     return;
   }
-  Configuration conf=NepheleMiniCluster.getMiniclusterDefaultConfig(JOB_MANAGER_RPC_PORT,6500,7501,null,true,true,false);
+  long javaMem=HardwareDescriptionFactory.extractFromSystem().getSizeOfFreeMemory();
+  javaMem/=numTaskMgr;
+  javaMem>>>=20;
+  Configuration conf=NepheleMiniCluster.getMiniclusterDefaultConfig(JOB_MANAGER_RPC_PORT,6500,7501,javaMem,null,false,true,false);
   GlobalConfiguration.includeConfiguration(conf);
-  JobManager jobManager;
-  try {
-    jobManager=new JobManager(ExecutionMode.CLUSTER);
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    return;
-  }
-  this.jobManagerThread=new JobManagerThread(jobManager);
-  this.jobManagerThread.setDaemon(true);
-  this.jobManagerThread.start();
+  this.jobManager=new JobManager(ExecutionMode.CLUSTER);
   for (int tm=0; tm < numTaskMgr; tm++) {
     Configuration tmConf=new Configuration();
     tmConf.setInteger(ConfigConstants.TASK_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_IPC_PORT + tm + numTaskMgr);
     tmConf.setInteger(ConfigConstants.TASK_MANAGER_DATA_PORT_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_DATA_PORT + tm);
     GlobalConfiguration.includeConfiguration(tmConf);
-    LocalTaskManagerThread t=new LocalTaskManagerThread("LocalDistributedExecutor: LocalTaskManagerThread-#" + tm,numTaskMgr);
+    LocalTaskManagerThread t=new LocalTaskManagerThread("LocalDistributedExecutor: LocalTaskManagerThread-#" + tm);
     t.start();
     taskManagerThreads.add(t);
   }
