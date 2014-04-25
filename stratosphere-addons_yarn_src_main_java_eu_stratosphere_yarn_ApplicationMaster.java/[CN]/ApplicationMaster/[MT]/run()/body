@@ -56,9 +56,13 @@
     LOG.warn("modified yaml does not exist!");
   }
   Utils.copyJarContents("resources/" + ConfigConstants.DEFAULT_JOB_MANAGER_WEB_PATH_NAME,ApplicationMaster.class.getProtectionDomain().getCodeSource().getLocation().getPath());
-  JobManagerRunner jmr=new JobManagerRunner(currDir + "/stratosphere-conf-modified.yaml");
-  LOG.info("Starting JobManager");
-  jmr.start();
+  JobManager jm;
+{
+    String pathToNepheleConfig=currDir + "/stratosphere-conf-modified.yaml";
+    String[] args={"-executionMode","cluster","-configDir",pathToNepheleConfig};
+    jm=JobManager.initialize(args);
+    jm.startInfoServer();
+  }
   AMRMClient<ContainerRequest> rmClient=AMRMClient.createAMRMClient();
   rmClient.init(conf);
   rmClient.start();
@@ -162,7 +166,6 @@
     Thread.sleep(5000);
   }
   LOG.info("Shutting down JobManager");
-  jmr.shutdown();
-  jmr.join(500);
+  jm.shutdown();
   rmClient.unregisterApplicationMaster(FinalApplicationStatus.SUCCEEDED,"","");
 }
