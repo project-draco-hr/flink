@@ -1,7 +1,8 @@
 {
   this.registeredHosts=new HashMap<InstanceConnectionInfo,ClusterInstance>();
   this.slicesOfJobs=new HashMap<JobID,List<AllocatedSlice>>();
-  this.availableInstanceTypes=populateInstanceTypeArray();
+  this.defaultInstanceType=InstanceTypeFactory.constructFromDescription(ConfigConstants.DEFAULT_INSTANCE_TYPE);
+  this.availableInstanceTypes=new InstanceType[]{this.defaultInstanceType};
   this.instanceAccommodationMatrix=calculateInstanceAccommodationMatrix();
   this.instanceTypeDescriptionMap=new SerializableHashMap<InstanceType,InstanceTypeDescription>();
   long tmpCleanUpInterval=(long)GlobalConfiguration.getInteger(CLEANUP_INTERVAL_KEY,DEFAULT_CLEANUP_INTERVAL) * 1000;
@@ -10,14 +11,8 @@
     tmpCleanUpInterval=DEFAULT_CLEANUP_INTERVAL;
   }
   this.cleanUpInterval=tmpCleanUpInterval;
-  int tmpDefaultInstanceTypeIndex=GlobalConfiguration.getInteger(DEFAULT_INSTANCE_TYPE_INDEX_KEY,ConfigConstants.DEFAULT_DEFAULT_INSTANCE_TYPE_INDEX);
-  if (tmpDefaultInstanceTypeIndex > this.availableInstanceTypes.length) {
-    LOG.warn("Incorrect index to for default instance type (" + tmpDefaultInstanceTypeIndex + "), switching to default index "+ ConfigConstants.DEFAULT_DEFAULT_INSTANCE_TYPE_INDEX);
-    tmpDefaultInstanceTypeIndex=ConfigConstants.DEFAULT_DEFAULT_INSTANCE_TYPE_INDEX;
-  }
-  this.defaultInstanceType=this.availableInstanceTypes[tmpDefaultInstanceTypeIndex - 1];
   sortAvailableInstancesByNumberOfCPUCores();
-  this.networkTopology=loadNetworkTopology();
+  this.networkTopology=NetworkTopology.createEmptyTopology();
   final boolean runTimerAsDaemon=true;
   new Timer(runTimerAsDaemon).schedule(cleanupStaleMachines,1000,1000);
   updateInstaceTypeDescriptionMap();
