@@ -1,14 +1,31 @@
 {
-  preSubmit();
-  SubmissionThread st=new SubmissionThread(Thread.currentThread(),cluster,getFailingJobGraph(),getJobGraph());
+  try {
+    preSubmit();
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    Assert.fail("Pre-submit work caused an error: " + e.getMessage());
+  }
+  SubmissionThread st=new SubmissionThread(Thread.currentThread(),this.executor,getFailingJobGraph(),getJobGraph());
   st.start();
-  boolean successBeforeTimeout=false;
   try {
     Thread.sleep(getTimeout() * 1000);
+    Assert.fail("Failing job and successful job did not fail.");
   }
  catch (  InterruptedException ie) {
-    successBeforeTimeout=true;
   }
-  Assert.assertTrue("Jobs did not finish within timeout",successBeforeTimeout);
-  postSubmit();
+  Exception cte=st.error;
+  if (cte != null) {
+    cte.printStackTrace();
+    Assert.fail("Task Canceling failed: " + cte.getMessage());
+  }
+  try {
+    postSubmit();
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    Assert.fail("Post-submit work caused an error: " + e.getMessage());
+  }
 }
