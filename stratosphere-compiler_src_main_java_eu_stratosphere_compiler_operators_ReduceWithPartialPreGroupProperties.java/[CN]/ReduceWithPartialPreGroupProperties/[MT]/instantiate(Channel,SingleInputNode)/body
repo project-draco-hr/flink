@@ -1,0 +1,25 @@
+{
+  if (in.getShipStrategy() == ShipStrategyType.FORWARD) {
+    if (in.getLocalStrategy() == LocalStrategy.SORT) {
+      if (!in.getLocalStrategyKeys().isValidUnorderedPrefix(this.keys)) {
+        throw new RuntimeException("Bug: Inconsistent sort for group strategy.");
+      }
+      in.setLocalStrategy(LocalStrategy.COMBININGSORT,in.getLocalStrategyKeys(),in.getLocalStrategySortOrder());
+    }
+    return new SingleInputPlanNode(node,"Reduce(" + node.getPactContract().getName() + ")",in,DriverStrategy.SORTED_REDUCE,this.keyList);
+  }
+ else {
+    Channel toCombiner=new Channel(in.getSource());
+    toCombiner.setShipStrategy(ShipStrategyType.FORWARD);
+    ReduceNode combinerNode=((ReduceNode)node).getCombinerUtilityNode();
+    combinerNode.setDegreeOfParallelism(in.getSource().getDegreeOfParallelism());
+    combinerNode.setSubtasksPerInstance(in.getSource().getSubtasksPerInstance());
+    SingleInputPlanNode combiner=new SingleInputPlanNode(combinerNode,"Combine(" + node.getPactContract().getName() + ")",toCombiner,DriverStrategy.PARTIAL_GROUP_COMBINE,this.keyList);
+    combiner.setCosts(new Costs(0,0));
+    combiner.initProperties(toCombiner.getGlobalProperties(),toCombiner.getLocalProperties());
+    Channel toReducer=new Channel(combiner);
+    toReducer.setShipStrategy(in.getShipStrategy(),in.getShipStrategyKeys(),in.getShipStrategySortOrder());
+    toReducer.setLocalStrategy(LocalStrategy.COMBININGSORT,in.getLocalStrategyKeys(),in.getLocalStrategySortOrder());
+    return new SingleInputPlanNode(node,"Reduce(" + node.getPactContract().getName() + ")",toReducer,DriverStrategy.SORTED_REDUCE,this.keyList);
+  }
+}

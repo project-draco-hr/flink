@@ -2,10 +2,15 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug(this.taskContext.formatLogString("Reducer preprocessing done. Running Reducer code."));
   }
-  final KeyGroupedIterator<IT> iter=new KeyGroupedIterator<IT>(this.input,this.serializer,this.comparator);
-  final GenericGroupReduce<IT,OT> stub=this.taskContext.getStub();
-  final Collector<OT> output=this.taskContext.getOutputCollector();
+  final KeyGroupedIterator<T> iter=new KeyGroupedIterator<T>(this.input,this.serializer,this.comparator);
+  final GenericReduce<T> stub=this.taskContext.getStub();
+  final Collector<T> output=this.taskContext.getOutputCollector();
   while (this.running && iter.nextKey()) {
-    stub.reduce(iter.getValues(),output);
+    ValuesIterator vIter=iter.getValues();
+    T curr=(T)vIter.next();
+    while (running & vIter.hasNext()) {
+      curr=stub.reduce(curr,(T)vIter.next());
+    }
+    output.collect(curr);
   }
 }
