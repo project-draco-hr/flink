@@ -1,0 +1,100 @@
+{
+  if (type == null) {
+    throw new InvalidTypesException("Unknown Error. Type is null.");
+  }
+  if (typeInfo == null) {
+    throw new InvalidTypesException("Unknown Error. TypeInformation is null.");
+  }
+  if (!(type instanceof TypeVariable<?>)) {
+    if (typeInfo.isBasicType()) {
+      TypeInformation<?> actual=null;
+      if (!(type instanceof Class<?>) || (actual=BasicTypeInfo.getInfoFor((Class<?>)type)) == null) {
+        throw new InvalidTypesException("Basic type expected.");
+      }
+      if (!typeInfo.equals(actual)) {
+        throw new InvalidTypesException("Basic type '" + typeInfo + "' expected but was '"+ actual+ "'.");
+      }
+    }
+ else     if (typeInfo.isTupleType()) {
+      if (!(type instanceof Class<?> && Tuple.class.isAssignableFrom((Class<?>)type)) && !(type instanceof ParameterizedType && Tuple.class.isAssignableFrom((Class<?>)((ParameterizedType)type).getRawType()))) {
+        throw new InvalidTypesException("Tuple type expected.");
+      }
+      if (type instanceof Class<?> && ((Class<?>)type).equals(Tuple.class)) {
+        throw new InvalidTypesException("Concrete subclass of Tuple expected.");
+      }
+      while (!(type instanceof ParameterizedType && ((Class<?>)((ParameterizedType)type).getRawType()).getSuperclass().equals(Tuple.class)) && !(type instanceof Class<?> && ((Class<?>)type).getSuperclass().equals(Tuple.class))) {
+        typeHierarchy.add(type);
+        if (type instanceof ParameterizedType) {
+          type=((Class<?>)((ParameterizedType)type).getRawType()).getGenericSuperclass();
+        }
+ else {
+          type=((Class<?>)type).getGenericSuperclass();
+        }
+      }
+      if (type instanceof Class<?>) {
+        throw new InvalidTypesException("Parameterized Tuple type expected.");
+      }
+      TupleTypeInfo<?> tti=(TupleTypeInfo<?>)typeInfo;
+      Type[] subTypes=((ParameterizedType)type).getActualTypeArguments();
+      if (subTypes.length != tti.getArity()) {
+        throw new InvalidTypesException("Tuple arity '" + tti.getArity() + "' expected but was '"+ subTypes.length+ "'.");
+      }
+      for (int i=0; i < subTypes.length; i++) {
+        validateInfo(new ArrayList<Type>(typeHierarchy),subTypes[i],((TupleTypeInfo<?>)typeInfo).getTypeAt(i));
+      }
+    }
+ else     if (typeInfo instanceof BasicArrayTypeInfo<?,?>) {
+      Type component=null;
+      if (!(type instanceof Class<?> && ((Class<?>)type).isArray() && (component=((Class<?>)type).getComponentType()) != null) && !(type instanceof GenericArrayType && (component=((GenericArrayType)type).getGenericComponentType()) != null)) {
+        throw new InvalidTypesException("Array type expected.");
+      }
+      if (component instanceof TypeVariable<?>) {
+        component=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)component);
+        if (component == null) {
+          return;
+        }
+      }
+      validateInfo(typeHierarchy,component,((BasicArrayTypeInfo<?,?>)typeInfo).getComponentInfo());
+    }
+ else     if (typeInfo instanceof ObjectArrayTypeInfo<?,?>) {
+      if (!(type instanceof Class<?> && ((Class<?>)type).isArray()) && !(type instanceof GenericArrayType)) {
+        throw new InvalidTypesException("Object array type expected.");
+      }
+      Type component=null;
+      if (type instanceof Class<?>) {
+        component=((Class<?>)type).getComponentType();
+      }
+ else {
+        component=((GenericArrayType)type).getGenericComponentType();
+      }
+      if (component instanceof TypeVariable<?>) {
+        component=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)component);
+        if (component == null) {
+          return;
+        }
+      }
+      validateInfo(typeHierarchy,component,((ObjectArrayTypeInfo<?,?>)typeInfo).getComponentInfo());
+    }
+ else     if (typeInfo instanceof ValueTypeInfo<?>) {
+      if (!(type instanceof Class<?> && Value.class.isAssignableFrom((Class<?>)type))) {
+        throw new InvalidTypesException("Value type expected.");
+      }
+      TypeInformation<?> actual=null;
+      if (!((ValueTypeInfo<?>)typeInfo).equals(actual=ValueTypeInfo.getValueTypeInfo((Class<? extends Value>)type))) {
+        throw new InvalidTypesException("Value type '" + typeInfo + "' expected but was '"+ actual+ "'.");
+      }
+    }
+ else     if (typeInfo instanceof GenericTypeInfo<?>) {
+      Class<?> clazz=null;
+      if (!(type instanceof Class<?> && ((GenericTypeInfo<?>)typeInfo).getTypeClass() == (clazz=(Class<?>)type)) && !(type instanceof ParameterizedType && (clazz=(Class<?>)((ParameterizedType)type).getRawType()) == ((GenericTypeInfo<?>)typeInfo).getTypeClass())) {
+        throw new InvalidTypesException("Generic object type '" + ((GenericTypeInfo<?>)typeInfo).getTypeClass().getCanonicalName() + "' expected but was '"+ clazz.getCanonicalName()+ "'.");
+      }
+    }
+  }
+ else {
+    type=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)type);
+    if (type != null) {
+      validateInfo(typeHierarchy,type,typeInfo);
+    }
+  }
+}
