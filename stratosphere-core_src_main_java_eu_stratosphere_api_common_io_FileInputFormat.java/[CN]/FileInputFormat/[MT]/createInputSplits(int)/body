@@ -18,12 +18,31 @@
       if (!dir[i].isDir() && acceptFile(dir[i])) {
         files.add(dir[i]);
         totalLength+=dir[i].getLen();
+        testForUnsplittable(dir[i]);
       }
     }
   }
  else {
+    testForUnsplittable(pathFile);
     files.add(pathFile);
     totalLength+=pathFile.getLen();
+  }
+  if (unsplittable) {
+    int splitNum=0;
+    for (    final FileStatus file : files) {
+      final BlockLocation[] blocks=fs.getFileBlockLocations(file,0,file.getLen());
+      Set<String> hosts=new HashSet<String>();
+      for (      BlockLocation block : blocks) {
+        hosts.addAll(Arrays.asList(block.getHosts()));
+      }
+      long len=file.getLen();
+      if (testForUnsplittable(file)) {
+        len=READ_WHOLE_SPLIT_FLAG;
+      }
+      FileInputSplit fis=new FileInputSplit(splitNum++,file.getPath(),0,len,hosts.toArray(new String[hosts.size()]));
+      inputSplits.add(fis);
+    }
+    return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
   }
   final long maxSplitSize=(minNumSplits < 1) ? Long.MAX_VALUE : (totalLength / minNumSplits + (totalLength % minNumSplits == 0 ? 0 : 1));
   int splitNum=0;
