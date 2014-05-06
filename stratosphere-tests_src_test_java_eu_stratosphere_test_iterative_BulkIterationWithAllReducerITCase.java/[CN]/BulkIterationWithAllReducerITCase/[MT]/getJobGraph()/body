@@ -1,0 +1,17 @@
+{
+  FileDataSource input=new FileDataSource(new CsvInputFormat(),inputPath);
+  CsvInputFormat.configureRecordFormat(input).fieldDelimiter(' ').field(StringValue.class,0).field(IntValue.class,1);
+  BulkIteration bulkIteration=new BulkIteration();
+  bulkIteration.setMaximumNumberOfIterations(10);
+  bulkIteration.setInput(input);
+  ReduceOperator reduce=ReduceOperator.builder(PickOneAllReduce.class).setBroadcastVariable("bc",bulkIteration.getPartialSolution()).input(input).build();
+  bulkIteration.setNextPartialSolution(reduce);
+  FileDataSink output=new FileDataSink(new ContractITCaseOutputFormat(),resultPath);
+  output.setDegreeOfParallelism(1);
+  output.setInput(bulkIteration);
+  Plan plan=new Plan(output);
+  PactCompiler pc=new PactCompiler(new DataStatistics());
+  OptimizedPlan op=pc.compile(plan);
+  NepheleJobGraphGenerator jgg=new NepheleJobGraphGenerator();
+  return jgg.compileJobGraph(op);
+}
