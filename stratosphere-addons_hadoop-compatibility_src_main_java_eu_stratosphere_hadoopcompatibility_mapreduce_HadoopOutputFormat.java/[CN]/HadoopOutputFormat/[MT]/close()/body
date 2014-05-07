@@ -1,0 +1,25 @@
+{
+  try {
+    this.recordWriter.close(this.context);
+  }
+ catch (  InterruptedException e) {
+    throw new IOException("Could not close RecordReader.",e);
+  }
+  if (this.fileOutputCommitter.needsTaskCommit(this.context)) {
+    this.fileOutputCommitter.commitTask(this.context);
+  }
+  this.fileOutputCommitter.commitJob(this.context);
+  FileSystem fs=FileSystem.get(this.configuration);
+  Path outputPath=new Path(this.configuration.get("mapred.output.dir"));
+  final Pattern p=Pattern.compile("tmp-(.)-([0-9]+)");
+  if (fs.getFileStatus(outputPath).isDir()) {
+    FileStatus[] files=fs.listStatus(outputPath);
+    for (    FileStatus f : files) {
+      Matcher m=p.matcher(f.getPath().getName());
+      if (m.matches()) {
+        int part=Integer.valueOf(m.group(2));
+        fs.rename(f.getPath(),new Path(outputPath.toString() + "/" + part));
+      }
+    }
+  }
+}

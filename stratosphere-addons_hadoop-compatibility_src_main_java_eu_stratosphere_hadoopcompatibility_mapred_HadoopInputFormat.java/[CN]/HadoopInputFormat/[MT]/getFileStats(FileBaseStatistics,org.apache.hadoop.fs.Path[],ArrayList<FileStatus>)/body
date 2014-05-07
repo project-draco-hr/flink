@@ -1,0 +1,33 @@
+{
+  long latestModTime=0L;
+  for (  org.apache.hadoop.fs.Path hadoopPath : hadoopFilePaths) {
+    final Path filePath=new Path(hadoopPath.toUri());
+    final FileSystem fs=FileSystem.get(filePath.toUri());
+    final FileStatus file=fs.getFileStatus(filePath);
+    latestModTime=Math.max(latestModTime,file.getModificationTime());
+    if (file.isDir()) {
+      FileStatus[] fss=fs.listStatus(filePath);
+      files.ensureCapacity(files.size() + fss.length);
+      for (      FileStatus s : fss) {
+        if (!s.isDir()) {
+          files.add(s);
+          latestModTime=Math.max(s.getModificationTime(),latestModTime);
+        }
+      }
+    }
+ else {
+      files.add(file);
+    }
+  }
+  if (cachedStats != null && latestModTime <= cachedStats.getLastModificationTime()) {
+    return cachedStats;
+  }
+  long len=0;
+  for (  FileStatus s : files) {
+    len+=s.getLen();
+  }
+  if (len <= 0) {
+    len=BaseStatistics.SIZE_UNKNOWN;
+  }
+  return new FileBaseStatistics(latestModTime,len,BaseStatistics.AVG_RECORD_BYTES_UNKNOWN);
+}
