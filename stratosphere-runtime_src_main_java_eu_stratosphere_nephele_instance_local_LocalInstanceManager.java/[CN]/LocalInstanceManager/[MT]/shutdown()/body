@@ -1,25 +1,30 @@
 {
-  int numTMShutDown;
-  do {
-    numTMShutDown=0;
-    for (    LocalTaskManagerThread thread : localTaskManagerThreads) {
-      if (!thread.isShutDown()) {
-        thread.interrupt();
-      }
- else {
-        numTMShutDown++;
-      }
-    }
-    if (numTMShutDown < localTaskManagerThreads.size()) {
-      try {
-        Thread.sleep(100);
-      }
- catch (      InterruptedException e) {
+  for (  TaskManager t : taskManagers) {
+    t.shutdown();
+  }
+  boolean areAllTaskManagerShutdown=false;
+  int timeout=START_STOP_TIMEOUT * this.taskManagers.size();
+  for (int sleep=0; sleep < timeout; sleep+=SLEEP_TIME) {
+    areAllTaskManagerShutdown=true;
+    for (    TaskManager t : taskManagers) {
+      if (!t.isShutDown()) {
+        areAllTaskManagerShutdown=false;
         break;
       }
     }
+    if (areAllTaskManagerShutdown) {
+      break;
+    }
+    try {
+      Thread.sleep(SLEEP_TIME);
+    }
+ catch (    InterruptedException e) {
+      break;
+    }
   }
- while (numTMShutDown < localTaskManagerThreads.size());
+  if (!areAllTaskManagerShutdown) {
+    throw new RuntimeException(String.format("TaskManager shut down timed out (%d ms).",timeout));
+  }
   instanceTypeDescriptionMap.clear();
 synchronized (this.synchronizationObject) {
     for (    LocalInstance instance : this.localInstances.values()) {
