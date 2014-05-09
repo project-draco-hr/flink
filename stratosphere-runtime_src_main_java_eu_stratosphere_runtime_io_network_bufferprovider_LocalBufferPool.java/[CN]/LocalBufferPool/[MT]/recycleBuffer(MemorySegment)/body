@@ -5,10 +5,19 @@ synchronized (this.buffers) {
       this.numRequestedBuffers--;
     }
  else {
-      this.buffers.add(buffer);
-      this.buffers.notify();
-      while (!this.listeners.isEmpty()) {
-        this.listeners.poll().bufferAvailable();
+      if (!this.listeners.isEmpty()) {
+        Buffer availableBuffer=new Buffer(buffer,buffer.size(),this.recycler);
+        try {
+          this.listeners.poll().bufferAvailable(availableBuffer);
+        }
+ catch (        Exception e) {
+          this.buffers.add(buffer);
+          this.buffers.notify();
+        }
+      }
+ else {
+        this.buffers.add(buffer);
+        this.buffers.notify();
       }
     }
   }

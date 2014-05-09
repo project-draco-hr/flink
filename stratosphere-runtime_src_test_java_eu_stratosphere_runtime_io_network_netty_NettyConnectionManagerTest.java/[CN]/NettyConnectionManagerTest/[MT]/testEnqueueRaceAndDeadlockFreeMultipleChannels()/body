@@ -1,0 +1,19 @@
+{
+  final InetAddress localhost=InetAddress.getLocalHost();
+  final CountDownLatch latch=new CountDownLatch(this.numSubtasks);
+  ChannelManager channelManager=mock(ChannelManager.class);
+  doAnswer(new VerifyEnvelopes(latch)).when(channelManager).dispatchFromNetwork(Matchers.<Envelope>anyObject());
+  NettyConnectionManager connManagerToTest=new NettyConnectionManager(channelManager,localhost,BIND_PORT,HIGH_WATERMARK,this.numInThreads,this.numOutThreads,-1,-1);
+  NettyConnectionManager connManagerReceiver=new NettyConnectionManager(channelManager,localhost,BIND_PORT + 1,HIGH_WATERMARK,this.numInThreads,this.numOutThreads,-1,-1);
+  RemoteReceiver[] receivers=new RemoteReceiver[this.numChannels];
+  for (int i=0; i < this.numChannels; i++) {
+    receivers[i]=new RemoteReceiver(new InetSocketAddress(localhost,BIND_PORT + 1),i);
+  }
+  for (int i=0; i < this.numSubtasks; i++) {
+    RemoteReceiver receiver=receivers[random.nextInt(this.numChannels)];
+    new Thread(new SubtaskSenderThread(connManagerToTest,receiver)).start();
+  }
+  latch.await();
+  connManagerToTest.shutdown();
+  connManagerReceiver.shutdown();
+}

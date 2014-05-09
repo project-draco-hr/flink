@@ -1,0 +1,32 @@
+{
+  JobGraph jobGraph=new JobGraph("Speed Test");
+  JobInputVertex producer=new JobGenericInputVertex("Speed Test Producer",jobGraph);
+  producer.setInputClass(SpeedTestProducer.class);
+  producer.setNumberOfSubtasks(numSubtasks);
+  producer.setNumberOfSubtasksPerInstance(numSubtasksPerInstance);
+  producer.getConfiguration().setInteger(DATA_VOLUME_GB_CONFIG_KEY,dataVolumeGb);
+  producer.getConfiguration().setBoolean(IS_SLOW_SENDER_CONFIG_KEY,isSlowSender);
+  JobTaskVertex forwarder=null;
+  if (useForwarder) {
+    forwarder=new JobTaskVertex("Speed Test Forwarder",jobGraph);
+    forwarder.setTaskClass(SpeedTestForwarder.class);
+    forwarder.setNumberOfSubtasks(numSubtasks);
+    forwarder.setNumberOfSubtasksPerInstance(numSubtasksPerInstance);
+  }
+  JobOutputVertex consumer=new JobOutputVertex("Speed Test Consumer",jobGraph);
+  consumer.setOutputClass(SpeedTestConsumer.class);
+  consumer.setNumberOfSubtasks(numSubtasks);
+  consumer.setNumberOfSubtasksPerInstance(numSubtasksPerInstance);
+  consumer.getConfiguration().setBoolean(IS_SLOW_RECEIVER_CONFIG_KEY,isSlowReceiver);
+  if (useForwarder) {
+    producer.connectTo(forwarder,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+    forwarder.connectTo(consumer,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+    producer.setVertexToShareInstancesWith(forwarder);
+    forwarder.setVertexToShareInstancesWith(consumer);
+  }
+ else {
+    producer.connectTo(consumer,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
+    producer.setVertexToShareInstancesWith(consumer);
+  }
+  return jobGraph;
+}

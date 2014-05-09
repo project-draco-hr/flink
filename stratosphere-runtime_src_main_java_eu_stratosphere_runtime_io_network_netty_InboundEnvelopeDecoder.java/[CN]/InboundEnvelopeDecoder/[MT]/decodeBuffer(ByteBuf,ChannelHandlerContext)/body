@@ -1,0 +1,32 @@
+{
+  DecoderState decoderState;
+  while ((decoderState=decodeEnvelope(in)) != DecoderState.PENDING) {
+    if (decoderState == DecoderState.COMPLETE) {
+      ctx.fireChannelRead(this.currentEnvelope);
+      this.currentEnvelope=null;
+    }
+ else     if (decoderState == DecoderState.NO_BUFFER_AVAILABLE) {
+switch (this.currentBufferProvider.registerBufferAvailabilityListener(this)) {
+case REGISTERED:
+        if (ctx.channel().config().isAutoRead()) {
+          ctx.channel().config().setAutoRead(false);
+        }
+      this.stagedBuffer=in;
+    this.stagedBuffer.retain();
+  return false;
+case NOT_REGISTERED_BUFFER_AVAILABLE:
+continue;
+case NOT_REGISTERED_BUFFER_POOL_DESTROYED:
+this.bytesToSkip=skipBytes(in,this.currentBufferRequestSize);
+this.currentBufferRequestSize=0;
+this.currentEventsBuffer=null;
+this.currentEnvelope=null;
+}
+}
+}
+if (in.isReadable()) {
+throw new IllegalStateException("Every buffer should have been fully" + "consumed after *successfully* decoding it (if it was not successful, " + "the buffer will be staged for later consumption).");
+}
+in.release();
+return true;
+}

@@ -1,0 +1,20 @@
+{
+  Buffer availableBuffer=bufferBroker.poll();
+  if (availableBuffer == null) {
+    throw new IllegalStateException("The BufferAvailabilityChangedTask" + "should only be executed when a Buffer has been offered" + "to the Buffer broker (after becoming available).");
+  }
+  availableBuffer.limitSize(currentBufferRequestSize);
+  currentEnvelope.setBuffer(availableBuffer);
+  currentDataBuffer=availableBuffer.getMemorySegment().wrap(0,InboundEnvelopeDecoder.this.currentBufferRequestSize);
+  currentBufferRequestSize=0;
+  stagedBuffer.release();
+  try {
+    if (decodeBuffer(stagedBuffer,channelHandlerContext)) {
+      stagedBuffer=null;
+      channelHandlerContext.channel().config().setAutoRead(true);
+    }
+  }
+ catch (  IOException e) {
+    availableBuffer.recycleBuffer();
+  }
+}
