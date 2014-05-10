@@ -1,0 +1,26 @@
+{
+  try {
+    final int DOP=8;
+    ExecutionEnvironment env=ExecutionEnvironment.createLocalEnvironment(DOP);
+    DataSet<Tuple3<Double,StringValue,LongValue>> initialData=getSourceDataSet(env);
+    initialData.reduce(new ReduceFunction<Tuple3<Double,StringValue,LongValue>>(){
+      public Tuple3<Double,StringValue,LongValue> reduce(      Tuple3<Double,StringValue,LongValue> value1,      Tuple3<Double,StringValue,LongValue> value2){
+        return value1;
+      }
+    }
+).print();
+    Plan p=env.createProgramPlan();
+    GenericDataSink sink=p.getDataSinks().iterator().next();
+    PlanReduceOperator<?> reducer=(PlanReduceOperator<?>)sink.getInput();
+    assertEquals(initialData.getType(),reducer.getInputType());
+    assertEquals(initialData.getType(),reducer.getReturnType());
+    assertTrue(reducer.getKeyColumns(0) == null || reducer.getKeyColumns(0).length == 0);
+    assertTrue(reducer.getDegreeOfParallelism() == 1 || reducer.getDegreeOfParallelism() == -1);
+    assertTrue(reducer.getInput() instanceof GenericDataSource<?>);
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail("Test caused an error: " + e.getMessage());
+  }
+}

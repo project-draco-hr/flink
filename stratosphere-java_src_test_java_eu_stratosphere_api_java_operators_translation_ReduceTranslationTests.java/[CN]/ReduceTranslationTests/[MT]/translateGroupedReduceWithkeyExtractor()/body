@@ -1,0 +1,40 @@
+{
+  try {
+    final int DOP=8;
+    ExecutionEnvironment env=ExecutionEnvironment.createLocalEnvironment(DOP);
+    DataSet<Tuple3<Double,StringValue,LongValue>> initialData=getSourceDataSet(env);
+    initialData.groupBy(new KeySelector<Tuple3<Double,StringValue,LongValue>,StringValue>(){
+      public StringValue getKey(      Tuple3<Double,StringValue,LongValue> value){
+        return value.f1;
+      }
+    }
+).reduce(new ReduceFunction<Tuple3<Double,StringValue,LongValue>>(){
+      public Tuple3<Double,StringValue,LongValue> reduce(      Tuple3<Double,StringValue,LongValue> value1,      Tuple3<Double,StringValue,LongValue> value2){
+        return value1;
+      }
+    }
+).setParallelism(4).print();
+    Plan p=env.createProgramPlan();
+    GenericDataSink sink=p.getDataSinks().iterator().next();
+    PlanMapOperator<?,?> keyProjector=(PlanMapOperator<?,?>)sink.getInput();
+    PlanUnwrappingReduceOperator<?,?> reducer=(PlanUnwrappingReduceOperator<?,?>)keyProjector.getInput();
+    PlanMapOperator<?,?> keyExtractor=(PlanMapOperator<?,?>)reducer.getInput();
+    assertEquals(1,keyExtractor.getDegreeOfParallelism());
+    assertEquals(4,reducer.getDegreeOfParallelism());
+    assertEquals(4,keyProjector.getDegreeOfParallelism());
+    TypeInformation<?> keyValueInfo=new TupleTypeInfo<Tuple2<StringValue,Tuple3<Double,StringValue,LongValue>>>(new ValueTypeInfo<StringValue>(StringValue.class),initialData.getType());
+    assertEquals(initialData.getType(),keyExtractor.getInputType());
+    assertEquals(keyValueInfo,keyExtractor.getReturnType());
+    assertEquals(keyValueInfo,reducer.getInputType());
+    assertEquals(keyValueInfo,reducer.getReturnType());
+    assertEquals(keyValueInfo,keyProjector.getInputType());
+    assertEquals(initialData.getType(),keyProjector.getReturnType());
+    assertEquals(KeyExtractingMapper.class,keyExtractor.getUserCodeWrapper().getUserCodeClass());
+    assertTrue(keyExtractor.getInput() instanceof GenericDataSource<?>);
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail("Test caused an error: " + e.getMessage());
+  }
+}
