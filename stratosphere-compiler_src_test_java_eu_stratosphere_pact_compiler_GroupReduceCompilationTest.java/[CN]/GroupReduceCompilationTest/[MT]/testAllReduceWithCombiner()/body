@@ -1,0 +1,34 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(8);
+    DataSet<Long> data=env.generateSequence(1,8000000).name("source");
+    ReduceGroupOperator<Long,Long> reduced=data.reduceGroup(new GroupReduceFunction<Long,Long>(){
+      public void reduce(      Iterator<Long> values,      Collector<Long> out){
+      }
+    }
+).name("reducer");
+    reduced.setCombinable(true);
+    reduced.print().name("sink");
+    Plan p=env.createProgramPlan();
+    OptimizedPlan op=compileNoStats(p);
+    OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(op);
+    SourcePlanNode sourceNode=resolver.getNode("source");
+    SingleInputPlanNode reduceNode=resolver.getNode("reducer");
+    SinkPlanNode sinkNode=resolver.getNode("sink");
+    SingleInputPlanNode combineNode=(SingleInputPlanNode)reduceNode.getInput().getSource();
+    assertEquals(sourceNode,combineNode.getInput().getSource());
+    assertEquals(reduceNode,sinkNode.getInput().getSource());
+    assertEquals(DriverStrategy.ALL_GROUP_REDUCE,reduceNode.getDriverStrategy());
+    assertEquals(DriverStrategy.ALL_GROUP_REDUCE,combineNode.getDriverStrategy());
+    assertEquals(8,sourceNode.getDegreeOfParallelism());
+    assertEquals(8,combineNode.getDegreeOfParallelism());
+    assertEquals(1,reduceNode.getDegreeOfParallelism());
+    assertEquals(1,sinkNode.getDegreeOfParallelism());
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail(e.getClass().getSimpleName() + " in test: " + e.getMessage());
+  }
+}
