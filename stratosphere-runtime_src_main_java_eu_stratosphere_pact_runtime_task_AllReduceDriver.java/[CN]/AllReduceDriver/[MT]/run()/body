@@ -3,11 +3,15 @@
     LOG.debug(this.taskContext.formatLogString("AllReduce preprocessing done. Running Reducer code."));
   }
   final GenericReduce<T> stub=this.taskContext.getStub();
-  final Collector<T> output=this.taskContext.getOutputCollector();
-  final MutableToRegularIteratorWrapper<T> inIter=new MutableToRegularIteratorWrapper<T>(this.input,this.serializer);
-  T curr=inIter.next();
-  while (running & inIter.hasNext()) {
-    curr=stub.reduce(curr,inIter.next());
+  final MutableObjectIterator<T> input=this.input;
+  final TypeSerializer<T> serializer=this.serializer;
+  T val1=serializer.createInstance();
+  if ((val1=input.next(val1)) == null) {
+    return;
   }
-  output.collect(curr);
+  T val2;
+  while (running && (val2=input.next(serializer.createInstance())) != null) {
+    val1=stub.reduce(val1,val2);
+  }
+  this.taskContext.getOutputCollector().collect(val1);
 }
