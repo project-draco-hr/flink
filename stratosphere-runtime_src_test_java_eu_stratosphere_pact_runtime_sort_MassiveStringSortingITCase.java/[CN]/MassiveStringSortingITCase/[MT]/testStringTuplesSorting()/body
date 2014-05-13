@@ -1,0 +1,80 @@
+{
+  final int NUM_STRINGS=300000;
+  File input=null;
+  File sorted=null;
+  try {
+    input=generateFileWithStringTuples(NUM_STRINGS,"http://some-uri.com/that/is/a/common/prefix/to/all");
+    sorted=File.createTempFile("sorted_strings","txt");
+    String[] command={"/bin/bash","-c","export LC_ALL=\"C\" && cat \"" + input.getAbsolutePath() + "\" | sort > \""+ sorted.getAbsolutePath()+ "\""};
+    Process p=null;
+    try {
+      p=Runtime.getRuntime().exec(command);
+      int retCode=p.waitFor();
+      if (retCode != 0) {
+        throw new Exception("Command failed with return code " + retCode);
+      }
+      p=null;
+    }
+  finally {
+      if (p != null) {
+        p.destroy();
+      }
+    }
+    UnilateralSortMerger<Tuple2<String,String[]>> sorter=null;
+    BufferedReader reader=null;
+    BufferedReader verifyReader=null;
+    try {
+      MemoryManager mm=new DefaultMemoryManager(1024 * 1024);
+      IOManager ioMan=new IOManager();
+      TupleTypeInfo<Tuple2<String,String[]>> typeInfo=(TupleTypeInfo<Tuple2<String,String[]>>)(TupleTypeInfo<?>)TypeInformation.parse("Tuple2<String, String[]>");
+      TypeSerializer<Tuple2<String,String[]>> serializer=typeInfo.createSerializer();
+      TypeComparator<Tuple2<String,String[]>> comparator=typeInfo.createComparator(new int[]{0},new boolean[]{true});
+      reader=new BufferedReader(new FileReader(input));
+      MutableObjectIterator<Tuple2<String,String[]>> inputIterator=new StringTupleReaderMutableObjectIterator(reader);
+      sorter=new UnilateralSortMerger<Tuple2<String,String[]>>(mm,ioMan,inputIterator,new DummyInvokable(),new RuntimeStatelessSerializerFactory<Tuple2<String,String[]>>(serializer,(Class<Tuple2<String,String[]>>)(Class<?>)Tuple2.class),comparator,1024 * 1024,4,0.8f);
+      MutableObjectIterator<Tuple2<String,String[]>> sortedData=sorter.getIterator();
+      reader.close();
+      verifyReader=new BufferedReader(new FileReader(sorted));
+      MutableObjectIterator<Tuple2<String,String[]>> verifyIterator=new StringTupleReaderMutableObjectIterator(verifyReader);
+      Tuple2<String,String[]> next=new Tuple2<String,String[]>("",new String[0]);
+      Tuple2<String,String[]> nextFromStratoSort=new Tuple2<String,String[]>("",new String[0]);
+      int num=0;
+      while ((next=verifyIterator.next(next)) != null) {
+        num++;
+        nextFromStratoSort=sortedData.next(nextFromStratoSort);
+        Assert.assertNotNull(nextFromStratoSort);
+        if (nextFromStratoSort.f0.equals("http://some-uri.com/that/is/a/common/prefix/to/all(()HK;V3__.e*")) {
+          System.out.println("Found at position " + num);
+        }
+        Assert.assertEquals(next.f0,nextFromStratoSort.f0);
+        Assert.assertArrayEquals(next.f1,nextFromStratoSort.f1);
+      }
+      Assert.assertNull(sortedData.next(nextFromStratoSort));
+      Assert.assertEquals(NUM_STRINGS,num);
+    }
+  finally {
+      if (reader != null) {
+        reader.close();
+      }
+      if (verifyReader != null) {
+        verifyReader.close();
+      }
+      if (sorter != null) {
+        sorter.close();
+      }
+    }
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+ finally {
+    if (input != null) {
+      input.delete();
+    }
+    if (sorted != null) {
+      sorted.delete();
+    }
+  }
+}
