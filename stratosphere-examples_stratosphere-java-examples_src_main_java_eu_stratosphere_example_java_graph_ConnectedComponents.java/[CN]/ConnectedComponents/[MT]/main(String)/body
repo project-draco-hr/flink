@@ -1,18 +1,17 @@
 {
-  if (args.length < 4) {
-    System.err.println("Parameters: <vertices-path> <edges-path> <result-path> <max-number-of-iterations>");
-    return;
-  }
-  final int maxIterations=Integer.parseInt(args[3]);
+  parseParameters(args);
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Long> vertices=env.readCsvFile(args[0]).types(Long.class).map(new MapFunction<Tuple1<Long>,Long>(){
-    public Long map(    Tuple1<Long> value){
-      return value.f0;
-    }
+  DataSet<Long> vertices=getVertexDataSet(env);
+  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env);
+  DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new DuplicateValue<Long>());
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithInitialId.iterateDelta(verticesWithInitialId,maxIterations,0);
+  DataSet<Tuple2<Long,Long>> changes=iteration.getWorkset().join(edges).where(0).equalTo(0).with(new NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).flatMap(new ComponentIdFilter());
+  DataSet<Tuple2<Long,Long>> result=iteration.closeWith(changes,changes);
+  if (fileOutput) {
+    result.writeAsCsv(outputPath,"\n"," ");
   }
-);
-  DataSet<Tuple2<Long,Long>> edges=env.readCsvFile(args[1]).fieldDelimiter(' ').types(Long.class,Long.class);
-  DataSet<Tuple2<Long,Long>> result=doConnectedComponents(vertices,edges,maxIterations);
-  result.writeAsCsv(args[2],"\n"," ");
-  env.execute("Connected Components");
+ else {
+    result.print();
+  }
+  env.execute("Connected Components Example");
 }

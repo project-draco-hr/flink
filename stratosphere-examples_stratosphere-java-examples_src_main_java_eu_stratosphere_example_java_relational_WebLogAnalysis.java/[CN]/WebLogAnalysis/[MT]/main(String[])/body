@@ -1,27 +1,19 @@
 {
-  if (args.length < 4) {
-    System.err.println("Parameters: <docs> <ranks> <visits> <output>.");
-    System.err.println("            If <output> is \"STDOUT\", prints result to the command line.");
-    return;
-  }
-  String docsInput=args[0];
-  String ranksInput=args[1];
-  String visitsInput=args[2];
-  String output=args[3];
+  parseParameters(args);
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Tuple2<String,String>> docs=env.readCsvFile(docsInput).fieldDelimiter('|').types(String.class,String.class);
-  DataSet<Tuple3<Integer,String,Integer>> ranks=env.readCsvFile(ranksInput).fieldDelimiter('|').types(Integer.class,String.class,Integer.class);
-  DataSet<Tuple2<String,String>> visits=env.readCsvFile(visitsInput).fieldDelimiter('|').includeFields("011000000").types(String.class,String.class);
-  DataSet<Tuple1<String>> filterDocs=docs.filter(new FilterDocs()).project(0).types(String.class);
+  DataSet<Tuple2<String,String>> documents=getDocumentsDataSet(env);
+  DataSet<Tuple3<Integer,String,Integer>> ranks=getRanksDataSet(env);
+  DataSet<Tuple2<String,String>> visits=getVisitsDataSet(env);
+  DataSet<Tuple1<String>> filterDocs=documents.filter(new FilterDocs()).project(0).types(String.class);
   DataSet<Tuple3<Integer,String,Integer>> filterRanks=ranks.filter(new FilterRanks());
   DataSet<Tuple1<String>> filterVisits=visits.filter(new FilterVisits()).project(0).types(String.class);
   DataSet<Tuple3<Integer,String,Integer>> joinDocsRanks=filterDocs.join(filterRanks).where(0).equalTo(1).projectSecond(0,1,2).types(Integer.class,String.class,Integer.class);
-  DataSet<Tuple3<Integer,String,Integer>> antiJoinVisits=joinDocsRanks.coGroup(filterVisits).where(1).equalTo(0).with(new AntiJoinVisits());
-  if (output.equals("STDOUT")) {
-    antiJoinVisits.print();
+  DataSet<Tuple3<Integer,String,Integer>> result=joinDocsRanks.coGroup(filterVisits).where(1).equalTo(0).with(new AntiJoinVisits());
+  if (fileOutput) {
+    result.writeAsCsv(outputPath,"\n","|");
   }
  else {
-    antiJoinVisits.writeAsCsv(output,"\n","|");
+    result.print();
   }
-  env.execute();
+  env.execute("WebLogAnalysis Example");
 }

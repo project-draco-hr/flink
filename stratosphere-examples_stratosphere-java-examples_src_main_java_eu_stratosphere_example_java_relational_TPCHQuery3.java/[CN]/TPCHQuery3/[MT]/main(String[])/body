@@ -1,16 +1,9 @@
 {
-  if (args.length < 3) {
-    System.err.println("Parameters: <lineitem.tbl> <customer.tbl> <orders.tbl> [<output>].");
-    return;
-  }
-  final String lineitemPath=args[0];
-  final String customerPath=args[1];
-  final String ordersPath=args[2];
-  final String resultPath=args.length >= 4 ? args[4] : null;
+  parseParameters(args);
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Lineitem> li=env.readCsvFile(lineitemPath).fieldDelimiter('|').includeFields("1000011000100000").tupleType(Lineitem.class);
-  DataSet<Order> or=env.readCsvFile(ordersPath).fieldDelimiter('|').includeFields("100010010").tupleType(Order.class);
-  DataSet<Customer> cust=env.readCsvFile(customerPath).fieldDelimiter('|').includeFields("10000010").tupleType(Customer.class);
+  DataSet<Lineitem> li=getLineitemDataSet(env);
+  DataSet<Order> or=getOrdersDataSet(env);
+  DataSet<Customer> cust=getCustomerDataSet(env);
   cust=cust.filter(new FilterFunction<Customer>(){
     @Override public boolean filter(    Customer value){
       return value.getMktsegment().equals("AUTOMOBILE");
@@ -59,18 +52,7 @@
     }
   }
 );
-  joined=joined.groupBy(0,2,3).reduce(new ReduceFunction<TPCHQuery3.ShippingPriorityItem>(){
-    @Override public ShippingPriorityItem reduce(    ShippingPriorityItem value1,    ShippingPriorityItem value2){
-      value1.setRevenue(value1.getRevenue() + value2.getRevenue());
-      return value1;
-    }
-  }
-);
-  if (resultPath == null) {
-    joined.print();
-  }
- else {
-    joined.writeAsCsv(resultPath,"\n","|");
-  }
-  env.execute();
+  joined=joined.groupBy(0,2,3).aggregate(Aggregations.SUM,1);
+  joined.writeAsCsv(outputPath,"\n","|");
+  env.execute("TPCH Query 3 Example");
 }
