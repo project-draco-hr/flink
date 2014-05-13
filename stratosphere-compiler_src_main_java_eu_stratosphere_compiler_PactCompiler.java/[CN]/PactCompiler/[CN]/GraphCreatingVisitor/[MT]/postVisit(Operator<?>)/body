@@ -1,0 +1,90 @@
+{
+  OptimizerNode n=this.con2node.get(c);
+  n.setInput(this.con2node);
+  n.setBroadcastInputs(this.con2node);
+  if (n instanceof BulkIterationNode) {
+    final BulkIterationNode iterNode=(BulkIterationNode)n;
+    final BulkIterationBase<?> iter=iterNode.getIterationContract();
+    HashMap<Operator<?>,OptimizerNode> closure=new HashMap<Operator<?>,OptimizerNode>(con2node);
+    final GraphCreatingVisitor recursiveCreator=new GraphCreatingVisitor(this,true,this.maxMachines,iterNode.getDegreeOfParallelism(),closure);
+    BulkPartialSolutionNode partialSolution=null;
+    iter.getNextPartialSolution().accept(recursiveCreator);
+    partialSolution=(BulkPartialSolutionNode)recursiveCreator.con2node.get(iter.getPartialSolution());
+    OptimizerNode rootOfStepFunction=recursiveCreator.con2node.get(iter.getNextPartialSolution());
+    if (partialSolution == null) {
+      throw new CompilerException("Error: The step functions result does not depend on the partial solution.");
+    }
+    OptimizerNode terminationCriterion=null;
+    if (iter.getTerminationCriterion() != null) {
+      terminationCriterion=recursiveCreator.con2node.get(iter.getTerminationCriterion());
+      if (terminationCriterion == null) {
+        iter.getTerminationCriterion().accept(recursiveCreator);
+        terminationCriterion=recursiveCreator.con2node.get(iter.getTerminationCriterion());
+      }
+    }
+    iterNode.setNextPartialSolution(rootOfStepFunction,terminationCriterion);
+    iterNode.setPartialSolution(partialSolution);
+    this.numMemoryConsumers+=recursiveCreator.numMemoryConsumers;
+    StaticDynamicPathIdentifier identifier=new StaticDynamicPathIdentifier(iterNode.getCostWeight());
+    rootOfStepFunction.accept(identifier);
+    if (terminationCriterion != null) {
+      terminationCriterion.accept(identifier);
+    }
+  }
+ else   if (n instanceof WorksetIterationNode) {
+    final WorksetIterationNode iterNode=(WorksetIterationNode)n;
+    final DeltaIterationBase<?,?> iter=iterNode.getIterationContract();
+    HashMap<Operator<?>,OptimizerNode> closure=new HashMap<Operator<?>,OptimizerNode>(con2node);
+    final GraphCreatingVisitor recursiveCreator=new GraphCreatingVisitor(this,true,this.maxMachines,iterNode.getDegreeOfParallelism(),closure);
+    iter.getSolutionSetDelta().accept(recursiveCreator);
+    final SolutionSetNode solutionSetNode=(SolutionSetNode)recursiveCreator.con2node.get(iter.getSolutionSet());
+    final WorksetNode worksetNode=(WorksetNode)recursiveCreator.con2node.get(iter.getWorkset());
+    if (worksetNode == null) {
+      throw new CompilerException("In the given plan, the solution set delta does not depend on the workset. This is a prerequisite in workset iterations.");
+    }
+    iter.getNextWorkset().accept(recursiveCreator);
+    if (solutionSetNode == null || solutionSetNode.getOutgoingConnections() == null || solutionSetNode.getOutgoingConnections().isEmpty()) {
+      throw new CompilerException("Error: The step function does not reference the solution set.");
+    }
+ else {
+      for (      PactConnection conn : solutionSetNode.getOutgoingConnections()) {
+        OptimizerNode successor=conn.getTarget();
+        if (successor.getClass() == MatchNode.class) {
+          MatchNode mn=(MatchNode)successor;
+          if (mn.getFirstPredecessorNode() == solutionSetNode) {
+            mn.makeJoinWithSolutionSet(0);
+          }
+ else           if (mn.getSecondPredecessorNode() == solutionSetNode) {
+            mn.makeJoinWithSolutionSet(1);
+          }
+ else {
+            throw new CompilerException();
+          }
+        }
+ else         if (successor.getClass() == CoGroupNode.class) {
+          CoGroupNode cg=(CoGroupNode)successor;
+          if (cg.getFirstPredecessorNode() == solutionSetNode) {
+            cg.makeCoGroupWithSolutionSet(0);
+          }
+ else           if (cg.getSecondPredecessorNode() == solutionSetNode) {
+            cg.makeCoGroupWithSolutionSet(1);
+          }
+ else {
+            throw new CompilerException();
+          }
+        }
+ else {
+          throw new CompilerException("Error: The solution set may only be joined with through a Join or a CoGroup function.");
+        }
+      }
+    }
+    final OptimizerNode nextWorksetNode=recursiveCreator.con2node.get(iter.getNextWorkset());
+    final OptimizerNode solutionSetDeltaNode=recursiveCreator.con2node.get(iter.getSolutionSetDelta());
+    iterNode.setPartialSolution(solutionSetNode,worksetNode);
+    iterNode.setNextPartialSolution(solutionSetDeltaNode,nextWorksetNode);
+    this.numMemoryConsumers+=recursiveCreator.numMemoryConsumers;
+    StaticDynamicPathIdentifier pathIdentifier=new StaticDynamicPathIdentifier(iterNode.getCostWeight());
+    nextWorksetNode.accept(pathIdentifier);
+    iterNode.getSolutionSetDelta().accept(pathIdentifier);
+  }
+}
