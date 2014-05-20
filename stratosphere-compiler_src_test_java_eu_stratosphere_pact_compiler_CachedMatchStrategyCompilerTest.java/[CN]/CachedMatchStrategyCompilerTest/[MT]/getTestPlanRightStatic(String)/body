@@ -1,0 +1,19 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setDegreeOfParallelism(DEFAULT_PARALLELISM);
+  DataSet<Tuple3<Long,Long,Long>> bigInput=env.readCsvFile("file://bigFile").types(Long.class,Long.class,Long.class).name("bigFile");
+  DataSet<Tuple3<Long,Long,Long>> smallInput=env.readCsvFile("file://smallFile").types(Long.class,Long.class,Long.class).name("smallFile");
+  IterativeDataSet<Tuple3<Long,Long,Long>> iteration=bigInput.iterate(10);
+  DataSet<Tuple3<Long,Long,Long>> inner;
+  if (strategy != "") {
+    Configuration joinStrategy=new Configuration();
+    joinStrategy.setString(PactCompiler.HINT_LOCAL_STRATEGY,strategy);
+    inner=iteration.join(smallInput).where(0).equalTo(0).with(new DummyJoiner()).name("DummyJoiner").withParameters(joinStrategy);
+  }
+ else {
+    inner=iteration.join(smallInput).where(0).equalTo(0).with(new DummyJoiner()).name("DummyJoiner");
+  }
+  DataSet<Tuple3<Long,Long,Long>> output=iteration.closeWith(inner);
+  output.print();
+  return env.createProgramPlan();
+}
