@@ -17,43 +17,65 @@
     }
     return;
   }
-  Matcher matcher=PATTERN.matcher(s);
-  int sourceField=0;
+  Matcher matcher=PATTERN_ANNOTATION.matcher(s);
   if (!matcher.matches()) {
     throw new RuntimeException("Unrecognized annotation string format.");
   }
-  sourceField=Integer.valueOf(matcher.group(1));
-  if (!isValidField(inType,sourceField)) {
-    throw new IndexOutOfBoundsException("Annotation: Field " + sourceField + " not available in the input tuple.");
-  }
-  if (matcher.group(6) != null) {
-    if (sp instanceof SingleInputSemanticProperties) {
-      for (int i=0; i < outType.getArity(); i++) {
-        ((SingleInputSemanticProperties)sp).addForwardedField(sourceField,i);
+  Matcher forwardMatcher=PATTERN_FORWARD.matcher(s);
+  while (forwardMatcher.find()) {
+    int sourceField=Integer.valueOf(forwardMatcher.group(2));
+    if (!isValidField(inType,sourceField)) {
+      throw new IndexOutOfBoundsException("Annotation: Field " + sourceField + " not available in the input tuple.");
+    }
+    if (forwardMatcher.group(7) != null) {
+      if (sp instanceof SingleInputSemanticProperties) {
+        for (int i=0; i < outType.getArity(); i++) {
+          ((SingleInputSemanticProperties)sp).addForwardedField(sourceField,i);
+        }
       }
+ else       if (sp instanceof DualInputSemanticProperties) {
+        for (int i=0; i < outType.getArity(); i++) {
+          if (input == 0) {
+            ((DualInputSemanticProperties)sp).addForwardedField1(sourceField,i);
+          }
+ else           if (input == 1) {
+            ((DualInputSemanticProperties)sp).addForwardedField2(sourceField,i);
+          }
+        }
+      }
+      continue;
+    }
+    String found=forwardMatcher.group(4);
+    FieldSet fs=readFieldSetFromString(found,inType,outType);
+    if (sp instanceof SingleInputSemanticProperties) {
+      ((SingleInputSemanticProperties)sp).addForwardedField(sourceField,fs);
     }
  else     if (sp instanceof DualInputSemanticProperties) {
-      for (int i=0; i < outType.getArity(); i++) {
-        if (input == 0) {
-          ((DualInputSemanticProperties)sp).addForwardedField1(sourceField,i);
-        }
- else         if (input == 1) {
-          ((DualInputSemanticProperties)sp).addForwardedField2(sourceField,i);
-        }
+      if (input == 0) {
+        ((DualInputSemanticProperties)sp).addForwardedField1(sourceField,fs);
+      }
+ else       if (input == 1) {
+        ((DualInputSemanticProperties)sp).addForwardedField2(sourceField,fs);
       }
     }
-    return;
   }
-  FieldSet fs=readFieldSetFromString(matcher.group(3),inType,outType);
-  if (sp instanceof SingleInputSemanticProperties) {
-    ((SingleInputSemanticProperties)sp).addForwardedField(sourceField,fs);
-  }
- else   if (sp instanceof DualInputSemanticProperties) {
-    if (input == 0) {
-      ((DualInputSemanticProperties)sp).addForwardedField1(sourceField,fs);
-    }
- else     if (input == 1) {
-      ((DualInputSemanticProperties)sp).addForwardedField2(sourceField,fs);
+  s=forwardMatcher.replaceAll("");
+  Matcher listMatcher=PATTERN_LIST.matcher(s);
+  while (listMatcher.find()) {
+    String list=listMatcher.group();
+    FieldSet fs=readFieldSetFromString(list,inType,outType);
+    for (    int i : fs) {
+      if (sp instanceof SingleInputSemanticProperties) {
+        ((SingleInputSemanticProperties)sp).addForwardedField(i,i);
+      }
+ else       if (sp instanceof DualInputSemanticProperties) {
+        if (input == 0) {
+          ((DualInputSemanticProperties)sp).addForwardedField1(i,i);
+        }
+ else         if (input == 1) {
+          ((DualInputSemanticProperties)sp).addForwardedField2(i,i);
+        }
+      }
     }
   }
 }
