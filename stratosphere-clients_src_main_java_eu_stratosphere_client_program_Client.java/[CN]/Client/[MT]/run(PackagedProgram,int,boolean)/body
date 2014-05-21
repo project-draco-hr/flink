@@ -1,6 +1,6 @@
 {
   if (prog.isUsingProgramEntryPoint()) {
-    return run(prog.getPlanWithJars(),wait);
+    return run(prog.getPlanWithJars(),parallelism,wait);
   }
  else   if (prog.isUsingInteractiveMode()) {
     ContextEnvironment env=new ContextEnvironment(this,prog.getAllLibraries(),prog.getUserCodeClassLoader());
@@ -8,7 +8,23 @@
       env.setDegreeOfParallelism(parallelism);
     }
     env.setAsContext();
-    prog.invokeInteractiveModeForExecution();
+    if (wait) {
+      prog.invokeInteractiveModeForExecution();
+    }
+ else {
+      Thread backGroundRunner=new Thread("Program Runner"){
+        public void run(){
+          try {
+            prog.invokeInteractiveModeForExecution();
+          }
+ catch (          Throwable t) {
+            LOG.error("The program execution failed.",t);
+          }
+        }
+      }
+;
+      backGroundRunner.start();
+    }
     return null;
   }
  else {
