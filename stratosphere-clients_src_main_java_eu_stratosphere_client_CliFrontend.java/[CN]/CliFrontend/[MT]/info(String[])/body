@@ -21,56 +21,64 @@ catch (  Exception e) {
     printHelpForInfo();
     return 0;
   }
-  File jarFile=null;
-  String assemblerClass=null;
-  String[] programArgs=null;
-  boolean description;
-  boolean plan;
-  if (line.hasOption(JAR_OPTION.getOpt())) {
-    jarFile=new File(line.getOptionValue(JAR_OPTION.getOpt()));
+  PackagedProgram program;
+{
+    String[] programArgs=line.hasOption(ARGS_OPTION.getOpt()) ? line.getOptionValues(ARGS_OPTION.getOpt()) : line.getArgs();
+    String jarFilePath=null;
+    if (line.hasOption(JAR_OPTION.getOpt())) {
+      jarFilePath=line.getOptionValue(JAR_OPTION.getOpt());
+    }
+ else     if (programArgs.length > 0) {
+      jarFilePath=programArgs[0];
+      programArgs=Arrays.copyOfRange(programArgs,1,programArgs.length);
+    }
+ else {
+      System.out.println("Error: Jar file is not set.");
+      printHelpForRun();
+      return 1;
+    }
+    File jarFile=new File(jarFilePath);
     if (!jarFile.exists()) {
       System.out.println("Error: Jar file does not exist.");
-      printHelpForInfo();
+      printHelpForRun();
       return 1;
     }
  else     if (!jarFile.isFile()) {
       System.out.println("Error: Jar file is not a file.");
-      printHelpForInfo();
+      printHelpForRun();
+      return 1;
+    }
+    String entryPointClass=line.hasOption(CLASS_OPTION.getOpt()) ? line.getOptionValue(CLASS_OPTION.getOpt()) : null;
+    try {
+      program=entryPointClass == null ? new PackagedProgram(jarFile,programArgs) : new PackagedProgram(jarFile,entryPointClass,programArgs);
+    }
+ catch (    ProgramInvocationException e) {
+      return handleError(e);
+    }
+  }
+  int parallelism=-1;
+  if (line.hasOption(PARALLELISM_OPTION.getOpt())) {
+    String parString=line.getOptionValue(PARALLELISM_OPTION.getOpt());
+    try {
+      parallelism=Integer.parseInt(parString);
+    }
+ catch (    NumberFormatException e) {
+      System.out.println("The value " + parString + " is invalid for the degree of parallelism.");
+      printHelpForRun();
+      return 1;
+    }
+    if (parallelism <= 0) {
+      System.out.println("Invalid value for the degree-of-parallelism. Parallelism must be greater than zero.");
+      printHelpForRun();
       return 1;
     }
   }
- else {
-    System.out.println("Error: Jar file is not set.");
-    printHelpForInfo();
-    return 1;
-  }
-  if (line.hasOption(CLASS_OPTION.getOpt())) {
-    assemblerClass=line.getOptionValue(CLASS_OPTION.getOpt());
-  }
-  if (line.hasOption(ARGS_OPTION.getOpt())) {
-    programArgs=line.getOptionValues(ARGS_OPTION.getOpt());
-  }
- else {
-    programArgs=line.getArgs();
-  }
-  description=line.hasOption(DESCR_OPTION.getOpt());
-  plan=line.hasOption(PLAN_OPTION.getOpt());
+  boolean description=line.hasOption(DESCR_OPTION.getOpt());
+  boolean plan=line.hasOption(PLAN_OPTION.getOpt());
   if (!description && !plan) {
     System.out.println("ERROR: Specify the information to display.");
     printHelpForInfo();
     return 1;
-  }
-  PackagedProgram program;
-  try {
-    if (assemblerClass == null) {
-      program=new PackagedProgram(jarFile,programArgs);
-    }
- else {
-      program=new PackagedProgram(jarFile,assemblerClass,programArgs);
-    }
-  }
- catch (  ProgramInvocationException e) {
-    return handleError(e);
   }
   try {
     if (description) {
@@ -95,7 +103,7 @@ catch (  Exception e) {
       Configuration configuration=getConfiguration();
       Client client=new Client(configuration);
       try {
-        jsonPlan=client.getOptimizedPlanAsJson(program);
+        jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
       }
  catch (      ProgramInvocationException e) {
         return handleError(e);
