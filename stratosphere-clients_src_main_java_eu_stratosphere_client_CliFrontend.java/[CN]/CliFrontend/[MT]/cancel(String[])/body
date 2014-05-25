@@ -20,19 +20,31 @@ catch (  Exception e) {
     printHelpForCancel();
     return 0;
   }
-  String jobId=null;
+  JobID jobId;
   if (line.hasOption(ID_OPTION.getOpt())) {
-    jobId=line.getOptionValue(ID_OPTION.getOpt());
+    String jobIdString=line.getOptionValue(ID_OPTION.getOpt());
+    try {
+      jobId=new JobID(StringUtils.hexStringToByte(jobIdString));
+    }
+ catch (    Exception e) {
+      System.out.println("Error: The value for the Job ID is not a valid ID.");
+      printHelpForCancel();
+      return 1;
+    }
   }
  else {
-    System.out.println("Error: Specify a jobID to cancel a job.");
+    System.out.println("Error: Specify a Job ID to cancel a job.");
     printHelpForCancel();
     return 1;
   }
   ExtendedManagementProtocol jmConn=null;
   try {
-    jmConn=getJMConnection();
-    jmConn.cancelJob(new JobID(StringUtils.hexStringToByte(jobId)));
+    jmConn=getJobManagerConnection(line);
+    if (jmConn == null) {
+      printHelpForCancel();
+      return 1;
+    }
+    jmConn.cancelJob(jobId);
     return 0;
   }
  catch (  Throwable t) {
@@ -44,7 +56,7 @@ catch (  Exception e) {
         RPC.stopProxy(jmConn);
       }
  catch (      Throwable t) {
-        System.out.println("Could not cleanly shut down connection from compiler to job manager");
+        System.out.println("Warning: Could not cleanly shut down connection to the JobManager.");
       }
     }
     jmConn=null;

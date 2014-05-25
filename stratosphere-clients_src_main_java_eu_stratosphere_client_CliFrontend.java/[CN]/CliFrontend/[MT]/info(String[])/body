@@ -21,40 +21,23 @@ catch (  Exception e) {
     printHelpForInfo();
     return 0;
   }
+  boolean description=line.hasOption(DESCR_OPTION.getOpt());
+  boolean plan=line.hasOption(PLAN_OPTION.getOpt());
+  if (!description && !plan) {
+    System.out.println("ERROR: Specify the information to display.");
+    printHelpForInfo();
+    return 1;
+  }
   PackagedProgram program;
-{
-    String[] programArgs=line.hasOption(ARGS_OPTION.getOpt()) ? line.getOptionValues(ARGS_OPTION.getOpt()) : line.getArgs();
-    String jarFilePath=null;
-    if (line.hasOption(JAR_OPTION.getOpt())) {
-      jarFilePath=line.getOptionValue(JAR_OPTION.getOpt());
-    }
- else     if (programArgs.length > 0) {
-      jarFilePath=programArgs[0];
-      programArgs=Arrays.copyOfRange(programArgs,1,programArgs.length);
-    }
- else {
-      System.out.println("Error: Jar file is not set.");
-      printHelpForRun();
-      return 1;
-    }
-    File jarFile=new File(jarFilePath);
-    if (!jarFile.exists()) {
-      System.out.println("Error: Jar file does not exist.");
-      printHelpForRun();
-      return 1;
-    }
- else     if (!jarFile.isFile()) {
-      System.out.println("Error: Jar file is not a file.");
-      printHelpForRun();
-      return 1;
-    }
-    String entryPointClass=line.hasOption(CLASS_OPTION.getOpt()) ? line.getOptionValue(CLASS_OPTION.getOpt()) : null;
-    try {
-      program=entryPointClass == null ? new PackagedProgram(jarFile,programArgs) : new PackagedProgram(jarFile,entryPointClass,programArgs);
-    }
- catch (    ProgramInvocationException e) {
-      return handleError(e);
-    }
+  try {
+    program=buildProgram(line);
+  }
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+  if (program == null) {
+    printHelpForInfo();
+    return 1;
   }
   int parallelism=-1;
   if (line.hasOption(PARALLELISM_OPTION.getOpt())) {
@@ -73,44 +56,21 @@ catch (  Exception e) {
       return 1;
     }
   }
-  boolean description=line.hasOption(DESCR_OPTION.getOpt());
-  boolean plan=line.hasOption(PLAN_OPTION.getOpt());
-  if (!description && !plan) {
-    System.out.println("ERROR: Specify the information to display.");
-    printHelpForInfo();
-    return 1;
-  }
   try {
     if (description) {
-      String descr=null;
-      try {
-        descr=program.getDescription();
-      }
- catch (      Exception e) {
-        return handleError(e);
-      }
+      String descr=program.getDescription();
       if (descr != null) {
         System.out.println("-------------------- Program Description ---------------------");
         System.out.println(descr);
         System.out.println("--------------------------------------------------------------");
       }
  else {
-        System.out.println("No description available for this plan.");
+        System.out.println("No description available for this program.");
       }
     }
     if (plan) {
-      String jsonPlan=null;
-      Configuration configuration=getConfiguration();
-      Client client=new Client(configuration);
-      try {
-        jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
-      }
- catch (      ProgramInvocationException e) {
-        return handleError(e);
-      }
-catch (      CompilerException e) {
-        return handleError(e);
-      }
+      Client client=getClient(line);
+      String jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
       if (jsonPlan != null) {
         System.out.println("----------------------- Execution Plan -----------------------");
         System.out.println(jsonPlan);
@@ -122,7 +82,10 @@ catch (      CompilerException e) {
     }
     return 0;
   }
-  finally {
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+ finally {
     program.deleteExtractedLibraries();
   }
 }
