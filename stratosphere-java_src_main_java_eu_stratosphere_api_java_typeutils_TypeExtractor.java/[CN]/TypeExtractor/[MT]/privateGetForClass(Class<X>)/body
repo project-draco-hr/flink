@@ -1,7 +1,10 @@
 {
   Validate.notNull(clazz);
-  if (Modifier.isInterface(clazz.getModifiers()) || (Modifier.isAbstract(clazz.getModifiers()) && !clazz.isArray())) {
-    throw new InvalidTypesException("Interfaces and abstract classes are not valid types.");
+  if (!clazz.isPrimitive() && (Modifier.isInterface(clazz.getModifiers()) || (Modifier.isAbstract(clazz.getModifiers()) && !clazz.isArray()))) {
+    throw new InvalidTypesException("Interfaces and abstract classes are not valid types: " + clazz);
+  }
+  if (clazz.equals(Object.class)) {
+    throw new InvalidTypesException("Object is not a valid type.");
   }
   if (clazz.isArray()) {
     PrimitiveArrayTypeInfo<X> primitiveArrayInfo=PrimitiveArrayTypeInfo.getInfoFor(clazz);
@@ -29,6 +32,17 @@
   }
   if (Tuple.class.isAssignableFrom(clazz)) {
     throw new InvalidTypesException("Type information extraction for tuples cannot be done based on the class.");
+  }
+  if (alreadySeen.contains(clazz)) {
+    return new GenericTypeInfo<X>(clazz);
+  }
+  alreadySeen.add(clazz);
+  if (clazz.equals(Class.class)) {
+    return new GenericTypeInfo<X>(clazz);
+  }
+  TypeInformation<X> pojoType=analyzePojo(clazz);
+  if (pojoType != null) {
+    return pojoType;
   }
   return new GenericTypeInfo<X>(clazz);
 }
