@@ -1,3 +1,22 @@
 {
-  throw new UnsupportedOperationException("NOT IMPLEMENTED");
+  GroupReduceFunction<T,T> function=new DistinctFunction<T>();
+  String name=function.getClass().getName();
+  if (keys instanceof Keys.FieldPositionKeys) {
+    int[] logicalKeyPositions=keys.computeLogicalKeyPositions();
+    UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<T,T>(getInputType(),getResultType());
+    GroupReduceOperatorBase<T,T,GenericGroupReduce<T,T>> po=new GroupReduceOperatorBase<T,T,GenericGroupReduce<T,T>>(function,operatorInfo,logicalKeyPositions,name);
+    po.setCombinable(true);
+    po.setInput(input);
+    po.setDegreeOfParallelism(this.getParallelism());
+    return po;
+  }
+ else   if (keys instanceof Keys.SelectorFunctionKeys) {
+    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<T,?> selectorKeys=(Keys.SelectorFunctionKeys<T,?>)keys;
+    PlanUnwrappingReduceGroupOperator<T,T,?> po=translateSelectorFunctionDistinct(selectorKeys,function,getInputType(),getResultType(),name,input,true);
+    po.setDegreeOfParallelism(this.getParallelism());
+    return po;
+  }
+ else {
+    throw new UnsupportedOperationException("Unrecognized key type.");
+  }
 }
