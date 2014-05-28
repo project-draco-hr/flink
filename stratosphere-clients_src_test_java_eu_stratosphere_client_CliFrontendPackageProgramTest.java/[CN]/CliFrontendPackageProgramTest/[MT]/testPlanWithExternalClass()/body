@@ -1,0 +1,39 @@
+{
+  final Boolean callme[]={false};
+  try {
+    String[] parameters={getTestJarPath(),"-c",TEST_JAR_CLASSLOADERTEST_CLASS,"some","program"};
+    CommandLine line=new PosixParser().parse(CliFrontend.getProgramSpecificOptions(new Options()),parameters,false);
+    CliFrontend frontend=new CliFrontend();
+    Object result=frontend.buildProgram(line);
+    assertTrue(result instanceof PackagedProgram);
+    PackagedProgram prog=(PackagedProgram)result;
+    Assert.assertArrayEquals(new String[]{"some","program"},prog.getArguments());
+    Assert.assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,prog.getMainClassName());
+    prog.setUserCodeClassLoader(new ClassLoader(prog.getUserCodeClassLoader()){
+      @Override public Class<?> loadClass(      String name) throws ClassNotFoundException {
+        assertTrue(name.equals("org.apache.hadoop.hive.ql.io.RCFileInputFormat"));
+        callme[0]=true;
+        return String.class;
+      }
+    }
+);
+    Configuration c=new Configuration();
+    c.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,"devil");
+    Client cli=new Client(c);
+    cli.getOptimizedPlanAsJson(prog,666);
+  }
+ catch (  ProgramInvocationException pie) {
+    assertTrue("Classloader was not called",callme[0]);
+    if (!(pie.getCause() instanceof ClassNotFoundException)) {
+      System.err.println(pie.getMessage());
+      pie.printStackTrace();
+      fail("Program caused an exception: " + pie.getMessage());
+    }
+  }
+catch (  Exception e) {
+    assertTrue("Classloader was not called",callme[0]);
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail("Program caused an exception: " + e.getMessage());
+  }
+}
