@@ -1,0 +1,34 @@
+{
+  if (this.initialVertices == null) {
+    throw new IllegalStateException("The input data set has not been set.");
+  }
+  final String name=(this.name != null) ? this.name : "Vertex-centric iteration (" + updateFunction + " | "+ messagingFunction+ ")";
+  final int[] zeroKeyPos=new int[]{0};
+  final DeltaIteration<Tuple2<VertexKey,VertexValue>,Tuple2<VertexKey,VertexValue>> iteration=this.initialVertices.iterateDelta(this.initialVertices,this.maximumNumberOfIterations,zeroKeyPos);
+  iteration.name(name);
+  iteration.parallelism(parallelism);
+  for (  Map.Entry<String,Class<? extends Aggregator<?>>> entry : this.aggregators.entrySet()) {
+    iteration.registerAggregator(entry.getKey(),entry.getValue());
+  }
+  CoGroupOperator<?,?,Tuple2<VertexKey,Message>> messages;
+  if (edgesWithoutValue != null) {
+    MessagingUdfNoEdgeValues<VertexKey,VertexValue,Message> messenger=new MessagingUdfNoEdgeValues<VertexKey,VertexValue,Message>(messagingFunction);
+    messages=this.edgesWithoutValue.coGroup(iteration.getWorkset()).where(0).equalTo(0).with(messenger);
+  }
+ else {
+    MessagingUdfWithEdgeValues<VertexKey,VertexValue,Message,EdgeValue> messenger=new MessagingUdfWithEdgeValues<VertexKey,VertexValue,Message,EdgeValue>(messagingFunction);
+    messages=this.edgesWithValue.coGroup(iteration.getWorkset()).where(0).equalTo(0).with(messenger);
+  }
+  messages=messages.name("Messaging");
+  for (  Tuple2<String,DataSet<?>> e : this.bcVarsMessaging) {
+    messages=messages.withBroadcastSet(e.f1,e.f0);
+  }
+  VertexUpdateUdf<VertexKey,VertexValue,Message> updateUdf=new VertexUpdateUdf<VertexKey,VertexValue,Message>(updateFunction);
+  CoGroupOperator<?,?,Tuple2<VertexKey,VertexValue>> updates=messages.coGroup(iteration.getSolutionSet()).where(0).equalTo(0).with(updateUdf);
+  updates=updates.name("Vertex State Updates");
+  for (  Tuple2<String,DataSet<?>> e : this.bcVarsUpdate) {
+    updates=updates.withBroadcastSet(e.f1,e.f0);
+  }
+  updates.withConstantSetFirst("0").withConstantSetSecond("0");
+  return iteration.closeWith(updates,updates);
+}

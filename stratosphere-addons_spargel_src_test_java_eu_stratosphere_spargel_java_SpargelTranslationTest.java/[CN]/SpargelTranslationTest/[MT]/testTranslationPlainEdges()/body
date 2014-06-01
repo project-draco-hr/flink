@@ -1,0 +1,33 @@
+{
+  try {
+    final String ITERATION_NAME="Test Name";
+    final String AGGREGATOR_NAME="AggregatorName";
+    ;
+    final int NUM_ITERATIONS=13;
+    final int ITERATION_DOP=77;
+    DataSet<Tuple2<String,Double>> result;
+{
+      ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+      @SuppressWarnings("unchecked") DataSet<Tuple2<String,Double>> initialVertices=env.fromElements(new Tuple2<String,Double>("abc",3.44));
+      @SuppressWarnings("unchecked") DataSet<Tuple2<String,String>> edges=env.fromElements(new Tuple2<String,String>("a","c"));
+      VertexCentricIteration<String,Double,Long,?> vertexIteration=VertexCentricIteration.withPlainEdges(edges,new UpdateFunction(),new MessageFunctionNoEdgeValue(),NUM_ITERATIONS);
+      vertexIteration.setName(ITERATION_NAME);
+      vertexIteration.setParallelism(ITERATION_DOP);
+      vertexIteration.registerAggregator(AGGREGATOR_NAME,LongSumAggregator.class);
+      result=initialVertices.runOperation(vertexIteration);
+    }
+    assertTrue(result instanceof DeltaIterationResultSet);
+    DeltaIterationResultSet<?,?> resultSet=(DeltaIterationResultSet<?,?>)result;
+    DeltaIteration<?,?> iteration=(DeltaIteration<?,?>)resultSet.getIterationHead();
+    assertEquals(NUM_ITERATIONS,resultSet.getMaxIterations());
+    assertArrayEquals(new int[]{0},resultSet.getKeyPositions());
+    assertEquals(ITERATION_DOP,iteration.getParallelism());
+    assertEquals(ITERATION_NAME,iteration.getName());
+    assertEquals(AGGREGATOR_NAME,iteration.getAggregators().getAllRegisteredAggregators().iterator().next().getName());
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
