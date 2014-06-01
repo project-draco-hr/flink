@@ -29,22 +29,14 @@
   }
   final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
   final int dop=getDegreeOfParallelism();
-  final int subPerInstance=getSubtasksPerInstance();
   final int inDop=getPredecessorNode().getDegreeOfParallelism();
-  final int inSubPerInstance=getPredecessorNode().getSubtasksPerInstance();
-  final int numInstances=dop / subPerInstance + (dop % subPerInstance == 0 ? 0 : 1);
-  final int inNumInstances=inDop / inSubPerInstance + (inDop % inSubPerInstance == 0 ? 0 : 1);
-  final boolean globalDopChange=numInstances != inNumInstances;
-  final boolean localDopChange=numInstances == inNumInstances & subPerInstance != inSubPerInstance;
+  final boolean dopChange=inDop != dop;
   for (  PlanNode child : subPlans) {
     if (this.inConn.getShipStrategy() == null) {
       for (      RequestedGlobalProperties igps : intGlobal) {
         final Channel c=new Channel(child,this.inConn.getMaterializationMode());
-        igps.parameterizeChannel(c,globalDopChange,localDopChange);
-        if (globalDopChange && !c.getShipStrategy().isNetworkStrategy()) {
-          c.getGlobalProperties().reset();
-        }
-        if (localDopChange && !(c.getShipStrategy().isNetworkStrategy() || c.getShipStrategy().compensatesForLocalDOPChanges())) {
+        igps.parameterizeChannel(c,dopChange);
+        if (dopChange && !c.getShipStrategy().isNetworkStrategy()) {
           c.getGlobalProperties().reset();
         }
         for (        RequestedGlobalProperties rgps : allValidGlobals) {
@@ -64,11 +56,8 @@
  else {
         c.setShipStrategy(this.inConn.getShipStrategy());
       }
-      if (globalDopChange) {
+      if (dopChange) {
         c.adjustGlobalPropertiesForFullParallelismChange();
-      }
- else       if (localDopChange) {
-        c.adjustGlobalPropertiesForLocalParallelismChange();
       }
       for (      RequestedGlobalProperties rgps : allValidGlobals) {
         if (rgps.isMetBy(c.getGlobalProperties())) {

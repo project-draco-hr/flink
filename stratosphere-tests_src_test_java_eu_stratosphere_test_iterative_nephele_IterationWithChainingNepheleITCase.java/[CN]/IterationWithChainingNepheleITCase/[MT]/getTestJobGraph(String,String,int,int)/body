@@ -2,15 +2,14 @@
   final JobGraph jobGraph=new JobGraph("Iteration Tail with Chaining");
   final TypeSerializerFactory<Record> serializer=RecordSerializerFactory.get();
   @SuppressWarnings("unchecked") final TypeComparatorFactory<Record> comparator=new RecordComparatorFactory(new int[]{0},new Class[]{IntValue.class});
-  final long MEM_PER_CONSUMER=2;
   final int ITERATION_ID=1;
-  JobInputVertex input=JobGraphUtils.createInput(new PointInFormat(),inputPath,"Input",jobGraph,numSubTasks,numSubTasks);
+  JobInputVertex input=JobGraphUtils.createInput(new PointInFormat(),inputPath,"Input",jobGraph,numSubTasks);
   TaskConfig inputConfig=new TaskConfig(input.getConfiguration());
 {
     inputConfig.setOutputSerializer(serializer);
     inputConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
   }
-  JobTaskVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"Iteration Head",jobGraph,numSubTasks,numSubTasks);
+  JobTaskVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"Iteration Head",jobGraph,numSubTasks);
   TaskConfig headConfig=new TaskConfig(head.getConfiguration());
 {
     headConfig.setIterationId(ITERATION_ID);
@@ -29,9 +28,9 @@
     headConfig.setDriver(CollectorMapDriver.class);
     headConfig.setDriverStrategy(DriverStrategy.COLLECTOR_MAP);
     headConfig.setStubWrapper(new UserCodeClassWrapper<DummyMapper>(DummyMapper.class));
-    headConfig.setBackChannelMemory(MEM_PER_CONSUMER * JobGraphUtils.MEGABYTE);
+    headConfig.setRelativeBackChannelMemory(1.0);
   }
-  JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"Chained Iteration Tail",jobGraph,numSubTasks,numSubTasks);
+  JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"Chained Iteration Tail",jobGraph,numSubTasks);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
 {
     tailConfig.setIterationId(ITERATION_ID);
@@ -53,7 +52,7 @@
     chainedMapperConfig.setIsWorksetUpdate();
     tailConfig.addChainedTask(ChainedCollectorMapDriver.class,chainedMapperConfig,"Chained ID Mapper");
   }
-  JobOutputVertex output=JobGraphUtils.createFileOutput(jobGraph,"Output",numSubTasks,numSubTasks);
+  JobOutputVertex output=JobGraphUtils.createFileOutput(jobGraph,"Output",numSubTasks);
   TaskConfig outputConfig=new TaskConfig(output.getConfiguration());
 {
     outputConfig.addInputToGroup(0);
@@ -61,7 +60,7 @@
     outputConfig.setStubWrapper(new UserCodeClassWrapper<PointOutFormat>(PointOutFormat.class));
     outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,outputPath);
   }
-  JobOutputVertex fakeTail=JobGraphUtils.createFakeOutput(jobGraph,"Fake Tail",numSubTasks,numSubTasks);
+  JobOutputVertex fakeTail=JobGraphUtils.createFakeOutput(jobGraph,"Fake Tail",numSubTasks);
   JobOutputVertex sync=JobGraphUtils.createSync(jobGraph,numSubTasks);
   TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
   syncConfig.setNumberOfIterations(maxIterations);

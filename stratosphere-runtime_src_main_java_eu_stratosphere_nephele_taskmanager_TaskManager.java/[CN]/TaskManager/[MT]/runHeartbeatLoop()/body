@@ -1,9 +1,39 @@
 {
   final long interval=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_HEARTBEAT_INTERVAL_KEY,ConfigConstants.DEFAULT_TASK_MANAGER_HEARTBEAT_INTERVAL);
+  try {
+    while (!shutdownStarted.get()) {
+      RegisterTaskManagerResult result=this.jobManager.registerTaskManager(this.localInstanceConnectionInfo,this.hardwareDescription,new IntegerRecord(this.numberOfSlots));
+      if (result.getReturnCode() == RegisterTaskManagerResult.ReturnCode.SUCCESS) {
+        break;
+      }
+      try {
+        Thread.sleep(50);
+      }
+ catch (      InterruptedException e) {
+        if (!shutdownStarted.get()) {
+          LOG.error("TaskManager register task manager loop was interrupted without shutdown.");
+        }
+      }
+    }
+  }
+ catch (  IOException e) {
+    if (!shutdownStarted.get()) {
+      LOG.error("Registering task manager caused an exception: " + e.getMessage(),e);
+    }
+    return;
+  }
   while (!shutdownStarted.get()) {
     try {
+      Thread.sleep(interval);
+    }
+ catch (    InterruptedException e) {
+      if (!shutdownStarted.get()) {
+        LOG.error("TaskManager heart beat loop was interrupted without shutdown.");
+      }
+    }
+    try {
       LOG.debug("heartbeat");
-      this.jobManager.sendHeartbeat(this.localInstanceConnectionInfo,this.hardwareDescription);
+      this.jobManager.sendHeartbeat(this.localInstanceConnectionInfo);
     }
  catch (    IOException e) {
       if (shutdownStarted.get()) {
@@ -11,14 +41,6 @@
       }
  else {
         LOG.error("Sending the heart beat caused an exception: " + e.getMessage(),e);
-      }
-    }
-    try {
-      Thread.sleep(interval);
-    }
- catch (    InterruptedException e) {
-      if (!shutdownStarted.get()) {
-        LOG.error("TaskManager heart beat loop was interrupted without shutdown.");
       }
     }
   }

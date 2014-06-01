@@ -1,36 +1,39 @@
 {
-  final ClusterInstance host=createTestClusterInstance();
+  final Instance host=createTestClusterInstance();
   final JobID jobID=new JobID();
-  final int numComputeUnits=8 / 8;
-  final int numCores=8 / 8;
-  final int memorySize=32 * 1024 / 8;
-  final int diskCapacity=200 / 8;
-  final InstanceType type=InstanceTypeFactory.construct("dummy",numComputeUnits,numCores,memorySize,diskCapacity,-1);
   for (int run=0; run < 2; ++run) {
-    AllocatedSlice[] slices=new AllocatedSlice[8];
+    AllocatedResource[] allocatedResources=new AllocatedResource[8];
     for (int i=0; i < 8; ++i) {
-      slices[i]=host.createSlice(type,jobID);
-      assertNotNull(slices[i]);
-      assertEquals(numComputeUnits,slices[i].getType().getNumberOfComputeUnits());
-      assertEquals(numCores,slices[i].getType().getNumberOfCores());
-      assertEquals(memorySize,slices[i].getType().getMemorySize());
-      assertEquals(diskCapacity,slices[i].getType().getDiskCapacity());
+      try {
+        allocatedResources[i]=host.allocateSlot(jobID);
+      }
+ catch (      InstanceException ex) {
+        fail(ex.getMessage());
+      }
+      assertNotNull(allocatedResources[i]);
     }
-    assertNull(host.createSlice(InstanceTypeFactory.construct("dummy",1,0,0,0,0),jobID));
-    assertNull(host.createSlice(InstanceTypeFactory.construct("dummy",0,1,0,0,0),jobID));
-    assertNull(host.createSlice(InstanceTypeFactory.construct("dummy",0,0,1,0,0),jobID));
-    assertNull(host.createSlice(InstanceTypeFactory.construct("dummy",0,0,0,1,0),jobID));
-    List<AllocatedSlice> removedSlices=host.removeAllAllocatedSlices();
-    final Set<AllocatedSlice> slicesSet=new HashSet<AllocatedSlice>();
-    for (int i=0; i < slices.length; ++i) {
-      slicesSet.add(slices[i]);
+    boolean instanceException=false;
+    try {
+      host.allocateSlot(jobID);
     }
-    final Set<AllocatedSlice> removedSlicesSet=new HashSet<AllocatedSlice>(removedSlices);
-    assertEquals(slicesSet.size(),removedSlices.size());
-    final Iterator<AllocatedSlice> it=slicesSet.iterator();
+ catch (    InstanceException ex) {
+      instanceException=true;
+    }
+    assertTrue(instanceException);
+    Collection<AllocatedSlot> allocatedSlots=host.removeAllocatedSlots();
+    Set<AllocationID> removedAllocationIDs=new HashSet<AllocationID>();
+    for (    AllocatedSlot slot : allocatedSlots) {
+      removedAllocationIDs.add(slot.getAllocationID());
+    }
+    final Set<AllocationID> allocationIDs=new HashSet<AllocationID>();
+    for (int i=0; i < allocatedResources.length; ++i) {
+      allocationIDs.add(allocatedResources[i].getAllocationID());
+    }
+    assertEquals(allocationIDs.size(),removedAllocationIDs.size());
+    final Iterator<AllocationID> it=allocationIDs.iterator();
     while (it.hasNext()) {
-      assertTrue(removedSlicesSet.remove(it.next()));
+      assertTrue(removedAllocationIDs.remove(it.next()));
     }
-    assertEquals(0,removedSlicesSet.size());
+    assertEquals(0,removedAllocationIDs.size());
   }
 }

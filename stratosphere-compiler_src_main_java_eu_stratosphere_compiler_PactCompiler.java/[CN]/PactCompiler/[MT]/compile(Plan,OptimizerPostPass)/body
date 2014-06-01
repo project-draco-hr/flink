@@ -1,0 +1,54 @@
+{
+  if (program == null || postPasser == null) {
+    throw new NullPointerException();
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Beginning compilation of program '" + program.getJobName() + '\'');
+  }
+  int defaultParallelism=program.getDefaultParallelism() > 0 ? program.getDefaultParallelism() : this.defaultDegreeOfParallelism;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Using a default degree of parallelism of " + defaultParallelism + '.');
+  }
+  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(defaultParallelism);
+  program.accept(graphCreator);
+  OptimizerNode rootNode;
+  if (graphCreator.sinks.size() == 1) {
+    rootNode=graphCreator.sinks.get(0);
+  }
+ else   if (graphCreator.sinks.size() > 1) {
+    Iterator<DataSinkNode> iter=graphCreator.sinks.iterator();
+    rootNode=iter.next();
+    while (iter.hasNext()) {
+      rootNode=new SinkJoiner(rootNode,iter.next());
+    }
+  }
+ else {
+    throw new CompilerException("Bug: The optimizer plan representation has no sinks.");
+  }
+  rootNode.accept(new IdAndEstimatesVisitor(this.statistics));
+  InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
+  rootNode.accept(propsVisitor);
+  BranchesVisitor branchingVisitor=new BranchesVisitor();
+  rootNode.accept(branchingVisitor);
+  if (rootNode.getOpenBranches() != null && rootNode.getOpenBranches().size() > 0) {
+    throw new CompilerException("Bug: Logic for branching plans (non-tree plans) has an error, and does not " + "track the re-joining of branches correctly.");
+  }
+  List<PlanNode> bestPlan=rootNode.getAlternativePlans(this.costEstimator);
+  if (bestPlan.size() != 1) {
+    throw new CompilerException("Error in compiler: more than one best plan was created!");
+  }
+  PlanNode bestPlanRoot=bestPlan.get(0);
+  List<SinkPlanNode> bestPlanSinks=new ArrayList<SinkPlanNode>(4);
+  if (bestPlanRoot instanceof SinkPlanNode) {
+    bestPlanSinks.add((SinkPlanNode)bestPlanRoot);
+  }
+ else   if (bestPlanRoot instanceof SinkJoinerPlanNode) {
+    ((SinkJoinerPlanNode)bestPlanRoot).getDataSinks(bestPlanSinks);
+  }
+  DeadlockPreventer dp=new DeadlockPreventer();
+  dp.resolveDeadlocks(bestPlanSinks);
+  OptimizedPlan plan=new PlanFinalizer().createFinalPlan(bestPlanSinks,program.getJobName(),program);
+  plan.accept(new BinaryUnionReplacer());
+  postPasser.postPass(plan);
+  return plan;
+}
