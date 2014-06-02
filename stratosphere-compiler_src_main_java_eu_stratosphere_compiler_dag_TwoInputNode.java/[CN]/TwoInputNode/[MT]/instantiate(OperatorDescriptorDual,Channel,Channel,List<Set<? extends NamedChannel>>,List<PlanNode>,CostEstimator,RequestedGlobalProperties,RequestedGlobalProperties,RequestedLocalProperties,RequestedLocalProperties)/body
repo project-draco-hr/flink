@@ -1,12 +1,25 @@
 {
+  final PlanNode inputSource1=in1.getSource();
+  final PlanNode inputSource2=in2.getSource();
   for (  List<NamedChannel> broadcastChannelsCombination : Sets.cartesianProduct(broadcastPlanChannels)) {
-    for (    NamedChannel nc : broadcastChannelsCombination) {
+    boolean validCombination=true;
+    for (int i=0; i < broadcastChannelsCombination.size(); i++) {
+      NamedChannel nc=broadcastChannelsCombination.get(i);
       PlanNode bcSource=nc.getSource();
-      PlanNode inputSource1=in1.getSource();
-      PlanNode inputSource2=in2.getSource();
       if (!(areBranchCompatible(bcSource,inputSource1) || areBranchCompatible(bcSource,inputSource2))) {
-        return;
+        validCombination=false;
+        break;
       }
+      for (int k=0; k < i; k++) {
+        PlanNode otherBcSource=broadcastChannelsCombination.get(k).getSource();
+        if (!areBranchCompatible(bcSource,otherBcSource)) {
+          validCombination=false;
+          break;
+        }
+      }
+    }
+    if (!validCombination) {
+      continue;
     }
     placePipelineBreakersIfNecessary(operator.getStrategy(),in1,in2);
     DualInputPlanNode node=operator.instantiate(in1,in2,this);
