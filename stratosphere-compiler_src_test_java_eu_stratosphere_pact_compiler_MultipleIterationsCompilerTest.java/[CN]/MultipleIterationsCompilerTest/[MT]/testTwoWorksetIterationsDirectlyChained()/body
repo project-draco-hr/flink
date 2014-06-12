@@ -1,0 +1,23 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(8);
+    DataSet<Tuple2<Long,Long>> verticesWithInitialId=env.fromElements(new Tuple2<Long,Long>(1L,2L));
+    DataSet<Tuple2<Long,Long>> edges=env.fromElements(new Tuple2<Long,Long>(1L,2L));
+    DataSet<Tuple2<Long,Long>> firstResult=doDeltaIteration(verticesWithInitialId,edges);
+    DataSet<Tuple2<Long,Long>> secondResult=doDeltaIteration(firstResult,edges);
+    secondResult.print();
+    Plan p=env.createProgramPlan();
+    OptimizedPlan op=compileNoStats(p);
+    assertEquals(1,op.getDataSinks().size());
+    assertTrue(op.getDataSinks().iterator().next().getInput().getSource() instanceof WorksetIterationPlanNode);
+    WorksetIterationPlanNode wipn=(WorksetIterationPlanNode)op.getDataSinks().iterator().next().getInput().getSource();
+    assertEquals(ShipStrategyType.FORWARD,wipn.getInput1().getShipStrategy());
+    assertTrue(wipn.getInput2().getTempMode().breaksPipeline());
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
