@@ -1,0 +1,45 @@
+{
+  Comparator<Method> methodComparator=new Comparator<Method>(){
+    @Override public int compare(    Method o1,    Method o2){
+      String o1Str=o1.getName() + typeParamToString(o1.getParameterTypes());
+      String o2Str=o2.getName() + typeParamToString(o2.getParameterTypes());
+      return o1Str.compareTo(o2Str);
+    }
+    private String typeParamToString(    Class<?>[] classes){
+      String str="";
+      for (      Object t : classes) {
+        str+=t.toString();
+      }
+      return str;
+    }
+  }
+;
+  Method[] confMethods=Configuration.class.getDeclaredMethods();
+  Method[] delegateMethods=DelegatingConfiguration.class.getDeclaredMethods();
+  Arrays.sort(confMethods,methodComparator);
+  Arrays.sort(delegateMethods,methodComparator);
+  match:   for (  Method configurationMethod : confMethods) {
+    boolean hasMethod=false;
+    if (!Modifier.isPublic(configurationMethod.getModifiers())) {
+      continue;
+    }
+    mismatch:     for (    Method wrapperMethod : delegateMethods) {
+      if (configurationMethod.getName().equals(wrapperMethod.getName())) {
+        Class<?>[] wrapperMethodParams=wrapperMethod.getParameterTypes();
+        Class<?>[] configMethodParams=configurationMethod.getParameterTypes();
+        if (wrapperMethodParams.length != configMethodParams.length) {
+          System.err.println("Length");
+          break mismatch;
+        }
+        for (int i=0; i < wrapperMethodParams.length; i++) {
+          if (wrapperMethodParams[i] != configMethodParams[i]) {
+            break mismatch;
+          }
+        }
+        hasMethod=true;
+        break match;
+      }
+    }
+    assertTrue("Foo method '" + configurationMethod.getName() + "' has not been wrapped correctly in DelegatingConfiguration wrapper",hasMethod);
+  }
+}
