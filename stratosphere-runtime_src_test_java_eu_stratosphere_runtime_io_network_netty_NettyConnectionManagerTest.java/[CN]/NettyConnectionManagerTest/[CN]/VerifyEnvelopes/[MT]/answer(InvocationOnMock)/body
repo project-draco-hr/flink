@@ -3,12 +3,16 @@
   ChannelID channelId=env.getSource();
   int seqNum=env.getSequenceNumber();
   if (seqNum == 0) {
-    Assert.assertNull(String.format("Received envelope from %s before, but current seq num is 0",channelId),this.received.putIfAbsent(channelId,seqNum));
+    Integer previousSeqNum=this.received.putIfAbsent(channelId,seqNum);
+    String msg=String.format("Received envelope from %s before, but current seq num is 0",channelId);
+    Assert.assertNull(msg,previousSeqNum);
   }
  else {
-    Assert.assertTrue(String.format("Received seq num %d from %s, but previous was not %d",seqNum,channelId,seqNum - 1),this.received.replace(channelId,seqNum - 1,seqNum));
+    boolean isExpectedPreviousSeqNum=this.received.replace(channelId,seqNum - 1,seqNum);
+    String msg=String.format("Received seq num %d from %s, but previous was not %d.",seqNum,channelId,seqNum - 1);
+    Assert.assertTrue(msg,isExpectedPreviousSeqNum);
   }
-  if (seqNum == numToSendPerSubtask - 1) {
+  if (seqNum == numExpectedEnvelopesPerSubtask - 1) {
     this.latch.countDown();
   }
   return null;
