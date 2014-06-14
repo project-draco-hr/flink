@@ -175,6 +175,23 @@
     yarnClient.stop();
     System.exit(1);
   }
+  int totalMemoryRequired=jmMemory + tmMemory * taskManagerCount;
+  ClusterResourceDescription freeClusterMem=getCurrentFreeClusterResources(yarnClient);
+  if (freeClusterMem.totalFreeMemory < totalMemoryRequired) {
+    LOG.fatal("This YARN session requires " + totalMemoryRequired + "MB of memory in the cluster. "+ "There are currently only "+ freeClusterMem.totalFreeMemory+ "MB available.");
+    yarnClient.stop();
+    System.exit(1);
+  }
+  if (tmMemory > freeClusterMem.containerLimit) {
+    LOG.fatal("The requested amount of memory for the TaskManagers (" + tmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
+    yarnClient.stop();
+    System.exit(1);
+  }
+  if (jmMemory > freeClusterMem.containerLimit) {
+    LOG.fatal("The requested amount of memory for the JobManager (" + jmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
+    yarnClient.stop();
+    System.exit(1);
+  }
   final String javaOpts=GlobalConfiguration.getString(ConfigConstants.STRATOSPHERE_JVM_OPTIONS,"");
   ContainerLaunchContext amContainer=Records.newRecord(ContainerLaunchContext.class);
   String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jmMemory) + "M "+ javaOpts;
