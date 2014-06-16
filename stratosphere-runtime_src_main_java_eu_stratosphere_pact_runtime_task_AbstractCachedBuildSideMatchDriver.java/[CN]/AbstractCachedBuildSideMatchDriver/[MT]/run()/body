@@ -2,52 +2,12 @@
   final GenericJoiner<IT1,IT2,OT> matchStub=this.taskContext.getStub();
   final Collector<OT> collector=this.taskContext.getOutputCollector();
   if (buildSideIndex == 0) {
-    final TypeSerializer<IT1> buildSideSerializer=taskContext.<IT1>getInputSerializer(0).getSerializer();
-    final TypeSerializer<IT2> probeSideSerializer=taskContext.<IT2>getInputSerializer(1).getSerializer();
-    IT1 buildSideRecordFirst;
-    IT1 buildSideRecordOther;
-    IT2 probeSideRecord;
-    IT2 probeSideRecordCopy;
-    final IT1 buildSideRecordFirstReuse=buildSideSerializer.createInstance();
-    final IT1 buildSideRecordOtherReuse=buildSideSerializer.createInstance();
-    final IT2 probeSideRecordReuse=probeSideSerializer.createInstance();
-    final IT2 probeSideRecordCopyReuse=probeSideSerializer.createInstance();
-    @SuppressWarnings("unchecked") final MutableHashTable<IT1,IT2> join=(MutableHashTable<IT1,IT2>)this.hashJoin;
-    final MutableObjectIterator<IT2> probeSideInput=taskContext.<IT2>getInput(1);
-    while (this.running && ((probeSideRecord=probeSideInput.next(probeSideRecordReuse)) != null)) {
-      final MutableHashTable.HashBucketIterator<IT1,IT2> bucket=join.getMatchesFor(probeSideRecord);
-      if ((buildSideRecordFirst=bucket.next(buildSideRecordFirstReuse)) != null) {
-        while ((buildSideRecordOther=bucket.next(buildSideRecordOtherReuse)) != null) {
-          probeSideRecordCopy=probeSideSerializer.copy(probeSideRecord,probeSideRecordCopyReuse);
-          matchStub.join(buildSideRecordOther,probeSideRecordCopy,collector);
-        }
-        matchStub.join(buildSideRecordFirst,probeSideRecord,collector);
-      }
-    }
+    final BuildFirstReOpenableHashMatchIterator<IT1,IT2,OT> matchIterator=(BuildFirstReOpenableHashMatchIterator<IT1,IT2,OT>)this.matchIterator;
+    while (this.running && matchIterator != null && matchIterator.callWithNextKey(matchStub,collector))     ;
   }
  else   if (buildSideIndex == 1) {
-    final TypeSerializer<IT2> buildSideSerializer=taskContext.<IT2>getInputSerializer(1).getSerializer();
-    final TypeSerializer<IT1> probeSideSerializer=taskContext.<IT1>getInputSerializer(0).getSerializer();
-    IT2 buildSideRecordFirst;
-    IT2 buildSideRecordOther;
-    IT1 probeSideRecord;
-    IT1 probeSideRecordCopy;
-    final IT2 buildSideRecordFirstReuse=buildSideSerializer.createInstance();
-    final IT2 buildSideRecordOtherReuse=buildSideSerializer.createInstance();
-    final IT1 probeSideRecordReuse=probeSideSerializer.createInstance();
-    final IT1 probeSideRecordCopyReuse=probeSideSerializer.createInstance();
-    @SuppressWarnings("unchecked") final MutableHashTable<IT2,IT1> join=(MutableHashTable<IT2,IT1>)this.hashJoin;
-    final MutableObjectIterator<IT1> probeSideInput=taskContext.<IT1>getInput(0);
-    while (this.running && ((probeSideRecord=probeSideInput.next(probeSideRecordReuse)) != null)) {
-      final MutableHashTable.HashBucketIterator<IT2,IT1> bucket=join.getMatchesFor(probeSideRecord);
-      if ((buildSideRecordFirst=bucket.next(buildSideRecordFirstReuse)) != null) {
-        while ((buildSideRecordOther=bucket.next(buildSideRecordOtherReuse)) != null) {
-          probeSideRecordCopy=probeSideSerializer.copy(probeSideRecord,probeSideRecordCopyReuse);
-          matchStub.join(probeSideRecordCopy,buildSideRecordOther,collector);
-        }
-        matchStub.join(probeSideRecord,buildSideRecordFirst,collector);
-      }
-    }
+    final BuildSecondReOpenableHashMatchIterator<IT1,IT2,OT> matchIterator=(BuildSecondReOpenableHashMatchIterator<IT1,IT2,OT>)this.matchIterator;
+    while (this.running && matchIterator != null && matchIterator.callWithNextKey(matchStub,collector))     ;
   }
  else {
     throw new Exception();
