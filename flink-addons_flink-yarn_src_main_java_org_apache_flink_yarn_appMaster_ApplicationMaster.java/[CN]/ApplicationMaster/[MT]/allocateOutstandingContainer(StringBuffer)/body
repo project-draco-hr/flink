@@ -1,0 +1,45 @@
+{
+  final String javaOpts=GlobalConfiguration.getString(ConfigConstants.FLINK_JVM_OPTIONS,"");
+  int allocatedContainers=0;
+  while (allocatedContainers < taskManagerCount) {
+    AllocateResponse response=rmClient.allocate(0);
+    for (    Container container : response.getAllocatedContainers()) {
+      LOG.info("Got new Container for TM " + container.getId() + " on host "+ container.getNodeId().getHost());
+      ++allocatedContainers;
+      ContainerLaunchContext ctx=Records.newRecord(ContainerLaunchContext.class);
+      String tmCommand="$JAVA_HOME/bin/java -Xmx" + heapLimit + "m "+ javaOpts;
+      if (hasLog4j) {
+        tmCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/taskmanager-log4j.log\" -Dlog4j.configuration=file:log4j.properties";
+      }
+      tmCommand+=" org.apache.flink.appMaster.YarnTaskManagerRunner -configDir . " + " 1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/taskmanager-stdout.log"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/taskmanager-stderr.log";
+      ctx.setCommands(Collections.singletonList(tmCommand));
+      LOG.info("Starting TM with command=" + tmCommand);
+      ctx.setLocalResources(taskManagerLocalResources);
+      Map<String,String> containerEnv=new HashMap<String,String>();
+      Utils.setupEnv(conf,containerEnv);
+      containerEnv.put(Client.ENV_CLIENT_USERNAME,yarnClientUsername);
+      ctx.setEnvironment(containerEnv);
+      UserGroupInformation user=UserGroupInformation.getCurrentUser();
+      try {
+        Credentials credentials=user.getCredentials();
+        DataOutputBuffer dob=new DataOutputBuffer();
+        credentials.writeTokenStorageToStream(dob);
+        ByteBuffer securityTokens=ByteBuffer.wrap(dob.getData(),0,dob.getLength());
+        ctx.setTokens(securityTokens);
+      }
+ catch (      IOException e) {
+        LOG.warn("Getting current user info failed when trying to launch the container",e);
+      }
+      LOG.info("Launching container " + allocatedContainers);
+      nmClient.startContainer(container,ctx);
+      messages.add(new Message("Launching new container"));
+    }
+    for (    ContainerStatus status : response.getCompletedContainersStatuses()) {
+      ++completedContainers;
+      LOG.info("Completed container (while allocating) " + status.getContainerId() + ". Total Completed:"+ completedContainers);
+      LOG.info("Diagnostics " + status.getDiagnostics());
+      logDeadContainer(status,containerDiag);
+    }
+    Thread.sleep(100);
+  }
+}

@@ -1,0 +1,73 @@
+{
+  heapLimit=Utils.calculateHeapSize(memoryPerTaskManager);
+  nmClient=NMClient.createNMClient();
+  nmClient.init(conf);
+  nmClient.start();
+  nmClient.cleanupRunningContainersOnStop(true);
+  LOG.info("Registering ApplicationMaster");
+  rmClient.registerApplicationMaster(applicationMasterHost,0,"http://" + applicationMasterHost + ":"+ GlobalConfiguration.getString(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,"undefined"));
+  Priority priority=Records.newRecord(Priority.class);
+  priority.setPriority(0);
+  Resource capability=Records.newRecord(Resource.class);
+  capability.setMemory(memoryPerTaskManager);
+  capability.setVirtualCores(coresPerTaskManager);
+  for (int i=0; i < taskManagerCount; ++i) {
+    ContainerRequest containerAsk=new ContainerRequest(capability,null,null,priority);
+    LOG.info("Requesting TaskManager container " + i);
+    rmClient.addContainerRequest(containerAsk);
+  }
+  LocalResource flinkJar=Records.newRecord(LocalResource.class);
+  LocalResource flinkConf=Records.newRecord(LocalResource.class);
+  final Path remoteJarPath=new Path(remoteFlinkJarPath);
+  Utils.registerLocalResource(fs,remoteJarPath,flinkJar);
+  Utils.setupLocalResource(conf,fs,appId,new Path("file://" + currDir + "/flink-conf-modified.yaml"),flinkConf,new Path(clientHomeDir));
+  LOG.info("Prepared local resource for modified yaml: " + flinkConf);
+  hasLog4j=new File(currDir + "/log4j.properties").exists();
+  LocalResource[] remoteShipRsc=null;
+  String[] remoteShipPaths=shipListString.split(",");
+  if (!shipListString.isEmpty()) {
+    remoteShipRsc=new LocalResource[remoteShipPaths.length];
+{
+      int i=0;
+      for (      String remoteShipPathStr : remoteShipPaths) {
+        if (remoteShipPathStr == null || remoteShipPathStr.isEmpty()) {
+          continue;
+        }
+        remoteShipRsc[i]=Records.newRecord(LocalResource.class);
+        Path remoteShipPath=new Path(remoteShipPathStr);
+        Utils.registerLocalResource(fs,remoteShipPath,remoteShipRsc[i]);
+        i++;
+      }
+    }
+  }
+  taskManagerLocalResources=new HashMap<String,LocalResource>(2);
+  taskManagerLocalResources.put("flink.jar",flinkJar);
+  taskManagerLocalResources.put("flink-conf.yaml",flinkConf);
+  if (!shipListString.isEmpty()) {
+    Preconditions.checkNotNull(remoteShipRsc);
+    for (int i=0; i < remoteShipPaths.length; i++) {
+      taskManagerLocalResources.put(new Path(remoteShipPaths[i]).getName(),remoteShipRsc[i]);
+    }
+  }
+  completedContainers=0;
+  StringBuffer containerDiag=new StringBuffer();
+  allocateOutstandingContainer(containerDiag);
+  LOG.info("Allocated all initial containers");
+  while (completedContainers < taskManagerCount) {
+    AllocateResponse response=rmClient.allocate(completedContainers / taskManagerCount);
+    for (    ContainerStatus status : response.getCompletedContainersStatuses()) {
+      ++completedContainers;
+      LOG.info("Completed container " + status.getContainerId() + ". Total Completed:"+ completedContainers);
+      LOG.info("Diagnostics " + status.getDiagnostics());
+      logDeadContainer(status,containerDiag);
+    }
+    Thread.sleep(5000);
+  }
+  LOG.info("Shutting down JobManager");
+  jobManager.shutdown();
+  final String diagnosticsMessage="Application Master shut down after all " + "containers finished\n" + containerDiag.toString();
+  LOG.info("Diagnostics message: " + diagnosticsMessage);
+  rmClient.unregisterApplicationMaster(FinalApplicationStatus.FAILED,diagnosticsMessage,"");
+  this.close();
+  LOG.info("Application Master shutdown completed.");
+}

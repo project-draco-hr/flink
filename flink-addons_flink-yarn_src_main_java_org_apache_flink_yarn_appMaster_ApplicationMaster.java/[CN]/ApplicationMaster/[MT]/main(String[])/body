@@ -1,0 +1,49 @@
+{
+  final String yarnClientUsername=System.getenv(Client.ENV_CLIENT_USERNAME);
+  LOG.info("YARN daemon runs as '" + UserGroupInformation.getCurrentUser().getShortUserName() + "' setting"+ " user to execute Flink ApplicationMaster/JobManager to '"+ yarnClientUsername+ "'");
+  UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
+  for (  Token<? extends TokenIdentifier> toks : UserGroupInformation.getCurrentUser().getTokens()) {
+    ugi.addToken(toks);
+  }
+  ugi.doAs(new PrivilegedAction<Object>(){
+    @Override public Object run(){
+      AMRMClient<ContainerRequest> rmClient=null;
+      ApplicationMaster am=null;
+      try {
+        Configuration conf=Utils.initializeYarnConfiguration();
+        rmClient=AMRMClient.createAMRMClient();
+        rmClient.init(conf);
+        rmClient.start();
+        am=new ApplicationMaster(conf);
+        am.generateConfigurationFile();
+        am.startJobManager();
+        am.setRMClient(rmClient);
+        am.run();
+      }
+ catch (      Throwable e) {
+        LOG.fatal("Error while running the application master",e);
+        if (rmClient != null && am == null) {
+          try {
+            rmClient.unregisterApplicationMaster(FinalApplicationStatus.FAILED,"Flink YARN Application master" + " stopped unexpectedly with an exception.\n" + StringUtils.stringifyException(e),"");
+          }
+ catch (          Exception e1) {
+            LOG.fatal("Unable to fail the application master",e1);
+          }
+          LOG.info("AM unregistered from RM");
+          return null;
+        }
+        if (rmClient == null) {
+          LOG.fatal("Unable to unregister AM since the RM client is not available");
+        }
+        if (am != null) {
+          LOG.info("Writing error into internal message system");
+          am.setFailed(true);
+          am.addMessage(new Message("The application master failed with an exception:\n" + StringUtils.stringifyException(e)));
+          am.keepRPCAlive();
+        }
+      }
+      return null;
+    }
+  }
+);
+}

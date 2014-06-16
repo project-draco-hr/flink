@@ -198,7 +198,7 @@
   if (hasLog4j) {
     amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-log4j.log\" -Dlog4j.configuration=file:log4j.properties";
   }
-  amCommand+=" org.apache.flink.yarn.ApplicationMaster" + " " + " 1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-stdout.log"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stderr.log";
+  amCommand+=" org.apache.flink.yarn.appMaster.ApplicationMaster" + " " + " 1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-stdout.log"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stderr.log";
   amContainer.setCommands(Collections.singletonList(amCommand));
   System.err.println("amCommand=" + amCommand);
   ApplicationSubmissionContext appContext=app.getApplicationSubmissionContext();
@@ -225,12 +225,13 @@
   }
   paths[0]=remotePathJar;
   paths[1]=remotePathConf;
-  paths[2]=new Path(fs.getHomeDirectory(),".flink/" + appId.toString() + "/");
+  sessionFilesDir=new Path(fs.getHomeDirectory(),".flink/" + appId.toString() + "/");
   FsPermission permission=new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL);
-  fs.setPermission(paths[2],permission);
+  fs.setPermission(sessionFilesDir,permission);
   Utils.setTokensFor(amContainer,paths,this.conf);
   amContainer.setLocalResources(localResources);
   fs.close();
+  int amRPCPort=GlobalConfiguration.getInteger(ConfigConstants.YARN_AM_PRC_PORT,ConfigConstants.DEFAULT_YARN_AM_RPC_PORT);
   Map<String,String> appMasterEnv=new HashMap<String,String>();
   Utils.setupEnv(conf,appMasterEnv);
   appMasterEnv.put(Client.ENV_TM_COUNT,String.valueOf(taskManagerCount));
@@ -241,6 +242,7 @@
   appMasterEnv.put(Client.ENV_CLIENT_HOME_DIR,fs.getHomeDirectory().toString());
   appMasterEnv.put(Client.ENV_CLIENT_SHIP_FILES,envShipFileList.toString());
   appMasterEnv.put(Client.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
+  appMasterEnv.put(Client.ENV_AM_PRC_PORT,String.valueOf(amRPCPort));
   amContainer.setEnvironment(appMasterEnv);
   Resource capability=Records.newRecord(Resource.class);
   capability.setMemory(jmMemory);
@@ -249,31 +251,7 @@
   appContext.setAMContainerSpec(amContainer);
   appContext.setResource(capability);
   appContext.setQueue(queue);
-  final File addrFile=new File(confDirPath + CliFrontend.JOBMANAGER_ADDRESS_FILE);
-  Runtime.getRuntime().addShutdownHook(new Thread(){
-    @Override public void run(){
-      try {
-        LOG.info("Killing the Flink-YARN application.");
-        yarnClient.killApplication(appId);
-        LOG.info("Deleting files in " + paths[2]);
-        FileSystem shutFS=FileSystem.get(conf);
-        shutFS.delete(paths[2],true);
-        shutFS.close();
-      }
- catch (      Exception e) {
-        LOG.warn("Exception while killing the YARN application",e);
-      }
-      try {
-        addrFile.delete();
-      }
- catch (      Exception e) {
-        LOG.warn("Exception while deleting the jobmanager address file",e);
-      }
-      LOG.info("YARN Client is shutting down");
-      yarnClient.stop();
-    }
-  }
-);
+  addrFile=new File(confDirPath + CliFrontend.JOBMANAGER_ADDRESS_FILE);
   LOG.info("Submitting application master " + appId);
   yarnClient.submitApplication(appContext);
   ApplicationReport appReport=yarnClient.getApplicationReport(appId);
@@ -281,6 +259,8 @@
   boolean told=false;
   char[] el={'/','|','\\','-'};
   int i=0;
+  int numTaskmanagers=0;
+  BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
   while (appState != YarnApplicationState.FINISHED && appState != YarnApplicationState.KILLED && appState != YarnApplicationState.FAILED) {
     if (!told && appState == YarnApplicationState.RUNNING) {
       System.err.println("Flink JobManager is now running on " + appReport.getHost() + ":"+ jmPort);
@@ -289,6 +269,9 @@
       out.println(appReport.getHost() + ":" + jmPort);
       out.close();
       addrFile.setReadable(true,false);
+      cmc=new ClientMasterControl(new InetSocketAddress(appReport.getHost(),amRPCPort));
+      cmc.start();
+      Runtime.getRuntime().addShutdownHook(new ClientShutdownHook());
       told=true;
     }
     if (!told) {
@@ -299,12 +282,36 @@
       Thread.sleep(500);
     }
  else {
-      Thread.sleep(5000);
+      int newTmCount=cmc.getNumberOfTaskManagers();
+      if (numTaskmanagers != newTmCount) {
+        System.err.println("Number of connected TaskManagers changed to " + newTmCount + " slots available: "+ cmc.getNumberOfAvailableSlots());
+        numTaskmanagers=newTmCount;
+      }
+      if (cmc.getFailedStatus()) {
+        System.err.println("The Application Master failed!\nMessages:\n");
+        for (        Message m : cmc.getMessages()) {
+          System.err.println("Message: " + m.text);
+        }
+        System.err.println("Requesting Application Master shutdown");
+        cmc.shutdownAM();
+        System.err.println("Application Master closed.");
+      }
+      for (      Message m : cmc.getMessages()) {
+        System.err.println("Message: " + m.text);
+      }
+      long startTime=System.currentTimeMillis();
+      while ((System.currentTimeMillis() - startTime) < CLIENT_POLLING_INTERVALL * 1000 && !in.ready()) {
+        Thread.sleep(200);
+      }
+      if (in.ready()) {
+        String command=in.readLine();
+        evalCommand(command);
+      }
     }
     appReport=yarnClient.getApplicationReport(appId);
     appState=appReport.getYarnApplicationState();
   }
-  LOG.info("Application " + appId + " finished with"+ " state "+ appState+ " at "+ appReport.getFinishTime());
+  LOG.info("Application " + appId + " finished with"+ " state "+ appState+ "and final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
   if (appState == YarnApplicationState.FAILED || appState == YarnApplicationState.KILLED) {
     LOG.warn("Application failed. Diagnostics " + appReport.getDiagnostics());
   }

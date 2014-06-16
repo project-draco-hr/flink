@@ -3,9 +3,14 @@
   if (nepheleConfig == null) {
     nepheleConfig=GlobalConfiguration.getConfiguration();
   }
-  String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
-  String webDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ROOT_PATH);
-  String logDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_LOG_PATH_KEY,basePath + "/log");
+  final String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
+  final String webDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ROOT_PATH);
+  final String[] logDirPaths=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_LOG_PATH_KEY,basePath + "/log").split(",");
+  final File[] logDirFiles=new File[logDirPaths.length];
+  int i=0;
+  for (  String path : logDirPaths) {
+    logDirFiles[i++]=new File(path);
+  }
   File webDir;
   if (webDirPath.startsWith("/")) {
     webDir=new File(webDirPath);
@@ -24,7 +29,7 @@
   ServletContextHandler servletContext=new ServletContextHandler(ServletContextHandler.SESSIONS);
   servletContext.setContextPath("/");
   servletContext.addServlet(new ServletHolder(new JobmanagerInfoServlet(jobmanager)),"/jobsInfo");
-  servletContext.addServlet(new ServletHolder(new LogfileInfoServlet(new File(logDirPath))),"/logInfo");
+  servletContext.addServlet(new ServletHolder(new LogfileInfoServlet(logDirFiles)),"/logInfo");
   servletContext.addServlet(new ServletHolder(new SetupInfoServlet(jobmanager)),"/setupInfo");
   servletContext.addServlet(new ServletHolder(new MenuServlet()),"/menu");
   ResourceHandler resourceHandler=new ResourceHandler();
