@@ -1,14 +1,45 @@
 {
   this.nextPartialSolution.accept(PlanCacheCleaner.INSTANCE);
+  if (this.terminationCriterion != null) {
+    this.terminationCriterion.accept(PlanCacheCleaner.INSTANCE);
+  }
   this.partialSolution.setCandidateProperties(in.getGlobalProperties(),in.getLocalProperties(),in);
   final BulkPartialSolutionPlanNode pspn=this.partialSolution.getCurrentPartialSolutionPlanNode();
   List<PlanNode> candidates=this.nextPartialSolution.getAlternativePlans(estimator);
-  for (Iterator<PlanNode> planDeleter=candidates.iterator(); planDeleter.hasNext(); ) {
-    PlanNode candidate=planDeleter.next();
-    if (candidate.getGlobalProperties().equals(pspn.getGlobalProperties()) && candidate.getLocalProperties().equals(pspn.getLocalProperties())) {
-      continue;
+{
+    List<PlanNode> newCandidates=new ArrayList<PlanNode>();
+    for (Iterator<PlanNode> planDeleter=candidates.iterator(); planDeleter.hasNext(); ) {
+      PlanNode candidate=planDeleter.next();
+      GlobalProperties atEndGlobal=candidate.getGlobalProperties();
+      LocalProperties atEndLocal=candidate.getLocalProperties();
+      FeedbackPropertiesMeetRequirementsReport report=candidate.checkPartialSolutionPropertiesMet(pspn,atEndGlobal,atEndLocal);
+      if (report == FeedbackPropertiesMeetRequirementsReport.NO_PARTIAL_SOLUTION) {
+        ;
+      }
+ else       if (report == FeedbackPropertiesMeetRequirementsReport.NOT_MET) {
+        Channel toNoOp=new Channel(candidate);
+        globPropsReq.parameterizeChannel(toNoOp,false,false);
+        locPropsReq.parameterizeChannel(toNoOp);
+        UnaryOperatorNode rebuildPropertiesNode=new UnaryOperatorNode("Rebuild Partial Solution Properties",FieldList.EMPTY_LIST);
+        rebuildPropertiesNode.setDegreeOfParallelism(candidate.getDegreeOfParallelism());
+        rebuildPropertiesNode.setSubtasksPerInstance(candidate.getSubtasksPerInstance());
+        SingleInputPlanNode rebuildPropertiesPlanNode=new SingleInputPlanNode(rebuildPropertiesNode,"Rebuild Partial Solution Properties",toNoOp,DriverStrategy.UNARY_NO_OP);
+        rebuildPropertiesPlanNode.initProperties(toNoOp.getGlobalProperties(),toNoOp.getLocalProperties());
+        estimator.costOperator(rebuildPropertiesPlanNode);
+        GlobalProperties atEndGlobalModified=rebuildPropertiesPlanNode.getGlobalProperties();
+        LocalProperties atEndLocalModified=rebuildPropertiesPlanNode.getLocalProperties();
+        if (!(atEndGlobalModified.equals(atEndGlobal) && atEndLocalModified.equals(atEndLocal))) {
+          FeedbackPropertiesMeetRequirementsReport report2=candidate.checkPartialSolutionPropertiesMet(pspn,atEndGlobalModified,atEndLocalModified);
+          if (report2 != FeedbackPropertiesMeetRequirementsReport.NOT_MET) {
+            newCandidates.add(rebuildPropertiesPlanNode);
+          }
+        }
+        planDeleter.remove();
+      }
     }
-    planDeleter.remove();
+  }
+  if (candidates.isEmpty()) {
+    return;
   }
   if (terminationCriterion == null) {
     for (    PlanNode candidate : candidates) {
