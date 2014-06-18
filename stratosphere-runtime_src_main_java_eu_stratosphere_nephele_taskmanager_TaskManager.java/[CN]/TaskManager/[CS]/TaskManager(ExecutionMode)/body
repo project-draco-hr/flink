@@ -140,4 +140,24 @@ runHeartbeatLoop();
 ;
 this.heartbeatThread.setName("Heartbeat Thread");
 this.heartbeatThread.start();
+final MemoryMXBean memoryUsageBean=ManagementFactory.getMemoryMXBean();
+LOG.info(getMemoryUsageAsString(memoryUsageBean));
+boolean startMemoryUsageLogThread=GlobalConfiguration.getBoolean(ConfigConstants.TASK_MANAGER_DEBUG_MEMORY_USAGE_START_LOG_THREAD,ConfigConstants.DEFAULT_TASK_MANAGER_DEBUG_MEMORY_USAGE_START_LOG_THREAD);
+if (startMemoryUsageLogThread && LOG.isDebugEnabled()) {
+final int logIntervalMs=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_DEBUG_MEMORY_USAGE_LOG_INTERVAL_MS,ConfigConstants.DEFAULT_TASK_MANAGER_DEBUG_MEMORY_USAGE_LOG_INTERVAL_MS);
+new Thread(new Runnable(){
+@Override public void run(){
+try {
+while (!isShutDown()) {
+Thread.sleep(logIntervalMs);
+LOG.debug(getMemoryUsageAsString(memoryUsageBean));
+}
+}
+ catch (InterruptedException e) {
+LOG.warn("Unexpected interruption of memory usage logger thread.");
+}
+}
+}
+).start();
+}
 }
