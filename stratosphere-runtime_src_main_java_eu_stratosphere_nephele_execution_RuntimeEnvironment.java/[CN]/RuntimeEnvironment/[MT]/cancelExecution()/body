@@ -1,0 +1,38 @@
+{
+  canceled=true;
+  LOG.info("Canceling " + getTaskNameWithIndex());
+  if (this.invokable != null) {
+    try {
+      this.invokable.cancel();
+    }
+ catch (    Throwable e) {
+      LOG.error("Error while cancelling the task.",e);
+    }
+  }
+  executingThread.interrupt();
+  try {
+    executingThread.join(5000);
+  }
+ catch (  InterruptedException e) {
+  }
+  if (!executingThread.isAlive()) {
+    return;
+  }
+  while (executingThread != null && executingThread.isAlive()) {
+    LOG.warn("Task " + getTaskName() + " did not react to cancelling signal. Sending repeated interrupt.");
+    if (LOG.isDebugEnabled()) {
+      StringBuilder bld=new StringBuilder("Task ").append(getTaskName()).append(" is stuck in method:\n");
+      StackTraceElement[] stack=executingThread.getStackTrace();
+      for (      StackTraceElement e : stack) {
+        bld.append(e).append('\n');
+      }
+      LOG.debug(bld.toString());
+    }
+    executingThread.interrupt();
+    try {
+      executingThread.join(1000);
+    }
+ catch (    InterruptedException e) {
+    }
+  }
+}
