@@ -1,13 +1,29 @@
 {
+  if (taskNumber < 0 || numTasks < 1) {
+    throw new IllegalArgumentException("TaskNumber: " + taskNumber + ", numTasks: "+ numTasks);
+  }
   if (LOG.isDebugEnabled()) {
-    LOG.debug("Openint stream for output (" + (taskNumber + 1) + "/"+ numTasks+ "). WriteMode="+ writeMode+ ", OutputDirectoryMode="+ outputDirectoryMode+ ", timeout="+ openTimeout);
+    LOG.debug("Opening stream for output (" + (taskNumber + 1) + "/"+ numTasks+ "). WriteMode="+ writeMode+ ", OutputDirectoryMode="+ outputDirectoryMode);
   }
-  OutputPathOpenThread opot=new OutputPathOpenThread(this,(taskNumber + 1),numTasks);
-  opot.start();
-  try {
-    this.stream=opot.waitForCompletion();
+  Path p=this.outputFilePath;
+  if (p == null) {
+    throw new IOException("The file path is null.");
   }
- catch (  Exception e) {
-    throw new RuntimeException("Stream to output file could not be opened: " + e.getMessage(),e);
+  final FileSystem fs=p.getFileSystem();
+  if (!fs.isDistributedFS()) {
+    if (numTasks == 1 && outputDirectoryMode == OutputDirectoryMode.PARONLY) {
+      if (!fs.initOutPathLocalFS(p,writeMode,false)) {
+        throw new IOException("Output path could not be initialized. Canceling task...");
+      }
+    }
+ else {
+      if (!fs.initOutPathLocalFS(p,writeMode,true)) {
+        throw new IOException("Output directory could not be created. Canceling task...");
+      }
+    }
   }
+  if (numTasks > 1 || outputDirectoryMode == OutputDirectoryMode.ALWAYS) {
+    p=p.suffix("/" + (taskNumber + 1));
+  }
+  this.stream=fs.create(p,writeMode == WriteMode.OVERWRITE);
 }

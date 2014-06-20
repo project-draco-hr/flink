@@ -3,24 +3,24 @@
   final String crossTaskName="Self Cross Task";
   final String outputTaskName="Self Cross Output";
   final int degreeOfParallelism=4;
-  File inputFile1=null;
-  File outputFile1=null;
+  File inputFile=null;
+  File outputFile=null;
   JobID jobID=null;
   try {
-    inputFile1=ServerTestUtils.createInputFile(0);
-    outputFile1=new File(ServerTestUtils.getRandomFilename());
+    inputFile=ServerTestUtils.createInputFile(0);
+    outputFile=new File(ServerTestUtils.getRandomFilename());
     final JobGraph jg=new JobGraph("Self Cross Test Job");
     jobID=jg.getJobID();
-    final JobFileInputVertex input=new JobFileInputVertex(inputTaskName,jg);
-    input.setFileInputClass(SelfCrossInputTask.class);
-    input.setFilePath(new Path(inputFile1.toURI()));
+    final JobInputVertex input=new JobInputVertex(inputTaskName,jg);
+    input.setInvokableClass(DataSourceTask.class);
+    input.setInputFormat(new TextInputFormat(new Path(inputFile.toURI())));
     input.setNumberOfSubtasks(degreeOfParallelism);
     final JobTaskVertex cross=new JobTaskVertex(crossTaskName,jg);
-    cross.setTaskClass(SelfCrossForwardTask.class);
+    cross.setInvokableClass(SelfCrossForwardTask.class);
     cross.setNumberOfSubtasks(degreeOfParallelism);
-    final JobFileOutputVertex output=new JobFileOutputVertex(outputTaskName,jg);
-    output.setFileOutputClass(FileLineWriter.class);
-    output.setFilePath(new Path(outputFile1.toURI()));
+    final JobOutputVertex output=new JobOutputVertex(outputTaskName,jg);
+    output.setInvokableClass(DataSinkTask.class);
+    output.setOutputFormat(new DiscardingOuputFormat<Object>());
     output.setNumberOfSubtasks(degreeOfParallelism);
     input.connectTo(cross,ChannelType.IN_MEMORY,0,0,DistributionPattern.POINTWISE);
     input.connectTo(cross,ChannelType.NETWORK,1,1,DistributionPattern.BIPARTITE);
@@ -74,11 +74,11 @@ catch (  IOException ioe) {
     fail(ioe.getMessage());
   }
  finally {
-    if (inputFile1 != null) {
-      inputFile1.delete();
+    if (inputFile != null) {
+      inputFile.delete();
     }
-    if (outputFile1 != null) {
-      outputFile1.delete();
+    if (outputFile != null) {
+      outputFile.delete();
     }
     if (jobID != null) {
       try {
