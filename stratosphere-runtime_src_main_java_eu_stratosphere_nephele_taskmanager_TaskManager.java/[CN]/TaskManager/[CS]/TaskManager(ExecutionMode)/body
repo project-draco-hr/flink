@@ -2,6 +2,12 @@
   if (executionMode == null) {
     throw new NullPointerException("Execution mode must not be null.");
   }
+  try {
+    LOG.info("TaskManager started as user " + UserGroupInformation.getCurrentUser().getShortUserName());
+  }
+ catch (  Throwable t) {
+    LOG.error("Cannot determine user group information.",t);
+  }
   LOG.info("User system property: " + System.getProperty("user.name"));
   LOG.info("Execution mode: " + executionMode);
   final InetSocketAddress jobManagerAddress;
@@ -118,7 +124,14 @@ throw new Exception("Failed to instantiate channel manager. " + ioe.getMessage()
 }
 {
 HardwareDescription resources=HardwareDescriptionFactory.extractFromSystem();
-numberOfSlots=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,Hardware.getNumberCPUCores());
+int slots=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,-1);
+if (slots == -1) {
+slots=Hardware.getNumberCPUCores();
+}
+ else if (slots <= 0) {
+throw new Exception("Illegal value for the number of task slots: " + slots);
+}
+this.numberOfSlots=slots;
 long memorySize=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,-1);
 if (memorySize > 0) {
 resources=HardwareDescriptionFactory.construct(resources.getNumberOfCPUCores(),resources.getSizeOfPhysicalMemory(),memorySize * 1024L * 1024L);
