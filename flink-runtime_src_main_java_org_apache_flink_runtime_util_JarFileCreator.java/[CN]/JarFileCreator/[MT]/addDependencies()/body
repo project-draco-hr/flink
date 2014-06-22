@@ -1,0 +1,42 @@
+{
+  List<String> dependencies=new ArrayList<String>();
+  for (  Class clazz : classSet) {
+    dependencies.add(clazz.getName());
+  }
+  int head=0;
+  while (head != dependencies.size()) {
+    DependencyVisitor v=new DependencyVisitor(Opcodes.ASM5);
+    v.addNameSpace(this.packages);
+    InputStream classInputStream=null;
+    String name=dependencies.get(head);
+    try {
+      Class clazz=Class.forName(name);
+      int n=name.lastIndexOf('.');
+      String className=null;
+      if (n > -1) {
+        className=name.substring(n + 1,name.length());
+      }
+      classInputStream=clazz.getResourceAsStream(className + CLASS_EXTENSION);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new RuntimeException(e.getMessage());
+    }
+    new ClassReader(classInputStream).accept(v,0);
+    classInputStream.close();
+    Set<String> classPackages=v.getPackages();
+    for (    String s : classPackages) {
+      if (!dependencies.contains(s.replace('/','.'))) {
+        dependencies.add(s.replace('/','.'));
+      }
+    }
+    head++;
+  }
+  for (  String dependency : dependencies) {
+    try {
+      this.classSet.add(Class.forName(dependency));
+    }
+ catch (    ClassNotFoundException e) {
+      throw new RuntimeException(e.getMessage());
+    }
+  }
+}
