@@ -2,7 +2,38 @@
   if (closed.get()) {
     return;
   }
-  long newPointer=this.partition.appendRecord(record);
+  long newPointer;
+  try {
+    newPointer=this.partition.appendRecord(record);
+  }
+ catch (  EOFException e) {
+    try {
+      int partitionNumber=this.partition.getPartitionNumber();
+      compactPartition(partitionNumber);
+      this.partition=partitions.get(partitionNumber);
+      newPointer=this.partition.appendRecord(record);
+    }
+ catch (    EOFException ex) {
+      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+    }
+catch (    IndexOutOfBoundsException ex) {
+      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+    }
+  }
+catch (  IndexOutOfBoundsException e) {
+    try {
+      int partitionNumber=this.partition.getPartitionNumber();
+      compactPartition(partitionNumber);
+      this.partition=partitions.get(partitionNumber);
+      newPointer=this.partition.appendRecord(record);
+    }
+ catch (    EOFException ex) {
+      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+    }
+catch (    IndexOutOfBoundsException ex) {
+      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+    }
+  }
   this.bucket.putLong(this.pointerOffsetInBucket,newPointer);
   this.partition.setCompaction(false);
 }
