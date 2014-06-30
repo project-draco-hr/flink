@@ -1,0 +1,34 @@
+{
+  try {
+    final JobVertexID jid=new JobVertexID();
+    final ActionQueue actions=new ActionQueue();
+    final ExecutionJobVertex ejv=getJobVertexExecutingTriggered(jid,actions);
+    final ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+    setVertexState(vertex,ExecutionState2.SCHEDULED);
+    assertEquals(ExecutionState2.SCHEDULED,vertex.getExecutionState());
+    TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+    when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenReturn(new TaskOperationResult(jid,0,true));
+    when(taskManager.cancelTask(jid,0)).thenReturn(new TaskOperationResult(jid,0,true),new TaskOperationResult(jid,0,false));
+    Instance instance=getInstance(taskManager);
+    AllocatedSlot slot=instance.allocateSlot(new JobID());
+    vertex.deployToSlot(slot);
+    assertEquals(ExecutionState2.DEPLOYING,vertex.getExecutionState());
+    vertex.cancel();
+    assertEquals(ExecutionState2.CANCELING,vertex.getExecutionState());
+    verify(taskManager,times(0)).submitTask(Matchers.any(TaskDeploymentDescriptor.class));
+    verify(taskManager,times(0)).cancelTask(jid,0);
+    actions.triggerNextAction();
+    verify(taskManager,times(1)).submitTask(Matchers.any(TaskDeploymentDescriptor.class));
+    assertEquals(ExecutionState2.CANCELING,vertex.getExecutionState());
+    actions.triggerNextAction();
+    assertEquals(ExecutionState2.CANCELED,vertex.getExecutionState());
+    actions.triggerNextAction();
+    assertEquals(ExecutionState2.CANCELED,vertex.getExecutionState());
+    verify(taskManager,times(2)).cancelTask(jid,0);
+    assertTrue(slot.isReleased());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

@@ -1,0 +1,19 @@
+{
+  if (scheduler == null) {
+    throw new IllegalArgumentException("Scheduler must not be null.");
+  }
+  if (STATE_UPDATER.compareAndSet(this,JobStatus.CREATED,JobStatus.RUNNING)) {
+    this.jobScheduler=scheduler;
+    notifyJobStatusChange(JobStatus.RUNNING,null);
+    for (    ExecutionJobVertex ejv : this.tasks.values()) {
+      if (ejv.getJobVertex().isInputVertex()) {
+        for (        ExecutionVertex2 ev : ejv.getTaskVertices()) {
+          ev.scheduleForExecution(scheduler);
+        }
+      }
+    }
+  }
+ else {
+    throw new IllegalStateException("Job may only be scheduled from state " + JobStatus.CREATED);
+  }
+}

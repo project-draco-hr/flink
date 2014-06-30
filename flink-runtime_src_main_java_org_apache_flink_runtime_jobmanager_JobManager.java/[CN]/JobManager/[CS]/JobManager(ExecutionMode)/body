@@ -20,6 +20,7 @@
  else {
     this.archive=null;
   }
+  this.currentJobs=new ConcurrentHashMap<JobID,ExecutionGraph>();
   this.accumulatorManager=new AccumulatorManager(Math.min(1,archived_items));
   final InetSocketAddress rpcServerAddress=new InetSocketAddress(ipcAddress,ipcPort);
   try {
@@ -36,15 +37,11 @@
     this.instanceManager=new LocalInstanceManager(numTaskManagers);
   }
  else   if (executionMode == ExecutionMode.CLUSTER) {
-    this.instanceManager=new DefaultInstanceManager();
+    this.instanceManager=new InstanceManager();
   }
  else {
     throw new IllegalArgumentException("ExecutionMode");
   }
-  final String schedulerClassName=JobManagerUtils.getSchedulerClassName(executionMode);
-  LOG.info("Trying to load " + schedulerClassName + " as scheduler");
-  this.scheduler=JobManagerUtils.loadScheduler(schedulerClassName,this,this.instanceManager);
-  if (this.scheduler == null) {
-    throw new Exception("Unable to load scheduler " + schedulerClassName);
-  }
+  this.scheduler=new DefaultScheduler();
+  this.instanceManager.addInstanceListener(this.scheduler);
 }

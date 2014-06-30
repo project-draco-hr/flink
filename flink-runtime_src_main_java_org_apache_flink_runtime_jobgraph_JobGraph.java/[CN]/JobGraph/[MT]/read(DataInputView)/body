@@ -1,72 +1,18 @@
 {
   this.jobID.read(in);
-  this.jobName=StringRecord.readString(in);
-  readRequiredJarFiles(in);
-  final int numVertices=in.readInt();
-  for (int i=0; i < numVertices; i++) {
-    final String className=StringRecord.readString(in);
-    final JobVertexID id=new JobVertexID();
-    id.read(in);
-    final String vertexName=StringRecord.readString(in);
-    Class<? extends IOReadableWritable> c;
-    try {
-      c=ClassUtils.getRecordByName(className);
-    }
- catch (    ClassNotFoundException cnfe) {
-      throw new IOException(cnfe.toString());
-    }
-    Constructor<? extends IOReadableWritable> cst;
-    try {
-      cst=c.getConstructor(String.class,JobVertexID.class,JobGraph.class);
-    }
- catch (    SecurityException e1) {
-      throw new IOException(e1.toString());
-    }
-catch (    NoSuchMethodException e1) {
-      throw new IOException(e1.toString());
-    }
-    try {
-      cst.newInstance(vertexName,id,this);
-    }
- catch (    IllegalArgumentException e) {
-      throw new IOException(e.toString());
-    }
-catch (    InstantiationException e) {
-      throw new IOException(e.toString());
-    }
-catch (    IllegalAccessException e) {
-      throw new IOException(e.toString());
-    }
-catch (    InvocationTargetException e) {
-      throw new IOException(e.toString());
-    }
-  }
-  final JobVertexID tmpID=new JobVertexID();
-  for (int i=0; i < numVertices; i++) {
-    AbstractJobVertex jv;
-    tmpID.read(in);
-    if (inputVertices.containsKey(tmpID)) {
-      jv=inputVertices.get(tmpID);
-    }
- else {
-      if (outputVertices.containsKey(tmpID)) {
-        jv=outputVertices.get(tmpID);
-      }
- else {
-        if (taskVertices.containsKey(tmpID)) {
-          jv=taskVertices.get(tmpID);
-        }
- else {
-          throw new IOException("Cannot find vertex with ID " + tmpID + " in any vertex map.");
-        }
-      }
-    }
-    jv.read(in);
-  }
-  final ClassLoader cl=LibraryCacheManager.getClassLoader(this.jobID);
-  if (cl == null) {
-    throw new IOException("Cannot find class loader for job graph " + this.jobID);
-  }
-  this.jobConfiguration=new Configuration(cl);
+  this.jobName=StringValue.readString(in);
   this.jobConfiguration.read(in);
+  final int numVertices=in.readInt();
+  @SuppressWarnings("resource") ObjectInputStream ois=new ObjectInputStream(new DataInputViewStream(in));
+  for (int i=0; i < numVertices; i++) {
+    try {
+      AbstractJobVertex vertex=(AbstractJobVertex)ois.readObject();
+      taskVertices.put(vertex.getID(),vertex);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new IOException(e);
+    }
+  }
+  ois.close();
+  readRequiredJarFiles(in);
 }

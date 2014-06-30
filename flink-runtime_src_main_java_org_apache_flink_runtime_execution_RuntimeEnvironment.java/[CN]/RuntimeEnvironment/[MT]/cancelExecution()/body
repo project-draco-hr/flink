@@ -1,6 +1,8 @@
 {
-  canceled=true;
-  LOG.info("Canceling " + getTaskNameWithIndex());
+  if (!canceled.compareAndSet(false,true)) {
+    return;
+  }
+  LOG.info("Canceling " + owner.getTaskNameWithSubtasks());
   if (this.invokable != null) {
     try {
       this.invokable.cancel();
@@ -9,6 +11,7 @@
       LOG.error("Error while cancelling the task.",e);
     }
   }
+  final Thread executingThread=this.executingThread;
   executingThread.interrupt();
   try {
     executingThread.join(5000);
@@ -19,9 +22,9 @@
     return;
   }
   while (executingThread != null && executingThread.isAlive()) {
-    LOG.warn("Task " + getTaskName() + " did not react to cancelling signal. Sending repeated interrupt.");
+    LOG.warn("Task " + owner.getTaskNameWithSubtasks() + " did not react to cancelling signal. Sending repeated interrupt.");
     if (LOG.isDebugEnabled()) {
-      StringBuilder bld=new StringBuilder("Task ").append(getTaskName()).append(" is stuck in method:\n");
+      StringBuilder bld=new StringBuilder("Task ").append(owner.getTaskNameWithSubtasks()).append(" is stuck in method:\n");
       StackTraceElement[] stack=executingThread.getStackTrace();
       for (      StackTraceElement e : stack) {
         bld.append(e).append('\n');

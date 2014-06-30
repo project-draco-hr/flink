@@ -1,0 +1,42 @@
+{
+  try {
+    final AbstractJobVertex vertex=new AbstractJobVertex("Test Vertex");
+    vertex.setParallelism(3);
+    vertex.setInvokableClass(NoOpInvokable.class);
+    final JobGraph jobGraph=new JobGraph("Test Job",vertex);
+    JobManager jm=startJobManager();
+    try {
+      LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
+      JobSubmissionResult result=jm.submitJob(jobGraph);
+      assertEquals(AbstractJobResult.ReturnCode.SUCCESS,result.getReturnCode());
+      ExecutionGraph eg=jm.getCurrentJobs().get(jobGraph.getJobID());
+      if (eg != null) {
+        long deadline=System.currentTimeMillis() + 60 * 1000;
+        boolean success=false;
+        while (System.currentTimeMillis() < deadline) {
+          JobStatus state=eg.getState();
+          if (state == JobStatus.FINISHED) {
+            success=true;
+            break;
+          }
+ else           if (state == JobStatus.FAILED || state == JobStatus.CANCELED) {
+            break;
+          }
+ else {
+            Thread.sleep(200);
+          }
+        }
+        assertTrue("The job did not finish successfully.",success);
+      }
+ else {
+      }
+    }
+  finally {
+      jm.shutdown();
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

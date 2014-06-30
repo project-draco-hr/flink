@@ -1,0 +1,26 @@
+{
+  List<JobEdge> inputs=jobVertex.getInputs();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(String.format("Connecting ExecutionJobVertex %s (%s) to %d predecessors.",jobVertex.getID(),jobVertex.getName(),inputs.size()));
+  }
+  for (int num=0; num < inputs.size(); num++) {
+    JobEdge edge=inputs.get(num);
+    if (LOG.isDebugEnabled()) {
+      if (edge.getSource() == null) {
+        LOG.debug(String.format("Connecting input %d of vertex %s (%s) to intermediate result referenced via ID %s.",num,jobVertex.getID(),jobVertex.getName(),edge.getSourceId()));
+      }
+ else {
+        LOG.debug(String.format("Connecting input %d of vertex %s (%s) to intermediate result referenced via predecessor %s (%s).",num,jobVertex.getID(),jobVertex.getName(),edge.getSource().getProducer().getID(),edge.getSource().getProducer().getName()));
+      }
+    }
+    IntermediateResult ires=intermediateDataSets.get(edge.getSourceId());
+    if (ires == null) {
+      throw new JobException("Cannot connect this job graph to the previous graph. No previous intermediate result found for ID " + edge.getSourceId());
+    }
+    int consumerIndex=ires.registerConsumer();
+    for (int i=0; i < parallelism; i++) {
+      ExecutionVertex2 ev=taskVertices[i];
+      ev.connectSource(num,ires,edge,consumerIndex);
+    }
+  }
+}

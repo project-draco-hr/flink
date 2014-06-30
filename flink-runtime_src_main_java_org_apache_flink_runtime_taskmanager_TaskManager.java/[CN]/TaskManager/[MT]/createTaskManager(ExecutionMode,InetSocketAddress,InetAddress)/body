@@ -1,0 +1,49 @@
+{
+  LOG.info("Connecting to JobManager at: " + jobManagerAddress);
+  JobManagerProtocol jobManager=null;
+  InputSplitProviderProtocol splitProvider=null;
+  ChannelLookupProtocol channelLookup=null;
+  AccumulatorProtocol accumulators=null;
+  boolean success=false;
+  try {
+    try {
+      jobManager=RPC.getProxy(JobManagerProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    }
+ catch (    IOException e) {
+      LOG.fatal("Could not connect to the JobManager: " + e.getMessage(),e);
+      throw new Exception("Failed to initialize connection to JobManager: " + e.getMessage(),e);
+    }
+    try {
+      splitProvider=RPC.getProxy(InputSplitProviderProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    }
+ catch (    IOException e) {
+      LOG.fatal(e.getMessage(),e);
+      throw new Exception("Failed to initialize connection to global input split provider: " + e.getMessage(),e);
+    }
+    try {
+      channelLookup=RPC.getProxy(ChannelLookupProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    }
+ catch (    IOException e) {
+      LOG.fatal(e.getMessage(),e);
+      throw new Exception("Failed to initialize channel lookup protocol. " + e.getMessage(),e);
+    }
+    try {
+      accumulators=RPC.getProxy(AccumulatorProtocol.class,jobManagerAddress,NetUtils.getSocketFactory());
+    }
+ catch (    IOException e) {
+      LOG.fatal("Failed to initialize accumulator protocol: " + e.getMessage(),e);
+      throw new Exception("Failed to initialize accumulator protocol: " + e.getMessage(),e);
+    }
+    TaskManager tm=new TaskManager(mode,jobManager,splitProvider,channelLookup,accumulators,jobManagerAddress,taskManagerAddress);
+    success=true;
+    return tm;
+  }
+  finally {
+    if (!success) {
+      stopProxy(jobManager);
+      stopProxy(splitProvider);
+      stopProxy(channelLookup);
+      stopProxy(accumulators);
+    }
+  }
+}

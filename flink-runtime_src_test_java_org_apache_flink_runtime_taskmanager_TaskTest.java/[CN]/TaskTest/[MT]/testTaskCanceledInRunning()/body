@@ -1,0 +1,44 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final JobVertexID vid=new JobVertexID();
+    final ExecutionAttemptID eid=new ExecutionAttemptID();
+    final TaskManager taskManager=mock(TaskManager.class);
+    final Task task=new Task(jid,vid,2,7,eid,"TestTask",taskManager);
+    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+    final OneShotLatch toRunning=new OneShotLatch();
+    final OneShotLatch afterCanceling=new OneShotLatch();
+    Thread operation=new Thread(){
+      public void run(){
+        try {
+          toRunning.trigger();
+          afterCanceling.await();
+          assertFalse(task.markAsFinished());
+          task.cancelingDone();
+        }
+ catch (        Throwable t) {
+          error.set(t);
+        }
+      }
+    }
+;
+    final RuntimeEnvironment env=mock(RuntimeEnvironment.class);
+    when(env.getExecutingThread()).thenReturn(operation);
+    assertEquals(ExecutionState2.DEPLOYING,task.getExecutionState());
+    task.setEnvironment(env);
+    task.startExecution();
+    toRunning.await();
+    task.cancelExecution();
+    afterCanceling.trigger();
+    operation.join();
+    if (error.get() != null) {
+      ExceptionUtils.rethrow(error.get());
+    }
+    assertEquals(ExecutionState2.CANCELED,task.getExecutionState());
+    verify(taskManager).notifyExecutionStateChange(jid,eid,ExecutionState2.CANCELED,null);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

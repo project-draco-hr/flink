@@ -1,86 +1,86 @@
 {
+  boolean success=false;
   try {
     if (job == null) {
       return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Submitted job is null!");
     }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Submitted job " + job.getName() + " is not null");
+    if (LOG.isInfoEnabled()) {
+      LOG.info(String.format("Received job %s (%s)",job.getJobID(),job.getName()));
     }
-    AbstractJobVertex jv=job.findVertexWithNullEdges();
-    if (jv != null) {
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Vertex " + jv.getName() + " has at least one null edge");
-      return result;
+    ExecutionGraph executionGraph=this.currentJobs.get(job.getJobID());
+    if (executionGraph == null) {
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Creating new execution graph for job " + job.getJobID() + " ("+ job.getName()+ ')');
+      }
+      executionGraph=new ExecutionGraph(job.getJobID(),job.getName(),job.getJobConfiguration(),this.executorService);
+      ExecutionGraph previous=this.currentJobs.putIfAbsent(job.getJobID(),executionGraph);
+      if (previous != null) {
+        throw new JobException("Concurrent submission of a job with the same jobId: " + job.getJobID());
+      }
     }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Submitted job " + job.getName() + " has no null edges");
+ else {
+      if (LOG.isInfoEnabled()) {
+        LOG.info(String.format("Found existing execution graph for id %s, attaching this job.",job.getJobID()));
+      }
     }
-    if (!job.isWeaklyConnected()) {
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not weakly connected");
-      return result;
+    final ClassLoader userCodeLoader=LibraryCacheManager.getClassLoader(job.getJobID());
+    if (userCodeLoader == null) {
+      throw new JobException("The user code class loader could not be initialized.");
     }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("The graph of job " + job.getName() + " is weakly connected");
-    }
-    if (!job.isAcyclic()) {
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Job graph is not a DAG");
-      return result;
-    }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("The graph of job " + job.getName() + " is acyclic");
-    }
-    jv=job.areVertexDegreesCorrect();
-    if (jv != null) {
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"Degree of vertex " + jv.getName() + " is incorrect");
-      return result;
+    String[] jarFilesForJob=LibraryCacheManager.getRequiredJarFiles(job.getJobID());
+    for (    String fileId : jarFilesForJob) {
+      executionGraph.addUserCodeJarFile(fileId);
     }
     if (LOG.isDebugEnabled()) {
-      LOG.debug("All vertices of job " + job.getName() + " have the correct degree");
+      LOG.debug(String.format("Running master initialization of job %s (%s)",job.getJobID(),job.getName()));
     }
-    if (!job.isInstanceDependencyChainAcyclic()) {
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,"The dependency chain for instance sharing contains a cycle");
-      return result;
-    }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("The dependency chain for instance sharing is acyclic");
-    }
-    LOG.info("Creating initial execution graph from job graph " + job.getName());
-    ExecutionGraph eg;
     try {
-      eg=new ExecutionGraph(job,1);
+      for (      AbstractJobVertex vertex : job.getVertices()) {
+        String executableClass=vertex.getInvokableClassName();
+        if (executableClass == null || executableClass.length() == 0) {
+          throw new JobException(String.format("The vertex %s (%s) has no invokable class.",vertex.getID(),vertex.getName()));
+        }
+        vertex.initializeOnMaster(userCodeLoader);
+      }
     }
- catch (    GraphConversionException e) {
-      if (e.getCause() == null) {
-        return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,StringUtils.stringifyException(e));
-      }
- else {
-        Throwable t=e.getCause();
-        if (t instanceof FileNotFoundException) {
-          return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,t.getMessage());
-        }
- else {
-          return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,StringUtils.stringifyException(t));
-        }
-      }
+ catch (    FileNotFoundException e) {
+      LOG.error("File-not-Found: " + e.getMessage());
+      return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,e.getMessage());
+    }
+    List<AbstractJobVertex> topoSorted=job.getVerticesSortedTopologicallyFromSources();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(String.format("Adding %d vertices from job graph %s (%s)",topoSorted.size(),job.getJobID(),job.getName()));
+    }
+    executionGraph.attachJobGraph(topoSorted);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(String.format("Successfully created execution graph from job graph %s (%s)",job.getJobID(),job.getName()));
     }
     if (this.eventCollector != null) {
-      this.eventCollector.registerJob(eg,false,System.currentTimeMillis());
+      this.eventCollector.registerJob(executionGraph,false,System.currentTimeMillis());
     }
-    eg.registerJobStatusListener(this);
+    executionGraph.registerJobStatusListener(this);
     if (LOG.isInfoEnabled()) {
       LOG.info("Scheduling job " + job.getName());
     }
-    try {
-      this.scheduler.scheduleJob(eg);
-    }
- catch (    SchedulingException e) {
-      unregisterJob(eg);
-      JobSubmissionResult result=new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,StringUtils.stringifyException(e));
-      return result;
-    }
+    executionGraph.scheduleForExecution(this.scheduler);
+    success=true;
     return new JobSubmissionResult(AbstractJobResult.ReturnCode.SUCCESS,null);
   }
  catch (  Throwable t) {
     LOG.error("Job submission failed.",t);
     return new JobSubmissionResult(AbstractJobResult.ReturnCode.ERROR,StringUtils.stringifyException(t));
+  }
+ finally {
+    if (!success) {
+      this.currentJobs.remove(job.getJobID());
+      try {
+        LibraryCacheManager.unregister(job.getJobID());
+      }
+ catch (      IllegalStateException e) {
+      }
+catch (      Throwable t) {
+        LOG.error("Error while de-registering job at library cache manager.",t);
+      }
+    }
   }
 }

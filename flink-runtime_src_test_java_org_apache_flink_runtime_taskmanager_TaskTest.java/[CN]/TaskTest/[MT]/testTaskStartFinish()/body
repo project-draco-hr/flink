@@ -1,0 +1,36 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final JobVertexID vid=new JobVertexID();
+    final ExecutionAttemptID eid=new ExecutionAttemptID();
+    final TaskManager taskManager=mock(TaskManager.class);
+    final Task task=new Task(jid,vid,2,7,eid,"TestTask",taskManager);
+    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+    Thread operation=new Thread(){
+      public void run(){
+        try {
+          assertTrue(task.markAsFinished());
+        }
+ catch (        Throwable t) {
+          error.set(t);
+        }
+      }
+    }
+;
+    final RuntimeEnvironment env=mock(RuntimeEnvironment.class);
+    when(env.getExecutingThread()).thenReturn(operation);
+    assertEquals(ExecutionState2.DEPLOYING,task.getExecutionState());
+    task.setEnvironment(env);
+    task.startExecution();
+    operation.join();
+    if (error.get() != null) {
+      ExceptionUtils.rethrow(error.get());
+    }
+    assertEquals(ExecutionState2.FINISHED,task.getExecutionState());
+    verify(taskManager).notifyExecutionStateChange(jid,eid,ExecutionState2.FINISHED,null);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

@@ -1,0 +1,43 @@
+{
+  try {
+    final JobVertexID jid=new JobVertexID();
+    final ExecutionJobVertex ejv=getJobVertexNotExecuting(jid);
+    try {
+      ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+      setVertexState(vertex,ExecutionState2.CANCELING);
+      DefaultScheduler scheduler=mock(DefaultScheduler.class);
+      vertex.scheduleForExecution(scheduler);
+      fail("Method should throw an exception");
+    }
+ catch (    IllegalStateException e) {
+    }
+    try {
+      ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+      setVertexState(vertex,ExecutionState2.CANCELING);
+      TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+      Instance instance=getInstance(taskManager);
+      AllocatedSlot slot=instance.allocateSlot(new JobID());
+      vertex.deployToSlot(slot);
+      fail("Method should throw an exception");
+    }
+ catch (    IllegalStateException e) {
+    }
+{
+      ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+      TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+      Instance instance=getInstance(taskManager);
+      AllocatedSlot slot=instance.allocateSlot(new JobID());
+      setVertexResource(vertex,slot);
+      setVertexState(vertex,ExecutionState2.CANCELING);
+      Exception failureCause=new Exception("test exception");
+      vertex.fail(failureCause);
+      assertEquals(ExecutionState2.FAILED,vertex.getExecutionState());
+      assertEquals(failureCause,vertex.getFailureCause());
+      assertTrue(slot.isReleased());
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

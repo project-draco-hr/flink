@@ -1,0 +1,44 @@
+{
+  try {
+    AbstractJobVertex v1=new AbstractJobVertex("v1");
+    AbstractJobVertex v2=new AbstractJobVertex("v2");
+    AbstractJobVertex v3=new AbstractJobVertex("v3");
+    AbstractJobVertex v4=new AbstractJobVertex("v4");
+    AbstractJobVertex v5=new AbstractJobVertex("v5");
+    v1.setParallelism(4);
+    v2.setParallelism(5);
+    v3.setParallelism(7);
+    v4.setParallelism(1);
+    v5.setParallelism(11);
+    v2.connectNewDataSetAsInput(v1,DistributionPattern.POINTWISE);
+    v5.connectNewDataSetAsInput(v4,DistributionPattern.POINTWISE);
+    SlotSharingGroup jg1=new SlotSharingGroup();
+    v2.setSlotSharingGroup(jg1);
+    v3.setSlotSharingGroup(jg1);
+    SlotSharingGroup jg2=new SlotSharingGroup();
+    v4.setSlotSharingGroup(jg2);
+    v5.setSlotSharingGroup(jg2);
+    List<AbstractJobVertex> vertices=new ArrayList<AbstractJobVertex>(Arrays.asList(v1,v2,v3,v4,v5));
+    ExecutionGraph eg=new ExecutionGraph(new JobID(),"test job",new Configuration());
+    eg.attachJobGraph(vertices);
+    SlotSharingGroup group1=null;
+    SlotSharingGroup group2=null;
+    assertNull(eg.getJobVertex(v1.getID()).getSlotSharingGroup());
+    group1=eg.getJobVertex(v2.getID()).getSlotSharingGroup();
+    assertNotNull(group1);
+    assertEquals(group1,eg.getJobVertex(v3.getID()).getSlotSharingGroup());
+    assertEquals(2,group1.getJobVertexIds().size());
+    assertTrue(group1.getJobVertexIds().contains(v2.getID()));
+    assertTrue(group1.getJobVertexIds().contains(v3.getID()));
+    group2=eg.getJobVertex(v4.getID()).getSlotSharingGroup();
+    assertNotNull(group2);
+    assertEquals(group2,eg.getJobVertex(v5.getID()).getSlotSharingGroup());
+    assertEquals(2,group1.getJobVertexIds().size());
+    assertTrue(group2.getJobVertexIds().contains(v4.getID()));
+    assertTrue(group2.getJobVertexIds().contains(v5.getID()));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

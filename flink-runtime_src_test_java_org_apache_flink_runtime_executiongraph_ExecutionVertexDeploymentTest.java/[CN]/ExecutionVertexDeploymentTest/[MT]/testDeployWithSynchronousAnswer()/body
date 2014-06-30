@@ -1,0 +1,25 @@
+{
+  try {
+    final JobVertexID jid=new JobVertexID();
+    TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+    when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenReturn(new TaskOperationResult(jid,0,true));
+    final Instance instance=getInstance(taskManager);
+    final AllocatedSlot slot=instance.allocateSlot(new JobID());
+    final ExecutionJobVertex ejv=getJobVertexExecutingSynchronously(jid);
+    final ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+    assertEquals(ExecutionState2.CREATED,vertex.getExecutionState());
+    vertex.deployToSlot(slot);
+    assertEquals(ExecutionState2.RUNNING,vertex.getExecutionState());
+    try {
+      vertex.deployToSlot(slot);
+      fail("Scheduled from wrong state");
+    }
+ catch (    IllegalStateException e) {
+    }
+    verify(taskManager).submitTask(Matchers.any(TaskDeploymentDescriptor.class));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

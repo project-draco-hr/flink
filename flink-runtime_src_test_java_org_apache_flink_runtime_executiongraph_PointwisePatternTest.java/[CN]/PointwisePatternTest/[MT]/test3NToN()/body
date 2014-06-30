@@ -1,0 +1,26 @@
+{
+  final int N=17;
+  AbstractJobVertex v1=new AbstractJobVertex("vertex1");
+  AbstractJobVertex v2=new AbstractJobVertex("vertex2");
+  v1.setParallelism(3 * N);
+  v2.setParallelism(N);
+  v2.connectNewDataSetAsInput(v1,DistributionPattern.POINTWISE);
+  List<AbstractJobVertex> ordered=new ArrayList<AbstractJobVertex>(Arrays.asList(v1,v2));
+  ExecutionGraph eg=new ExecutionGraph(jobId,jobName,cfg);
+  try {
+    eg.attachJobGraph(ordered);
+  }
+ catch (  JobException e) {
+    e.printStackTrace();
+    fail("Job failed with exception: " + e.getMessage());
+  }
+  ExecutionJobVertex target=eg.getAllVertices().get(v2.getID());
+  for (  ExecutionVertex2 ev : target.getTaskVertices()) {
+    assertEquals(1,ev.getNumberOfInputs());
+    ExecutionEdge2[] inEdges=ev.getInputEdges(0);
+    assertEquals(3,inEdges.length);
+    assertEquals(ev.getParallelSubtaskIndex() * 3,inEdges[0].getSource().getPartition());
+    assertEquals(ev.getParallelSubtaskIndex() * 3 + 1,inEdges[1].getSource().getPartition());
+    assertEquals(ev.getParallelSubtaskIndex() * 3 + 2,inEdges[2].getSource().getPartition());
+  }
+}

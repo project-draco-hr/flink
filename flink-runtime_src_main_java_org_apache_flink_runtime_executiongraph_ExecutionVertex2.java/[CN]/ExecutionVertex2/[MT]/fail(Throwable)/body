@@ -1,0 +1,24 @@
+{
+  while (true) {
+    ExecutionState2 current=this.state;
+    if (current == FAILED) {
+      return;
+    }
+    if (current == CANCELED) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(String.format("Ignoring transition of vertex %s to %s while being %s",getSimpleName(),FAILED,current));
+      }
+      return;
+    }
+    if (current != DEPLOYING && current != RUNNING && current != CANCELING) {
+      LOG.error(String.format("Vertex %s unexpectedly went from state %s to %s with error: %s",getSimpleName(),CREATED,FAILED,t.getMessage()),t);
+    }
+    if (STATE_UPDATER.compareAndSet(this,current,FAILED)) {
+      this.failureCause=t;
+      getExecutionGraph().notifyExecutionChange(getJobvertexId(),subTaskIndex,FAILED,StringUtils.stringifyException(t));
+      setAssignedSlot(null);
+      this.jobVertex.vertexFailed(subTaskIndex);
+      return;
+    }
+  }
+}

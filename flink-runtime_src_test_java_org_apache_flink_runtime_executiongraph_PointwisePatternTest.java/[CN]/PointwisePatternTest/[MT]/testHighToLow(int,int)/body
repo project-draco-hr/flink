@@ -1,0 +1,34 @@
+{
+  if (highDop < lowDop) {
+    throw new IllegalArgumentException();
+  }
+  final int factor=highDop / lowDop;
+  final int delta=highDop % lowDop == 0 ? 0 : 1;
+  AbstractJobVertex v1=new AbstractJobVertex("vertex1");
+  AbstractJobVertex v2=new AbstractJobVertex("vertex2");
+  v1.setParallelism(highDop);
+  v2.setParallelism(lowDop);
+  v2.connectNewDataSetAsInput(v1,DistributionPattern.POINTWISE);
+  List<AbstractJobVertex> ordered=new ArrayList<AbstractJobVertex>(Arrays.asList(v1,v2));
+  ExecutionGraph eg=new ExecutionGraph(jobId,jobName,cfg);
+  try {
+    eg.attachJobGraph(ordered);
+  }
+ catch (  JobException e) {
+    e.printStackTrace();
+    fail("Job failed with exception: " + e.getMessage());
+  }
+  ExecutionJobVertex target=eg.getAllVertices().get(v2.getID());
+  int[] timesUsed=new int[highDop];
+  for (  ExecutionVertex2 ev : target.getTaskVertices()) {
+    assertEquals(1,ev.getNumberOfInputs());
+    ExecutionEdge2[] inEdges=ev.getInputEdges(0);
+    assertTrue(inEdges.length >= factor && inEdges.length <= factor + delta);
+    for (    ExecutionEdge2 ee : inEdges) {
+      timesUsed[ee.getSource().getPartition()]++;
+    }
+  }
+  for (int i=0; i < timesUsed.length; i++) {
+    assertEquals(1,timesUsed[i]);
+  }
+}

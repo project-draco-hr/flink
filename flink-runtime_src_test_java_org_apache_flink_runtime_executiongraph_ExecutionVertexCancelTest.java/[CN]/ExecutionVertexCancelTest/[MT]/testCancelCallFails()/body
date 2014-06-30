@@ -1,0 +1,22 @@
+{
+  LogUtils.initializeDefaultConsoleLogger(Level.OFF);
+  try {
+    final JobVertexID jid=new JobVertexID();
+    final ExecutionJobVertex ejv=getJobVertexExecutingSynchronously(jid);
+    final ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+    final TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+    when(taskManager.cancelTask(jid,0)).thenThrow(new IOException("RPC call failed"));
+    Instance instance=getInstance(taskManager);
+    AllocatedSlot slot=instance.allocateSlot(new JobID());
+    setVertexState(vertex,ExecutionState2.RUNNING);
+    setVertexResource(vertex,slot);
+    assertEquals(ExecutionState2.RUNNING,vertex.getExecutionState());
+    vertex.cancel();
+    assertEquals(ExecutionState2.FAILED,vertex.getExecutionState());
+    assertTrue(slot.isReleased());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

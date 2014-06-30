@@ -1,22 +1,17 @@
 {
-  if (invokable == null) {
-    LOG.error("ExecutionEnvironment has no Invokable set");
-  }
-  changeExecutionState(ExecutionState.RUNNING,null);
-  if (this.executionObserver.isCanceled()) {
-    changeExecutionState(ExecutionState.CANCELED,null);
+  if (owner.isCanceled()) {
+    owner.cancelingDone();
     return;
   }
   try {
-    ClassLoader cl=LibraryCacheManager.getClassLoader(jobID);
-    Thread.currentThread().setContextClassLoader(cl);
+    Thread.currentThread().setContextClassLoader(userCodeClassLoader);
     this.invokable.invoke();
-    if (this.executionObserver.isCanceled()) {
-      throw new InterruptedException();
+    if (this.owner.isCanceled()) {
+      throw new CancelTaskException();
     }
   }
  catch (  Throwable t) {
-    if (!this.executionObserver.isCanceled()) {
+    if (!this.owner.isCanceled()) {
       try {
         this.invokable.cancel();
       }
@@ -25,15 +20,14 @@
       }
     }
     releaseAllChannelResources();
-    if (this.executionObserver.isCanceled() || t instanceof CancelTaskException) {
-      changeExecutionState(ExecutionState.CANCELED,null);
+    if (this.owner.isCanceled() || t instanceof CancelTaskException) {
+      this.owner.cancelingDone();
     }
  else {
-      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(t));
+      this.owner.markFailed(t);
     }
     return;
   }
-  changeExecutionState(ExecutionState.FINISHING,null);
   try {
     closeInputGates();
     requestAllOutputGatesToClose();
@@ -42,14 +36,16 @@
   }
  catch (  Throwable t) {
     releaseAllChannelResources();
-    if (this.executionObserver.isCanceled() || t instanceof CancelTaskException) {
-      changeExecutionState(ExecutionState.CANCELED,null);
+    if (this.owner.isCanceled() || t instanceof CancelTaskException) {
+      this.owner.cancelingDone();
     }
  else {
-      changeExecutionState(ExecutionState.FAILED,StringUtils.stringifyException(t));
+      this.owner.markFailed(t);
     }
     return;
   }
   releaseAllChannelResources();
-  changeExecutionState(ExecutionState.FINISHED,null);
+  if (!owner.markAsFinished()) {
+    owner.markFailed(new Exception());
+  }
 }

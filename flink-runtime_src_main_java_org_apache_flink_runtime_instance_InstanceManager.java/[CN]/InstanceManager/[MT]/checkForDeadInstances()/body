@@ -1,0 +1,23 @@
+{
+  final long now=System.currentTimeMillis();
+  final long timeout=InstanceManager.this.heartbeatTimeout;
+synchronized (InstanceManager.this.lock) {
+    if (InstanceManager.this.shutdown) {
+      return;
+    }
+    final Iterator<Map.Entry<InstanceID,Instance>> entries=registeredHostsById.entrySet().iterator();
+    while (entries.hasNext()) {
+      final Map.Entry<InstanceID,Instance> entry=entries.next();
+      final Instance host=entry.getValue();
+      if (!host.isStillAlive(now,timeout)) {
+        entries.remove();
+        registeredHostsByConnection.remove(host.getInstanceConnectionInfo());
+        deadHosts.add(host.getInstanceConnectionInfo());
+        host.markDead();
+        totalNumberOfAliveTaskSlots-=host.getTotalNumberOfSlots();
+        LOG.info(String.format("TaskManager %s at %s did not report a heartbeat for %d msecs - marking as dead. Current number of registered hosts is %d.",host.getId(),host.getInstanceConnectionInfo(),heartbeatTimeout,registeredHostsById.size()));
+        notifyDeadInstance(host);
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  try {
+    final JobVertexID jid=new JobVertexID();
+    final ActionQueue actions=new ActionQueue();
+    final ExecutionJobVertex ejv=getJobVertexExecutingTriggered(jid,actions);
+    final ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
+    final TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+    when(taskManager.cancelTask(jid,0)).thenReturn(new TaskOperationResult(jid,0,true));
+    Instance instance=getInstance(taskManager);
+    AllocatedSlot slot=instance.allocateSlot(new JobID());
+    setVertexState(vertex,ExecutionState2.RUNNING);
+    setVertexResource(vertex,slot);
+    assertEquals(ExecutionState2.RUNNING,vertex.getExecutionState());
+    vertex.cancel();
+    assertEquals(ExecutionState2.CANCELING,vertex.getExecutionState());
+    vertex.cancel();
+    assertEquals(ExecutionState2.CANCELING,vertex.getExecutionState());
+    actions.triggerNextAction();
+    assertEquals(ExecutionState2.CANCELED,vertex.getExecutionState());
+    try {
+      actions.triggerNextAction();
+      fail("Too many calls sent.");
+    }
+ catch (    NoSuchElementException e) {
+    }
+    assertTrue(slot.isReleased());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

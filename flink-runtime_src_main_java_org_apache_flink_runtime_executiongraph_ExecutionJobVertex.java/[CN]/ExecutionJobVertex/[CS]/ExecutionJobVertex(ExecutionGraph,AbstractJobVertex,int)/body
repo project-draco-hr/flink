@@ -1,0 +1,34 @@
+{
+  if (graph == null || jobVertex == null) {
+    throw new NullPointerException();
+  }
+  this.graph=graph;
+  this.jobVertex=jobVertex;
+  int vertexParallelism=jobVertex.getParallelism();
+  int numTaskVertices=vertexParallelism > 0 ? vertexParallelism : defaultParallelism;
+  this.parallelism=numTaskVertices;
+  this.taskVertices=new ExecutionVertex2[numTaskVertices];
+  this.producedDataSets=new IntermediateResult[jobVertex.getNumberOfProducedIntermediateDataSets()];
+  for (int i=0; i < jobVertex.getProducedDataSets().size(); i++) {
+    IntermediateDataSet set=jobVertex.getProducedDataSets().get(i);
+    this.producedDataSets[i]=new IntermediateResult(set.getId(),this,numTaskVertices);
+  }
+  for (int i=0; i < numTaskVertices; i++) {
+    ExecutionVertex2 vertex=new ExecutionVertex2(this,i,this.producedDataSets);
+    this.taskVertices[i]=vertex;
+  }
+  this.slotSharingGroup=jobVertex.getSlotSharingGroup();
+  try {
+    @SuppressWarnings("unchecked") InputSplitSource<InputSplit> splitSource=(InputSplitSource<InputSplit>)jobVertex.getInputSplitSource();
+    if (splitSource != null) {
+      InputSplit[] splits=splitSource.createInputSplits(numTaskVertices);
+      this.splitAssigner=splitSource.getInputSplitAssigner(splits);
+    }
+ else {
+      this.splitAssigner=null;
+    }
+  }
+ catch (  Throwable t) {
+    throw new JobException("Creating the input splits caused an error: " + t.getMessage(),t);
+  }
+}

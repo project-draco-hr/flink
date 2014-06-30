@@ -1,0 +1,47 @@
+{
+  final AllocatedSlot slot=this.assignedSlot;
+  if (slot == null) {
+    throw new IllegalStateException("Cannot cancel when task was not running or deployed.");
+  }
+  Runnable cancelAction=new Runnable(){
+    @Override public void run(){
+      Throwable exception=null;
+      for (int triesLeft=NUM_CANCEL_CALL_TRIES; triesLeft > 0; --triesLeft) {
+        try {
+          TaskOperationResult result=slot.getInstance().getTaskManagerProxy().cancelTask(getJobvertexId(),subTaskIndex);
+          if (result.isSuccess()) {
+            try {
+              if (STATE_UPDATER.compareAndSet(ExecutionVertex2.this,CANCELING,CANCELED)) {
+                ExecutionVertex2.this.jobVertex.vertexCancelled(ExecutionVertex2.this.subTaskIndex);
+              }
+ else {
+                ExecutionState2 foundState=ExecutionVertex2.this.state;
+                if (foundState != FAILED) {
+                  LOG.error(String.format("Asynchronous race: Found state %s after successful cancel call.",foundState));
+                }
+              }
+            }
+  finally {
+              slot.releaseSlot();
+            }
+          }
+ else {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Cancel task call did not find task. Probably cause: Acceptable asynchronous race.");
+            }
+          }
+          return;
+        }
+ catch (        Throwable t) {
+          if (exception == null) {
+            exception=t;
+          }
+          LOG.error("Canceling vertex " + getSimpleName() + " failed ("+ triesLeft+ " tries left): "+ t.getMessage(),t);
+        }
+      }
+      fail(new Exception("Task could not be canceled.",exception));
+    }
+  }
+;
+  execute(cancelAction);
+}
