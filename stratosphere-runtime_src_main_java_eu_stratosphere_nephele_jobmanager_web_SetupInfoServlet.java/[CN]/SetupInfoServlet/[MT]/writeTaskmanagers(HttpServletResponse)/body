@@ -1,0 +1,35 @@
+{
+  Set<InstanceConnectionInfo> keys=jobmanager.getInstances().keySet();
+  List<InstanceConnectionInfo> list=new ArrayList<InstanceConnectionInfo>(keys);
+  Collections.sort(list);
+  JSONObject obj=new JSONObject();
+  JSONArray array=new JSONArray();
+  for (  InstanceConnectionInfo k : list) {
+    JSONObject objInner=new JSONObject();
+    Instance instance=jobmanager.getInstances().get(k);
+    long time=new Date().getTime() - instance.getLastHeartBeat();
+    try {
+      objInner.put("inetAdress",k.getInetAdress());
+      objInner.put("ipcPort",k.ipcPort());
+      objInner.put("dataPort",k.dataPort());
+      objInner.put("timeSinceLastHeartbeat",time / 1000);
+      objInner.put("slotsNumber",instance.getNumberOfSlots());
+      objInner.put("freeSlots",instance.getNumberOfAvailableSlots());
+      objInner.put("cpuCores",instance.getHardwareDescription().getNumberOfCPUCores());
+      objInner.put("physicalMemory",instance.getHardwareDescription().getSizeOfPhysicalMemory() / 1048576);
+      objInner.put("freeMemory",instance.getHardwareDescription().getSizeOfFreeMemory() / 1048576);
+      array.put(objInner);
+    }
+ catch (    JSONException e) {
+      LOG.warn("Json object creation failed",e);
+    }
+  }
+  try {
+    obj.put("taskmanagers",array);
+  }
+ catch (  JSONException e) {
+    LOG.warn("Json object creation failed",e);
+  }
+  PrintWriter w=resp.getWriter();
+  w.write(obj.toString());
+}
