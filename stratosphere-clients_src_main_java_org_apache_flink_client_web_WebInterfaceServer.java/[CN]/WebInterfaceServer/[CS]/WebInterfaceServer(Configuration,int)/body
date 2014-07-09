@@ -1,0 +1,102 @@
+{
+  Configuration config=GlobalConfiguration.getConfiguration();
+  if (nepheleConfig == null) {
+    nepheleConfig=config;
+  }
+  String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
+  File webDir;
+  File tmpDir;
+  File uploadDir;
+  File planDumpDir;
+  String webDirPath=config.getString(ConfigConstants.WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_WEB_ROOT_DIR);
+  if (webDirPath.startsWith("/")) {
+    webDir=new File(webDirPath);
+  }
+ else {
+    webDir=new File(basePath + "/" + webDirPath);
+  }
+  String tmpDirPath=config.getString(ConfigConstants.WEB_TMP_DIR_KEY,ConfigConstants.DEFAULT_WEB_TMP_DIR);
+  tmpDir=new File(tmpDirPath);
+  if (tmpDir.isAbsolute()) {
+  }
+ else {
+    tmpDir=new File(basePath + "/" + tmpDirPath);
+  }
+  String uploadDirPath=config.getString(ConfigConstants.WEB_JOB_UPLOAD_DIR_KEY,ConfigConstants.DEFAULT_WEB_JOB_STORAGE_DIR);
+  uploadDir=new File(uploadDirPath);
+  if (uploadDir.isAbsolute()) {
+  }
+ else {
+    uploadDir=new File(basePath + "/" + uploadDirPath);
+  }
+  String planDumpDirPath=config.getString(ConfigConstants.WEB_PLAN_DUMP_DIR_KEY,ConfigConstants.DEFAULT_WEB_PLAN_DUMP_DIR);
+  planDumpDir=new File(planDumpDirPath);
+  if (planDumpDir.isAbsolute()) {
+  }
+ else {
+    planDumpDir=new File(basePath + "/" + planDumpDirPath);
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Setting up web frontend server, using web-root directory '" + webDir.getAbsolutePath() + "'.");
+    LOG.info("Web frontend server will store temporary files in '" + tmpDir.getAbsolutePath() + "', uploaded jobs in '"+ uploadDir.getAbsolutePath()+ "', plan-json-dumps in '"+ planDumpDir.getAbsolutePath()+ "'.");
+    LOG.info("Web-frontend will submit jobs to nephele job-manager on " + config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT)+ ".");
+  }
+  server=new Server(port);
+  if (!webDir.exists()) {
+    throw new FileNotFoundException("The directory containing the web documents does not exist: " + webDir.getAbsolutePath());
+  }
+  checkAndCreateDirectories(tmpDir,true);
+  checkAndCreateDirectories(uploadDir,true);
+  checkAndCreateDirectories(planDumpDir,true);
+  int jobManagerWebPort=config.getInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_FRONTEND_PORT);
+  ServletContextHandler servletContext=new ServletContextHandler(ServletContextHandler.SESSIONS);
+  servletContext.setContextPath("/");
+  servletContext.addServlet(new ServletHolder(new PactJobJSONServlet(uploadDir)),"/pactPlan");
+  servletContext.addServlet(new ServletHolder(new JobsInfoServlet(nepheleConfig)),"/jobsInfo");
+  servletContext.addServlet(new ServletHolder(new PlanDisplayServlet(jobManagerWebPort)),"/showPlan");
+  servletContext.addServlet(new ServletHolder(new JobsServlet(uploadDir,tmpDir,"launch.html")),"/jobs");
+  servletContext.addServlet(new ServletHolder(new JobSubmissionServlet(nepheleConfig,uploadDir,planDumpDir)),"/runJob");
+  ResourceHandler pactPlanHandler=new ResourceHandler();
+  pactPlanHandler.setDirectoriesListed(false);
+  pactPlanHandler.setResourceBase(planDumpDir.getAbsolutePath());
+  ContextHandler pactPlanContext=new ContextHandler();
+  pactPlanContext.setContextPath("/ajax-plans");
+  pactPlanContext.setHandler(pactPlanHandler);
+  ResourceHandler resourceHandler=new ResourceHandler();
+  resourceHandler.setDirectoriesListed(false);
+  resourceHandler.setResourceBase(webDir.getAbsolutePath());
+  HandlerList handlers=new HandlerList();
+  handlers.addHandler(servletContext);
+  handlers.addHandler(pactPlanContext);
+  handlers.addHandler(resourceHandler);
+  File af=null;
+  String authFile=config.getString(ConfigConstants.WEB_ACCESS_FILE_KEY,ConfigConstants.DEFAULT_WEB_ACCESS_FILE_PATH);
+  if (authFile != null) {
+    af=new File(authFile);
+    if (!af.exists()) {
+      LOG.error("The specified file '" + af.getAbsolutePath() + "' with the authentication information is missing. Starting server without HTTP authentication.");
+      af=null;
+    }
+  }
+  if (af != null) {
+    HashLoginService loginService=new HashLoginService("Flink Query Engine Interface",authFile);
+    server.addBean(loginService);
+    Constraint constraint=new Constraint();
+    constraint.setName(Constraint.__BASIC_AUTH);
+    constraint.setAuthenticate(true);
+    constraint.setRoles(new String[]{"user"});
+    ConstraintMapping mapping=new ConstraintMapping();
+    mapping.setPathSpec("/*");
+    mapping.setConstraint(constraint);
+    ConstraintSecurityHandler sh=new ConstraintSecurityHandler();
+    sh.addConstraintMapping(mapping);
+    sh.setAuthenticator(new BasicAuthenticator());
+    sh.setLoginService(loginService);
+    sh.setStrict(true);
+    sh.setHandler(handlers);
+    server.setHandler(sh);
+  }
+ else {
+    server.setHandler(handlers);
+  }
+}
