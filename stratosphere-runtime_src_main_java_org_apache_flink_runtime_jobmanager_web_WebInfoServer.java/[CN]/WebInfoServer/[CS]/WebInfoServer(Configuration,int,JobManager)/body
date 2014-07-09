@@ -1,0 +1,66 @@
+{
+  this.port=port;
+  if (nepheleConfig == null) {
+    nepheleConfig=GlobalConfiguration.getConfiguration();
+  }
+  String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
+  String webDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ROOT_PATH);
+  String logDirPath=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_LOG_PATH_KEY,basePath + "/log");
+  File webDir;
+  if (webDirPath.startsWith("/")) {
+    webDir=new File(webDirPath);
+  }
+ else {
+    webDir=new File(basePath + "/" + webDirPath);
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Setting up web info server, using web-root directory '" + webDir.getAbsolutePath() + "'.");
+    LOG.info("Web info server will display information about nephele job-manager on " + nepheleConfig.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ port+ ".");
+  }
+  if (!webDir.exists()) {
+    throw new FileNotFoundException("Cannot start jobmanager web info server. The directory containing the web documents does not exist: " + webDir.getAbsolutePath());
+  }
+  server=new Server(port);
+  ServletContextHandler servletContext=new ServletContextHandler(ServletContextHandler.SESSIONS);
+  servletContext.setContextPath("/");
+  servletContext.addServlet(new ServletHolder(new JobmanagerInfoServlet(jobmanager)),"/jobsInfo");
+  servletContext.addServlet(new ServletHolder(new LogfileInfoServlet(new File(logDirPath))),"/logInfo");
+  servletContext.addServlet(new ServletHolder(new SetupInfoServlet(jobmanager)),"/setupInfo");
+  servletContext.addServlet(new ServletHolder(new MenuServlet()),"/menu");
+  ResourceHandler resourceHandler=new ResourceHandler();
+  resourceHandler.setDirectoriesListed(false);
+  resourceHandler.setResourceBase(webDir.getAbsolutePath());
+  HandlerList handlers=new HandlerList();
+  handlers.addHandler(servletContext);
+  handlers.addHandler(resourceHandler);
+  File af=null;
+  String authFile=nepheleConfig.getString(ConfigConstants.JOB_MANAGER_WEB_ACCESS_FILE_KEY,null);
+  if (authFile != null) {
+    af=new File(authFile);
+    if (!af.exists()) {
+      LOG.error("The specified file '" + af.getAbsolutePath() + "' with the authentication information is missing. Starting server without HTTP authentication.");
+      af=null;
+    }
+  }
+  if (af != null) {
+    HashLoginService loginService=new HashLoginService("Flink Jobmanager Interface",authFile);
+    server.addBean(loginService);
+    Constraint constraint=new Constraint();
+    constraint.setName(Constraint.__BASIC_AUTH);
+    constraint.setAuthenticate(true);
+    constraint.setRoles(new String[]{"user"});
+    ConstraintMapping mapping=new ConstraintMapping();
+    mapping.setPathSpec("/*");
+    mapping.setConstraint(constraint);
+    ConstraintSecurityHandler sh=new ConstraintSecurityHandler();
+    sh.addConstraintMapping(mapping);
+    sh.setAuthenticator(new BasicAuthenticator());
+    sh.setLoginService(loginService);
+    sh.setStrict(true);
+    sh.setHandler(handlers);
+    server.setHandler(sh);
+  }
+ else {
+    server.setHandler(handlers);
+  }
+}
