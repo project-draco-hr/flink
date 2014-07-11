@@ -1,0 +1,20 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(64);
+    DataSet<Long> sourceWithMapper=env.generateSequence(1,10).map(new IdentityMapper<Long>());
+    DataSet<Long> bcInput1=sourceWithMapper.map(new IdentityMapper<Long>()).reduce(new SelectOneReducer<Long>());
+    DataSet<Long> bcInput2=env.generateSequence(1,10);
+    DataSet<Long> result=sourceWithMapper.map(new IdentityMapper<Long>()).withBroadcastSet(bcInput1,"bc1").withBroadcastSet(bcInput2,"bc2");
+    result.print();
+    Plan p=env.createProgramPlan();
+    OptimizedPlan op=compileNoStats(p);
+    SinkPlanNode sink=op.getDataSinks().iterator().next();
+    SingleInputPlanNode mapper=(SingleInputPlanNode)sink.getInput().getSource();
+    assertTrue(mapper.getInput().getTempMode().breaksPipeline());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
