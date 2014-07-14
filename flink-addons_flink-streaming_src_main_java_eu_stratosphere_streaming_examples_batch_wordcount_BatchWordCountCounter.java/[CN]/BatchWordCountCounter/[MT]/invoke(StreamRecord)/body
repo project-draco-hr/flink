@@ -1,16 +1,23 @@
 {
-  word=record.getString(0);
-  timestamp=record.getLong(1);
-  if (wordCounts.containsKey(word)) {
-    count=wordCounts.get(word) + 1;
-    wordCounts.put(word,count);
-  }
+  int numTuple=record.getNumOfTuples();
+  for (int i=0; i < numTuple; ++i) {
+    word=record.getString(i,0);
+    count=record.getInteger(i,1);
+    timestamp=record.getLong(i,2);
+    if (wordCounts.containsKey(word)) {
+      count=wordCounts.get(word) + 1;
+      wordCounts.put(word,count);
+    }
  else {
-    count=1;
-    wordCounts.put(word,1);
+      count=1;
+      wordCounts.put(word,1);
+    }
   }
-  outRecord.setString(0,word);
-  outRecord.setInteger(1,count);
-  outRecord.setLong(2,timestamp);
+  MutableTableStateIterator<String,Integer> iterator=wordCounts.getIterator();
+  while (iterator.hasNext()) {
+    Tuple2<String,Integer> tuple=iterator.next();
+    Tuple3<String,Integer,Long> outputTuple=new Tuple3<String,Integer,Long>((String)tuple.getField(0),(Integer)tuple.getField(1),timestamp);
+    outRecord.addTuple(outputTuple);
+  }
   emit(outRecord);
 }
