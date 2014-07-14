@@ -1,0 +1,38 @@
+{
+  boolean hasInput=true;
+  while (hasInput) {
+    hasInput=false;
+    for (    RecordReader<Record> input : inputs) {
+      if (input.hasNext()) {
+        hasInput=true;
+        StreamRecord rec=new StreamRecord(input.next());
+        String id=rec.getId();
+        try {
+          userFunction.invoke(rec.getRecord());
+          boolean concurrentModificationOccured=false;
+          while (!concurrentModificationOccured) {
+            try {
+              input.publishEvent(new AckEvent(id));
+              concurrentModificationOccured=true;
+            }
+ catch (            Exception f) {
+              Thread.sleep(rnd.nextInt(50));
+            }
+          }
+        }
+ catch (        Exception e) {
+          boolean concurrentModificationOccured=false;
+          while (!concurrentModificationOccured) {
+            try {
+              input.publishEvent(new FailEvent(id));
+              concurrentModificationOccured=true;
+            }
+ catch (            Exception f) {
+              Thread.sleep(rnd.nextInt(50));
+            }
+          }
+        }
+      }
+    }
+  }
+}
