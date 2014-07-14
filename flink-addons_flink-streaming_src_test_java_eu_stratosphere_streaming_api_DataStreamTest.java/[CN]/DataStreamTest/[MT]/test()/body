@@ -2,6 +2,8 @@
   Tuple1<String> tup=new Tuple1<String>("asd");
   StreamExecutionEnvironment context=new StreamExecutionEnvironment();
   DataStream<Tuple1<String>> dataStream=context.setDummySource().flatMap(new MyFlatMap());
+  dataStream.addSink();
+  context.execute();
   JobGraphBuilder jgb=context.jobGB();
   for (  AbstractJobVertex c : jgb.components.values()) {
     if (c instanceof JobTaskVertex) {
@@ -9,9 +11,44 @@
       System.out.println(config.getString("componentName","default"));
       byte[] bytes=config.getBytes("operator",null);
       ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(bytes));
-      FlatMapFunction<?,?> f=(FlatMapFunction<?,?>)in.readObject();
+      FlatMapFunction<Tuple,Tuple> f=(FlatMapFunction<Tuple,Tuple>)in.readObject();
+      StreamCollector<Tuple> s=new StreamCollector<Tuple>(1,1,null);
+      Tuple t=new Tuple1<String>("asd");
+      f.flatMap(t,s);
       System.out.println(f.getClass().getGenericSuperclass());
-      TypeInformation<?> ts=(TypeInformation<?>)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),1,null,null);
+      TupleTypeInfo<Tuple> ts=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),0,null,null);
+      System.out.println(ts);
+      byte[] userFunctionSerialized=config.getBytes("serializedudf",null);
+      in=new ObjectInputStream(new ByteArrayInputStream(userFunctionSerialized));
+      StreamInvokableComponent userFunction=(StreamInvokableComponent)in.readObject();
+      System.out.println(userFunction.getClass());
+      assertTrue(true);
+      System.out.println("----------------");
+    }
+    if (c instanceof JobOutputVertex) {
+      Configuration config=c.getConfiguration();
+      System.out.println(config.getString("componentName","default"));
+      byte[] bytes=config.getBytes("operator",null);
+      ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      FlatMapFunction<Tuple,Tuple> f=(FlatMapFunction<Tuple,Tuple>)in.readObject();
+      System.out.println(f.getClass().getGenericSuperclass());
+      TupleTypeInfo<Tuple> ts=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),0,null,null);
+      System.out.println(ts);
+      byte[] userFunctionSerialized=config.getBytes("serializedudf",null);
+      in=new ObjectInputStream(new ByteArrayInputStream(userFunctionSerialized));
+      UserSinkInvokable userFunction=(UserSinkInvokable)in.readObject();
+      System.out.println(userFunction.getClass());
+      assertTrue(true);
+      System.out.println("----------------");
+    }
+    if (c instanceof JobInputVertex) {
+      Configuration config=c.getConfiguration();
+      System.out.println(config.getString("componentName","default"));
+      byte[] bytes=config.getBytes("operator",null);
+      ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      UserSourceInvokable<Tuple> f=(UserSourceInvokable<Tuple>)in.readObject();
+      System.out.println(f.getClass().getGenericSuperclass());
+      TupleTypeInfo<Tuple> ts=(TupleTypeInfo)TypeExtractor.createTypeInfo(UserSourceInvokable.class,f.getClass(),0,null,null);
       System.out.println(ts);
       System.out.println("----------------");
     }

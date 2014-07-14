@@ -1,4 +1,18 @@
 {
+  if (taskBase instanceof StreamSource) {
+    byte[] bytes=taskConfiguration.getBytes("operator",null);
+    ObjectInputStream in;
+    try {
+      in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      UserSourceInvokable<Tuple> f=(UserSourceInvokable<Tuple>)in.readObject();
+      outTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(UserSourceInvokable.class,f.getClass(),0,null,null);
+      outTupleSerializer=outTupleTypeInfo.createSerializer();
+      outSerializationDelegate=new SerializationDelegate<Tuple>(outTupleSerializer);
+      collector=new StreamCollector<Tuple>(1,1,outSerializationDelegate);
+    }
+ catch (    Exception e) {
+    }
+  }
   int numberOfOutputs=taskConfiguration.getInteger("numberOfOutputs",0);
   for (int i=0; i < numberOfOutputs; i++) {
     setPartitioner(taskConfiguration,i,partitioners);
@@ -14,4 +28,5 @@
       throw new StreamComponentException("Nonsupported object passed to setConfigOutputs");
     }
   }
+  collector.setOutputs(outputs);
 }

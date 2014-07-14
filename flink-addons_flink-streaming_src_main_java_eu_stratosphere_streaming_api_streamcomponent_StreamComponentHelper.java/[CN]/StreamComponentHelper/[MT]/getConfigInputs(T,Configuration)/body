@@ -1,14 +1,38 @@
 {
   int numberOfInputs=taskConfiguration.getInteger("numberOfInputs",0);
-  TupleTypeInfo<Tuple> ts=null;
-  TupleSerializer<Tuple> tupleSerializer=ts.createSerializer();
-  DeserializationDelegate<Tuple> deserializationDelegate=new DeserializationDelegate<Tuple>(tupleSerializer);
+  if (taskBase instanceof StreamTask || taskBase instanceof StreamSink) {
+    byte[] bytes=taskConfiguration.getBytes("operator",null);
+    ObjectInputStream in;
+    try {
+      in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      FlatMapFunction<Tuple,Tuple> f=(FlatMapFunction<Tuple,Tuple>)in.readObject();
+      inTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),0,null,null);
+      inTupleSerializer=inTupleTypeInfo.createSerializer();
+      inDeserializationDelegate=new DeserializationDelegate<Tuple>(inTupleSerializer);
+    }
+ catch (    Exception e) {
+    }
+  }
+  if (taskBase instanceof StreamTask) {
+    byte[] bytes=taskConfiguration.getBytes("operator",null);
+    ObjectInputStream in;
+    try {
+      in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      FlatMapFunction<Tuple,Tuple> f=(FlatMapFunction<Tuple,Tuple>)in.readObject();
+      outTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),1,null,null);
+      outTupleSerializer=outTupleTypeInfo.createSerializer();
+      outSerializationDelegate=new SerializationDelegate<Tuple>(outTupleSerializer);
+      collector=new StreamCollector<Tuple>(1,1,outSerializationDelegate);
+    }
+ catch (    Exception e) {
+    }
+  }
   if (numberOfInputs < 2) {
     if (taskBase instanceof StreamTask) {
-      return new StreamRecordReader((StreamTask)taskBase,ArrayStreamRecord.class,deserializationDelegate,tupleSerializer);
+      return new StreamRecordReader((StreamTask)taskBase,ArrayStreamRecord.class,inDeserializationDelegate,inTupleSerializer);
     }
  else     if (taskBase instanceof StreamSink) {
-      return new StreamRecordReader((StreamSink)taskBase,ArrayStreamRecord.class,deserializationDelegate,tupleSerializer);
+      return new StreamRecordReader((StreamSink)taskBase,ArrayStreamRecord.class,inDeserializationDelegate,inTupleSerializer);
     }
  else {
       throw new StreamComponentException("Nonsupported object passed to setConfigInputs");
@@ -27,6 +51,6 @@
         throw new StreamComponentException("Nonsupported object passed to setConfigInputs");
       }
     }
-    return new UnionStreamRecordReader(recordReaders,ArrayStreamRecord.class,deserializationDelegate,tupleSerializer);
+    return new UnionStreamRecordReader(recordReaders,ArrayStreamRecord.class,inDeserializationDelegate,inTupleSerializer);
   }
 }
