@@ -1,5 +1,28 @@
 {
   log.debug("TASK " + name + " invoked with instance id "+ taskInstanceID);
-  streamTaskHelper.invokeRecords(userFunction,inputs,name);
+  boolean hasInput=true;
+  while (hasInput) {
+    hasInput=false;
+    for (    RecordReader<StreamRecord> input : inputs) {
+      if (input.hasNext()) {
+        hasInput=true;
+        StreamRecord streamRecord=input.next();
+        String id=streamRecord.getId();
+        try {
+          userFunction.invoke(streamRecord);
+          streamTaskHelper.threadSafePublish(new AckEvent(id),input);
+          log.debug("ACK: " + id + " -- "+ name);
+        }
+ catch (        RecordSizeMismatchException e) {
+          throw (e);
+        }
+catch (        Exception e) {
+          e.printStackTrace();
+          streamTaskHelper.threadSafePublish(new FailEvent(id),input);
+          log.warn("FAILED: " + id + " -- "+ name+ " -- due to "+ e.getClass().getSimpleName());
+        }
+      }
+    }
+  }
   log.debug("TASK " + name + " invoke finished with instance id "+ taskInstanceID);
 }

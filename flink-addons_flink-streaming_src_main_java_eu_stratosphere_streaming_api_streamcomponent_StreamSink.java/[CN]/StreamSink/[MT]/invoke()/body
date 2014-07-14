@@ -1,6 +1,28 @@
 {
   log.debug("SINK " + name + " invoked");
-  streamSinkHelper.invokeRecords(userFunction,inputs,name);
+  boolean hasInput=true;
+  while (hasInput) {
+    hasInput=false;
+    for (    RecordReader<StreamRecord> input : inputs) {
+      if (input.hasNext()) {
+        hasInput=true;
+        StreamRecord rec=input.next();
+        String id=rec.getId();
+        try {
+          userFunction.invoke(rec);
+          streamSinkHelper.threadSafePublish(new AckEvent(id),input);
+          log.debug("ACK: " + id + " -- "+ name);
+        }
+ catch (        RecordSizeMismatchException e) {
+          throw (e);
+        }
+catch (        Exception e) {
+          streamSinkHelper.threadSafePublish(new FailEvent(id),input);
+          log.warn("INVOKE FAILED: " + id + " -- "+ name+ " -- due to "+ e.getClass().getSimpleName());
+        }
+      }
+    }
+  }
   System.out.println("Result: " + userFunction.getResult());
   log.debug("SINK " + name + " invoke finished");
 }
