@@ -1,16 +1,24 @@
 {
-  word=record.getString(0);
-  timestamp=record.getLong(1);
-  if (wordCounts.containsKey(word)) {
-    count=wordCounts.get(word) + 1;
-    wordCounts.put(word,count);
+  if (window.isFull()) {
+    StreamRecord expiredRecord=window.popFront();
+    incrementCompute(record);
+    decrementCompute(expiredRecord);
+    window.pushBack(record);
+    if (window.isComputable()) {
+      outRecord.setString(0,word);
+      outRecord.setInteger(1,count);
+      outRecord.setLong(2,timestamp);
+      emit(outRecord);
+    }
   }
  else {
-    count=1;
-    wordCounts.put(word,1);
+    incrementCompute(record);
+    window.pushBack(record);
+    if (window.isFull()) {
+      outRecord.setString(0,word);
+      outRecord.setInteger(1,count);
+      outRecord.setLong(2,timestamp);
+      emit(outRecord);
+    }
   }
-  outRecord.setString(0,word);
-  outRecord.setInteger(1,count);
-  outRecord.setLong(2,timestamp);
-  emit(outRecord);
 }
