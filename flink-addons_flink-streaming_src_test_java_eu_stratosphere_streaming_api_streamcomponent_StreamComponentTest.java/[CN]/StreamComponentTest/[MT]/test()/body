@@ -1,0 +1,28 @@
+{
+  Logger root=Logger.getRootLogger();
+  root.removeAllAppenders();
+  root.addAppender(new ConsoleAppender());
+  root.setLevel(Level.OFF);
+  JobGraphBuilder graphBuilder=new JobGraphBuilder("testGraph");
+  graphBuilder.setSource("MySource",StreamComponentTest.MySource.class);
+  graphBuilder.setTask("MyTask",MyTask.class,1);
+  graphBuilder.setSink("MySink",MySink.class);
+  graphBuilder.shuffleConnect("MySource","MyTask");
+  graphBuilder.shuffleConnect("MyTask","MySink");
+  JobGraph jG=graphBuilder.getJobGraph();
+  Configuration configuration=jG.getJobConfiguration();
+  NepheleMiniCluster exec=new NepheleMiniCluster();
+  try {
+    exec.start();
+    Client client=new Client(new InetSocketAddress("localhost",6498),configuration);
+    client.run(jG,true);
+    exec.stop();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+  assertEquals(1000,data.keySet().size());
+  for (  Integer k : data.keySet()) {
+    assertEquals((Integer)(k + 1),data.get(k));
+  }
+}
