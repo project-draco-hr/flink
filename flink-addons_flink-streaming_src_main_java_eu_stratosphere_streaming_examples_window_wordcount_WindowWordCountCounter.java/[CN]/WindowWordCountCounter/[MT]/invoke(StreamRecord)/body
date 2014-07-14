@@ -1,0 +1,35 @@
+{
+  int numTuple=record.getNumOfTuples();
+  for (int i=0; i < numTuple; ++i) {
+    long progress=record.getLong(i,windowFieldId);
+    if (initTimestamp == -1) {
+      initTimestamp=progress;
+      nextTimestamp=initTimestamp + computeGranularity;
+      tempRecord=new StreamRecord(record.getNumOfFields());
+    }
+ else {
+      if (progress >= nextTimestamp) {
+        if (window.isFull()) {
+          StreamRecord expiredRecord=window.popFront();
+          incrementCompute(tempRecord);
+          decrementCompute(expiredRecord);
+          window.pushBack(tempRecord);
+          if (window.isEmittable()) {
+            produceRecord(progress);
+          }
+        }
+ else {
+          incrementCompute(tempRecord);
+          window.pushBack(tempRecord);
+          if (window.isFull()) {
+            produceRecord(progress);
+          }
+        }
+        initTimestamp=nextTimestamp;
+        nextTimestamp=initTimestamp + computeGranularity;
+        tempRecord=new StreamRecord(record.getNumOfFields());
+      }
+    }
+    tempRecord.addTuple(record.getTuple(i));
+  }
+}
