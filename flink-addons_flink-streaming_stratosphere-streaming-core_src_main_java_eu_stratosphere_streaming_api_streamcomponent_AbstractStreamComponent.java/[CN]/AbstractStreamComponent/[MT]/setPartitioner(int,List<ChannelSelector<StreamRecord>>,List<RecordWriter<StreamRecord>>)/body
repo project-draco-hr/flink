@@ -1,0 +1,32 @@
+{
+  Class<? extends ChannelSelector<StreamRecord>> partitioner=configuration.getClass("partitionerClass_" + numberOfOutputs,DefaultPartitioner.class,ChannelSelector.class);
+  Integer batchSize=configuration.getInteger("batchSize_" + numberOfOutputs,1);
+  try {
+    if (partitioner.equals(FieldsPartitioner.class)) {
+      int parallelism=configuration.getInteger("numOfOutputs_" + numberOfOutputs,-1);
+      int keyPosition=configuration.getInteger("partitionerIntParam_" + numberOfOutputs,1);
+      ChannelSelector<StreamRecord> outputPartitioner=partitioner.getConstructor(int.class).newInstance(keyPosition);
+      RecordWriter<StreamRecord> output=new RecordWriter<StreamRecord>(this,outputPartitioner);
+      outputs.add(output);
+      partitioners.add(outputPartitioner);
+      String outputName=configuration.getString("outputName_" + numberOfOutputs,null);
+      collectorManager.addPartitionedCollector(output,parallelism,keyPosition,batchSize,outputName);
+    }
+ else {
+      ChannelSelector<StreamRecord> outputPartitioner=partitioner.newInstance();
+      partitioners.add(outputPartitioner);
+      RecordWriter<StreamRecord> output=new RecordWriter<StreamRecord>(this,outputPartitioner);
+      outputs.add(output);
+      String outputName=configuration.getString("outputName_" + numberOfOutputs,null);
+      collectorManager.addNotPartitionedCollector(output,batchSize,outputName);
+    }
+    if (log.isTraceEnabled()) {
+      log.trace("Partitioner set: " + partitioner.getSimpleName() + " with "+ numberOfOutputs+ " outputs");
+    }
+  }
+ catch (  Exception e) {
+    if (log.isErrorEnabled()) {
+      log.error("Error while setting partitioner: " + partitioner.getSimpleName() + " with "+ numberOfOutputs+ " outputs",e);
+    }
+  }
+}
