@@ -1,19 +1,31 @@
 {
-  ConnectionFactory factory=new ConnectionFactory();
-  factory.setHost(HOST_NAME);
-  Connection connection=factory.newConnection();
-  Channel channel=connection.createChannel();
-  channel.queueDeclare(QUEUE_NAME,false,false,false,null);
-  QueueingConsumer consumer=new QueueingConsumer(channel);
-  channel.basicConsume(QUEUE_NAME,true,consumer);
+  initializeConnection();
   while (true) {
-    QueueingConsumer.Delivery delivery=consumer.nextDelivery();
-    String message=new String(delivery.getBody());
+    try {
+      delivery=consumer.nextDelivery();
+    }
+ catch (    ShutdownSignalException e) {
+      e.printStackTrace();
+      break;
+    }
+catch (    ConsumerCancelledException e) {
+      e.printStackTrace();
+      break;
+    }
+catch (    InterruptedException e) {
+      e.printStackTrace();
+    }
+    message=new String(delivery.getBody());
     if (message.equals("quit")) {
       break;
     }
     record.setString(0,message);
     emit(record);
   }
-  connection.close();
+  try {
+    connection.close();
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
 }
