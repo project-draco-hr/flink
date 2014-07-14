@@ -1,27 +1,30 @@
 {
   byte[] operatorBytes=taskConfiguration.getBytes("operator",null);
   String operatorName=taskConfiguration.getString("operatorName","");
-  Object function=null;
   try {
     ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(operatorBytes));
-    function=in.readObject();
+    Object function=in.readObject();
     if (operatorName.equals("flatMap")) {
-      setSerializerDeserializer(function,FlatMapFunction.class);
+      setSerializer(function,FlatMapFunction.class);
     }
  else     if (operatorName.equals("map")) {
-      setSerializerDeserializer(function,MapFunction.class);
+      setSerializer(function,MapFunction.class);
     }
  else     if (operatorName.equals("batchReduce")) {
-      setSerializerDeserializer(function,GroupReduceFunction.class);
+      setSerializer(function,GroupReduceFunction.class);
     }
  else     if (operatorName.equals("filter")) {
-      setSerializerDeserializer(function,FilterFunction.class);
+      setSerializer(function,FilterFunction.class);
     }
  else     if (operatorName.equals("sink")) {
-      setDeserializer(function,SinkFunction.class);
+      inTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(SinkFunction.class,function.getClass(),0,null,null);
+      inTupleSerializer=inTupleTypeInfo.createSerializer();
+      inDeserializationDelegate=new DeserializationDelegate<Tuple>(inTupleSerializer);
     }
  else     if (operatorName.equals("source")) {
-      setSerializer(function,UserSourceInvokable.class,0);
+      outTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(UserSourceInvokable.class,function.getClass(),0,null,null);
+      outTupleSerializer=outTupleTypeInfo.createSerializer();
+      outSerializationDelegate=new SerializationDelegate<Tuple>(outTupleSerializer);
     }
  else     if (operatorName.equals("elements")) {
       outTupleTypeInfo=new TupleTypeInfo<Tuple>(TypeExtractor.getForObject(function));
@@ -33,6 +36,6 @@
     }
   }
  catch (  Exception e) {
-    throw new StreamComponentException("Nonsupported object (named " + operatorName + ") passed as operator");
+    throw new StreamComponentException("Nonsupported object passed as operator");
   }
 }
