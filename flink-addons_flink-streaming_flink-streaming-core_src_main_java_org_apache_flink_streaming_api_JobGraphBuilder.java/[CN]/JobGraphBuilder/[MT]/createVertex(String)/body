@@ -1,0 +1,48 @@
+{
+  Class<? extends AbstractInvokable> componentClass=componentClasses.get(componentName);
+  StreamComponentInvokable invokableObject=invokableObjects.get(componentName);
+  String operatorName=operatorNames.get(componentName);
+  byte[] serializedFunction=serializedFunctions.get(componentName);
+  int parallelism=componentParallelism.get(componentName);
+  byte[] outputSelector=outputSelectors.get(componentName);
+  String userDefinedName=userDefinedNames.get(componentName);
+  AbstractJobVertex component=null;
+  if (componentClass.equals(StreamSource.class) || componentClass.equals(StreamIterationSource.class)) {
+    component=new JobInputVertex(componentName,this.jobGraph);
+  }
+ else   if (componentClass.equals(StreamTask.class)) {
+    component=new JobTaskVertex(componentName,this.jobGraph);
+  }
+ else   if (componentClass.equals(StreamSink.class) || componentClass.equals(StreamIterationSink.class)) {
+    component=new JobOutputVertex(componentName,this.jobGraph);
+  }
+  component.setInvokableClass(componentClass);
+  component.setNumberOfSubtasks(parallelism);
+  Configuration config=new TaskConfig(component.getConfiguration()).getConfiguration();
+  if (invokableObject != null) {
+    config.setClass("userfunction",invokableObject.getClass());
+    addSerializedObject(invokableObject,config);
+  }
+  config.setString("componentName",componentName);
+  config.setLong("batchTimeout",this.batchTimeout);
+  config.setInteger("faultToleranceType",this.faultToleranceType.id);
+  if (serializedFunction != null) {
+    config.setBytes("operator",serializedFunction);
+    config.setString("operatorName",operatorName);
+  }
+  if (userDefinedName != null) {
+    config.setString("userDefinedName",userDefinedName);
+  }
+  if (outputSelector != null) {
+    config.setBoolean("directedEmit",true);
+    config.setBytes("outputSelector",outputSelector);
+  }
+  if (componentClass.equals(StreamIterationSource.class) || componentClass.equals(StreamIterationSink.class)) {
+    config.setString("iteration-id","iteration-0");
+  }
+  components.put(componentName,component);
+  if (parallelism > maxParallelism) {
+    maxParallelism=parallelism;
+    maxParallelismVertexName=componentName;
+  }
+}
