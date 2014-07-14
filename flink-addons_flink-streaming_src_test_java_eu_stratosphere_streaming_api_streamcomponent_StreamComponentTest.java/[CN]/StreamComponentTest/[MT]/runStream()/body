@@ -1,24 +1,10 @@
 {
-  Logger root=Logger.getRootLogger();
-  root.removeAllAppenders();
-  root.addAppender(new ConsoleAppender());
-  root.setLevel(Level.OFF);
-  JobGraphBuilder graphBuilder=new JobGraphBuilder("testGraph");
-  graphBuilder.setSource("MySource",MySource.class);
-  graphBuilder.setTask("MyTask",MyTask.class,2,2);
-  graphBuilder.setSink("MySink",MySink.class);
+  LogUtils.initializeDefaultConsoleLogger(Level.DEBUG,Level.INFO);
+  JobGraphBuilder graphBuilder=new JobGraphBuilder("testGraph",FaultToleranceType.NONE);
+  graphBuilder.setSource("MySource",new MySource("source"));
+  graphBuilder.setTask("MyTask",new MyTask("task"),2,2);
+  graphBuilder.setSink("MySink",new MySink("sink"));
   graphBuilder.shuffleConnect("MySource","MyTask");
   graphBuilder.shuffleConnect("MyTask","MySink");
-  JobGraph jG=graphBuilder.getJobGraph();
-  Configuration configuration=jG.getJobConfiguration();
-  NepheleMiniCluster exec=new NepheleMiniCluster();
-  try {
-    exec.start();
-    Client client=new Client(new InetSocketAddress("localhost",6498),configuration);
-    client.run(jG,true);
-    exec.stop();
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-  }
+  ClusterUtil.runOnMiniCluster(graphBuilder.getJobGraph());
 }
