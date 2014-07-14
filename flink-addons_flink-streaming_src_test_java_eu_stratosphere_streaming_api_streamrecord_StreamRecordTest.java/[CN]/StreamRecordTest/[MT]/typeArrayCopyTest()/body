@@ -1,0 +1,32 @@
+{
+  StreamRecord rec=new StreamRecord(new Tuple9<Boolean[],Byte[],Character[],Double[],Float[],Integer[],Long[],Short[],String[]>(new Boolean[]{true},new Byte[]{12},new Character[]{'a'},new Double[]{12.5},new Float[]{13.5f},new Integer[]{1234},new Long[]{12345678900l},new Short[]{12345},new String[]{"something"}));
+  ByteArrayOutputStream buff=new ByteArrayOutputStream();
+  DataOutputStream out=new DataOutputStream(buff);
+  for (int i=0; i < 10000; i++) {
+    out.write(rec.tupleTypesToByteArray(rec.getTuple()));
+  }
+  DataInputStream in=new DataInputStream(new ByteArrayInputStream(buff.toByteArray()));
+  StreamRecord rec2=new StreamRecord();
+  Long start=System.nanoTime();
+  for (int i=0; i < 10000; i++) {
+    byte[] byteTypes=new byte[9];
+    in.read(byteTypes);
+    TypeInformation<?>[] basicTypes=rec2.tupleTypesFromByteArray(byteTypes);
+    @SuppressWarnings("unused") TupleTypeInfo<Tuple> typeInfo=new TupleTypeInfo<Tuple>(basicTypes);
+  }
+  System.out.println("Type copy with ByteArray:\t" + (System.nanoTime() - start) + " ns");
+  start=System.nanoTime();
+  byte[] byteTypes=rec.tupleTypesToByteArray(rec.getTuple());
+  Tuple t=rec.getTuple();
+  start=System.nanoTime();
+  for (int i=0; i < 10000; i++) {
+    TypeInformation<?>[] basicTypes=rec2.tupleTypesFromByteArray(byteTypes);
+    @SuppressWarnings("unused") TupleTypeInfo<Tuple> typeInfo=new TupleTypeInfo<Tuple>(basicTypes);
+  }
+  System.out.println("Write with infoArray:\t\t" + (System.nanoTime() - start) + " ns");
+  start=System.nanoTime();
+  for (int i=0; i < 10000; i++) {
+    @SuppressWarnings("unused") TupleTypeInfo<Tuple> typeInfo=(TupleTypeInfo<Tuple>)TypeExtractor.getForObject(t);
+  }
+  System.out.println("Write with extract:\t\t" + (System.nanoTime() - start) + " ns");
+}
