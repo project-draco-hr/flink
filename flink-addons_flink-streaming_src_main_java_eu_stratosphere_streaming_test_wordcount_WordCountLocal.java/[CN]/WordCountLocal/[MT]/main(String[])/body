@@ -1,21 +1,29 @@
 {
-  NepheleMiniCluster exec=new NepheleMiniCluster();
   Logger root=Logger.getRootLogger();
   root.removeAllAppenders();
   PatternLayout layout=new PatternLayout("%d{HH:mm:ss,SSS} %-5p %-60c %x - %m%n");
   ConsoleAppender appender=new ConsoleAppender(layout,"System.err");
   root.addAppender(appender);
-  root.setLevel(Level.ERROR);
+  root.setLevel(Level.DEBUG);
   try {
-    File file=new File("target/stratosphere-streaming-0.5-SNAPSHOT.jar");
-    JobWithJars.checkJarFile(file);
     JobGraph jG=getJobGraph();
-    jG.addJar(new Path(file.getAbsolutePath()));
     Configuration configuration=jG.getJobConfiguration();
-    Client client=new Client(new InetSocketAddress("localhost",6498),configuration);
-    exec.start();
-    client.run(null,jG,true);
-    exec.stop();
+    if (args.length == 0) {
+      args=new String[]{"local"};
+    }
+    if (args[0].equals("local")) {
+      System.out.println("Running in Local mode");
+      NepheleMiniCluster exec=new NepheleMiniCluster();
+      exec.start();
+      Client client=new Client(new InetSocketAddress("localhost",6498),configuration);
+      client.run(null,jG,true);
+      exec.stop();
+    }
+ else     if (args[0].equals("cluster")) {
+      System.out.println("Running in Cluster2 mode");
+      Client client=new Client(new InetSocketAddress("hadoop02.ilab.sztaki.hu",6123),configuration);
+      client.run(null,jG,true);
+    }
   }
  catch (  Exception e) {
     System.out.println(e);
