@@ -1,16 +1,15 @@
 {
   DataStream<R> returnStream=new DataStream<R>(this,returnType);
-  jobGraphBuilder.setTask(inputStream.getId(),new UserTaskInvokable<T,R>(){
-    private static final long serialVersionUID=1L;
-    @Override public void invoke(    StreamRecord record,    StreamCollector<R> collector) throws Exception {
-      int batchSize=record.getBatchSize();
-      for (int i=0; i < batchSize; i++) {
-        T tuple=(T)record.getTuple(i);
-        flatMapper.flatMap(tuple,collector);
-      }
-    }
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  ObjectOutputStream oos;
+  try {
+    oos=new ObjectOutputStream(baos);
+    oos.writeObject(flatMapper);
   }
-);
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
+  jobGraphBuilder.setTask(returnStream.getId(),new FlatMapInvokable<T,R>(flatMapper),baos.toByteArray());
   jobGraphBuilder.shuffleConnect(inputStream.getId(),returnStream.getId());
   return returnStream;
 }

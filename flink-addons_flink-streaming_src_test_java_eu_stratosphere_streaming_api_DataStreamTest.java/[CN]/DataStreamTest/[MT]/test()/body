@@ -3,5 +3,17 @@
   StreamExecutionEnvironment context=new StreamExecutionEnvironment();
   DataStream<Tuple1<String>> dataStream=context.setDummySource().flatMap(new MyFlatMap());
   JobGraphBuilder jgb=context.jobGB();
-  context.execute(dataStream.getId());
+  for (  AbstractJobVertex c : jgb.components.values()) {
+    if (c instanceof JobTaskVertex) {
+      Configuration config=c.getConfiguration();
+      System.out.println(config.getString("componentName","default"));
+      byte[] bytes=config.getBytes("operator",null);
+      ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(bytes));
+      FlatMapFunction<?,?> f=(FlatMapFunction<?,?>)in.readObject();
+      System.out.println(f.getClass().getGenericSuperclass());
+      TypeInformation<?> ts=(TypeInformation<?>)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),1,null,null);
+      System.out.println(ts);
+      System.out.println("----------------");
+    }
+  }
 }
