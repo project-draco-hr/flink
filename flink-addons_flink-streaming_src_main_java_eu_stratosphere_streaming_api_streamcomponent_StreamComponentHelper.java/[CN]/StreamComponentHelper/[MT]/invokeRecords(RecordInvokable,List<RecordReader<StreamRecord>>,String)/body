@@ -1,0 +1,26 @@
+{
+  boolean hasInput=true;
+  while (hasInput) {
+    hasInput=false;
+    for (    RecordReader<StreamRecord> input : inputs) {
+      if (input.hasNext()) {
+        hasInput=true;
+        StreamRecord record=input.next();
+        String id=record.getId();
+        try {
+          userFunction.invoke(record);
+          threadSafePublish(new AckEvent(id),input);
+          log.debug("ACK: " + id + " -- "+ name);
+        }
+ catch (        RecordSizeMismatchException e) {
+          throw (e);
+        }
+catch (        Exception e) {
+          e.printStackTrace();
+          threadSafePublish(new FailEvent(id),input);
+          log.warn("FAILED: " + id + " -- "+ name+ " -- due to "+ e.getClass().getSimpleName());
+        }
+      }
+    }
+  }
+}
