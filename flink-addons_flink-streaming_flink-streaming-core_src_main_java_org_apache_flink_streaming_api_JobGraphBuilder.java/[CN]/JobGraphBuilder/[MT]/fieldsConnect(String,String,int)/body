@@ -1,3 +1,23 @@
 {
-  setEdge(upStreamComponentName,downStreamComponentName,FieldsPartitioner.class,keyPosition);
+  AbstractJobVertex upStreamComponent=components.get(upStreamComponentName);
+  AbstractJobVertex downStreamComponent=components.get(downStreamComponentName);
+  addToEdges(upStreamComponentName,downStreamComponentName,FieldsPartitioner.class);
+  try {
+    upStreamComponent.connectTo(downStreamComponent,ChannelType.NETWORK);
+    Configuration config=new TaskConfig(upStreamComponent.getConfiguration()).getConfiguration();
+    int outputIndex=upStreamComponent.getNumberOfForwardConnections() - 1;
+    config.setBoolean("isPartitionedOutput_" + outputIndex,true);
+    putOutputNameToConfig(upStreamComponentName,downStreamComponentName,outputIndex);
+    config.setClass("partitionerClass_" + outputIndex,FieldsPartitioner.class);
+    config.setInteger("partitionerIntParam_" + outputIndex,keyPosition);
+    if (log.isDebugEnabled()) {
+      log.debug("CONNECTED: FIELD PARTITIONING - " + upStreamComponentName + " -> "+ downStreamComponentName+ ", KEY: "+ keyPosition);
+    }
+  }
+ catch (  JobGraphDefinitionException e) {
+    if (log.isErrorEnabled()) {
+      log.error("Cannot connect components by field: " + upStreamComponentName + " to "+ downStreamComponentName,e);
+    }
+  }
+  log.info("Fieldsconnected " + upStreamComponentName + " to "+ downStreamComponentName+ " on "+ keyPosition);
 }
