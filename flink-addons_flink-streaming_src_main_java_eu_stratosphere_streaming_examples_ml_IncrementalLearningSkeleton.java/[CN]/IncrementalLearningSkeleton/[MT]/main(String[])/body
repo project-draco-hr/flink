@@ -1,5 +1,23 @@
 {
-  StreamExecutionEnvironment env=new StreamExecutionEnvironment();
-  DataStream<Tuple1<Integer>> model=env.addSource(new TrainingDataSource()).map(new PartialModelBuilder()).broadcast();
-  DataStream<Tuple1<Integer>> prediction=env.addSource(new NewDataSource()).connectWith(model).map(new Predictor()).addSink(new IMLSink());
+  LogUtils.initializeDefaultConsoleLogger(Level.INFO,Level.INFO);
+  try {
+    JobGraph jG=getJobGraph();
+    Configuration configuration=jG.getJobConfiguration();
+    if (args.length == 0 || args[0].equals("local")) {
+      System.out.println("Running in Local mode");
+      NepheleMiniCluster exec=new NepheleMiniCluster();
+      exec.start();
+      Client client=new Client(new InetSocketAddress("localhost",6498),configuration);
+      client.run(jG,true);
+      exec.stop();
+    }
+ else     if (args[0].equals("cluster")) {
+      System.out.println("Running in Cluster mode");
+      Client client=new Client(new InetSocketAddress("dell150",6123),configuration);
+      client.run(jG,true);
+    }
+  }
+ catch (  Exception e) {
+    System.out.println(e);
+  }
 }
