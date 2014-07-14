@@ -1,0 +1,35 @@
+{
+  byte[] operatorBytes=taskConfiguration.getBytes("operator",null);
+  String operatorName=taskConfiguration.getString("operatorName","");
+  try {
+    ObjectInputStream in=new ObjectInputStream(new ByteArrayInputStream(operatorBytes));
+    if (operatorName.equals("flatMap")) {
+      FlatMapFunction<Tuple,Tuple> f=(FlatMapFunction<Tuple,Tuple>)in.readObject();
+      inTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),0,null,null);
+      inTupleSerializer=inTupleTypeInfo.createSerializer();
+      inDeserializationDelegate=new DeserializationDelegate<Tuple>(inTupleSerializer);
+      outTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(FlatMapFunction.class,f.getClass(),1,null,null);
+      outTupleSerializer=outTupleTypeInfo.createSerializer();
+      outSerializationDelegate=new SerializationDelegate<Tuple>(outTupleSerializer);
+    }
+ else     if (operatorName.equals("sink")) {
+      UserSinkInvokable<Tuple> f=(UserSinkInvokable<Tuple>)in.readObject();
+      inTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(UserSinkInvokable.class,f.getClass(),0,null,null);
+      inTupleSerializer=inTupleTypeInfo.createSerializer();
+      inDeserializationDelegate=new DeserializationDelegate<Tuple>(inTupleSerializer);
+    }
+ else     if (operatorName.equals("source")) {
+      UserSourceInvokable<Tuple> f=(UserSourceInvokable<Tuple>)in.readObject();
+      outTupleTypeInfo=(TupleTypeInfo)TypeExtractor.createTypeInfo(UserSourceInvokable.class,f.getClass(),0,null,null);
+      outTupleSerializer=outTupleTypeInfo.createSerializer();
+      outSerializationDelegate=new SerializationDelegate<Tuple>(outTupleSerializer);
+    }
+ else {
+      throw new Exception();
+    }
+    collector=new StreamCollector<Tuple>(1,1,outSerializationDelegate);
+  }
+ catch (  Exception e) {
+    throw new StreamComponentException("Nonsupported object passed as operator");
+  }
+}
