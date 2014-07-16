@@ -3,6 +3,7 @@
     throw new NullPointerException("Execution mode must not be null.");
   }
   LOG.info("Execution mode: " + executionMode);
+  this.executionMode=executionMode;
   final InetSocketAddress jobManagerAddress;
 {
     LOG.info("Reading location of job manager from configuration");
@@ -128,13 +129,12 @@ LOG.info("Creating " + slots + " task slot(s).");
 }
 this.numberOfSlots=slots;
 }
-this.hardwareDescription=HardwareDescriptionFactory.extractFromSystem();
 {
 final long configuredMemorySize=GlobalConfiguration.getInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,-1);
 final long memorySize;
 if (configuredMemorySize == -1) {
 float fraction=GlobalConfiguration.getFloat(ConfigConstants.TASK_MANAGER_MEMORY_FRACTION_KEY,ConfigConstants.DEFAULT_MEMORY_MANAGER_MEMORY_FRACTION);
-memorySize=(long)(this.hardwareDescription.getSizeOfFreeMemory() * fraction);
+memorySize=(long)(EnvironmentInformation.getSizeOfFreeHeapMemoryWithDefrag() * fraction);
 LOG.info("Using " + fraction + " of the free heap space for managed memory.");
 }
  else if (configuredMemorySize <= 0) {
@@ -154,6 +154,7 @@ LOG.error("Unable to initialize memory manager with " + (memorySize >>> 20) + " 
 throw new Exception("Unable to initialize memory manager.",t);
 }
 }
+this.hardwareDescription=HardwareDescription.extractFromSystem(this.memoryManager.getMemorySize());
 this.ioManager=new IOManager(tmpDirPaths);
 this.heartbeatThread=new Thread(){
 @Override public void run(){

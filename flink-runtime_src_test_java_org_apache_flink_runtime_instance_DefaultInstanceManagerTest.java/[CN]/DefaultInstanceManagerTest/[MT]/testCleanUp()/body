@@ -1,33 +1,40 @@
 {
   try {
-    final int CLEANUP_INTERVAL=2;
-    Configuration config=new Configuration();
-    config.setInteger("instancemanager.cluster.cleanupinterval",CLEANUP_INTERVAL);
-    GlobalConfiguration.includeConfiguration(config);
-    DefaultInstanceManager cm=new DefaultInstanceManager();
-    TestInstanceListener testInstanceListener=new TestInstanceListener();
-    cm.setInstanceListener(testInstanceListener);
-    int ipcPort=ConfigConstants.DEFAULT_TASK_MANAGER_IPC_PORT;
-    int dataPort=ConfigConstants.DEFAULT_TASK_MANAGER_DATA_PORT;
-    HardwareDescription hardwareDescription=HardwareDescriptionFactory.construct(2,2L * 1024L * 1024L* 1024L,2L * 1024L * 1024L* 1024L);
-    String hostname="192.168.198.1";
-    InetAddress address=InetAddress.getByName("192.168.198.1");
-    InstanceConnectionInfo ici1=new InstanceConnectionInfo(address,hostname,null,ipcPort + 0,dataPort + 0);
-    InstanceConnectionInfo ici2=new InstanceConnectionInfo(address,hostname,null,ipcPort + 15,dataPort + 15);
-    InstanceConnectionInfo ici3=new InstanceConnectionInfo(address,hostname,null,ipcPort + 30,dataPort + 30);
-    cm.registerTaskManager(ici1,hardwareDescription,1);
-    cm.registerTaskManager(ici2,hardwareDescription,1);
-    cm.registerTaskManager(ici3,hardwareDescription,1);
-    assertEquals(3,cm.getNumberOfSlots());
-    JobID jobID=new JobID();
-    Configuration conf=new Configuration();
-    cm.requestInstance(jobID,conf,1);
-    DefaultInstanceManagerTestUtils.waitForInstances(jobID,testInstanceListener,1,1000);
-    assertEquals(1,testInstanceListener.getNumberOfAllocatedResourcesForJob(jobID));
-    Thread.sleep(2000 * CLEANUP_INTERVAL);
-    DefaultInstanceManagerTestUtils.waitForInstances(jobID,testInstanceListener,0,1000);
-    assertEquals(0,testInstanceListener.getNumberOfAllocatedResourcesForJob(jobID));
-    assertEquals(0,cm.getNumberOfSlots());
+    DefaultInstanceManager cm=new DefaultInstanceManager(200,100);
+    HardwareDescription resources=HardwareDescription.extractFromSystem(4096);
+    InetAddress address=InetAddress.getByName("127.0.0.1");
+    InstanceConnectionInfo ici1=new InstanceConnectionInfo(address,10000,20000);
+    InstanceConnectionInfo ici2=new InstanceConnectionInfo(address,10001,20001);
+    InstanceID i1=cm.registerTaskManager(ici1,resources,1);
+    InstanceID i2=cm.registerTaskManager(ici2,resources,1);
+    assertNotNull(i1);
+    assertNotNull(i2);
+    assertEquals(2,cm.getNumberOfRegisteredTaskManagers());
+    assertEquals(2,cm.getTotalNumberOfSlots());
+    for (int i=0; i < 8; i++) {
+      CommonTestUtils.sleepUninterruptibly(50);
+      assertTrue(cm.reportHeartBeat(i1));
+      assertTrue(cm.reportHeartBeat(i2));
+    }
+    assertEquals(2,cm.getNumberOfRegisteredTaskManagers());
+    assertEquals(2,cm.getTotalNumberOfSlots());
+    for (int i=0; i < 8; i++) {
+      CommonTestUtils.sleepUninterruptibly(50);
+      assertTrue(cm.reportHeartBeat(i1));
+    }
+    assertEquals(1,cm.getNumberOfRegisteredTaskManagers());
+    assertEquals(1,cm.getTotalNumberOfSlots());
+    assertFalse(cm.reportHeartBeat(i2));
+    i2=cm.registerTaskManager(ici2,resources,1);
+    assertEquals(2,cm.getNumberOfRegisteredTaskManagers());
+    assertEquals(2,cm.getTotalNumberOfSlots());
+    for (int i=0; i < 8; i++) {
+      CommonTestUtils.sleepUninterruptibly(50);
+      assertTrue(cm.reportHeartBeat(i1));
+      assertTrue(cm.reportHeartBeat(i2));
+    }
+    assertEquals(2,cm.getNumberOfRegisteredTaskManagers());
+    assertEquals(2,cm.getTotalNumberOfSlots());
     cm.shutdown();
   }
  catch (  Exception e) {
