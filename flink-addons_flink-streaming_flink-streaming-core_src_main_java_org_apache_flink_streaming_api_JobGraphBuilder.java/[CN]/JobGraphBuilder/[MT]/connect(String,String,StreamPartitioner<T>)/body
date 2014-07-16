@@ -1,0 +1,18 @@
+{
+  AbstractJobVertex upStreamComponent=components.get(upStreamComponentName);
+  AbstractJobVertex downStreamComponent=components.get(downStreamComponentName);
+  Configuration config=new TaskConfig(upStreamComponent.getConfiguration()).getConfiguration();
+  try {
+    upStreamComponent.connectTo(downStreamComponent,ChannelType.NETWORK);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("CONNECTED: " + partitionerObject.getClass().getSimpleName() + " - "+ upStreamComponentName+ " -> "+ downStreamComponentName);
+    }
+  }
+ catch (  JobGraphDefinitionException e) {
+    throw new RuntimeException("Cannot connect components by field: " + upStreamComponentName + " to "+ downStreamComponentName,e);
+  }
+  int outputIndex=upStreamComponent.getNumberOfForwardConnections() - 1;
+  putOutputNameToConfig(upStreamComponentName,downStreamComponentName,outputIndex,config);
+  config.setBytes("partitionerObject_" + outputIndex,SerializationUtils.serialize(partitionerObject));
+  config.setInteger("numOfOutputs_" + outputIndex,componentParallelism.get(downStreamComponentName));
+}
