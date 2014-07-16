@@ -1,0 +1,46 @@
+{
+  String maprHome=System.getenv(MAPR_HOME_ENV);
+  if (maprHome == null) {
+    maprHome=DEFAULT_MAPR_HOME;
+  }
+  final File maprClusterConf=new File(maprHome,MAPR_CLUSTER_CONF_FILE);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(String.format("Trying to retrieve MapR cluster configuration from %s",maprClusterConf));
+  }
+  BufferedReader br=null;
+  try {
+    br=new BufferedReader(new FileReader(maprClusterConf));
+    String line;
+    while ((line=br.readLine()) != null) {
+      line=line.trim();
+      line=line.replace('\t',' ');
+      final String[] fields=line.split(" ");
+      if (fields == null) {
+        continue;
+      }
+      if (fields.length < 1) {
+        continue;
+      }
+      final String clusterName=fields[0];
+      if (!clusterName.equals(authority)) {
+        continue;
+      }
+      final List<String> cldbLocations=new ArrayList<String>();
+      for (int i=1; i < fields.length; ++i) {
+        if (!fields[i].isEmpty() && !fields[i].contains("=")) {
+          cldbLocations.add(fields[i]);
+        }
+      }
+      if (cldbLocations.isEmpty()) {
+        throw new IOException(String.format("%s contains entry for cluster %s but no CLDB locations.",maprClusterConf,authority));
+      }
+      return cldbLocations.toArray(new String[0]);
+    }
+  }
+  finally {
+    if (br != null) {
+      br.close();
+    }
+  }
+  throw new IOException(String.format("Unable to find CLDB locations for cluster %s",authority));
+}
