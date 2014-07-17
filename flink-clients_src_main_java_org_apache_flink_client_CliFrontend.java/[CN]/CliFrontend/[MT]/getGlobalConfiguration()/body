@@ -2,6 +2,31 @@
   if (!globalConfigurationLoaded) {
     String location=getConfigurationDirectory();
     GlobalConfiguration.loadConfiguration(location);
+    Properties yarnProps;
+    try {
+      yarnProps=getYarnProperties();
+      if (yarnProps != null) {
+        String propDegree=yarnProps.getProperty(YARN_PROPERTIES_DOP);
+        int paraDegree=-1;
+        if (propDegree != null) {
+          paraDegree=Integer.valueOf(propDegree);
+        }
+        Configuration c=GlobalConfiguration.getConfiguration();
+        if (paraDegree != -1) {
+          c.setInteger(ConfigConstants.DEFAULT_PARALLELIZATION_DEGREE_KEY,paraDegree);
+        }
+        String dynamicPropertiesEncoded=yarnProps.getProperty(YARN_PROPERTIES_DYNAMIC_PROPERTIES_STRING);
+        List<Tuple2<String,String>> dynamicProperties=getDynamicProperties(dynamicPropertiesEncoded);
+        for (        Tuple2<String,String> dynamicProperty : dynamicProperties) {
+          c.setString(dynamicProperty.f0,dynamicProperty.f1);
+        }
+        GlobalConfiguration.includeConfiguration(c);
+      }
+    }
+ catch (    IOException e) {
+      System.err.println("Error while loading YARN properties: " + e.getMessage());
+      e.printStackTrace();
+    }
     globalConfigurationLoaded=true;
   }
   return GlobalConfiguration.getConfiguration();

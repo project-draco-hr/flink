@@ -5,6 +5,7 @@
   logDirs=envs.get(Environment.LOG_DIRS.key());
   ownHostname=envs.get(Environment.NM_HOST.key());
   appId=envs.get(Client.ENV_APP_ID);
+  appNumber=Integer.valueOf(envs.get(Client.ENV_APP_NUMBER));
   clientHomeDir=envs.get(Client.ENV_CLIENT_HOME_DIR);
   applicationMasterHost=envs.get(Environment.NM_HOST.key());
   remoteFlinkJarPath=envs.get(Client.FLINK_JAR_PATH);
@@ -14,6 +15,8 @@
   taskManagerCount=Integer.valueOf(envs.get(Client.ENV_TM_COUNT));
   memoryPerTaskManager=Integer.valueOf(envs.get(Client.ENV_TM_MEMORY));
   coresPerTaskManager=Integer.valueOf(envs.get(Client.ENV_TM_CORES));
+  slots=Integer.valueOf(envs.get(Client.ENV_SLOTS));
+  dynamicPropertiesEncodedString=envs.get(Client.ENV_DYNAMIC_PROPERTIES);
   localWebInterfaceDir=currDir + "/resources/" + ConfigConstants.DEFAULT_JOB_MANAGER_WEB_PATH_NAME;
   this.conf=conf;
   if (currDir == null) {
@@ -22,8 +25,17 @@
   if (ownHostname == null) {
     throw new RuntimeException("Own hostname (" + Environment.NM_HOST + ") not set.");
   }
-  LOG.info("Working directory " + currDir);
+  LOG.debug("Working directory " + currDir);
   Utils.getFlinkConfiguration(currDir);
   amRpcServer=RPC.getServer(this,ownHostname,Integer.valueOf(rpcPort),2);
   amRpcServer.start();
+  int port=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,-1);
+  if (port != -1) {
+    port+=appNumber;
+  }
+ else {
+    LOG.warn("JobManager port is unknown");
+  }
+  this.jobManagerPort=port;
+  this.jobManagerWebPort=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_FRONTEND_PORT) + appNumber;
 }

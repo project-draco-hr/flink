@@ -4,8 +4,9 @@
   nmClient.init(conf);
   nmClient.start();
   nmClient.cleanupRunningContainersOnStop(true);
-  LOG.info("Registering ApplicationMaster");
-  rmClient.registerApplicationMaster(applicationMasterHost,0,"http://" + applicationMasterHost + ":"+ GlobalConfiguration.getString(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,"undefined"));
+  String url="http://" + applicationMasterHost + ":"+ jobManagerWebPort;
+  LOG.info("Registering ApplicationMaster with tracking url " + url);
+  rmClient.registerApplicationMaster(applicationMasterHost,0,url);
   Priority priority=Records.newRecord(Priority.class);
   priority.setPriority(0);
   Resource capability=Records.newRecord(Resource.class);
@@ -63,11 +64,13 @@
     }
     Thread.sleep(5000);
   }
-  LOG.info("Shutting down JobManager");
-  jobManager.shutdown();
+  if (isClosed) {
+    return;
+  }
   final String diagnosticsMessage="Application Master shut down after all " + "containers finished\n" + containerDiag.toString();
   LOG.info("Diagnostics message: " + diagnosticsMessage);
   rmClient.unregisterApplicationMaster(FinalApplicationStatus.FAILED,diagnosticsMessage,"");
   this.close();
+  amRpcServer.stop();
   LOG.info("Application Master shutdown completed.");
 }
