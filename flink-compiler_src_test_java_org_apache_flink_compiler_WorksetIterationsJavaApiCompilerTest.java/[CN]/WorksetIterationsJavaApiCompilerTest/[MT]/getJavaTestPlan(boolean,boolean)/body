@@ -5,23 +5,23 @@
   @SuppressWarnings("unchecked") DataSet<Tuple3<Long,Long,Long>> worksetInput=env.fromElements(new Tuple3<Long,Long,Long>(1L,2L,3L)).name("Workset");
   @SuppressWarnings("unchecked") DataSet<Tuple3<Long,Long,Long>> invariantInput=env.fromElements(new Tuple3<Long,Long,Long>(1L,2L,3L)).name("Invariant Input");
   DeltaIteration<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>> iter=solutionSetInput.iterateDelta(worksetInput,100,1,2);
-  DataSet<Tuple3<Long,Long,Long>> joinedWithSolutionSet=iter.getWorkset().join(invariantInput).where(1,2).equalTo(1,2).with(new JoinFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
+  DataSet<Tuple3<Long,Long,Long>> joinedWithSolutionSet=iter.getWorkset().join(invariantInput).where(1,2).equalTo(1,2).with(new RichJoinFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
     public Tuple3<Long,Long,Long> join(    Tuple3<Long,Long,Long> first,    Tuple3<Long,Long,Long> second){
       return first;
     }
   }
-).name(JOIN_WITH_INVARIANT_NAME).join(iter.getSolutionSet()).where(1,0).equalTo(1,2).with(new JoinFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
+).name(JOIN_WITH_INVARIANT_NAME).join(iter.getSolutionSet()).where(1,0).equalTo(1,2).with(new RichJoinFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
     public Tuple3<Long,Long,Long> join(    Tuple3<Long,Long,Long> first,    Tuple3<Long,Long,Long> second){
       return second;
     }
   }
 ).name(JOIN_WITH_SOLUTION_SET).withConstantSetSecond(joinPreservesSolutionSet ? new String[]{"0->0","1->1","2->2"} : null);
-  DataSet<Tuple3<Long,Long,Long>> nextWorkset=joinedWithSolutionSet.groupBy(1,2).reduceGroup(new GroupReduceFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
+  DataSet<Tuple3<Long,Long,Long>> nextWorkset=joinedWithSolutionSet.groupBy(1,2).reduceGroup(new RichGroupReduceFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
     public void reduce(    Iterator<Tuple3<Long,Long,Long>> values,    Collector<Tuple3<Long,Long,Long>> out){
     }
   }
 ).name(NEXT_WORKSET_REDUCER_NAME).withConstantSet("1->1","2->2","0->0");
-  DataSet<Tuple3<Long,Long,Long>> nextSolutionSet=mapBeforeSolutionDelta ? joinedWithSolutionSet.map(new MapFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
+  DataSet<Tuple3<Long,Long,Long>> nextSolutionSet=mapBeforeSolutionDelta ? joinedWithSolutionSet.map(new RichMapFunction<Tuple3<Long,Long,Long>,Tuple3<Long,Long,Long>>(){
     public Tuple3<Long,Long,Long> map(    Tuple3<Long,Long,Long> value){
       return value;
     }
