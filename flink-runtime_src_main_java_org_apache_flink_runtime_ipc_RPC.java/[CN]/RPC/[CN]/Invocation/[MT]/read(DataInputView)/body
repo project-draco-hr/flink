@@ -1,31 +1,27 @@
 {
   this.methodName=StringRecord.readString(in);
-  this.parameters=new IOReadableWritable[in.readInt()];
+  this.parameters=new Object[in.readInt()];
   this.parameterClasses=new Class[parameters.length];
   for (int i=0; i < parameters.length; i++) {
     final String className=StringRecord.readString(in);
     try {
-      parameterClasses[i]=ClassUtils.getRecordByName(className);
+      parameterClasses[i]=ClassUtils.resolveClassPrimitiveAware(className);
     }
- catch (    ClassNotFoundException cnfe) {
-      throw new IOException(cnfe.toString());
+ catch (    ClassNotFoundException e) {
+      throw new IOException(e);
     }
     if (in.readBoolean()) {
+      IOReadableWritable value;
       try {
         final String parameterClassName=StringRecord.readString(in);
-        final Class<? extends IOReadableWritable> parameterClass=ClassUtils.getRecordByName(parameterClassName);
-        parameters[i]=parameterClass.newInstance();
+        final Class<? extends IOReadableWritable> parameterClass=(Class<? extends IOReadableWritable>)ClassUtils.resolveClassPrimitiveAware(parameterClassName);
+        value=parameterClass.newInstance();
+        parameters[i]=value;
       }
- catch (      IllegalAccessException iae) {
-        throw new IOException(iae.toString());
+ catch (      Exception e) {
+        throw new IOException(e);
       }
-catch (      InstantiationException ie) {
-        throw new IOException(ie.toString());
-      }
-catch (      ClassNotFoundException cnfe) {
-        throw new IOException(cnfe.toString());
-      }
-      parameters[i].read(in);
+      value.read(in);
     }
  else {
       parameters[i]=null;
