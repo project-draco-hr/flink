@@ -1,0 +1,51 @@
+{
+  List<IN> tupleBatch=new ArrayList<IN>();
+  boolean batchStart;
+  if (window) {
+    long startTime=System.currentTimeMillis();
+    while (loadNextRecord() != null) {
+      batchStart=true;
+      do {
+        if (batchStart) {
+          batchStart=false;
+        }
+ else {
+          reuse=loadNextRecord();
+          if (reuse == null) {
+            break;
+          }
+        }
+        tupleBatch.add(reuse.getTuple());
+        resetReuse();
+      }
+ while (System.currentTimeMillis() - startTime < windowSize);
+      reducer.reduce(tupleBatch.iterator(),collector);
+      tupleBatch.clear();
+      startTime=System.currentTimeMillis();
+    }
+  }
+ else {
+    int counter=0;
+    while (loadNextRecord() != null) {
+      batchStart=true;
+      do {
+        if (batchStart) {
+          batchStart=false;
+        }
+ else {
+          reuse=loadNextRecord();
+          if (reuse == null) {
+            break;
+          }
+        }
+        counter++;
+        tupleBatch.add(reuse.getTuple());
+        resetReuse();
+      }
+ while (counter < batchSize);
+      reducer.reduce(tupleBatch.iterator(),collector);
+      tupleBatch.clear();
+      counter=0;
+    }
+  }
+}
