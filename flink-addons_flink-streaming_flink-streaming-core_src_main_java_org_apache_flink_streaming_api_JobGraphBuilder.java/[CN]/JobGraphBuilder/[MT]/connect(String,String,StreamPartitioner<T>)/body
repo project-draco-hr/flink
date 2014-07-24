@@ -1,7 +1,7 @@
 {
   AbstractJobVertex upStreamComponent=components.get(upStreamComponentName);
   AbstractJobVertex downStreamComponent=components.get(downStreamComponentName);
-  Configuration config=upStreamComponent.getConfiguration();
+  StreamConfig config=new StreamConfig(upStreamComponent.getConfiguration());
   try {
     if (partitionerObject.getClass().equals(ForwardPartitioner.class)) {
       upStreamComponent.connectTo(downStreamComponent,ChannelType.NETWORK,DistributionPattern.POINTWISE);
@@ -17,7 +17,7 @@
     throw new RuntimeException("Cannot connect components: " + upStreamComponentName + " to "+ downStreamComponentName,e);
   }
   int outputIndex=upStreamComponent.getNumberOfForwardConnections() - 1;
-  putOutputNameToConfig(upStreamComponentName,downStreamComponentName,outputIndex,config);
-  config.setBytes("partitionerObject_" + outputIndex,SerializationUtils.serialize(partitionerObject));
-  config.setInteger("numOfOutputs_" + outputIndex,componentParallelism.get(downStreamComponentName));
+  config.setOutputName(outputIndex,outEdgeNames.get(upStreamComponentName).get(outputIndex));
+  config.setPartitioner(outputIndex,partitionerObject);
+  config.setNumberOfOutputChannels(outputIndex,componentParallelism.get(downStreamComponentName));
 }

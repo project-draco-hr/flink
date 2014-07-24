@@ -1,11 +1,10 @@
 {
   Class<? extends AbstractInvokable> componentClass=componentClasses.get(componentName);
-  StreamComponentInvokable invokableObject=invokableObjects.get(componentName);
+  StreamComponentInvokable<?> invokableObject=invokableObjects.get(componentName);
   String operatorName=operatorNames.get(componentName);
   byte[] serializedFunction=serializedFunctions.get(componentName);
   int parallelism=componentParallelism.get(componentName);
   byte[] outputSelector=outputSelectors.get(componentName);
-  String userDefinedName=userDefinedNames.get(componentName);
   AbstractJobVertex component=null;
   if (componentClass.equals(StreamSource.class) || componentClass.equals(StreamIterationSource.class)) {
     component=new JobInputVertex(componentName,this.jobGraph);
@@ -16,30 +15,25 @@
  else   if (componentClass.equals(StreamSink.class) || componentClass.equals(StreamIterationSink.class)) {
     component=new JobOutputVertex(componentName,this.jobGraph);
   }
+ else {
+    throw new RuntimeException("Unsupported component class");
+  }
   component.setInvokableClass(componentClass);
   component.setNumberOfSubtasks(parallelism);
   if (LOG.isDebugEnabled()) {
     LOG.debug("Parallelism set: " + parallelism + " for "+ componentName);
   }
-  Configuration config=component.getConfiguration();
-  if (invokableObject != null) {
-    config.setClass("userfunction",invokableObject.getClass());
-    addSerializedObject(invokableObject,config);
-  }
-  config.setString("componentName",componentName);
-  if (serializedFunction != null) {
-    config.setBytes("operator",serializedFunction);
-    config.setString("operatorName",operatorName);
-  }
-  if (userDefinedName != null) {
-    config.setString("userDefinedName",userDefinedName);
-  }
-  if (outputSelector != null) {
-    config.setBoolean("directedEmit",true);
-    config.setBytes("outputSelector",outputSelector);
-  }
+  StreamConfig config=new StreamConfig(component.getConfiguration());
+  config.setMutability(mutability.get(componentName));
+  config.setBufferTimeout(bufferTimeout.get(componentName));
+  config.setTypeWrapper(typeWrappers.get(componentName));
+  config.setUserInvokable(invokableObject);
+  config.setComponentName(componentName);
+  config.setFunction(serializedFunction,operatorName);
+  config.setOutputSelector(outputSelector);
   if (componentClass.equals(StreamIterationSource.class) || componentClass.equals(StreamIterationSink.class)) {
-    config.setString("iteration-id",iterationIds.get(componentName));
+    config.setIterationId(iterationIds.get(componentName));
+    config.setIterationWaitTime(iterationWaitTime.get(componentName));
   }
   components.put(componentName,component);
   if (parallelism > maxParallelism) {
