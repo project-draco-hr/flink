@@ -8,11 +8,20 @@
   if (!instance.isAlive()) {
     throw new IllegalArgumentException("The instance is not alive.");
   }
-synchronized (this.lock) {
+synchronized (this.globalLock) {
     if (!this.allInstances.add(instance)) {
       throw new IllegalArgumentException("The instance is already contained.");
     }
+    try {
+      instance.setSlotAvailabilityListener(this);
+    }
+ catch (    IllegalStateException e) {
+      this.allInstances.remove(instance);
+      LOG.error("Scheduler could not attach to the instance as a listener.");
+    }
     this.instancesWithAvailableResources.add(instance);
-    this.lock.notifyAll();
+    for (int i=0; i < instance.getNumberOfAvailableSlots(); i++) {
+      newSlotAvailable(instance);
+    }
   }
 }

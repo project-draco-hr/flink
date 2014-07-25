@@ -1,0 +1,56 @@
+{
+  try {
+    JobVertexID jid1=new JobVertexID();
+    SlotSharingGroup sharingGroup=new SlotSharingGroup(jid1);
+    DefaultScheduler scheduler=new DefaultScheduler();
+    Instance i1=getRandomInstance(2);
+    Instance i2=getRandomInstance(2);
+    scheduler.newInstanceAvailable(i1);
+    scheduler.newInstanceAvailable(i2);
+    AllocatedSlot s1=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,0,8),sharingGroup));
+    AllocatedSlot s2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,1,8),sharingGroup));
+    AllocatedSlot s3=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,2,8),sharingGroup));
+    AllocatedSlot s4=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,3,8),sharingGroup));
+    assertNotNull(s1);
+    assertNotNull(s2);
+    assertNotNull(s3);
+    assertNotNull(s4);
+    assertTrue(areAllDistinct(s1,s2,s3,s4));
+    try {
+      scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,4,8),sharingGroup));
+      fail("Scheduler accepted too many tasks at the same time");
+    }
+ catch (    NoResourceAvailableException e) {
+    }
+catch (    Exception e) {
+      fail("Wrong exception.");
+    }
+    s3.releaseSlot();
+    AllocatedSlot s5=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,4,8),sharingGroup));
+    assertNotNull(s5);
+    s1.releaseSlot();
+    s2.releaseSlot();
+    s4.releaseSlot();
+    AllocatedSlot s6=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,5,8),sharingGroup));
+    AllocatedSlot s7=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,6,8),sharingGroup));
+    AllocatedSlot s8=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,7,8),sharingGroup));
+    assertNotNull(s6);
+    assertNotNull(s7);
+    assertNotNull(s8);
+    int c=0;
+    c+=(s5.getInstance() == i1) ? 1 : -1;
+    c+=(s6.getInstance() == i1) ? 1 : -1;
+    c+=(s7.getInstance() == i1) ? 1 : -1;
+    c+=(s8.getInstance() == i1) ? 1 : -1;
+    assertEquals(0,c);
+    s5.releaseSlot();
+    s6.releaseSlot();
+    s7.releaseSlot();
+    s8.releaseSlot();
+    assertEquals(4,scheduler.getNumberOfAvailableSlots());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

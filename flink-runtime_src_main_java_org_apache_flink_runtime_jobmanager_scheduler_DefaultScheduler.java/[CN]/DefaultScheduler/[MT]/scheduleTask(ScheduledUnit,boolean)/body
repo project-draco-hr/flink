@@ -2,10 +2,53 @@
   if (task == null) {
     throw new IllegalArgumentException();
   }
-  AllocatedSlot existing=this.allocatedSlots.get(task.getSharedResourceId());
-  if (existing != null) {
-    if (existing.runTask(task.getTaskVertex())) {
-      return;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Scheduling task " + task);
+  }
+synchronized (globalLock) {
+    SlotSharingGroup sharingUnit=task.getSlotSharingGroup();
+    if (sharingUnit != null) {
+      SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
+      AllocatedSlot slot=assignment.getSlotForTask(task.getJobVertexId(),task.getTaskVertex());
+      if (slot != null) {
+        return slot;
+      }
+    }
+    while (true) {
+      Instance instanceToUse=getFreeInstanceForTask(task.getTaskVertex());
+      if (instanceToUse != null) {
+        try {
+          AllocatedSlot slot=instanceToUse.allocateSlot(task.getTaskVertex().getJobId());
+          if (instanceToUse.hasResourcesAvailable()) {
+            this.instancesWithAvailableResources.add(instanceToUse);
+          }
+          if (slot != null) {
+            if (sharingUnit != null) {
+              slot=sharingUnit.getTaskAssignment().addSlotWithTask(slot,task.getJobVertexId());
+            }
+            if (slot.runTask(task.getTaskVertex())) {
+              return slot;
+            }
+ else {
+              slot.releaseSlot();
+            }
+          }
+        }
+ catch (        InstanceDiedException e) {
+          this.allInstances.remove(instanceToUse);
+          this.instancesWithAvailableResources.remove(instanceToUse);
+        }
+      }
+ else {
+        if (queueIfNoResource) {
+          SlotAllocationFuture future=new SlotAllocationFuture();
+          this.taskQueue.add(new QueuedTask(task,future));
+          return future;
+        }
+ else {
+          throw new NoResourceAvailableException(task);
+        }
+      }
     }
   }
 }

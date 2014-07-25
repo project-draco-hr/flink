@@ -1,0 +1,67 @@
+{
+  final int NUM_INSTANCES=50;
+  final int NUM_SLOTS_PER_INSTANCE=3;
+  final int NUM_TASKS_TO_SCHEDULE=2000;
+  try {
+    DefaultScheduler scheduler=new DefaultScheduler();
+    for (int i=0; i < NUM_INSTANCES; i++) {
+      scheduler.newInstanceAvailable(getRandomInstance((int)(Math.random() * NUM_SLOTS_PER_INSTANCE) + 1));
+    }
+    assertEquals(NUM_INSTANCES,scheduler.getNumberOfAvailableInstances());
+    final int totalSlots=scheduler.getNumberOfAvailableSlots();
+    List<SlotAllocationFuture> allAllocatedSlots=new ArrayList<SlotAllocationFuture>();
+    final Set<AllocatedSlot> toRelease=new HashSet<AllocatedSlot>();
+    final AtomicBoolean errored=new AtomicBoolean(false);
+    SlotAllocationFutureAction action=new SlotAllocationFutureAction(){
+      @Override public void slotAllocated(      AllocatedSlot slot){
+synchronized (toRelease) {
+          toRelease.add(slot);
+          toRelease.notifyAll();
+        }
+      }
+    }
+;
+    Runnable disposer=new Runnable(){
+      @Override public void run(){
+        try {
+          int recycled=0;
+          while (recycled < NUM_TASKS_TO_SCHEDULE) {
+synchronized (toRelease) {
+              while (toRelease.isEmpty()) {
+                toRelease.wait();
+              }
+              Iterator<AllocatedSlot> iter=toRelease.iterator();
+              AllocatedSlot next=iter.next();
+              iter.remove();
+              next.releaseSlot();
+              recycled++;
+            }
+          }
+        }
+ catch (        Throwable t) {
+          errored.set(true);
+        }
+      }
+    }
+;
+    Thread disposeThread=new Thread(disposer);
+    disposeThread.start();
+    for (int i=0; i < NUM_TASKS_TO_SCHEDULE; i++) {
+      SlotAllocationFuture future=scheduler.scheduleQueued(new ScheduledUnit(getDummyVertex()));
+      future.setFutureAction(action);
+      allAllocatedSlots.add(future);
+    }
+    disposeThread.join();
+    assertFalse("The slot releasing thread caused an error.",errored.get());
+    List<AllocatedSlot> slotsAfter=new ArrayList<AllocatedSlot>();
+    for (    SlotAllocationFuture future : allAllocatedSlots) {
+      slotsAfter.add(future.waitTillAllocated());
+    }
+    assertTrue(areAllDistinct(slotsAfter.toArray()));
+    assertEquals(totalSlots,scheduler.getNumberOfAvailableSlots());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

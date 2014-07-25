@@ -1,0 +1,45 @@
+{
+  try {
+{
+      final AtomicInteger invocations=new AtomicInteger();
+      final AtomicBoolean error=new AtomicBoolean();
+      final AllocatedSlot thisSlot=new AllocatedSlot(new JobID(),SchedulerTestUtils.getRandomInstance(1),0);
+      final SlotAllocationFuture future=new SlotAllocationFuture();
+      Runnable r=new Runnable(){
+        @Override public void run(){
+          try {
+            AllocatedSlot syncSlot=future.waitTillAllocated();
+            if (syncSlot == null || syncSlot != thisSlot) {
+              error.set(true);
+              return;
+            }
+            invocations.incrementAndGet();
+          }
+ catch (          Throwable t) {
+            error.set(true);
+          }
+        }
+      }
+;
+      Thread syncer=new Thread(r);
+      syncer.start();
+      Thread.sleep(10);
+      future.setSlot(thisSlot);
+      syncer.join();
+      assertFalse(error.get());
+      assertEquals(1,invocations.get());
+    }
+{
+      final AllocatedSlot thisSlot=new AllocatedSlot(new JobID(),SchedulerTestUtils.getRandomInstance(1),0);
+      final SlotAllocationFuture future=new SlotAllocationFuture();
+      future.setSlot(thisSlot);
+      AllocatedSlot retrieved=future.waitTillAllocated();
+      assertNotNull(retrieved);
+      assertEquals(thisSlot,retrieved);
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

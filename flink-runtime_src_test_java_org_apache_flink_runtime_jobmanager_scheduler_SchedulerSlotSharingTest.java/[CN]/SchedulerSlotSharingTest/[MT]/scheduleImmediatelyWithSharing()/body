@@ -1,0 +1,80 @@
+{
+  try {
+    JobVertexID jid1=new JobVertexID();
+    JobVertexID jid2=new JobVertexID();
+    SlotSharingGroup sharingGroup=new SlotSharingGroup(jid1,jid2);
+    DefaultScheduler scheduler=new DefaultScheduler();
+    scheduler.newInstanceAvailable(getRandomInstance(2));
+    scheduler.newInstanceAvailable(getRandomInstance(2));
+    AllocatedSlot s1=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,0,5),sharingGroup));
+    AllocatedSlot s2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,1,5),sharingGroup));
+    AllocatedSlot s3=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,2,5),sharingGroup));
+    AllocatedSlot s4=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,3,5),sharingGroup));
+    assertNotNull(s1);
+    assertNotNull(s2);
+    assertNotNull(s3);
+    assertNotNull(s4);
+    assertTrue(areAllDistinct(s1,s2,s3,s4));
+    try {
+      scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,4,5),sharingGroup));
+      fail("Scheduler accepted too many tasks at the same time");
+    }
+ catch (    NoResourceAvailableException e) {
+    }
+catch (    Exception e) {
+      fail("Wrong exception.");
+    }
+    AllocatedSlot s1_2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,0,5),sharingGroup));
+    AllocatedSlot s2_2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,1,5),sharingGroup));
+    AllocatedSlot s3_2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,2,5),sharingGroup));
+    AllocatedSlot s4_2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,3,5),sharingGroup));
+    assertNotNull(s1_2);
+    assertNotNull(s2_2);
+    assertNotNull(s3_2);
+    assertNotNull(s4_2);
+    try {
+      scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,4,5),sharingGroup));
+      fail("Scheduler accepted too many tasks at the same time");
+    }
+ catch (    NoResourceAvailableException e) {
+    }
+catch (    Exception e) {
+      fail("Wrong exception.");
+    }
+    s1.releaseSlot();
+    s4.releaseSlot();
+    assertEquals(4,sharingGroup.getTaskAssignment().getNumberOfSlots());
+    assertEquals(2,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid1));
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid2));
+    try {
+      scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,4,5),sharingGroup));
+      fail("Scheduler accepted too many tasks at the same time");
+    }
+ catch (    NoResourceAvailableException e) {
+    }
+catch (    Exception e) {
+      fail("Wrong exception.");
+    }
+    AllocatedSlot s5=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid1,4,5),sharingGroup));
+    assertNotNull(s5);
+    assertEquals(4,sharingGroup.getTaskAssignment().getNumberOfSlots());
+    assertEquals(1,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid1));
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid2));
+    s2_2.releaseSlot();
+    AllocatedSlot s5_2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertex(jid2,4,5),sharingGroup));
+    assertNotNull(s5_2);
+    s2.releaseSlot();
+    s3.releaseSlot();
+    s5.releaseSlot();
+    s1_2.releaseSlot();
+    s3_2.releaseSlot();
+    s4_2.releaseSlot();
+    s5_2.releaseSlot();
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfSlots());
+    assertEquals(4,scheduler.getNumberOfAvailableSlots());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

@@ -1,0 +1,26 @@
+{
+synchronized (globalLock) {
+    QueuedTask queued=taskQueue.peek();
+    if (queued != null) {
+      ScheduledUnit task=queued.getTask();
+      try {
+        AllocatedSlot newSlot=instance.allocateSlot(task.getTaskVertex().getJobId());
+        if (newSlot != null && newSlot.runTask(task.getTaskVertex())) {
+          taskQueue.poll();
+          if (queued.getFuture() != null) {
+            queued.getFuture().setSlot(newSlot);
+          }
+        }
+      }
+ catch (      InstanceDiedException e) {
+        this.allInstances.remove(instance);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Instance " + instance + " was marked dead asynchronously.");
+        }
+      }
+    }
+ else {
+      this.instancesWithAvailableResources.add(instance);
+    }
+  }
+}

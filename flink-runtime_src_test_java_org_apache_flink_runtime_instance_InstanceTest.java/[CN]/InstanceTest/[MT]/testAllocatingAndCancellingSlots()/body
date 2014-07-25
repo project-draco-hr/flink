@@ -1,0 +1,49 @@
+{
+  try {
+    HardwareDescription hardwareDescription=new HardwareDescription(4,2L * 1024 * 1024* 1024,1024 * 1024 * 1024,512 * 1024 * 1024);
+    InetAddress address=InetAddress.getByName("127.0.0.1");
+    InstanceConnectionInfo connection=new InstanceConnectionInfo(address,10000,10001);
+    Instance instance=new Instance(connection,new InstanceID(),hardwareDescription,4);
+    assertEquals(4,instance.getTotalNumberOfSlots());
+    assertEquals(4,instance.getNumberOfAvailableSlots());
+    assertEquals(0,instance.getNumberOfAllocatedSlots());
+    AllocatedSlot slot1=instance.allocateSlot(new JobID());
+    AllocatedSlot slot2=instance.allocateSlot(new JobID());
+    AllocatedSlot slot3=instance.allocateSlot(new JobID());
+    AllocatedSlot slot4=instance.allocateSlot(new JobID());
+    assertNotNull(slot1);
+    assertNotNull(slot2);
+    assertNotNull(slot3);
+    assertNotNull(slot4);
+    assertEquals(0,instance.getNumberOfAvailableSlots());
+    assertEquals(4,instance.getNumberOfAllocatedSlots());
+    assertEquals(6,slot1.getSlotNumber() + slot2.getSlotNumber() + slot3.getSlotNumber()+ slot4.getSlotNumber());
+    assertNull(instance.allocateSlot(new JobID()));
+    try {
+      instance.returnAllocatedSlot(slot2);
+      fail("instance accepted a non-cancelled slot.");
+    }
+ catch (    IllegalArgumentException e) {
+    }
+    slot1.releaseSlot();
+    slot2.releaseSlot();
+    assertFalse(instance.returnAllocatedSlot(slot1));
+    assertFalse(instance.returnAllocatedSlot(slot2));
+    slot3.cancel();
+    slot4.cancel();
+    assertTrue(instance.returnAllocatedSlot(slot3));
+    assertTrue(instance.returnAllocatedSlot(slot4));
+    assertEquals(4,instance.getNumberOfAvailableSlots());
+    assertEquals(0,instance.getNumberOfAllocatedSlots());
+    assertFalse(instance.returnAllocatedSlot(slot1));
+    assertFalse(instance.returnAllocatedSlot(slot2));
+    assertFalse(instance.returnAllocatedSlot(slot3));
+    assertFalse(instance.returnAllocatedSlot(slot4));
+    assertEquals(4,instance.getNumberOfAvailableSlots());
+    assertEquals(0,instance.getNumberOfAllocatedSlots());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
