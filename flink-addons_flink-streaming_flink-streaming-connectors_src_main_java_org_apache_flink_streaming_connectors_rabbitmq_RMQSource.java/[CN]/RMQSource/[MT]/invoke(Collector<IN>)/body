@@ -1,17 +1,29 @@
 {
   initializeConnection();
-  while (!close) {
+  while (true) {
     try {
       delivery=consumer.nextDelivery();
     }
- catch (    Exception e) {
-      if (LOG.isErrorEnabled()) {
-        LOG.error("Cannot receive RMQ message " + QUEUE_NAME + " at "+ HOST_NAME);
-      }
+ catch (    ShutdownSignalException e) {
+      e.printStackTrace();
+      break;
+    }
+catch (    ConsumerCancelledException e) {
+      e.printStackTrace();
+      break;
+    }
+catch (    InterruptedException e) {
+      e.printStackTrace();
     }
     outTuple=deserialize(delivery.getBody());
-    if (!close) {
+    if (closeWithoutSend) {
+      break;
+    }
+ else {
       collector.collect(outTuple);
+    }
+    if (sendAndClose) {
+      break;
     }
   }
   try {
