@@ -1,0 +1,16 @@
+{
+  DataStream<R> returnStream=new DataStreamSink<R>(environment,"iterationSink");
+  jobGraphBuilder.addIterationSink(returnStream.getId(),iterationTail.getId(),iterationID.toString(),iterationTail.getParallelism());
+  jobGraphBuilder.setIterationSourceParallelism(iterationID.toString(),iterationTail.getParallelism());
+  List<String> name=Arrays.asList(new String[]{iterationName});
+  if (iterationTail instanceof ConnectedDataStream) {
+    for (    DataStream<IN> stream : ((ConnectedDataStream<IN>)iterationTail).connectedStreams) {
+      String inputID=stream.getId();
+      jobGraphBuilder.setEdge(inputID,returnStream.getId(),new ForwardPartitioner<IN>(),0,name);
+    }
+  }
+ else {
+    jobGraphBuilder.setEdge(iterationTail.getId(),returnStream.getId(),new ForwardPartitioner<IN>(),0,name);
+  }
+  return iterationTail;
+}
