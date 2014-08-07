@@ -1,25 +1,15 @@
 {
-  List<IN> tupleBatch=new ArrayList<IN>();
-  boolean batchStart;
-  long startTime=System.currentTimeMillis();
-  while (loadNextRecord() != null) {
-    batchStart=true;
-    do {
-      if (batchStart) {
-        batchStart=false;
-      }
- else {
-        reuse=loadNextRecord();
-        if (reuse == null) {
-          break;
-        }
-      }
-      tupleBatch.add(reuse.getObject());
-      resetReuse();
+  if ((reuse=loadNextRecord()) == null) {
+    throw new RuntimeException("DataStream must not be empty");
+  }
+  while (reuse != null && !state.isFull()) {
+    collectOneTimeUnit();
+  }
+  reduce();
+  while (reuse != null) {
+    for (int i=0; i < slideInterval / timeUnitInMillis; i++) {
+      collectOneTimeUnit();
     }
- while (System.currentTimeMillis() - startTime < windowSize);
-    reducer.reduce(tupleBatch,collector);
-    tupleBatch.clear();
-    startTime=System.currentTimeMillis();
+    reduce();
   }
 }

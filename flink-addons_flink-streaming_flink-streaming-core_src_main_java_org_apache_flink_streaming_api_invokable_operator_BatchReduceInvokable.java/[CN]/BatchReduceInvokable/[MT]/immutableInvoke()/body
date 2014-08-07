@@ -1,26 +1,29 @@
 {
-  List<IN> tupleBatch=new ArrayList<IN>();
-  boolean batchStart;
-  int counter=0;
-  while (loadNextRecord() != null) {
-    batchStart=true;
-    do {
-      if (batchStart) {
-        batchStart=false;
-      }
- else {
-        reuse=loadNextRecord();
-        if (reuse == null) {
-          break;
-        }
-      }
-      counter++;
-      tupleBatch.add(reuse.getObject());
-      resetReuse();
+  reuse=loadNextRecord();
+  ArrayList<IN> list;
+  while (!state.isFull()) {
+    list=new ArrayList<IN>(granularity);
+    try {
+      state.pushBack(fillArray(list));
     }
- while (counter < batchSize);
-    reducer.reduce(tupleBatch,collector);
-    tupleBatch.clear();
-    counter=0;
+ catch (    NullPointerException e) {
+      throw new RuntimeException("DataStream length must be greater than batchsize");
+    }
+  }
+  boolean go=reduce();
+  while (go) {
+    if (state.isEmittable()) {
+      go=reduce();
+    }
+ else {
+      list=(ArrayList<IN>)state.popFront();
+      list.clear();
+      state.pushBack(fillArray(list));
+      emitted=false;
+      go=reuse != null;
+    }
+  }
+  if (!emitted) {
+    reduce();
   }
 }
