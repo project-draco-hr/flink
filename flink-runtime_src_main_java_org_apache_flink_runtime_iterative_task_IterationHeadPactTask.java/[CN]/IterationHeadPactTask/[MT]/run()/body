@@ -6,6 +6,8 @@
   boolean waitForSolutionSetUpdate=config.getWaitForSolutionSetUpdate();
   boolean isWorksetIteration=config.getIsWorksetIteration();
   try {
+    SuperstepKickoffLatch nextStepKickoff=new SuperstepKickoffLatch();
+    SuperstepKickoffLatchBroker.instance().handIn(brokerKey,nextStepKickoff);
     BlockingBackChannel backChannel=initBackChannel();
     SuperstepBarrier barrier=initSuperstepBarrier();
     SolutionSetUpdateBarrier solutionSetUpdateBarrier=null;
@@ -67,12 +69,14 @@
           log.info(formatLogString("head received termination request in iteration [" + currentIteration() + "]"));
         }
         requestTermination();
+        nextStepKickoff.signalTermination();
       }
  else {
         incrementIterationCounter();
         String[] globalAggregateNames=barrier.getAggregatorNames();
         Value[] globalAggregates=barrier.getAggregates();
         aggregatorRegistry.updateGlobalAggregatesAndReset(globalAggregateNames,globalAggregates);
+        nextStepKickoff.triggerNextSuperstep();
       }
     }
     if (log.isInfoEnabled()) {
@@ -89,12 +93,9 @@
   finally {
     IterationAggregatorBroker.instance().remove(brokerKey);
     BlockingBackChannelBroker.instance().remove(brokerKey);
-    if (isWorksetIteration) {
-      SolutionSetBroker.instance().remove(brokerKey);
-      if (waitForSolutionSetUpdate) {
-        SolutionSetUpdateBarrierBroker.instance().remove(brokerKey);
-      }
-    }
+    SuperstepKickoffLatchBroker.instance().remove(brokerKey);
+    SolutionSetBroker.instance().remove(brokerKey);
+    SolutionSetUpdateBarrierBroker.instance().remove(brokerKey);
     if (solutionSet != null) {
       solutionSet.close();
       solutionSet=null;
