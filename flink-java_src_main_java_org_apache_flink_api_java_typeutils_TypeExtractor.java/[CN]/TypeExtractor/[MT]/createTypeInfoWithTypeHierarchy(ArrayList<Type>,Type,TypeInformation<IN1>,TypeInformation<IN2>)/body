@@ -38,12 +38,19 @@
         tupleSubTypes[i]=createTypeInfoWithTypeHierarchy(new ArrayList<Type>(typeHierarchy),subtypes[i],in1Type,in2Type);
       }
     }
+    Class<?> tAsClass=null;
     if (t instanceof Class<?>) {
-      return new TupleTypeInfo(((Class<? extends Tuple>)t),tupleSubTypes);
+      tAsClass=(Class<?>)t;
     }
  else     if (t instanceof ParameterizedType) {
-      return new TupleTypeInfo(((Class<? extends Tuple>)((ParameterizedType)t).getRawType()),tupleSubTypes);
+      tAsClass=(Class<? extends Tuple>)((ParameterizedType)t).getRawType();
     }
+    Preconditions.checkNotNull(tAsClass,"t has a unexpected type");
+    int fieldCount=countFieldsInClass(tAsClass);
+    if (fieldCount != tupleSubTypes.length) {
+      return (TypeInformation<OUT>)analyzePojo(tAsClass,new ArrayList<Type>());
+    }
+    return new TupleTypeInfo(tAsClass,tupleSubTypes);
   }
  else   if (t instanceof TypeVariable) {
     Type typeVar=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)t);
@@ -85,10 +92,10 @@
     return ObjectArrayTypeInfo.getInfoFor(t,componentInfo);
   }
  else   if (t instanceof ParameterizedType) {
-    return privateGetForClass((Class<OUT>)((ParameterizedType)t).getRawType());
+    return privateGetForClass((Class<OUT>)((ParameterizedType)t).getRawType(),new ArrayList<Type>());
   }
  else   if (t instanceof Class) {
-    return privateGetForClass((Class<OUT>)t);
+    return privateGetForClass((Class<OUT>)t,new ArrayList<Type>());
   }
   throw new InvalidTypesException("Type Information could not be created.");
 }

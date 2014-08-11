@@ -1,0 +1,37 @@
+{
+  if (!type.isTupleType()) {
+    throw new InvalidProgramException("Specifying keys via field positions is only valid" + "for tuple data types. Type: " + type);
+  }
+  if (!allowEmpty && (groupingFields == null || groupingFields.length == 0)) {
+    throw new IllegalArgumentException("The grouping fields must not be empty.");
+  }
+  if (groupingFields == null || groupingFields.length == 0) {
+    groupingFields=new int[type.getArity()];
+    for (int i=0; i < groupingFields.length; i++) {
+      groupingFields[i]=i;
+    }
+  }
+ else {
+    groupingFields=rangeCheckFields(groupingFields,type.getArity() - 1);
+  }
+  TupleTypeInfoBase<?> tupleType=(TupleTypeInfoBase<?>)type;
+  Preconditions.checkArgument(groupingFields.length > 0,"Grouping fields can not be empty at this point");
+  keyFields=new ArrayList<FlatFieldDescriptor>(type.getTotalFields());
+  for (int j=0; j < groupingFields.length; j++) {
+    for (int i=0; i < type.getArity(); i++) {
+      TypeInformation<?> fieldType=tupleType.getTypeAt(i);
+      if (groupingFields[j] == i) {
+        int keyId=countNestedElementsBefore(tupleType,i) + i;
+        if (fieldType instanceof TupleTypeInfoBase) {
+          TupleTypeInfoBase<?> tupleFieldType=(TupleTypeInfoBase<?>)fieldType;
+          tupleFieldType.addAllFields(keyId,keyFields);
+        }
+ else {
+          Preconditions.checkArgument(fieldType instanceof AtomicType,"Wrong field type");
+          keyFields.add(new FlatFieldDescriptor(keyId,fieldType));
+        }
+      }
+    }
+  }
+  keyFields=removeNullElementsFromList(keyFields);
+}

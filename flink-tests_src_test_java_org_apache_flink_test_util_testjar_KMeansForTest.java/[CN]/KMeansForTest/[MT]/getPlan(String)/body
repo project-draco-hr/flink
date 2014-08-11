@@ -11,12 +11,7 @@
   DataSet<Point> points=env.readCsvFile(pointsPath).fieldDelimiter('|').includeFields(true,true).types(Double.class,Double.class).map(new TuplePointConverter());
   DataSet<Centroid> centroids=env.readCsvFile(centersPath).fieldDelimiter('|').includeFields(true,true,true).types(Integer.class,Double.class,Double.class).map(new TupleCentroidConverter());
   IterativeDataSet<Centroid> loop=centroids.iterate(numIterations);
-  DataSet<Centroid> newCentroids=points.map(new SelectNearestCenter()).withBroadcastSet(loop,"centroids").map(new CountAppender()).groupBy(new KeySelector<DummyTuple3IntPointLong,Integer>(){
-    @Override public Integer getKey(    DummyTuple3IntPointLong value) throws Exception {
-      return value.f0;
-    }
-  }
-).reduce(new CentroidAccumulator()).map(new CentroidAverager());
+  DataSet<Centroid> newCentroids=points.map(new SelectNearestCenter()).withBroadcastSet(loop,"centroids").map(new CountAppender()).groupBy("field0").reduce(new CentroidAccumulator()).map(new CentroidAverager());
   DataSet<Centroid> finalCentroids=loop.closeWith(newCentroids);
   DataSet<Tuple2<Integer,Point>> clusteredPoints=points.map(new SelectNearestCenter()).withBroadcastSet(finalCentroids,"centroids");
   clusteredPoints.writeAsCsv(outputPath,"\n"," ");

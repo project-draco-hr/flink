@@ -1,0 +1,37 @@
+{
+  if (typeHierarchy.size() == 0) {
+    recursivelyGetTypeHierarchy(typeHierarchy,clazz,Object.class);
+  }
+  List<Field> fields=removeNonObjectFields(getAllDeclaredFields(clazz));
+  List<PojoField> pojoFields=new ArrayList<PojoField>();
+  for (  Field field : fields) {
+    Type fieldType=field.getGenericType();
+    if (!isValidPojoField(field,clazz,typeHierarchy)) {
+      LOG.warn("Class " + clazz + " is not a valid POJO type");
+      return null;
+    }
+    try {
+      typeHierarchy.add(fieldType);
+      pojoFields.add(new PojoField(field,createTypeInfoWithTypeHierarchy(typeHierarchy,fieldType,null,null)));
+    }
+ catch (    InvalidTypesException e) {
+      throw new InvalidTypesException("Flink is currently unable to serialize this type: " + fieldType + ""+ "\nThe system is using the Avro serializer which is not able to handle all types.",e);
+    }
+  }
+  CompositeType<X> pojoType=new PojoTypeInfo<X>(clazz,pojoFields);
+  List<Method> methods=getAllDeclaredMethods(clazz);
+  for (  Method method : methods) {
+    if (method.getName().equals("readObject") || method.getName().equals("writeObject")) {
+      LOG.warn("Class " + clazz + " contains custom serialization methods we do not call.");
+      return null;
+    }
+  }
+  try {
+    clazz.getDeclaredConstructor();
+  }
+ catch (  NoSuchMethodException e) {
+    LOG.warn("Class " + clazz + " does not have a default constructor. You can not use it as a POJO");
+    return null;
+  }
+  return pojoType;
+}

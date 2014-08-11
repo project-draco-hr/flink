@@ -1,0 +1,21 @@
+{
+  initializeNewComparator(logicalKeyFields.length);
+  for (int logicalKeyFieldIndex=0; logicalKeyFieldIndex < logicalKeyFields.length; logicalKeyFieldIndex++) {
+    int logicalKeyField=logicalKeyFields[logicalKeyFieldIndex];
+    int logicalField=logicalFieldOffset;
+    for (int localFieldId=0; localFieldId < this.getArity(); localFieldId++) {
+      TypeInformation<?> localFieldType=this.getTypeAt(localFieldId);
+      if (localFieldType instanceof AtomicType && logicalField == logicalKeyField) {
+        addCompareField(localFieldId,((AtomicType<?>)localFieldType).createComparator(orders[logicalKeyFieldIndex]));
+      }
+ else       if (localFieldType instanceof CompositeType && (logicalField <= logicalKeyField && logicalKeyField <= logicalField + (localFieldType.getTotalFields() - 1))) {
+        addCompareField(localFieldId,((CompositeType<?>)localFieldType).createComparator(new int[]{logicalKeyField},orders,logicalField));
+      }
+      if (localFieldType instanceof CompositeType) {
+        logicalField+=localFieldType.getTotalFields() - 1;
+      }
+      logicalField++;
+    }
+  }
+  return getNewComparator();
+}

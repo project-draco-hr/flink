@@ -1,0 +1,35 @@
+{
+  if (other instanceof SelectorFunctionKeys) {
+    @SuppressWarnings("unchecked") SelectorFunctionKeys<?,K> sfk=(SelectorFunctionKeys<?,K>)other;
+    return sfk.keyType.equals(this.keyType);
+  }
+ else   if (other instanceof ExpressionKeys) {
+    ExpressionKeys<?> expressionKeys=(ExpressionKeys<?>)other;
+    if (keyType.isTupleType()) {
+      TupleTypeInfo<?> tupleKeyType=(TupleTypeInfo<?>)keyType;
+      List<FlatFieldDescriptor> keyTypeFields=new ArrayList<FlatFieldDescriptor>(tupleKeyType.getTotalFields());
+      tupleKeyType.getKey(ExpressionKeys.SELECT_ALL_CHAR,0,keyTypeFields);
+      if (expressionKeys.keyFields.size() != keyTypeFields.size()) {
+        throw new IncompatibleKeysException(IncompatibleKeysException.SIZE_MISMATCH_MESSAGE);
+      }
+      for (int i=0; i < expressionKeys.keyFields.size(); i++) {
+        if (!expressionKeys.keyFields.get(i).getType().equals(keyTypeFields.get(i).getType())) {
+          throw new IncompatibleKeysException(expressionKeys.keyFields.get(i).getType(),keyTypeFields.get(i).getType());
+        }
+      }
+      return true;
+    }
+    if (expressionKeys.getNumberOfKeyFields() != 1) {
+      throw new IncompatibleKeysException("Key selector functions are only compatible to one key");
+    }
+    if (expressionKeys.keyFields.get(0).getType().equals(this.keyType)) {
+      return true;
+    }
+ else {
+      throw new IncompatibleKeysException(expressionKeys.keyFields.get(0).getType(),this.keyType);
+    }
+  }
+ else {
+    throw new IncompatibleKeysException("The key is not compatible with " + other);
+  }
+}

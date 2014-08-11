@@ -1,0 +1,52 @@
+{
+  if (fieldExpression.equals(ExpressionKeys.SELECT_ALL_CHAR)) {
+    int keyPosition=0;
+    for (    PojoField field : fields) {
+      if (field.type instanceof AtomicType) {
+        result.add(new FlatFieldDescriptor(offset + keyPosition,field.type));
+      }
+ else       if (field.type instanceof CompositeType) {
+        CompositeType<?> cType=(CompositeType<?>)field.type;
+        cType.getKey(String.valueOf(ExpressionKeys.SELECT_ALL_CHAR),offset + keyPosition,result);
+        keyPosition+=cType.getTotalFields() - 1;
+      }
+ else {
+        throw new RuntimeException("Unexpected key type: " + field.type);
+      }
+      keyPosition++;
+    }
+    return;
+  }
+  Validate.notEmpty(fieldExpression,"Field expression must not be empty.");
+  int firstDot=fieldExpression.indexOf('.');
+  if (firstDot == -1) {
+    int fieldId=0;
+    for (int i=0; i < fields.length; i++) {
+      if (fields[i].type instanceof CompositeType) {
+        fieldId+=fields[i].type.getTotalFields() - 1;
+      }
+      if (fields[i].field.getName().equals(fieldExpression)) {
+        result.add(new FlatFieldDescriptor(offset + fieldId,fields[i].type));
+        return;
+      }
+      fieldId++;
+    }
+  }
+ else {
+    String firstField=fieldExpression.substring(0,firstDot);
+    String rest=fieldExpression.substring(firstDot + 1);
+    int fieldId=0;
+    for (int i=0; i < fields.length; i++) {
+      if (fields[i].field.getName().equals(firstField)) {
+        if (!(fields[i].type instanceof CompositeType<?>)) {
+          throw new RuntimeException("Field " + fields[i].type + " is not composite type");
+        }
+        CompositeType<?> cType=(CompositeType<?>)fields[i].type;
+        cType.getKey(rest,offset + fieldId,result);
+        return;
+      }
+      fieldId++;
+    }
+    throw new RuntimeException("Unable to find field " + fieldExpression + " in type "+ this+ " (looking for '"+ firstField+ "')");
+  }
+}

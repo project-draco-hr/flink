@@ -1,0 +1,41 @@
+{
+  if (Modifier.isPublic(f.getModifiers())) {
+    return true;
+  }
+ else {
+    boolean hasGetter=false, hasSetter=false;
+    final String fieldNameLow=f.getName().toLowerCase();
+    Type fieldType=f.getGenericType();
+    TypeVariable<?> fieldTypeGeneric=null;
+    if (fieldType instanceof TypeVariable) {
+      fieldTypeGeneric=(TypeVariable<?>)fieldType;
+      fieldType=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)fieldType);
+    }
+    for (    Method m : clazz.getMethods()) {
+      if (m.getName().toLowerCase().contains("get" + fieldNameLow) && m.getParameterTypes().length == 0 && m.getReturnType().equals(fieldType) || (fieldTypeGeneric != null && m.getGenericReturnType().equals(fieldTypeGeneric))) {
+        if (hasGetter) {
+          throw new IllegalStateException("Detected more than one getters");
+        }
+        hasGetter=true;
+      }
+      if (m.getName().toLowerCase().contains("set" + fieldNameLow) && m.getParameterTypes().length == 1 && (m.getParameterTypes()[0].equals(fieldType) || (fieldTypeGeneric != null && m.getGenericParameterTypes()[0].equals(fieldTypeGeneric))) && m.getReturnType().equals(Void.TYPE)) {
+        if (hasSetter) {
+          throw new IllegalStateException("Detected more than one getters");
+        }
+        hasSetter=true;
+      }
+    }
+    if (hasGetter && hasSetter) {
+      return true;
+    }
+ else {
+      if (!hasGetter) {
+        LOG.warn("Class " + clazz + " does not contain a getter for field "+ f.getName());
+      }
+      if (!hasSetter) {
+        LOG.warn("Class " + clazz + " does not contain a setter for field "+ f.getName());
+      }
+      return false;
+    }
+  }
+}
