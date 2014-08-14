@@ -1,0 +1,35 @@
+{
+  if (loader == null) {
+    throw new NullPointerException();
+  }
+  if (this.accumulators == null) {
+    final int num=accNames.length;
+    this.accumulators=new HashMap<String,Accumulator<?,?>>(num);
+    for (int i=0; i < num; i++) {
+      Accumulator<?,?> acc;
+      try {
+        @SuppressWarnings("unchecked") Class<? extends Accumulator<?,?>> valClass=(Class<? extends Accumulator<?,?>>)Class.forName(classNames[i],true,loader);
+        acc=InstantiationUtil.instantiate(valClass,Accumulator.class);
+      }
+ catch (      ClassNotFoundException e) {
+        throw new RuntimeException("Could not load user-defined class '" + classNames[i] + "'.",e);
+      }
+catch (      ClassCastException e) {
+        throw new RuntimeException("User-defined accumulator class is not an Accumulator sublass.");
+      }
+      DataInputStream in=new DataInputStream(new ByteArrayInputStream(serializedData[i]));
+      try {
+        acc.read(new InputViewDataInputStreamWrapper(in));
+        in.close();
+      }
+ catch (      IOException e) {
+        throw new RuntimeException("Error while deserializing the user-defined aggregate class.",e);
+      }
+      accumulators.put(accNames[i],acc);
+    }
+    this.accNames=null;
+    this.classNames=null;
+    this.serializedData=null;
+  }
+  return this.accumulators;
+}

@@ -36,6 +36,7 @@
     String[] options=params.isEmpty() ? new String[0] : (String[])params.toArray(new String[params.size()]);
     PackagedProgram program;
     OptimizedPlan optPlan;
+    Client client;
     try {
       if (assemblerClass == null) {
         program=new PackagedProgram(jarFile,options);
@@ -43,6 +44,7 @@
  else {
         program=new PackagedProgram(jarFile,assemblerClass,options);
       }
+      client=new Client(nepheleConfig,program.getUserCodeClassLoader());
       optPlan=client.getOptimizedPlan(program,-1);
       if (optPlan == null) {
         throw new Exception("The optimized plan could not be produced.");
@@ -85,7 +87,7 @@ catch (    Throwable t) {
       new PlanJSONDumpGenerator().dumpOptimizerPlanAsJSON(optPlan,jsonFile);
       if (!suspend) {
         try {
-          this.client.run(program,optPlan,false);
+          client.run(program,optPlan,false);
         }
  catch (        Throwable t) {
           LOG.error("Error submitting job to the job-manager.",t);
@@ -98,7 +100,7 @@ catch (    Throwable t) {
       }
  else {
         try {
-          this.submittedJobs.put(uid,this.client.getJobGraph(program,optPlan));
+          this.submittedJobs.put(uid,client.getJobGraph(program,optPlan));
         }
  catch (        ProgramInvocationException piex) {
           LOG.error("Error creating JobGraph from optimized plan.",piex);
@@ -148,6 +150,7 @@ catch (        Throwable t) {
       return;
     }
     try {
+      Client client=new Client(nepheleConfig,getClass().getClassLoader());
       client.run(job,false);
     }
  catch (    Exception ex) {
