@@ -1,0 +1,16 @@
+{
+  DataStream<OUT> inputStream=this.copy();
+  @SuppressWarnings({"unchecked","rawtypes"}) SingleOutputStreamOperator<R,?> returnStream=new SingleOutputStreamOperator(environment,functionName);
+  try {
+    jobGraphBuilder.addTask(returnStream.getId(),functionInvokable,inTypeWrapper,outTypeWrapper,functionName,SerializationUtils.serialize((Serializable)function),degreeOfParallelism);
+  }
+ catch (  SerializationException e) {
+    throw new RuntimeException("Cannot serialize user defined function");
+  }
+  connectGraph(inputStream,returnStream.getId(),0);
+  if (inputStream instanceof IterativeDataStream) {
+    IterativeDataStream<OUT> iterativeStream=(IterativeDataStream<OUT>)inputStream;
+    returnStream.addIterationSource(iterativeStream.iterationID.toString(),iterativeStream.waitTime);
+  }
+  return returnStream;
+}
