@@ -1,0 +1,73 @@
+{
+switch (progId) {
+case 1:
+{
+      final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+      DataSet<Tuple3<Integer,Long,String>> ds=CollectionDataSets.get3TupleDataSet(env);
+      DataSet<Long> uniqLongs=ds.partitionByHash(1).mapPartition(new UniqueLongMapper());
+      uniqLongs.writeAsText(resultPath);
+      env.execute();
+      return "1\n" + "2\n" + "3\n"+ "4\n"+ "5\n"+ "6\n";
+    }
+case 2:
+{
+    final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    DataSet<Tuple3<Integer,Long,String>> ds=CollectionDataSets.get3TupleDataSet(env);
+    DataSet<Long> uniqLongs=ds.partitionByHash(new KeySelector<Tuple3<Integer,Long,String>,Long>(){
+      private static final long serialVersionUID=1L;
+      @Override public Long getKey(      Tuple3<Integer,Long,String> value) throws Exception {
+        return value.f1;
+      }
+    }
+).mapPartition(new UniqueLongMapper());
+    uniqLongs.writeAsText(resultPath);
+    env.execute();
+    return "1\n" + "2\n" + "3\n"+ "4\n"+ "5\n"+ "6\n";
+  }
+case 3:
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Long> ds=env.generateSequence(1,3000);
+  DataSet<Tuple2<Integer,Integer>> uniqLongs=ds.filter(new FilterFunction<Long>(){
+    private static final long serialVersionUID=1L;
+    @Override public boolean filter(    Long value) throws Exception {
+      if (value <= 780) {
+        return false;
+      }
+ else {
+        return true;
+      }
+    }
+  }
+).rebalance().map(new PartitionIndexMapper()).groupBy(0).reduce(new ReduceFunction<Tuple2<Integer,Integer>>(){
+    private static final long serialVersionUID=1L;
+    public Tuple2<Integer,Integer> reduce(    Tuple2<Integer,Integer> v1,    Tuple2<Integer,Integer> v2){
+      return new Tuple2<Integer,Integer>(v1.f0,v1.f1 + v2.f1);
+    }
+  }
+).map(new MapFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
+    private static final long serialVersionUID=1L;
+    @Override public Tuple2<Integer,Integer> map(    Tuple2<Integer,Integer> value) throws Exception {
+      value.f1=(value.f1 / 10);
+      return value;
+    }
+  }
+);
+  uniqLongs.writeAsText(resultPath);
+  env.execute();
+  return "(0,55)\n" + "(1,55)\n" + "(2,55)\n"+ "(3,55)\n";
+}
+case 4:
+{
+final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+env.setDegreeOfParallelism(3);
+DataSet<Tuple3<Integer,Long,String>> ds=CollectionDataSets.get3TupleDataSet(env);
+DataSet<Long> uniqLongs=ds.partitionByHash(1).mapPartition(new UniqueLongMapper()).setParallelism(4);
+uniqLongs.writeAsText(resultPath);
+env.execute();
+return "1\n" + "2\n" + "3\n"+ "4\n"+ "5\n"+ "6\n";
+}
+default :
+throw new IllegalArgumentException("Invalid program id");
+}
+}
