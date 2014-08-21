@@ -1,7 +1,7 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
-  DataStream<Tuple1<Integer>> model=env.addSource(new TrainingDataSource(),SOURCE_PARALLELISM).map(new PartialModelBuilder()).broadcast();
-  @SuppressWarnings("unchecked") DataStream<Tuple1<Integer>> prediction=env.addSource(new NewDataSource(),SOURCE_PARALLELISM).merge(model).map(new Predictor());
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM).setBufferTimeout(1000);
+  DataStream<Double[]> model=env.addSource(new TrainingDataSource(),SOURCE_PARALLELISM).windowReduce(new PartialModelBuilder(),1000);
+  DataStream<Integer> prediction=env.addSource(new NewDataSource(),SOURCE_PARALLELISM).connect(model).map(new Predictor());
   prediction.print();
   env.execute();
 }
