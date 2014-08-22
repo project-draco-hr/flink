@@ -1,0 +1,41 @@
+{
+  this.keyPositions=keyPositions;
+  this.comparators=(TypeComparator<Object>[])comparators;
+  this.serializers=(TypeSerializer<Object>[])serializers;
+  this.serializerFactories=new TypeSerializerFactory[this.serializers.length];
+  for (int i=0; i < serializers.length; i++) {
+    this.serializerFactories[i]=this.serializers[i].isStateful() ? new RuntimeStatefulSerializerFactory<Object>(this.serializers[i],Object.class) : new RuntimeStatelessSerializerFactory<Object>(this.serializers[i],Object.class);
+  }
+  this.normalizedKeyLengths=new int[keyPositions.length];
+  int nKeys=0;
+  int nKeyLen=0;
+  boolean inverted=false;
+  for (int i=0; i < this.keyPositions.length; i++) {
+    TypeComparator<?> k=this.comparators[i];
+    if (k.supportsNormalizedKey()) {
+      if (i == 0) {
+        inverted=k.invertNormalizedKey();
+      }
+ else       if (k.invertNormalizedKey() != inverted) {
+        break;
+      }
+      nKeys++;
+      final int len=k.getNormalizeKeyLen();
+      if (len < 0) {
+        throw new RuntimeException("Comparator " + k.getClass().getName() + " specifies an invalid length for the normalized key: "+ len);
+      }
+      this.normalizedKeyLengths[i]=len;
+      nKeyLen+=len;
+      if (nKeyLen < 0) {
+        nKeyLen=Integer.MAX_VALUE;
+        break;
+      }
+    }
+ else {
+      break;
+    }
+  }
+  this.numLeadingNormalizableKeys=nKeys;
+  this.normalizableKeyPrefixLen=nKeyLen;
+  this.invertNormKey=inverted;
+}
