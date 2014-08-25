@@ -2,18 +2,21 @@
   iterator=state.getStreamRecordIterator();
   while (iterator.hasNext()) {
     StreamRecord<IN> nextRecord=iterator.next();
-    nextValue=nextRecord.getObject();
     Object key=nextRecord.getField(keyPosition);
-    currentValue=values.get(key);
-    if (currentValue != null) {
-      callUserFunctionAndLogException();
-      values.put(key,reduced);
-      collector.collect(reduced);
+    nextValue=nextRecord.getObject();
+    List<IN> group=values.get(key);
+    if (group != null) {
+      group.add(nextValue);
     }
  else {
-      values.put(key,nextValue);
-      collector.collect(nextValue);
+      group=new ArrayList<IN>();
+      group.add(nextValue);
+      values.put(key,group);
     }
+  }
+  for (  List<IN> group : values.values()) {
+    userIterable=group;
+    callUserFunctionAndLogException();
   }
   values.clear();
 }
