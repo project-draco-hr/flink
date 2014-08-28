@@ -1,11 +1,19 @@
 {
   if (LOG.isDebugEnabled()) {
-    LOG.debug(this.taskContext.formatLogString("Preprocessing done, iterator obtained."));
+    LOG.debug("Combiner starting.");
   }
-  final KeyGroupedIterator<T> iter=new KeyGroupedIterator<T>(this.input.getIterator(),this.serializerFactory.getSerializer(),this.comparator);
-  final FlatCombineFunction<T> stub=this.taskContext.getStub();
-  final Collector<T> output=this.taskContext.getOutputCollector();
-  while (this.running && iter.nextKey()) {
-    stub.combine(iter.getValues(),output);
+  final MutableObjectIterator<T> in=this.taskContext.getInput(0);
+  final TypeSerializer<T> serializer=this.serializer;
+  T value=serializer.createInstance();
+  while (running && (value=in.next(value)) != null) {
+    if (this.sorter.write(value)) {
+      continue;
+    }
+    sortAndCombine();
+    this.sorter.reset();
+    if (!this.sorter.write(value)) {
+      throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+    }
   }
+  sortAndCombine();
 }

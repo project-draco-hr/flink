@@ -1,15 +1,19 @@
 {
-  final TaskConfig config=this.taskContext.getTaskConfig();
-  final DriverStrategy ls=config.getDriverStrategy();
-  final MemoryManager memoryManager=this.taskContext.getMemoryManager();
-  final MutableObjectIterator<T> in=this.taskContext.getInput(0);
-  this.serializerFactory=this.taskContext.getInputSerializer(0);
+  if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_GROUP_COMBINE) {
+    throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for "+ "group reduce combinder.");
+  }
+  this.memManager=this.taskContext.getMemoryManager();
+  final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
+  final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
+  this.serializer=serializerFactory.getSerializer();
   this.comparator=this.taskContext.getInputComparator(0);
-switch (ls) {
-case SORTED_GROUP_COMBINE:
-    this.input=new AsynchronousPartialSorter<T>(memoryManager,in,this.taskContext.getOwningNepheleTask(),this.serializerFactory,this.comparator.duplicate(),config.getRelativeMemoryDriver());
-  break;
-default :
-throw new RuntimeException("Invalid local strategy provided for CombineTask.");
-}
+  this.combiner=this.taskContext.getStub();
+  this.output=this.taskContext.getOutputCollector();
+  final List<MemorySegment> memory=this.memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
+  if (this.comparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.comparator,memory);
+  }
+ else {
+    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.comparator.duplicate(),memory);
+  }
 }
