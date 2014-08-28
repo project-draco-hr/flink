@@ -26,20 +26,6 @@
     printUsage();
     System.exit(1);
   }
-  if (System.getProperty("log4j.configuration") == null) {
-    Logger root=Logger.getRootLogger();
-    root.removeAllAppenders();
-    PatternLayout layout=new PatternLayout("%d{HH:mm:ss,SSS} %-5p %-60c %x - %m%n");
-    ConsoleAppender appender=new ConsoleAppender(layout,"System.err");
-    root.addAppender(appender);
-    if (cmd.hasOption(VERBOSE.getOpt())) {
-      root.setLevel(Level.DEBUG);
-      LOG.debug("CLASSPATH: " + System.getProperty("java.class.path"));
-    }
- else {
-      root.setLevel(Level.INFO);
-    }
-  }
   Path localJarPath;
   if (cmd.hasOption(FLINK_JAR.getOpt())) {
     String userPath=cmd.getOptionValue(FLINK_JAR.getOpt());
@@ -63,7 +49,7 @@
     confDirPath=cmd.getOptionValue(FLINK_CONF_DIR.getOpt()) + "/";
     File confFile=new File(confDirPath + CONFIG_FILE_NAME);
     if (!confFile.exists()) {
-      LOG.fatal("Unable to locate configuration file in " + confFile);
+      LOG.error("Unable to locate configuration file in " + confFile);
       System.exit(1);
     }
     confPath=new Path(confFile.getAbsolutePath());
@@ -108,12 +94,12 @@
       LOG.warn("Ship directory is not a directory!");
     }
   }
-  boolean hasLog4j=false;
+  boolean hasLogback=false;
   if (confDirPath.length() > 0) {
-    File l4j=new File(confDirPath + "/log4j.properties");
-    if (l4j.exists()) {
-      shipFiles.add(l4j);
-      hasLog4j=true;
+    File logback=new File(confDirPath + "/logback.xml");
+    if (logback.exists()) {
+      shipFiles.add(logback);
+      hasLogback=true;
     }
   }
   String queue="default";
@@ -167,7 +153,7 @@
     showClusterMetrics(yarnClient);
   }
   if (!cmd.hasOption(CONTAINER.getOpt())) {
-    LOG.fatal("Missing required argument " + CONTAINER.getOpt());
+    LOG.error("Missing required argument " + CONTAINER.getOpt());
     printUsage();
     yarnClient.stop();
     System.exit(1);
@@ -184,37 +170,37 @@
   GetNewApplicationResponse appResponse=app.getNewApplicationResponse();
   Resource maxRes=appResponse.getMaximumResourceCapability();
   if (tmMemory > maxRes.getMemory() || tmCores > maxRes.getVirtualCores()) {
-    LOG.fatal("The cluster does not have the requested resources for the TaskManagers available!\n" + "Maximum Memory: " + maxRes.getMemory() + ", Maximum Cores: "+ tmCores);
+    LOG.error("The cluster does not have the requested resources for the TaskManagers available!\n" + "Maximum Memory: " + maxRes.getMemory() + ", Maximum Cores: "+ tmCores);
     yarnClient.stop();
     System.exit(1);
   }
   if (jmMemory > maxRes.getMemory()) {
-    LOG.fatal("The cluster does not have the requested resources for the JobManager available!\n" + "Maximum Memory: " + maxRes.getMemory());
+    LOG.error("The cluster does not have the requested resources for the JobManager available!\n" + "Maximum Memory: " + maxRes.getMemory());
     yarnClient.stop();
     System.exit(1);
   }
   int totalMemoryRequired=jmMemory + tmMemory * taskManagerCount;
   ClusterResourceDescription freeClusterMem=getCurrentFreeClusterResources(yarnClient);
   if (freeClusterMem.totalFreeMemory < totalMemoryRequired) {
-    LOG.fatal("This YARN session requires " + totalMemoryRequired + "MB of memory in the cluster. "+ "There are currently only "+ freeClusterMem.totalFreeMemory+ "MB available.");
+    LOG.error("This YARN session requires " + totalMemoryRequired + "MB of memory in the cluster. "+ "There are currently only "+ freeClusterMem.totalFreeMemory+ "MB available.");
     yarnClient.stop();
     System.exit(1);
   }
   if (tmMemory > freeClusterMem.containerLimit) {
-    LOG.fatal("The requested amount of memory for the TaskManagers (" + tmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
+    LOG.error("The requested amount of memory for the TaskManagers (" + tmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
     yarnClient.stop();
     System.exit(1);
   }
   if (jmMemory > freeClusterMem.containerLimit) {
-    LOG.fatal("The requested amount of memory for the JobManager (" + jmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
+    LOG.error("The requested amount of memory for the JobManager (" + jmMemory + "MB) is more than "+ "the largest possible YARN container: "+ freeClusterMem.containerLimit);
     yarnClient.stop();
     System.exit(1);
   }
   final String javaOpts=GlobalConfiguration.getString(ConfigConstants.FLINK_JVM_OPTIONS,"");
   ContainerLaunchContext amContainer=Records.newRecord(ContainerLaunchContext.class);
   String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jmMemory) + "M "+ javaOpts;
-  if (hasLog4j) {
-    amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-log4j.log\" -Dlog4j.configuration=file:log4j.properties";
+  if (hasLogback) {
+    amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-logback.log\" "+ "-Dlogback.configurationFile=file:logback.xml";
   }
   amCommand+=" " + ApplicationMaster.class.getName() + " "+ " 1>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stdout.log"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stderr.log";
   amContainer.setCommands(Collections.singletonList(amCommand));
