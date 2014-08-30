@@ -1,0 +1,15 @@
+{
+  LocalEnvironment env=ExecutionEnvironment.createLocalEnvironment(4);
+  env.enableLogging();
+  DataSet<Tuple1<String>> strings=env.readCsvFile(TEST_DATA_PATH).types(String.class);
+  DataSet<String> uniqueStrings=strings.map(new MapFunction<Tuple1<String>,String>(){
+    @Override public String map(    Tuple1<String> value){
+      return value.f0;
+    }
+  }
+);
+  DataSet<Tuple2<Integer,Long>> partitionCounts=uniqueStrings.mapPartition(new PerPartitionCounter());
+  DataSet<Tuple2<String,Long>> result=uniqueStrings.map(new IdAssigner()).withBroadcastSet(partitionCounts,"COUNTERS");
+  result.print();
+  env.execute();
+}
