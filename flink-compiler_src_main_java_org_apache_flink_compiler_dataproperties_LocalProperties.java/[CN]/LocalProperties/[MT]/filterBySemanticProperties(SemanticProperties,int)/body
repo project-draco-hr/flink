@@ -1,0 +1,79 @@
+{
+  Ordering no=this.ordering;
+  FieldList ngf=this.groupedFields;
+  Set<FieldSet> nuf=this.uniqueFields;
+  FieldList forwardList=null;
+  if (props == null) {
+    return new LocalProperties();
+  }
+  if (this.ordering != null) {
+    no=new Ordering();
+    final FieldList involvedIndexes=this.ordering.getInvolvedIndexes();
+    for (int i=0; i < involvedIndexes.size(); i++) {
+      forwardList=props.getForwardFields(input,involvedIndexes.get(i)) == null ? null : props.getForwardFields(input,involvedIndexes.get(i)).toFieldList();
+      if (forwardList == null) {
+        no=null;
+        ngf=null;
+        break;
+      }
+ else {
+        no.appendOrdering(forwardList.get(0),this.ordering.getType(i),this.ordering.getOrder(i));
+        ngf=no.getInvolvedIndexes();
+      }
+    }
+  }
+ else   if (this.groupedFields != null) {
+    for (    Integer index : this.groupedFields) {
+      forwardList=props.getForwardFields(input,index) == null ? null : props.getForwardFields(input,index).toFieldList();
+      if (forwardList == null) {
+        ngf=null;
+        break;
+      }
+ else       if (!forwardList.contains(index)) {
+        FieldList grouped=new FieldList();
+        for (        Integer value : ngf.toFieldList()) {
+          if (value.intValue() == index) {
+            grouped=grouped.addFields(forwardList);
+          }
+ else {
+            grouped=grouped.addField(value);
+          }
+        }
+        ngf=grouped;
+      }
+    }
+  }
+  if (this.uniqueFields != null) {
+    HashSet<FieldSet> newSet=new HashSet<FieldSet>();
+    newSet.addAll(this.uniqueFields);
+    for (Iterator<FieldSet> combos=this.uniqueFields.iterator(); combos.hasNext(); ) {
+      FieldSet current=combos.next();
+      FieldSet nfs=new FieldSet();
+      for (      Integer field : current) {
+        if (props.getForwardFields(input,field) == null) {
+          newSet.remove(current);
+          nfs=null;
+          break;
+        }
+ else {
+          nfs=nfs.addFields(props.getForwardFields(input,field));
+        }
+      }
+      if (nfs != null) {
+        newSet.remove(current);
+        newSet.add(nfs);
+      }
+    }
+    nuf=newSet.isEmpty() ? null : newSet;
+  }
+  if (no == this.ordering && ngf == this.groupedFields && nuf == this.uniqueFields) {
+    return this;
+  }
+ else {
+    LocalProperties lp=new LocalProperties();
+    lp.ordering=no;
+    lp.groupedFields=ngf;
+    lp.uniqueFields=nuf;
+    return lp;
+  }
+}
