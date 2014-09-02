@@ -1,0 +1,45 @@
+{
+  final MyType[] elements=new MyType[NUM_ELEMENTS];
+  for (int i=0; i < NUM_ELEMENTS; i++) {
+    elements[i]=MyType.getRandom();
+  }
+  final MyType dummy=new MyType();
+  long[] timesAvro=new long[NUM_RUNS];
+  long[] timesKryo=new long[NUM_RUNS];
+  for (int i=0; i < NUM_RUNS; i++) {
+    System.out.println("----------------- Starting run " + i + " ---------------------");
+    System.out.println("Avro serializer");
+{
+      final DataOutputSerializer outView=new DataOutputSerializer(100000000);
+      final AvroSerializer<MyType> serializer=new AvroSerializer<MyType>(MyType.class);
+      long start=System.nanoTime();
+      for (int k=0; k < NUM_ELEMENTS; k++) {
+        serializer.serialize(elements[k],outView);
+      }
+      final DataInputDeserializer inView=new DataInputDeserializer(outView.wrapAsByteBuffer());
+      for (int k=0; k < NUM_ELEMENTS; k++) {
+        serializer.deserialize(dummy,inView);
+      }
+      long elapsed=System.nanoTime() - start;
+      System.out.println("Took: " + (elapsed / 1000000) + " msecs");
+      timesAvro[i]=elapsed;
+    }
+    System.gc();
+    System.out.println("Kryo serializer");
+{
+      final DataOutputSerializer outView=new DataOutputSerializer(100000000);
+      final KryoSerializer<MyType> serializer=new KryoSerializer<MyType>(MyType.class);
+      long start=System.nanoTime();
+      for (int k=0; k < NUM_ELEMENTS; k++) {
+        serializer.serialize(elements[k],outView);
+      }
+      final DataInputDeserializer inView=new DataInputDeserializer(outView.wrapAsByteBuffer());
+      for (int k=0; k < NUM_ELEMENTS; k++) {
+        serializer.deserialize(dummy,inView);
+      }
+      long elapsed=System.nanoTime() - start;
+      System.out.println("Took: " + (elapsed / 1000000) + " msecs");
+      timesKryo[i]=elapsed;
+    }
+  }
+}
