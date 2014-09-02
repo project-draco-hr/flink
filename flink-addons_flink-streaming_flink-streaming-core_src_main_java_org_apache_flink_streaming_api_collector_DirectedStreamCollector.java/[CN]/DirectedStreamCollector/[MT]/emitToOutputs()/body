@@ -1,0 +1,31 @@
+{
+  Collection<String> outputNames=outputSelector.getOutputs(streamRecord.getObject());
+  emitted.clear();
+  for (  String outputName : outputNames) {
+    List<RecordWriter<SerializationDelegate<StreamRecord<OUT>>>> outputList=outputMap.get(outputName);
+    if (outputList == null) {
+      if (LOG.isErrorEnabled()) {
+        LOG.error(String.format("Cannot emit because no output is selected with the name: %s",outputName));
+      }
+    }
+    try {
+      for (      RecordWriter<SerializationDelegate<StreamRecord<OUT>>> output : selectAllOutputs) {
+        if (!emitted.contains(output)) {
+          output.emit(serializationDelegate);
+          emitted.add(output);
+        }
+      }
+      for (      RecordWriter<SerializationDelegate<StreamRecord<OUT>>> output : outputList) {
+        if (!emitted.contains(output)) {
+          output.emit(serializationDelegate);
+          emitted.add(output);
+        }
+      }
+    }
+ catch (    Exception e) {
+      if (LOG.isErrorEnabled()) {
+        LOG.error(String.format("Emit to %s failed due to: %s",outputName,StringUtils.stringifyException(e)));
+      }
+    }
+  }
+}
