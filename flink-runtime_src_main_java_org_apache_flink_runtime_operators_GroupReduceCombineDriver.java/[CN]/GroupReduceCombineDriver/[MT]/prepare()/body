@@ -6,14 +6,15 @@
   final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
   final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
   this.serializer=serializerFactory.getSerializer();
-  this.comparator=this.taskContext.getInputComparator(0);
+  this.sortingComparator=this.taskContext.getDriverComparator(0);
+  this.groupingComparator=this.taskContext.getDriverComparator(1);
   this.combiner=this.taskContext.getStub();
   this.output=this.taskContext.getOutputCollector();
   final List<MemorySegment> memory=this.memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
-  if (this.comparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
-    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.comparator,memory);
+  if (this.sortingComparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.sortingComparator,memory);
   }
  else {
-    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.comparator.duplicate(),memory);
+    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.sortingComparator.duplicate(),memory);
   }
 }
