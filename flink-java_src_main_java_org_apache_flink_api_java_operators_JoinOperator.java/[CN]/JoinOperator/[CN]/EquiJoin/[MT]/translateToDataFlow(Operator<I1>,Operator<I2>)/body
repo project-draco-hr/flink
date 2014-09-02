@@ -1,35 +1,35 @@
 {
   String name=getName() != null ? getName() : function.getClass().getName();
-  if (super.keys1 instanceof Keys.SelectorFunctionKeys && super.keys2 instanceof Keys.SelectorFunctionKeys && super.keys1.areCompatibale(super.keys2)) {
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)super.keys1;
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)super.keys2;
-    PlanUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoin(selectorKeys1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
+  if (!keys1.areCompatibale(keys2)) {
+    throw new InvalidProgramException("The types of the key fields do not match. Left:" + " " + keys1 + " Right: "+ keys2);
+  }
+  if (keys1 instanceof Keys.SelectorFunctionKeys && keys2 instanceof Keys.SelectorFunctionKeys) {
+    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
+    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
+    PlanBothUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoin(selectorKeys1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
+    po.setDegreeOfParallelism(this.getParallelism());
+    return po;
+  }
+ else   if (keys2 instanceof Keys.SelectorFunctionKeys) {
+    int[] logicalKeyPositions1=keys1.computeLogicalKeyPositions();
+    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
+    PlanRightUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinRight(logicalKeyPositions1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
+    po.setDegreeOfParallelism(this.getParallelism());
+    return po;
+  }
+ else   if (keys1 instanceof Keys.SelectorFunctionKeys) {
+    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
+    int[] logicalKeyPositions2=keys2.computeLogicalKeyPositions();
+    PlanLeftUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinLeft(selectorKeys1,logicalKeyPositions2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
     po.setDegreeOfParallelism(this.getParallelism());
     return po;
   }
  else   if ((super.keys1 instanceof Keys.FieldPositionKeys && super.keys2 instanceof Keys.FieldPositionKeys) || ((super.keys1 instanceof Keys.ExpressionKeys && super.keys2 instanceof Keys.ExpressionKeys))) {
-    if (!super.keys1.areCompatibale(super.keys2)) {
-      throw new InvalidProgramException("The types of the key fields do not match.");
-    }
     int[] logicalKeyPositions1=super.keys1.computeLogicalKeyPositions();
     int[] logicalKeyPositions2=super.keys2.computeLogicalKeyPositions();
     JoinOperatorBase<I1,I2,OUT,FlatJoinFunction<I1,I2,OUT>> po=new JoinOperatorBase<I1,I2,OUT,FlatJoinFunction<I1,I2,OUT>>(function,new BinaryOperatorInformation<I1,I2,OUT>(getInput1Type(),getInput2Type(),getResultType()),logicalKeyPositions1,logicalKeyPositions2,name);
     po.setFirstInput(input1);
     po.setSecondInput(input2);
-    po.setDegreeOfParallelism(this.getParallelism());
-    return po;
-  }
- else   if (super.keys1 instanceof Keys.FieldPositionKeys && super.keys2 instanceof Keys.SelectorFunctionKeys && super.keys1.areCompatibale(super.keys2)) {
-    int[] logicalKeyPositions1=super.keys1.computeLogicalKeyPositions();
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)super.keys2;
-    PlanUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinRight(logicalKeyPositions1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
-    po.setDegreeOfParallelism(this.getParallelism());
-    return po;
-  }
- else   if (super.keys1 instanceof Keys.SelectorFunctionKeys && super.keys2 instanceof Keys.FieldPositionKeys && super.keys1.areCompatibale(super.keys2)) {
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)super.keys1;
-    int[] logicalKeyPositions2=super.keys2.computeLogicalKeyPositions();
-    PlanUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinLeft(selectorKeys1,logicalKeyPositions2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
     po.setDegreeOfParallelism(this.getParallelism());
     return po;
   }
