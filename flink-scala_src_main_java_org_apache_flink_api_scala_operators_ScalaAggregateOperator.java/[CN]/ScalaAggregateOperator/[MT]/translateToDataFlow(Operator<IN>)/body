@@ -1,0 +1,63 @@
+{
+  if (this.aggregationFunctions.isEmpty() || this.aggregationFunctions.size() != this.fields.size()) {
+    throw new IllegalStateException();
+  }
+  AggregationFunction<Object>[] aggFunctions=new AggregationFunction[this.aggregationFunctions.size()];
+  int[] fields=new int[this.fields.size()];
+  StringBuilder genName=new StringBuilder();
+  for (int i=0; i < fields.length; i++) {
+    aggFunctions[i]=(AggregationFunction<Object>)this.aggregationFunctions.get(i);
+    fields[i]=this.fields.get(i);
+    genName.append(aggFunctions[i].toString()).append('(').append(fields[i]).append(')').append(',');
+  }
+  genName.setLength(genName.length() - 1);
+  TypeSerializer<IN> serializer=getInputType().createSerializer();
+  TypeSerializerFactory<IN> serializerFactory=null;
+  if (serializer.isStateful()) {
+    serializerFactory=new RuntimeStatefulSerializerFactory<IN>(serializer,getInputType().getTypeClass());
+  }
+ else {
+    serializerFactory=new RuntimeStatelessSerializerFactory<IN>(serializer,getInputType().getTypeClass());
+  }
+  @SuppressWarnings("rawtypes") RichGroupReduceFunction<IN,IN> function=new AggregatingUdf(serializerFactory,aggFunctions,fields);
+  String name=getName() != null ? getName() : genName.toString();
+  if (this.grouping == null) {
+    UnaryOperatorInformation<IN,IN> operatorInfo=new UnaryOperatorInformation<IN,IN>(getInputType(),getResultType());
+    GroupReduceOperatorBase<IN,IN,GroupReduceFunction<IN,IN>> po=new GroupReduceOperatorBase<IN,IN,GroupReduceFunction<IN,IN>>(function,operatorInfo,new int[0],name);
+    po.setCombinable(true);
+    po.setInput(input);
+    po.setDegreeOfParallelism(this.getParallelism());
+    return po;
+  }
+  if (this.grouping.getKeys() instanceof Keys.FieldPositionKeys) {
+    int[] logicalKeyPositions=this.grouping.getKeys().computeLogicalKeyPositions();
+    UnaryOperatorInformation<IN,IN> operatorInfo=new UnaryOperatorInformation<IN,IN>(getInputType(),getResultType());
+    GroupReduceOperatorBase<IN,IN,GroupReduceFunction<IN,IN>> po=new GroupReduceOperatorBase<IN,IN,GroupReduceFunction<IN,IN>>(function,operatorInfo,logicalKeyPositions,name);
+    po.setCombinable(true);
+    po.setInput(input);
+    po.setDegreeOfParallelism(this.getParallelism());
+    SingleInputSemanticProperties props=new SingleInputSemanticProperties();
+    for (int i=0; i < logicalKeyPositions.length; i++) {
+      int keyField=logicalKeyPositions[i];
+      boolean keyFieldUsedInAgg=false;
+      for (int k=0; k < fields.length; k++) {
+        int aggField=fields[k];
+        if (keyField == aggField) {
+          keyFieldUsedInAgg=true;
+          break;
+        }
+      }
+      if (!keyFieldUsedInAgg) {
+        props.addForwardedField(keyField,keyField);
+      }
+    }
+    po.setSemanticProperties(props);
+    return po;
+  }
+ else   if (this.grouping.getKeys() instanceof Keys.SelectorFunctionKeys) {
+    throw new UnsupportedOperationException("Aggregate does not support grouping with KeySelector functions, yet.");
+  }
+ else {
+    throw new UnsupportedOperationException("Unrecognized key type.");
+  }
+}

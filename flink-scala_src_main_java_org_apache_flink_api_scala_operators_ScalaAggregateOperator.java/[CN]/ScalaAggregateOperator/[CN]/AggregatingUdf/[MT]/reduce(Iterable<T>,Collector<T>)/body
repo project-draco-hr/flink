@@ -1,0 +1,24 @@
+{
+  final AggregationFunction<Object>[] aggFunctions=this.aggFunctions;
+  final int[] fieldPositions=this.fieldPositions;
+  T current=null;
+  final Iterator<T> values=records.iterator();
+  while (values.hasNext()) {
+    current=values.next();
+    for (int i=0; i < fieldPositions.length; i++) {
+      Object val=current.productElement(fieldPositions[i]);
+      aggFunctions[i].aggregate(val);
+    }
+  }
+  Object[] fields=new Object[serializer.getArity()];
+  for (int i=0; i < fieldPositions.length; i++) {
+    fields[0]=current.productElement(i);
+  }
+  for (int i=0; i < fieldPositions.length; i++) {
+    Object aggVal=aggFunctions[i].getAggregate();
+    fields[fieldPositions[i]]=aggVal;
+    aggFunctions[i].initializeAggregate();
+  }
+  T result=serializer.createInstance(fields);
+  out.collect(result);
+}
