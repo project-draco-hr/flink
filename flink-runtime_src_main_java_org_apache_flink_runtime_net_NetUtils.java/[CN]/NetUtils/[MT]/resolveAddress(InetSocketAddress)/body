@@ -1,0 +1,60 @@
+{
+  AddressDetectionState strategy=jobManagerAddress != null ? AddressDetectionState.ADDRESS : AddressDetectionState.HEURISTIC;
+  while (true) {
+    Enumeration<NetworkInterface> e=NetworkInterface.getNetworkInterfaces();
+    while (e.hasMoreElements()) {
+      NetworkInterface n=e.nextElement();
+      Enumeration<InetAddress> ee=n.getInetAddresses();
+      while (ee.hasMoreElements()) {
+        InetAddress i=ee.nextElement();
+switch (strategy) {
+case ADDRESS:
+          if (hasCommonPrefix(jobManagerAddress.getAddress().getAddress(),i.getAddress())) {
+            if (tryToConnect(i,jobManagerAddress,strategy.getTimeout())) {
+              LOG.info("Determined " + i + " as the TaskTracker's own IP address");
+              return i;
+            }
+          }
+        break;
+case FAST_CONNECT:
+case SLOW_CONNECT:
+      boolean correct=tryToConnect(i,jobManagerAddress,strategy.getTimeout());
+    if (correct) {
+      LOG.info("Determined " + i + " as the TaskTracker's own IP address");
+      return i;
+    }
+  break;
+case HEURISTIC:
+if (!i.isLinkLocalAddress() && !i.isLoopbackAddress() && i instanceof Inet4Address) {
+  LOG.warn("Hostname " + InetAddress.getLocalHost().getHostName() + " resolves to "+ "loopback address. Using instead "+ i.getHostAddress()+ " on network "+ "interface "+ n.getName()+ ".");
+  return i;
+}
+break;
+default :
+throw new RuntimeException("Unkown address detection strategy: " + strategy);
+}
+}
+}
+switch (strategy) {
+case ADDRESS:
+strategy=AddressDetectionState.FAST_CONNECT;
+break;
+case FAST_CONNECT:
+strategy=AddressDetectionState.SLOW_CONNECT;
+break;
+case SLOW_CONNECT:
+if (!InetAddress.getLocalHost().isLoopbackAddress()) {
+return InetAddress.getLocalHost();
+}
+ else {
+strategy=AddressDetectionState.HEURISTIC;
+break;
+}
+case HEURISTIC:
+throw new RuntimeException("The TaskManager is unable to connect to the JobManager (Address: '" + jobManagerAddress + "').");
+}
+if (LOG.isDebugEnabled()) {
+LOG.debug("Defaulting to detection strategy " + strategy);
+}
+}
+}

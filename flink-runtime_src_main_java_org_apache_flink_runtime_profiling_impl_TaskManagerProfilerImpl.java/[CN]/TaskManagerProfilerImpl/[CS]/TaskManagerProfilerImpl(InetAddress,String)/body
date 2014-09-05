@@ -1,0 +1,23 @@
+{
+  final InetSocketAddress profilingAddress=new InetSocketAddress(jobManagerAddress,GlobalConfiguration.getInteger(ProfilingUtils.JOBMANAGER_RPC_PORT_KEY,ProfilingUtils.JOBMANAGER_DEFAULT_RPC_PORT));
+  ProfilerImplProtocol jobManagerProfilerTmp=null;
+  try {
+    jobManagerProfilerTmp=(ProfilerImplProtocol)RPC.getProxy(ProfilerImplProtocol.class,profilingAddress,NetUtils.getSocketFactory());
+  }
+ catch (  IOException e) {
+    throw new ProfilingException(StringUtils.stringifyException(e));
+  }
+  this.jobManagerProfiler=jobManagerProfilerTmp;
+  this.tmx=ManagementFactory.getThreadMXBean();
+  if (this.tmx.isThreadContentionMonitoringSupported()) {
+    this.tmx.setThreadContentionMonitoringEnabled(true);
+  }
+ else {
+    throw new ProfilingException("The thread contention monitoring is not supported.");
+  }
+  this.instanceProfiler=new InstanceProfiler(instancePath);
+  this.timerInterval=(long)(GlobalConfiguration.getInteger(ProfilingUtils.TASKMANAGER_REPORTINTERVAL_KEY,ProfilingUtils.DEFAULT_TASKMANAGER_REPORTINTERVAL) * 1000);
+  final long initialDelay=(long)(Math.random() * this.timerInterval);
+  this.timer=new Timer(true);
+  this.timer.schedule(this,initialDelay,this.timerInterval);
+}
