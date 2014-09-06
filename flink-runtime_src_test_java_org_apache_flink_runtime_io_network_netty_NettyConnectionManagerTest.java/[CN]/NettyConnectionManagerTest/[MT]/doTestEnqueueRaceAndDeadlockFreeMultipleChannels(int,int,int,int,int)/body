@@ -1,0 +1,37 @@
+{
+  final InetAddress localhost=InetAddress.getLocalHost();
+  final CountDownLatch latch=new CountDownLatch(numSubtasks);
+  ChannelManager channelManager=mock(ChannelManager.class);
+  doAnswer(new VerifyEnvelopes(latch,numToSendPerSubtask)).when(channelManager).dispatchFromNetwork(Matchers.<Envelope>anyObject());
+  final NettyConnectionManager senderConnManager=new NettyConnectionManager(localhost,BIND_PORT,BUFFER_SIZE,numInThreads,numOutThreads,-1,-1);
+  senderConnManager.start(channelManager);
+  NettyConnectionManager receiverConnManager=new NettyConnectionManager(localhost,BIND_PORT + 1,BUFFER_SIZE,numInThreads,numOutThreads,-1,-1);
+  receiverConnManager.start(channelManager);
+  RemoteReceiver[] receivers=new RemoteReceiver[numChannels];
+  for (int i=0; i < numChannels; i++) {
+    receivers[i]=new RemoteReceiver(new InetSocketAddress(localhost,BIND_PORT + 1),i);
+  }
+  for (int i=0; i < numSubtasks; i++) {
+    final RemoteReceiver receiver=receivers[random.nextInt(numChannels)];
+    final AtomicInteger seqNum=new AtomicInteger(0);
+    final JobID jobId=new JobID();
+    final ChannelID channelId=new ChannelID();
+    new Thread(new Runnable(){
+      @Override public void run(){
+        while (seqNum.get() < numToSendPerSubtask) {
+          try {
+            Envelope env=new Envelope(seqNum.getAndIncrement(),jobId,channelId);
+            senderConnManager.enqueue(env,receiver);
+          }
+ catch (          IOException e) {
+            throw new RuntimeException("Unexpected exception while enqueuing envelope.");
+          }
+        }
+      }
+    }
+).start();
+  }
+  latch.await();
+  senderConnManager.shutdown();
+  receiverConnManager.shutdown();
+}

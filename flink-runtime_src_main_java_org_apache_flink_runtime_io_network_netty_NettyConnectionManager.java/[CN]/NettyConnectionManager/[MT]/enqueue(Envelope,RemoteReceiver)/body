@@ -1,5 +1,5 @@
 {
-  final Object entry=outConnections.get(receiver);
+  final Object entry=this.outConnections.get(receiver);
   final OutboundConnectionQueue channel;
   if (entry != null) {
     if (entry instanceof OutboundConnectionQueue) {
@@ -11,12 +11,12 @@
     }
   }
  else {
-    ChannelInBuildup inBuildup=new ChannelInBuildup(out,receiver,this,closeAfterIdleForMs);
-    Object old=outConnections.putIfAbsent(receiver,inBuildup);
+    ChannelInBuildup inBuildup=new ChannelInBuildup(this.out,receiver);
+    Object old=this.outConnections.putIfAbsent(receiver,inBuildup);
     if (old == null) {
-      out.connect(receiver.getConnectionAddress()).addListener(inBuildup);
+      this.out.connect(receiver.getConnectionAddress()).addListener(inBuildup);
       channel=inBuildup.waitForChannel();
-      Object previous=outConnections.put(receiver,channel);
+      Object previous=this.outConnections.put(receiver,channel);
       if (inBuildup != previous) {
         throw new IOException("Race condition during channel build up.");
       }
@@ -28,8 +28,5 @@
       channel=(OutboundConnectionQueue)old;
     }
   }
-  if (!channel.enqueue(envelope)) {
-    LOG.debug("Retry enqueue on channel: " + channel + ".");
-    enqueue(envelope,receiver);
-  }
+  channel.enqueue(envelope);
 }
