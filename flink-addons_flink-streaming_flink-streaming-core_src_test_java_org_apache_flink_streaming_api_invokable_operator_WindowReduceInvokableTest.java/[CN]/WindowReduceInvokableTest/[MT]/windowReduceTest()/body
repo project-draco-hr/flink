@@ -1,0 +1,60 @@
+{
+  List<Integer> inputs=new ArrayList<Integer>();
+  inputs.add(1);
+  inputs.add(2);
+  inputs.add(2);
+  inputs.add(3);
+  inputs.add(4);
+  inputs.add(5);
+  inputs.add(10);
+  inputs.add(11);
+  inputs.add(11);
+  WindowReduceInvokable<Integer> invokable=new WindowReduceInvokable<Integer>(new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      return value1 + value2;
+    }
+  }
+,4,2,new Timestamp<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public long getTimestamp(    Integer value){
+      return value;
+    }
+  }
+);
+  List<Integer> expected=new ArrayList<Integer>();
+  expected.add(8);
+  expected.add(16);
+  expected.add(9);
+  expected.add(32);
+  assertEquals(expected,MockInvokable.createAndExecute(invokable,inputs));
+  List<Tuple2<String,Integer>> inputs2=new ArrayList<Tuple2<String,Integer>>();
+  inputs2.add(new Tuple2<String,Integer>("a",1));
+  inputs2.add(new Tuple2<String,Integer>("a",2));
+  inputs2.add(new Tuple2<String,Integer>("b",2));
+  inputs2.add(new Tuple2<String,Integer>("b",2));
+  inputs2.add(new Tuple2<String,Integer>("a",3));
+  inputs2.add(new Tuple2<String,Integer>("b",4));
+  inputs2.add(new Tuple2<String,Integer>("b",5));
+  GroupedWindowReduceInvokable<Tuple2<String,Integer>> invokable2=new GroupedWindowReduceInvokable<Tuple2<String,Integer>>(new ReduceFunction<Tuple2<String,Integer>>(){
+    private static final long serialVersionUID=1L;
+    @Override public Tuple2<String,Integer> reduce(    Tuple2<String,Integer> value1,    Tuple2<String,Integer> value2) throws Exception {
+      return new Tuple2<String,Integer>(value1.f0,value1.f1 + value2.f1);
+    }
+  }
+,3,2,new Timestamp<Tuple2<String,Integer>>(){
+    private static final long serialVersionUID=1L;
+    @Override public long getTimestamp(    Tuple2<String,Integer> value){
+      return value.f1;
+    }
+  }
+,0);
+  List<Tuple2<String,Integer>> expected2=new ArrayList<Tuple2<String,Integer>>();
+  expected2.add(new Tuple2<String,Integer>("a",6));
+  expected2.add(new Tuple2<String,Integer>("b",4));
+  expected2.add(new Tuple2<String,Integer>("b",9));
+  expected2.add(new Tuple2<String,Integer>("a",3));
+  List<Tuple2<String,Integer>> actual2=MockInvokable.createAndExecute(invokable2,inputs2);
+  assertEquals(new HashSet<Tuple2<String,Integer>>(expected2),new HashSet<Tuple2<String,Integer>>(actual2));
+  assertEquals(expected2.size(),actual2.size());
+}
