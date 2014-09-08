@@ -1,0 +1,42 @@
+{
+  StringBuilder json=new StringBuilder("");
+  json.append("{");
+  json.append("\"groupvertexid\": \"" + jobVertex.getJobVertexId() + "\",");
+  json.append("\"groupvertexname\": \"" + StringUtils.escapeHtml(jobVertex.getJobVertex().getName()) + "\",");
+  json.append("\"numberofgroupmembers\": " + jobVertex.getParallelism() + ",");
+  json.append("\"groupmembers\": [");
+  Map<ExecutionState2,Integer> stateCounts=new HashMap<ExecutionState2,Integer>();
+  for (  ExecutionState2 state : ExecutionState2.values()) {
+    stateCounts.put(state,new Integer(0));
+  }
+  ExecutionVertex2[] vertices=jobVertex.getTaskVertices();
+  for (int j=0; j < vertices.length; j++) {
+    ExecutionVertex2 vertex=vertices[j];
+    json.append(toJson(vertex));
+    if (j != vertices.length - 1) {
+      json.append(",");
+    }
+    Integer count=stateCounts.get(vertex.getExecutionState()) + new Integer(1);
+    stateCounts.put(vertex.getExecutionState(),count);
+  }
+  json.append("],");
+  json.append("\"backwardEdges\": [");
+  List<IntermediateResult> inputs=jobVertex.getInputs();
+  for (int inputNumber=0; inputNumber < inputs.size(); inputNumber++) {
+    ExecutionJobVertex input=inputs.get(inputNumber).getProducer();
+    json.append("{");
+    json.append("\"groupvertexid\": \"" + input.getJobVertexId() + "\",");
+    json.append("\"groupvertexname\": \"" + StringUtils.escapeHtml(jobVertex.getJobVertex().getName()) + "\",");
+    json.append("\"channelType\": \"" + ChannelType.NETWORK + "\"");
+    json.append("}");
+    if (inputNumber != inputs.size() - 1) {
+      json.append(",");
+    }
+  }
+  json.append("]");
+  for (  Map.Entry<ExecutionState2,Integer> stateCount : stateCounts.entrySet()) {
+    json.append(",\"" + stateCount.getKey() + "\": "+ stateCount.getValue());
+  }
+  json.append("}");
+  return json.toString();
+}
