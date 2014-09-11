@@ -1,6 +1,16 @@
 {
-  if (STATE_UPDATER.compareAndSet(this,ExecutionState.CANCELING,ExecutionState.CANCELED)) {
-    notifyObservers(ExecutionState.CANCELED,null);
-    taskManager.notifyExecutionStateChange(jobId,executionId,ExecutionState.CANCELED,null);
+  while (true) {
+    ExecutionState current=this.executionState;
+    if (current == ExecutionState.CANCELED) {
+      return;
+    }
+    if (!(current == ExecutionState.RUNNING || current == ExecutionState.CANCELING)) {
+      LOG.error(String.format("Unexpected state transition in Task: %s -> %s",current,ExecutionState.CANCELED));
+    }
+    if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.CANCELED)) {
+      notifyObservers(ExecutionState.CANCELED,null);
+      taskManager.notifyExecutionStateChange(jobId,executionId,ExecutionState.CANCELED,null);
+      return;
+    }
   }
 }

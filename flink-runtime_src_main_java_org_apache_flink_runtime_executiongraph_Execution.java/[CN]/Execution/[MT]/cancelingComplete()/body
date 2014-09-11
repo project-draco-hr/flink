@@ -1,20 +1,28 @@
 {
-  if (transitionState(CANCELING,CANCELED)) {
-    try {
-      vertex.executionCanceled();
-      vertex.notifyStateTransition(attemptId,CANCELED,null);
+  while (true) {
+    ExecutionState current=this.state;
+    if (current == CANCELED) {
+      return;
     }
+ else     if (current == CANCELING || current == RUNNING) {
+      if (transitionState(current,CANCELED)) {
+        try {
+          vertex.executionCanceled();
+        }
   finally {
-      vertex.getExecutionGraph().deregisterExecution(this);
-      assignedResource.releaseSlot();
+          vertex.getExecutionGraph().deregisterExecution(this);
+          assignedResource.releaseSlot();
+        }
+        return;
+      }
     }
-  }
  else {
-    ExecutionState actualState=this.state;
-    if (actualState != FAILED) {
-      String message=String.format("Asynchronous race: Found state %s after successful cancel call.",state);
-      LOG.error(message);
-      vertex.getExecutionGraph().fail(new Exception(message));
+      if (current != FAILED) {
+        String message=String.format("Asynchronous race: Found state %s after successful cancel call.",state);
+        LOG.error(message);
+        vertex.getExecutionGraph().fail(new Exception(message));
+      }
+      return;
     }
   }
 }

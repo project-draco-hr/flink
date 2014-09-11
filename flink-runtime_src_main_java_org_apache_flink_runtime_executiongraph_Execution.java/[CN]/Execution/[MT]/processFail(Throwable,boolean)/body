@@ -4,13 +4,23 @@
     if (current == FAILED) {
       return false;
     }
-    if (current == CANCELED || (current == CANCELING && isCallback)) {
+    if (current == CANCELED) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug(String.format("Ignoring transition of vertex %s to %s while being %s",getVertexWithAttempt(),FAILED,current));
+        LOG.debug(String.format("Ignoring transition of vertex %s to %s while being %s",getVertexWithAttempt(),FAILED,CANCELED));
       }
       return false;
     }
-    if (transitionState(current,FAILED)) {
+    if (transitionState(current,FAILED,t)) {
+      this.failureCause=t;
+      try {
+        vertex.getExecutionGraph().deregisterExecution(this);
+        vertex.executionFailed(t);
+      }
+  finally {
+        if (assignedResource != null) {
+          assignedResource.releaseSlot();
+        }
+      }
       if (!isCallback && (current == RUNNING || current == DEPLOYING)) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Sending out cancel request, to remove task execution from TaskManager.");
@@ -23,17 +33,6 @@
  catch (        Throwable tt) {
           LOG.error("Error triggering cancel call while marking task as failed.",tt);
         }
-      }
-      try {
-        this.failureCause=t;
-        vertex.executionFailed(t);
-        vertex.notifyStateTransition(attemptId,FAILED,t);
-      }
-  finally {
-        if (assignedResource != null) {
-          assignedResource.releaseSlot();
-        }
-        vertex.getExecutionGraph().deregisterExecution(this);
       }
       return true;
     }

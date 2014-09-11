@@ -1,0 +1,33 @@
+{
+  final int NUM_TASKS=31;
+  try {
+    final AbstractJobVertex sender=new AbstractJobVertex("Sender");
+    final AbstractJobVertex receiver=new AbstractJobVertex("Receiver");
+    sender.setInvokableClass(Sender.class);
+    receiver.setInvokableClass(Receiver.class);
+    sender.setParallelism(NUM_TASKS);
+    receiver.setParallelism(NUM_TASKS);
+    receiver.connectNewDataSetAsInput(sender,DistributionPattern.POINTWISE);
+    final JobGraph jobGraph=new JobGraph("Pointwise Job",sender,receiver);
+    JobManager jm=startJobManager(2 * NUM_TASKS);
+    try {
+      LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
+      JobSubmissionResult result=jm.submitJob(jobGraph);
+      assertEquals(AbstractJobResult.ReturnCode.SUCCESS,result.getReturnCode());
+      ExecutionGraph eg=jm.getCurrentJobs().get(jobGraph.getJobID());
+      if (eg != null) {
+        eg.waitForJobEnd();
+        assertEquals(JobStatus.FINISHED,eg.getState());
+      }
+ else {
+      }
+    }
+  finally {
+      jm.shutdown();
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

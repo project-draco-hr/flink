@@ -10,7 +10,6 @@
     if (!transitionState(previous,DEPLOYING)) {
       throw new IllegalStateException("Cannot deploy task: Concurrent deployment call race.");
     }
-    vertex.notifyStateTransition(attemptId,DEPLOYING,null);
   }
  else {
     throw new IllegalStateException("The vertex must be in CREATED or SCHEDULED state to be deployed. Found state " + previous);
@@ -20,6 +19,10 @@
       throw new JobException("Could not assign the ExecutionVertex to the slot " + slot);
     }
     this.assignedResource=slot;
+    if (this.state != DEPLOYING) {
+      slot.releaseSlot();
+      return;
+    }
     final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot);
     vertex.getExecutionGraph().registerExecution(this);
     Runnable deployaction=new Runnable(){
