@@ -1,11 +1,22 @@
 {
   this.jobID.read(in);
   this.executionId.read(in);
-  this.executionState=ExecutionState2.values()[in.readInt()];
-  if (in.readBoolean()) {
-    this.description=StringValue.readString(in);
+  this.executionState=ExecutionState.values()[in.readInt()];
+  int errorDataLen=in.readInt();
+  if (errorDataLen > 0) {
+    byte[] data=new byte[errorDataLen];
+    in.readFully(data);
+    try {
+      ByteArrayInputStream bis=new ByteArrayInputStream(data);
+      ObjectInputStream ois=new ObjectInputStream(bis);
+      this.error=(Throwable)ois.readObject();
+      ois.close();
+    }
+ catch (    Throwable t) {
+      this.error=new Exception("An error occurred, but the exception could not be transfered through the RPC");
+    }
   }
  else {
-    this.description=null;
+    this.error=null;
   }
 }

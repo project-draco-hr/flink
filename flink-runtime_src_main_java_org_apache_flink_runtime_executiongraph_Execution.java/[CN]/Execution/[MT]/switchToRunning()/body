@@ -1,0 +1,24 @@
+{
+  if (transitionState(DEPLOYING,RUNNING)) {
+    vertex.notifyStateTransition(attemptId,RUNNING,null);
+  }
+ else {
+    ExecutionState currentState=this.state;
+    if (currentState == FINISHED || currentState == CANCELED) {
+    }
+    if (currentState == CANCELING || currentState == FAILED) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(String.format("Concurrent canceling/failing of %s while deployment was in progress.",getVertexWithAttempt()));
+      }
+      sendCancelRpcCall();
+    }
+ else {
+      String message=String.format("Concurrent unexpected state transition of task %s to %s while deployment was in progress.",getVertexWithAttempt(),currentState);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(message);
+      }
+      sendCancelRpcCall();
+      markFailed(new Exception(message));
+    }
+  }
+}

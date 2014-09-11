@@ -1,0 +1,40 @@
+{
+  final JobID jobId=new JobID();
+  final JobVertexID jid1=new JobVertexID();
+  final JobVertexID jid2=new JobVertexID();
+  AbstractJobVertex v1=new AbstractJobVertex("v1",jid1);
+  AbstractJobVertex v2=new AbstractJobVertex("v2",jid2);
+  v1.setParallelism(dop1);
+  v2.setParallelism(dop2);
+  v1.setInvokableClass(RegularPactTask.class);
+  v2.setInvokableClass(RegularPactTask.class);
+  ExecutionGraph eg=new ExecutionGraph(jobId,"some job",new Configuration());
+  eg.setQueuedSchedulingAllowed(false);
+  List<AbstractJobVertex> ordered=Arrays.asList(v1,v2);
+  eg.attachJobGraph(ordered);
+  TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+  when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenAnswer(new Answer<TaskOperationResult>(){
+    @Override public TaskOperationResult answer(    InvocationOnMock invocation){
+      final TaskDeploymentDescriptor tdd=(TaskDeploymentDescriptor)invocation.getArguments()[0];
+      return new TaskOperationResult(tdd.getExecutionId(),true);
+    }
+  }
+);
+  when(taskManager.cancelTask(Matchers.any(ExecutionAttemptID.class))).thenAnswer(new Answer<TaskOperationResult>(){
+    @Override public TaskOperationResult answer(    InvocationOnMock invocation){
+      final ExecutionAttemptID id=(ExecutionAttemptID)invocation.getArguments()[0];
+      return new TaskOperationResult(id,true);
+    }
+  }
+);
+  DefaultScheduler scheduler=new DefaultScheduler();
+  for (int i=0; i < dop1 + dop2; i++) {
+    scheduler.newInstanceAvailable(getInstance(taskManager));
+  }
+  assertEquals(dop1 + dop2,scheduler.getNumberOfAvailableSlots());
+  LibraryCacheManager.register(jobId,new String[0]);
+  eg.scheduleForExecution(scheduler);
+  Map<ExecutionAttemptID,Execution> executions=eg.getRegisteredExecutions();
+  assertEquals(dop1 + dop2,executions.size());
+  return executions;
+}

@@ -1,0 +1,20 @@
+{
+  if (transitionState(CANCELING,CANCELED)) {
+    try {
+      vertex.executionCanceled();
+      vertex.notifyStateTransition(attemptId,CANCELED,null);
+    }
+  finally {
+      vertex.getExecutionGraph().deregisterExecution(this);
+      assignedResource.releaseSlot();
+    }
+  }
+ else {
+    ExecutionState actualState=this.state;
+    if (actualState != FAILED) {
+      String message=String.format("Asynchronous race: Found state %s after successful cancel call.",state);
+      LOG.error(message);
+      vertex.getExecutionGraph().fail(new Exception(message));
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final JobVertexID vid=new JobVertexID();
+    AbstractJobVertex ajv=new AbstractJobVertex("TestVertex",vid);
+    ajv.setParallelism(3);
+    ajv.setInvokableClass(mock(AbstractInvokable.class).getClass());
+    ExecutionGraph graph=new ExecutionGraph(jid,"test job",new Configuration());
+    graph.attachJobGraph(Arrays.asList(ajv));
+    setGraphStatus(graph,JobStatus.RUNNING);
+    ExecutionJobVertex ejv=graph.getJobVertex(vid);
+    LibraryCacheManager.register(jid,new String[0]);
+    TaskOperationProtocol taskManager=getSimpleAcknowledgingTaskmanager();
+    for (    ExecutionVertex ee : ejv.getTaskVertices()) {
+      AllocatedSlot slot=getInstance(taskManager).allocateSlot(jid);
+      ee.deployToSlot(slot);
+    }
+    for (    ExecutionVertex ee : ejv.getTaskVertices()) {
+      ee.executionFinished();
+    }
+    assertTrue(ejv.isInFinalState());
+    assertEquals(JobStatus.FINISHED,graph.getState());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

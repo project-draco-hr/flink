@@ -1,0 +1,33 @@
+{
+synchronized (progressLock) {
+    int nextPos=nextVertexToFinish;
+    if (nextPos >= verticesInCreationOrder.size()) {
+      throw new RuntimeException("Inconsistency in job progress detection.");
+    }
+    if (verticesInCreationOrder.get(nextPos) == ev) {
+      do {
+        nextPos++;
+      }
+ while (nextPos < verticesInCreationOrder.size() && verticesInCreationOrder.get(nextPos).isInFinalState());
+      nextVertexToFinish=nextPos;
+      if (nextPos == verticesInCreationOrder.size()) {
+        while (true) {
+          JobStatus current=this.state;
+          if (current == JobStatus.RUNNING && transitionState(current,JobStatus.FINISHED)) {
+            break;
+          }
+          if (current == JobStatus.CANCELLING && transitionState(current,JobStatus.CANCELED)) {
+            break;
+          }
+          if (current == JobStatus.FAILED) {
+            break;
+          }
+          if (current == JobStatus.CANCELED || current == JobStatus.CREATED || current == JobStatus.FINISHED) {
+            fail(new Exception("ExecutionGraph went into final state from state " + current));
+          }
+        }
+        progressLock.notifyAll();
+      }
+    }
+  }
+}

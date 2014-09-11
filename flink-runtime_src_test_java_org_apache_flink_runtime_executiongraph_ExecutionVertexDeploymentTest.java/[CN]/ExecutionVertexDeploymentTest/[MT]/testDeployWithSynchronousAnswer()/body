@@ -1,15 +1,16 @@
 {
   try {
     final JobVertexID jid=new JobVertexID();
-    TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
-    when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenReturn(new TaskOperationResult(jid,0,true));
+    final TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
     final Instance instance=getInstance(taskManager);
     final AllocatedSlot slot=instance.allocateSlot(new JobID());
     final ExecutionJobVertex ejv=getJobVertexExecutingSynchronously(jid);
-    final ExecutionVertex2 vertex=new ExecutionVertex2(ejv,0,new IntermediateResult[0]);
-    assertEquals(ExecutionState2.CREATED,vertex.getExecutionState());
+    final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0]);
+    when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenReturn(new TaskOperationResult(vertex.getCurrentExecutionAttempt().getAttemptId(),true));
+    assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
+    LibraryCacheManager.register(vertex.getJobId(),new String[0]);
     vertex.deployToSlot(slot);
-    assertEquals(ExecutionState2.RUNNING,vertex.getExecutionState());
+    assertEquals(ExecutionState.RUNNING,vertex.getExecutionState());
     try {
       vertex.deployToSlot(slot);
       fail("Scheduled from wrong state");
@@ -17,6 +18,10 @@
  catch (    IllegalStateException e) {
     }
     verify(taskManager).submitTask(Matchers.any(TaskDeploymentDescriptor.class));
+    assertNull(vertex.getFailureCause());
+    assertTrue(vertex.getStateTimestamp(ExecutionState.CREATED) > 0);
+    assertTrue(vertex.getStateTimestamp(ExecutionState.DEPLOYING) > 0);
+    assertTrue(vertex.getStateTimestamp(ExecutionState.RUNNING) > 0);
   }
  catch (  Exception e) {
     e.printStackTrace();

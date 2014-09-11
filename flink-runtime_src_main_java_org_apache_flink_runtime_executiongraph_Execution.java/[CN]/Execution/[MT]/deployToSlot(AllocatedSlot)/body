@@ -1,0 +1,56 @@
+{
+  if (slot == null) {
+    throw new NullPointerException();
+  }
+  if (!slot.isAlive()) {
+    throw new JobException("Traget slot for deployment is not alive.");
+  }
+  ExecutionState previous=this.state;
+  if (previous == SCHEDULED || previous == CREATED) {
+    if (!transitionState(previous,DEPLOYING)) {
+      throw new IllegalStateException("Cannot deploy task: Concurrent deployment call race.");
+    }
+    vertex.notifyStateTransition(attemptId,DEPLOYING,null);
+  }
+ else {
+    throw new IllegalStateException("The vertex must be in CREATED or SCHEDULED state to be deployed. Found state " + previous);
+  }
+  try {
+    if (!slot.setExecutedVertex(this)) {
+      throw new JobException("Could not assign the ExecutionVertex to the slot " + slot);
+    }
+    this.assignedResource=slot;
+    final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot);
+    vertex.getExecutionGraph().registerExecution(this);
+    Runnable deployaction=new Runnable(){
+      @Override public void run(){
+        try {
+          Instance instance=slot.getInstance();
+          instance.checkLibraryAvailability(vertex.getJobId());
+          TaskOperationResult result=instance.getTaskManagerProxy().submitTask(deployment);
+          if (result == null) {
+            markFailed(new Exception("Failed to deploy the task to slot " + slot + ": TaskOperationResult was null"));
+          }
+ else           if (!result.getExecutionId().equals(attemptId)) {
+            markFailed(new Exception("Answer execution id does not match the request execution id."));
+          }
+ else           if (result.isSuccess()) {
+            switchToRunning();
+          }
+ else {
+            markFailed(new Exception("Failed to deploy the task " + getVertexWithAttempt() + " to slot "+ slot+ ": "+ result.getDescription()));
+          }
+        }
+ catch (        Throwable t) {
+          markFailed(t);
+        }
+      }
+    }
+;
+    vertex.execute(deployaction);
+  }
+ catch (  Throwable t) {
+    markFailed(t);
+    ExceptionUtils.rethrow(t);
+  }
+}

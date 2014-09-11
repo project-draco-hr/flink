@@ -32,22 +32,23 @@
     List<AbstractJobVertex> ordered=Arrays.asList(v1,v2,v3,v4);
     eg.attachJobGraph(ordered);
     ExecutionJobVertex ejv=eg.getAllVertices().get(jid2);
-    ExecutionVertex2 vertex=ejv.getTaskVertices()[3];
+    ExecutionVertex vertex=ejv.getTaskVertices()[3];
     final AtomicReference<TaskDeploymentDescriptor> reference=new AtomicReference<TaskDeploymentDescriptor>();
     TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
     when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenAnswer(new Answer<TaskOperationResult>(){
       @Override public TaskOperationResult answer(      InvocationOnMock invocation){
-        final TaskDeploymentDescriptor parameter=(TaskDeploymentDescriptor)invocation.getArguments()[0];
-        reference.set(parameter);
-        return new TaskOperationResult(jid2,0,true);
+        final TaskDeploymentDescriptor tdd=(TaskDeploymentDescriptor)invocation.getArguments()[0];
+        reference.set(tdd);
+        return new TaskOperationResult(tdd.getExecutionId(),true);
       }
     }
 );
     final Instance instance=getInstance(taskManager);
     final AllocatedSlot slot=instance.allocateSlot(jobId);
-    assertEquals(ExecutionState2.CREATED,vertex.getExecutionState());
+    assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
+    LibraryCacheManager.register(jobId,new String[0]);
     vertex.deployToSlot(slot);
-    assertEquals(ExecutionState2.RUNNING,vertex.getExecutionState());
+    assertEquals(ExecutionState.RUNNING,vertex.getExecutionState());
     TaskDeploymentDescriptor descr=reference.get();
     assertNotNull(descr);
     assertEquals(jobId,descr.getJobID());

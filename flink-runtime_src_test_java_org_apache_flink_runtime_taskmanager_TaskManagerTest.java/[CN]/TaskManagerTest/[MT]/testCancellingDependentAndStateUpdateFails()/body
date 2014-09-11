@@ -1,0 +1,44 @@
+{
+  try {
+    JobID jid=new JobID();
+    JobVertexID vid1=new JobVertexID();
+    JobVertexID vid2=new JobVertexID();
+    ExecutionAttemptID eid1=new ExecutionAttemptID();
+    ExecutionAttemptID eid2=new ExecutionAttemptID();
+    ChannelID senderId=new ChannelID();
+    ChannelID receiverId=new ChannelID();
+    JobManager jobManager=getJobManagerMockBase();
+    when(jobManager.updateTaskExecutionState(any(TaskExecutionState.class))).thenReturn(false);
+    when(jobManager.lookupConnectionInfo(Matchers.any(InstanceConnectionInfo.class),Matchers.eq(jid),Matchers.eq(senderId))).thenReturn(ConnectionInfoLookupResponse.createReceiverFoundAndReady(receiverId));
+    TaskManager tm=createTaskManager(jobManager);
+    ChannelDeploymentDescriptor cdd=new ChannelDeploymentDescriptor(senderId,receiverId);
+    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),Collections.<GateDeploymentDescriptor>emptyList(),new String[0],0);
+    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),ReceiverBlocking.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),new String[0],0);
+    LibraryCacheManager.register(jid,new String[0]);
+    LibraryCacheManager.register(jid,new String[0]);
+    assertNotNull(LibraryCacheManager.getClassLoader(jid));
+    TaskOperationResult result2=tm.submitTask(tdd2);
+    TaskOperationResult result1=tm.submitTask(tdd1);
+    assertTrue(result1.isSuccess());
+    assertTrue(result2.isSuccess());
+    Map<ExecutionAttemptID,Task> tasks=tm.getAllRunningTasks();
+    Task t1=tasks.get(eid1);
+    Task t2=tasks.get(eid2);
+    tm.cancelTask(eid2);
+    if (t2 != null) {
+      t2.getEnvironment().getExecutingThread().join();
+    }
+    if (t1 != null) {
+      if (t1.getExecutionState() == ExecutionState.RUNNING) {
+        tm.cancelTask(eid1);
+      }
+      t1.getEnvironment().getExecutingThread().join();
+    }
+    assertEquals(0,tasks.size());
+    assertNetworkResourcesReleased(tm);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

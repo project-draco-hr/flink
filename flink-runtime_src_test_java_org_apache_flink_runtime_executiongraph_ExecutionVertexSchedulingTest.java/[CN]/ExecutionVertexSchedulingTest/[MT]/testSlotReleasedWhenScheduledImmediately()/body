@@ -1,0 +1,22 @@
+{
+  try {
+    final TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
+    final Instance instance=getInstance(taskManager);
+    final AllocatedSlot slot=instance.allocateSlot(new JobID());
+    slot.cancel();
+    assertFalse(slot.isReleased());
+    final ExecutionJobVertex ejv=getJobVertexNotExecuting(new JobVertexID());
+    final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0]);
+    DefaultScheduler scheduler=mock(DefaultScheduler.class);
+    when(scheduler.scheduleImmediately(Matchers.any(ScheduledUnit.class))).thenReturn(slot);
+    assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
+    vertex.scheduleForExecution(scheduler,false);
+    assertEquals(ExecutionState.FAILED,vertex.getExecutionState());
+    assertTrue(slot.isReleased());
+    verify(taskManager,times(0)).submitTask(Matchers.any(TaskDeploymentDescriptor.class));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
