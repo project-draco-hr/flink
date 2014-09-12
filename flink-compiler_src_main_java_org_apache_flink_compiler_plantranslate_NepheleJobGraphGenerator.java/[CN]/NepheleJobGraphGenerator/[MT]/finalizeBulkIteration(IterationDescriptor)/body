@@ -1,6 +1,6 @@
 {
   final BulkIterationPlanNode bulkNode=(BulkIterationPlanNode)descr.getIterationNode();
-  final JobTaskVertex headVertex=descr.getHeadTask();
+  final AbstractJobVertex headVertex=descr.getHeadTask();
   final TaskConfig headConfig=new TaskConfig(headVertex.getConfiguration());
   final TaskConfig headFinalOutputConfig=descr.getHeadFinalResultConfig();
   final int numStepFunctionOuts=headConfig.getNumOutputs();
@@ -12,33 +12,28 @@
     throw new CompilerException("Bug: No memory has been assigned to the iteration back channel.");
   }
   headConfig.setRelativeBackChannelMemory(relativeMemForBackChannel);
-  final SimpleOutputVertex sync=new SimpleOutputVertex("Sync(" + bulkNode.getNodeName() + ")",this.jobGraph);
+  final AbstractJobVertex sync=new AbstractJobVertex("Sync(" + bulkNode.getNodeName() + ")");
   sync.setInvokableClass(IterationSynchronizationSinkTask.class);
-  sync.setNumberOfSubtasks(1);
+  sync.setParallelism(1);
   this.auxVertices.add(sync);
   final TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
-  syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getNumberOfSubtasks());
+  syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getParallelism());
   final int maxNumIterations=bulkNode.getIterationNode().getIterationContract().getMaximumNumberOfIterations();
   if (maxNumIterations < 1) {
     throw new CompilerException("Cannot create bulk iteration with unspecified maximum number of iterations.");
   }
   syncConfig.setNumberOfIterations(maxNumIterations);
-  try {
-    headVertex.connectTo(sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  }
- catch (  JobGraphDefinitionException e) {
-    throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
-  }
+  sync.connectNewDataSetAsInput(headVertex,DistributionPattern.POINTWISE);
   final PlanNode rootOfTerminationCriterion=bulkNode.getRootOfTerminationCriterion();
   final PlanNode rootOfStepFunction=bulkNode.getRootOfStepFunction();
   final TaskConfig tailConfig;
-  JobTaskVertex rootOfStepFunctionVertex=(JobTaskVertex)this.vertices.get(rootOfStepFunction);
+  AbstractJobVertex rootOfStepFunctionVertex=(AbstractJobVertex)this.vertices.get(rootOfStepFunction);
   if (rootOfStepFunctionVertex == null) {
     final TaskInChain taskInChain=this.chainedTasks.get(rootOfStepFunction);
     if (taskInChain == null) {
       throw new CompilerException("Bug: Tail of step function not found as vertex or chained task.");
     }
-    rootOfStepFunctionVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+    rootOfStepFunctionVertex=(AbstractJobVertex)taskInChain.getContainingVertex();
     tailConfig=taskInChain.getTaskConfig();
   }
  else {
@@ -49,26 +44,21 @@
     rootOfStepFunctionVertex.setInvokableClass(IterationTailPactTask.class);
     tailConfig.setOutputSerializer(bulkNode.getSerializerForIterationChannel());
     tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-    SimpleOutputVertex fakeTail=new SimpleOutputVertex("Fake Tail",this.jobGraph);
+    AbstractJobVertex fakeTail=new AbstractJobVertex("Fake Tail");
     fakeTail.setInvokableClass(FakeOutputTask.class);
-    fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+    fakeTail.setParallelism(headVertex.getParallelism());
     this.auxVertices.add(fakeTail);
-    try {
-      rootOfStepFunctionVertex.connectTo(fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
-    }
- catch (    JobGraphDefinitionException e) {
-      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
-    }
+    fakeTail.connectNewDataSetAsInput(rootOfStepFunctionVertex,DistributionPattern.POINTWISE);
   }
   final TaskConfig tailConfigOfTerminationCriterion;
   if (rootOfTerminationCriterion != null && rootOfTerminationCriterion.getOutgoingChannels().isEmpty()) {
-    JobTaskVertex rootOfTerminationCriterionVertex=(JobTaskVertex)this.vertices.get(rootOfTerminationCriterion);
+    AbstractJobVertex rootOfTerminationCriterionVertex=(AbstractJobVertex)this.vertices.get(rootOfTerminationCriterion);
     if (rootOfTerminationCriterionVertex == null) {
       final TaskInChain taskInChain=this.chainedTasks.get(rootOfTerminationCriterion);
       if (taskInChain == null) {
         throw new CompilerException("Bug: Tail of termination criterion not found as vertex or chained task.");
       }
-      rootOfTerminationCriterionVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+      rootOfTerminationCriterionVertex=(AbstractJobVertex)taskInChain.getContainingVertex();
       tailConfigOfTerminationCriterion=taskInChain.getTaskConfig();
     }
  else {
@@ -78,16 +68,11 @@
     tailConfigOfTerminationCriterion.setIsSolutionSetUpdate();
     tailConfigOfTerminationCriterion.setOutputSerializer(bulkNode.getSerializerForIterationChannel());
     tailConfigOfTerminationCriterion.addOutputShipStrategy(ShipStrategyType.FORWARD);
-    SimpleOutputVertex fakeTailTerminationCriterion=new SimpleOutputVertex("Fake Tail for Termination Criterion",this.jobGraph);
+    AbstractJobVertex fakeTailTerminationCriterion=new AbstractJobVertex("Fake Tail for Termination Criterion");
     fakeTailTerminationCriterion.setInvokableClass(FakeOutputTask.class);
-    fakeTailTerminationCriterion.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+    fakeTailTerminationCriterion.setParallelism(headVertex.getParallelism());
     this.auxVertices.add(fakeTailTerminationCriterion);
-    try {
-      rootOfTerminationCriterionVertex.connectTo(fakeTailTerminationCriterion,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
-    }
- catch (    JobGraphDefinitionException e) {
-      throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task for termination criterion");
-    }
+    fakeTailTerminationCriterion.connectNewDataSetAsInput(rootOfTerminationCriterionVertex,DistributionPattern.POINTWISE);
     headConfig.setWaitForSolutionSetUpdate();
   }
   AggregatorRegistry aggs=bulkNode.getIterationNode().getIterationContract().getAggregators();

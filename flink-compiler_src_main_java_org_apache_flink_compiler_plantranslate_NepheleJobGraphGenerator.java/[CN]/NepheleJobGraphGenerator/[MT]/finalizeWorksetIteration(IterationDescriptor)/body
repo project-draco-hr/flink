@@ -1,6 +1,6 @@
 {
   final WorksetIterationPlanNode iterNode=(WorksetIterationPlanNode)descr.getIterationNode();
-  final JobTaskVertex headVertex=descr.getHeadTask();
+  final AbstractJobVertex headVertex=descr.getHeadTask();
   final TaskConfig headConfig=new TaskConfig(headVertex.getConfiguration());
   final TaskConfig headFinalOutputConfig=descr.getHeadFinalResultConfig();
 {
@@ -20,23 +20,18 @@
   }
   final TaskConfig syncConfig;
 {
-    final SimpleOutputVertex sync=new SimpleOutputVertex("Sync (" + iterNode.getNodeName() + ")",this.jobGraph);
+    final AbstractJobVertex sync=new AbstractJobVertex("Sync (" + iterNode.getNodeName() + ")");
     sync.setInvokableClass(IterationSynchronizationSinkTask.class);
-    sync.setNumberOfSubtasks(1);
+    sync.setParallelism(1);
     this.auxVertices.add(sync);
     syncConfig=new TaskConfig(sync.getConfiguration());
-    syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getNumberOfSubtasks());
+    syncConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,headVertex.getParallelism());
     final int maxNumIterations=iterNode.getIterationNode().getIterationContract().getMaximumNumberOfIterations();
     if (maxNumIterations < 1) {
       throw new CompilerException("Cannot create workset iteration with unspecified maximum number of iterations.");
     }
     syncConfig.setNumberOfIterations(maxNumIterations);
-    try {
-      headVertex.connectTo(sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-    }
- catch (    JobGraphDefinitionException e) {
-      throw new CompilerException("Bug: Cannot connect head vertex to sync task.");
-    }
+    sync.connectNewDataSetAsInput(headVertex,DistributionPattern.POINTWISE);
   }
 {
     final PlanNode nextWorksetNode=iterNode.getNextWorkSetPlanNode();
@@ -45,13 +40,13 @@
     final boolean hasSolutionSetTail=(!iterNode.isImmediateSolutionSetUpdate()) || (!hasWorksetTail);
 {
       final TaskConfig worksetTailConfig;
-      JobTaskVertex nextWorksetVertex=(JobTaskVertex)this.vertices.get(nextWorksetNode);
+      AbstractJobVertex nextWorksetVertex=(AbstractJobVertex)this.vertices.get(nextWorksetNode);
       if (nextWorksetVertex == null) {
         TaskInChain taskInChain=this.chainedTasks.get(nextWorksetNode);
         if (taskInChain == null) {
           throw new CompilerException("Bug: Next workset node not found as vertex or chained task.");
         }
-        nextWorksetVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+        nextWorksetVertex=(AbstractJobVertex)taskInChain.getContainingVertex();
         worksetTailConfig=taskInChain.getTaskConfig();
       }
  else {
@@ -63,27 +58,22 @@
         nextWorksetVertex.setInvokableClass(IterationTailPactTask.class);
         worksetTailConfig.setOutputSerializer(iterNode.getWorksetSerializer());
         worksetTailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-        SimpleOutputVertex fakeTail=new SimpleOutputVertex("Fake Tail",this.jobGraph);
+        AbstractJobVertex fakeTail=new AbstractJobVertex("Fake Tail");
         fakeTail.setInvokableClass(FakeOutputTask.class);
-        fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+        fakeTail.setParallelism(headVertex.getParallelism());
         this.auxVertices.add(fakeTail);
-        try {
-          nextWorksetVertex.connectTo(fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
-        }
- catch (        JobGraphDefinitionException e) {
-          throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
-        }
+        fakeTail.connectNewDataSetAsInput(nextWorksetVertex,DistributionPattern.POINTWISE);
       }
     }
 {
       final TaskConfig solutionDeltaConfig;
-      JobTaskVertex solutionDeltaVertex=(JobTaskVertex)this.vertices.get(solutionDeltaNode);
+      AbstractJobVertex solutionDeltaVertex=(AbstractJobVertex)this.vertices.get(solutionDeltaNode);
       if (solutionDeltaVertex == null) {
         TaskInChain taskInChain=this.chainedTasks.get(solutionDeltaNode);
         if (taskInChain == null) {
           throw new CompilerException("Bug: Solution Set Delta not found as vertex or chained task.");
         }
-        solutionDeltaVertex=(JobTaskVertex)taskInChain.getContainingVertex();
+        solutionDeltaVertex=(AbstractJobVertex)taskInChain.getContainingVertex();
         solutionDeltaConfig=taskInChain.getTaskConfig();
       }
  else {
@@ -95,16 +85,11 @@
         solutionDeltaVertex.setInvokableClass(IterationTailPactTask.class);
         solutionDeltaConfig.setOutputSerializer(iterNode.getSolutionSetSerializer());
         solutionDeltaConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
-        SimpleOutputVertex fakeTail=new SimpleOutputVertex("Fake Tail",this.jobGraph);
+        AbstractJobVertex fakeTail=new AbstractJobVertex("Fake Tail");
         fakeTail.setInvokableClass(FakeOutputTask.class);
-        fakeTail.setNumberOfSubtasks(headVertex.getNumberOfSubtasks());
+        fakeTail.setParallelism(headVertex.getParallelism());
         this.auxVertices.add(fakeTail);
-        try {
-          solutionDeltaVertex.connectTo(fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
-        }
- catch (        JobGraphDefinitionException e) {
-          throw new CompilerException("Bug: Cannot connect iteration tail vertex fake tail task");
-        }
+        fakeTail.connectNewDataSetAsInput(solutionDeltaVertex,DistributionPattern.POINTWISE);
         headConfig.setWaitForSolutionSetUpdate();
       }
  else {

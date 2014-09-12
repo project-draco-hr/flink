@@ -1,11 +1,9 @@
 {
-  this.jobGraph=new JobGraph(program.getJobName());
   this.vertices=new HashMap<PlanNode,AbstractJobVertex>();
   this.chainedTasks=new HashMap<PlanNode,TaskInChain>();
   this.chainedTasksInSequence=new ArrayList<TaskInChain>();
   this.auxVertices=new ArrayList<AbstractJobVertex>();
   this.iterations=new HashMap<IterationPlanNode,IterationDescriptor>();
-  this.maxDegreeVertex=null;
   program.accept(this);
   for (  IterationDescriptor iteration : this.iterations.values()) {
     if (iteration.getIterationNode() instanceof BulkIterationPlanNode) {
@@ -23,26 +21,24 @@
     TaskConfig t=new TaskConfig(tic.getContainingVertex().getConfiguration());
     t.addChainedTask(tic.getChainedTask(),tic.getTaskConfig(),tic.getTaskName());
   }
+  JobGraph graph=new JobGraph(program.getJobName());
+  graph.setAllowQueuedScheduling(false);
+  SlotSharingGroup sharingGroup=new SlotSharingGroup();
   for (  AbstractJobVertex vertex : this.vertices.values()) {
-    if (vertex != this.maxDegreeVertex) {
-      vertex.setVertexToShareInstancesWith(this.maxDegreeVertex);
-    }
+    graph.addVertex(vertex);
+    vertex.setSlotSharingGroup(sharingGroup);
   }
   for (  AbstractJobVertex vertex : this.auxVertices) {
-    if (vertex != this.maxDegreeVertex) {
-      vertex.setVertexToShareInstancesWith(this.maxDegreeVertex);
-    }
+    graph.addVertex(vertex);
+    vertex.setSlotSharingGroup(sharingGroup);
   }
   for (  Entry<String,DistributedCacheEntry> e : program.getOriginalPactPlan().getCachedFiles()) {
-    DistributedCache.writeFileInfoToConfig(e.getKey(),e.getValue(),this.jobGraph.getJobConfiguration());
+    DistributedCache.writeFileInfoToConfig(e.getKey(),e.getValue(),graph.getJobConfiguration());
   }
-  JobGraph graph=this.jobGraph;
-  this.maxDegreeVertex=null;
   this.vertices=null;
   this.chainedTasks=null;
   this.chainedTasksInSequence=null;
   this.auxVertices=null;
   this.iterations=null;
-  this.jobGraph=null;
   return graph;
 }
