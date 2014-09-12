@@ -27,14 +27,13 @@ catch (  Exception e) {
     printHelpForList();
     return 1;
   }
-  ExtendedManagementProtocol jmConn=null;
   try {
-    jmConn=getJobManagerConnection(line);
-    if (jmConn == null) {
+    ActorRef jobManager=getJobManager(line);
+    if (jobManager == null) {
       printHelpForList();
       return 1;
     }
-    List<RecentJobEvent> recentJobs=jmConn.getRecentJobs();
+    List<RecentJobEvent> recentJobs=AkkaUtils.<EventCollectorMessages.RecentJobs>ask(jobManager,EventCollectorMessages.RequestRecentJobs$.MODULE$).asJavaList();
     ArrayList<RecentJobEvent> runningJobs=null;
     ArrayList<RecentJobEvent> scheduledJobs=null;
     if (running) {
@@ -88,16 +87,5 @@ catch (  Exception e) {
   }
  catch (  Throwable t) {
     return handleError(t);
-  }
- finally {
-    if (jmConn != null) {
-      try {
-        RPC.stopProxy(jmConn);
-      }
- catch (      Throwable t) {
-        System.out.println("Could not cleanly shut down connection from compiler to job manager");
-      }
-    }
-    jmConn=null;
   }
 }

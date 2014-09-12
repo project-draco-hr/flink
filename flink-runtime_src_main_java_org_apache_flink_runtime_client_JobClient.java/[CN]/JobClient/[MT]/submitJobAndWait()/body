@@ -1,26 +1,16 @@
 {
-synchronized (this.jobSubmitClient) {
-    final JobSubmissionResult submissionResult=submitJob();
-    if (submissionResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
-      LOG.error("ERROR: " + submissionResult.getDescription());
-      throw new JobExecutionException(submissionResult.getDescription(),false);
-    }
-    Runtime.getRuntime().addShutdownHook(this.jobCleanUp);
+  final JobSubmissionResult submissionResult=submitJob();
+  if (submissionResult.returnCode() == JobResult.ERROR()) {
+    LOG.error("ERROR: " + submissionResult.description());
+    throw new JobExecutionException(submissionResult.description(),false);
   }
   long sleep=0;
-  try {
-    final IntegerRecord interval=this.jobSubmitClient.getRecommendedPollingInterval();
-    sleep=interval.getValue() * 1000;
-  }
- catch (  IOException ioe) {
-    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-    throw ioe;
-  }
+  final int interval=AkkaUtils.<Integer>ask(jobManager,JobManagerMessages.RequestPollingInterval$.MODULE$);
+  sleep=interval * 1000;
   try {
     Thread.sleep(sleep / 2);
   }
  catch (  InterruptedException e) {
-    Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
     logErrorAndRethrow(StringUtils.stringifyException(e));
   }
   long startTimestamp=-1;
@@ -28,21 +18,15 @@ synchronized (this.jobSubmitClient) {
     if (Thread.interrupted()) {
       logErrorAndRethrow("Job client has been interrupted");
     }
-    JobProgressResult jobProgressResult=null;
-    try {
-      jobProgressResult=getJobProgress();
-    }
- catch (    IOException ioe) {
-      Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-      throw ioe;
-    }
+    JobResult.JobProgressResult jobProgressResult=null;
+    jobProgressResult=getJobProgress();
     if (jobProgressResult == null) {
       logErrorAndRethrow("Returned job progress is unexpectedly null!");
     }
-    if (jobProgressResult.getReturnCode() == AbstractJobResult.ReturnCode.ERROR) {
-      logErrorAndRethrow("Could not retrieve job progress: " + jobProgressResult.getDescription());
+    if (jobProgressResult.returnCode() == JobResult.ERROR()) {
+      logErrorAndRethrow("Could not retrieve job progress: " + jobProgressResult.description());
     }
-    final Iterator<AbstractEvent> it=jobProgressResult.getEvents();
+    final Iterator<AbstractEvent> it=jobProgressResult.asJavaList().iterator();
     while (it.hasNext()) {
       final AbstractEvent event=it.next();
       if (this.lastProcessedEventSequenceNumber >= event.getSequenceNumber()) {
@@ -60,20 +44,12 @@ synchronized (this.jobSubmitClient) {
           startTimestamp=jobEvent.getTimestamp();
         }
         if (jobStatus == JobStatus.FINISHED) {
-          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
           final long jobDuration=jobEvent.getTimestamp() - startTimestamp;
           Map<String,Object> accumulators=null;
-          try {
-            accumulators=AccumulatorHelper.toResultMap(getAccumulators().getAccumulators(this.userCodeClassLoader));
-          }
- catch (          IOException ioe) {
-            Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
-            throw ioe;
-          }
+          accumulators=AccumulatorHelper.toResultMap(getAccumulators().getAccumulators(this.userCodeClassLoader));
           return new JobExecutionResult(jobDuration,accumulators);
         }
  else         if (jobStatus == JobStatus.CANCELED || jobStatus == JobStatus.FAILED) {
-          Runtime.getRuntime().removeShutdownHook(this.jobCleanUp);
           LOG.info(jobEvent.getOptionalMessage());
           if (jobStatus == JobStatus.CANCELED) {
             throw new JobExecutionException(jobEvent.getOptionalMessage(),true);
