@@ -9,41 +9,57 @@
 synchronized (globalLock) {
     SlotSharingGroup sharingUnit=task.getSlotSharingGroup();
     if (sharingUnit != null) {
-      SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
-      AllocatedSlot slot=assignment.getSlotForTask(vertex.getJobvertexId(),vertex);
-      if (slot != null) {
-        return slot;
+      final SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
+      AllocatedSlot newSlot=null;
+      AllocatedSlot slotFromGroup=assignment.getSlotForTask(vertex.getJobvertexId(),vertex,true);
+      try {
+        if (slotFromGroup != null) {
+          if (slotFromGroup.getLocality() != Locality.NON_LOCAL) {
+            updateLocalityCounters(slotFromGroup.getLocality());
+            return slotFromGroup;
+          }
+        }
+        newSlot=getFreeSlotForTask(vertex);
+        AllocatedSlot toUse;
+        if (newSlot == null) {
+          if (slotFromGroup == null) {
+            throw new NoResourceAvailableException();
+          }
+ else {
+            toUse=slotFromGroup;
+          }
+        }
+ else         if (slotFromGroup == null || newSlot.getLocality() == Locality.LOCAL) {
+          toUse=sharingUnit.getTaskAssignment().addSlotWithTask(newSlot,task.getJobVertexId());
+        }
+ else {
+          toUse=slotFromGroup;
+        }
+        updateLocalityCounters(toUse.getLocality());
+        return toUse;
+      }
+ catch (      Throwable t) {
+        if (slotFromGroup != null) {
+          slotFromGroup.releaseSlot();
+        }
+        if (newSlot != null) {
+          newSlot.releaseSlot();
+        }
       }
     }
-    while (true) {
-      Instance instanceToUse=getFreeInstanceForTask(task.getTaskToExecute().getVertex());
-      if (instanceToUse != null) {
-        try {
-          AllocatedSlot slot=instanceToUse.allocateSlot(vertex.getJobId());
-          if (instanceToUse.hasResourcesAvailable()) {
-            this.instancesWithAvailableResources.add(instanceToUse);
-          }
-          if (slot != null) {
-            if (sharingUnit != null) {
-              slot=sharingUnit.getTaskAssignment().addSlotWithTask(slot,task.getJobVertexId());
-            }
-            return slot;
-          }
-        }
- catch (        InstanceDiedException e) {
-          this.allInstances.remove(instanceToUse);
-          this.instancesWithAvailableResources.remove(instanceToUse);
-        }
+    AllocatedSlot slot=getFreeSlotForTask(vertex);
+    if (slot != null) {
+      updateLocalityCounters(slot.getLocality());
+      return slot;
+    }
+ else {
+      if (queueIfNoResource) {
+        SlotAllocationFuture future=new SlotAllocationFuture();
+        this.taskQueue.add(new QueuedTask(task,future));
+        return future;
       }
  else {
-        if (queueIfNoResource) {
-          SlotAllocationFuture future=new SlotAllocationFuture();
-          this.taskQueue.add(new QueuedTask(task,future));
-          return future;
-        }
- else {
-          throw new NoResourceAvailableException(task);
-        }
+        throw new NoResourceAvailableException(task);
       }
     }
   }
