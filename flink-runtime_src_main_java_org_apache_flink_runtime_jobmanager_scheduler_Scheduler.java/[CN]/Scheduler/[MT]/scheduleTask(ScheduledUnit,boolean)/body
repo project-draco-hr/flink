@@ -7,8 +7,47 @@
   }
   final ExecutionVertex vertex=task.getTaskToExecute().getVertex();
 synchronized (globalLock) {
+    CoLocationConstraint locationConstraint=task.getLocationConstraint();
+    if (locationConstraint != null) {
+      if (queueIfNoResource) {
+        throw new IllegalArgumentException("A task with a location constraint was scheduled in a queued fashion.");
+      }
+      if (locationConstraint.isUnassigned()) {
+        AllocatedSlot newSlot=getFreeSlotForTask(vertex);
+        if (newSlot == null) {
+          throw new NoResourceAvailableException();
+        }
+        SharedSlot sl=locationConstraint.swapInNewSlot(newSlot);
+        SubSlot slot=sl.allocateSubSlot(vertex.getJobvertexId());
+        updateLocalityCounters(newSlot.getLocality());
+        return slot;
+      }
+ else {
+        SubSlot slot=locationConstraint.allocateSubSlot(vertex.getJobvertexId());
+        if (slot == null) {
+          Instance location=locationConstraint.getSlot().getAllocatedSlot().getInstance();
+          AllocatedSlot newSlot;
+          try {
+            newSlot=location.allocateSlot(vertex.getJobId());
+          }
+ catch (          InstanceDiedException e) {
+            throw new NoResourceAvailableException("The instance of the required location died.");
+          }
+          if (newSlot == null) {
+            throw new NoResourceAvailableException();
+          }
+          SharedSlot sharedSlot=locationConstraint.swapInNewSlot(newSlot);
+          slot=sharedSlot.allocateSubSlot(vertex.getJobvertexId());
+        }
+        updateLocalityCounters(Locality.LOCAL);
+        return slot;
+      }
+    }
     SlotSharingGroup sharingUnit=task.getSlotSharingGroup();
     if (sharingUnit != null) {
+      if (queueIfNoResource) {
+        throw new IllegalArgumentException("A task with a vertex sharing group was scheduled in a queued fashion.");
+      }
       final SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
       AllocatedSlot newSlot=null;
       AllocatedSlot slotFromGroup=assignment.getSlotForTask(vertex.getJobvertexId(),vertex,true);
