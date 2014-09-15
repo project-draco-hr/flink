@@ -1,20 +1,16 @@
 {
-  final int NUM_TASKS=133;
   try {
     final AbstractJobVertex vertex=new AbstractJobVertex("Test Vertex");
-    vertex.setParallelism(NUM_TASKS);
-    vertex.setInvokableClass(NoOpInvokable.class);
+    vertex.setParallelism(2);
+    vertex.setInvokableClass(BlockingNoOpInvokable.class);
     final JobGraph jobGraph=new JobGraph("Test Job",vertex);
-    final JobManager jm=startJobManager(NUM_TASKS);
+    final JobManager jm=startJobManager(1);
     final GlobalBufferPool bp=((LocalInstanceManager)jm.getInstanceManager()).getTaskManagers()[0].getChannelManager().getGlobalBufferPool();
     try {
-      assertEquals(NUM_TASKS,jm.getAvailableSlots());
+      assertEquals(1,jm.getAvailableSlots());
       LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
       JobSubmissionResult result=jm.submitJob(jobGraph);
-      if (result.getReturnCode() != AbstractJobResult.ReturnCode.SUCCESS) {
-        System.out.println(result.getDescription());
-      }
-      assertEquals(AbstractJobResult.ReturnCode.SUCCESS,result.getReturnCode());
+      assertEquals(AbstractJobResult.ReturnCode.ERROR,result.getReturnCode());
       ExecutionGraph eg=jm.getCurrentJobs().get(jobGraph.getJobID());
       if (eg != null) {
         long deadline=System.currentTimeMillis() + 60 * 1000;
@@ -33,10 +29,10 @@
           }
         }
         assertTrue("The job did not finish successfully.",success);
+        assertEquals(0,eg.getRegisteredExecutions().size());
       }
  else {
       }
-      assertEquals(0,eg.getRegisteredExecutions().size());
       waitForTaskThreadsToBeTerminated();
       assertEquals(bp.numBuffers(),bp.numAvailableBuffers());
     }

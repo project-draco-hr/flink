@@ -1,12 +1,12 @@
 {
-  final int NUM_TASKS=13;
+  final int NUM_TASKS=11;
   try {
     final AbstractJobVertex sender1=new AbstractJobVertex("Sender1");
     final AbstractJobVertex sender2=new AbstractJobVertex("Sender2");
     final AbstractJobVertex receiver=new AbstractJobVertex("Receiver");
     sender1.setInvokableClass(Sender.class);
     sender2.setInvokableClass(Sender.class);
-    receiver.setInvokableClass(AgnosticReceiver.class);
+    receiver.setInvokableClass(AgnosticBinaryReceiver.class);
     sender1.setParallelism(NUM_TASKS);
     sender2.setParallelism(2 * NUM_TASKS);
     receiver.setParallelism(3 * NUM_TASKS);
@@ -14,6 +14,7 @@
     receiver.connectNewDataSetAsInput(sender2,DistributionPattern.BIPARTITE);
     final JobGraph jobGraph=new JobGraph("Bipartite Job",sender1,receiver,sender2);
     JobManager jm=startJobManager(6 * NUM_TASKS);
+    final GlobalBufferPool bp=((LocalInstanceManager)jm.getInstanceManager()).getTaskManagers()[0].getChannelManager().getGlobalBufferPool();
     try {
       LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
       JobSubmissionResult result=jm.submitJob(jobGraph);
@@ -21,10 +22,13 @@
       ExecutionGraph eg=jm.getCurrentJobs().get(jobGraph.getJobID());
       if (eg != null) {
         eg.waitForJobEnd();
-        assertEquals(JobStatus.FAILED,eg.getState());
+        assertEquals(JobStatus.FINISHED,eg.getState());
       }
  else {
       }
+      assertEquals(0,eg.getRegisteredExecutions().size());
+      waitForTaskThreadsToBeTerminated();
+      assertEquals(bp.numBuffers(),bp.numAvailableBuffers());
     }
   finally {
       jm.shutdown();

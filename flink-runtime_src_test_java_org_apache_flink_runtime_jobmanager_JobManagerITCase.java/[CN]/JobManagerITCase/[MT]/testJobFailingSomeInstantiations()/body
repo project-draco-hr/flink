@@ -9,7 +9,8 @@
     receiver.setParallelism(NUM_TASKS);
     receiver.connectNewDataSetAsInput(sender,DistributionPattern.POINTWISE);
     final JobGraph jobGraph=new JobGraph("Pointwise Job",sender,receiver);
-    JobManager jm=startJobManager(NUM_TASKS);
+    final JobManager jm=startJobManager(NUM_TASKS);
+    final GlobalBufferPool bp=((LocalInstanceManager)jm.getInstanceManager()).getTaskManagers()[0].getChannelManager().getGlobalBufferPool();
     try {
       assertEquals(NUM_TASKS,jm.getAvailableSlots());
       LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
@@ -22,10 +23,9 @@
       }
  else {
       }
-      for (      Execution e : eg.getRegisteredExecutions().values()) {
-        System.out.println(e + StringUtils.arrayAwareToString(e.getStateTimestamps()));
-      }
       assertEquals(0,eg.getRegisteredExecutions().size());
+      waitForTaskThreadsToBeTerminated();
+      assertEquals(bp.numBuffers(),bp.numAvailableBuffers());
     }
   finally {
       jm.shutdown();

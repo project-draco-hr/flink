@@ -9,6 +9,16 @@
     if (this.owner.isCanceled()) {
       throw new CancelTaskException();
     }
+    closeInputGates();
+    requestAllOutputGatesToClose();
+    waitForInputChannelsToBeClosed();
+    waitForOutputChannelsToBeClosed();
+    if (this.owner.isCanceled()) {
+      throw new CancelTaskException();
+    }
+    if (!owner.markAsFinished()) {
+      throw new Exception("Could notify job manager that the task is finished.");
+    }
   }
  catch (  Throwable t) {
     if (!this.owner.isCanceled()) {
@@ -16,7 +26,7 @@
         this.invokable.cancel();
       }
  catch (      Throwable t2) {
-        LOG.error(StringUtils.stringifyException(t2));
+        LOG.error("Error while canceling the task",t2);
       }
     }
     releaseAllChannelResources();
@@ -26,26 +36,8 @@
  else {
       this.owner.markFailed(t);
     }
-    return;
   }
-  try {
-    closeInputGates();
-    requestAllOutputGatesToClose();
-    waitForInputChannelsToBeClosed();
-    waitForOutputChannelsToBeClosed();
-  }
- catch (  Throwable t) {
+ finally {
     releaseAllChannelResources();
-    if (this.owner.isCanceled() || t instanceof CancelTaskException) {
-      this.owner.cancelingDone();
-    }
- else {
-      this.owner.markFailed(t);
-    }
-    return;
-  }
-  releaseAllChannelResources();
-  if (!owner.markAsFinished()) {
-    owner.markFailed(new Exception());
   }
 }
