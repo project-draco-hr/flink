@@ -9,6 +9,11 @@
   this.parallelism=numTaskVertices;
   this.taskVertices=new ExecutionVertex[numTaskVertices];
   this.inputs=new ArrayList<IntermediateResult>(jobVertex.getInputs().size());
+  this.slotSharingGroup=jobVertex.getSlotSharingGroup();
+  this.coLocationGroup=jobVertex.getCoLocationGroup();
+  if (coLocationGroup != null && slotSharingGroup == null) {
+    throw new JobException("Vertex uses a co-location constraint without using slot sharing");
+  }
   this.producedDataSets=new IntermediateResult[jobVertex.getNumberOfProducedIntermediateDataSets()];
   for (int i=0; i < jobVertex.getProducedDataSets().size(); i++) {
     IntermediateDataSet set=jobVertex.getProducedDataSets().get(i);
@@ -23,7 +28,6 @@
       throw new RuntimeException("The intermediate result's partitions were not correctly assiged.");
     }
   }
-  this.slotSharingGroup=jobVertex.getSlotSharingGroup();
   try {
     @SuppressWarnings("unchecked") InputSplitSource<InputSplit> splitSource=(InputSplitSource<InputSplit>)jobVertex.getInputSplitSource();
     if (splitSource != null) {

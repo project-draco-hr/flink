@@ -7,58 +7,33 @@
   }
   final ExecutionVertex vertex=task.getTaskToExecute().getVertex();
 synchronized (globalLock) {
-    CoLocationConstraint locationConstraint=task.getLocationConstraint();
-    if (locationConstraint != null) {
-      if (queueIfNoResource) {
-        throw new IllegalArgumentException("A task with a location constraint was scheduled in a queued fashion.");
-      }
-      if (locationConstraint.isUnassigned()) {
-        AllocatedSlot newSlot=getFreeSlotForTask(vertex);
-        if (newSlot == null) {
-          throw new NoResourceAvailableException();
-        }
-        SharedSlot sl=locationConstraint.swapInNewSlot(newSlot);
-        SubSlot slot=sl.allocateSubSlot(vertex.getJobvertexId());
-        updateLocalityCounters(newSlot.getLocality());
-        return slot;
-      }
- else {
-        SubSlot slot=locationConstraint.allocateSubSlot(vertex.getJobvertexId());
-        if (slot == null) {
-          Instance location=locationConstraint.getSlot().getAllocatedSlot().getInstance();
-          AllocatedSlot newSlot;
-          try {
-            newSlot=location.allocateSlot(vertex.getJobId());
-          }
- catch (          InstanceDiedException e) {
-            throw new NoResourceAvailableException("The instance of the required location died.");
-          }
-          if (newSlot == null) {
-            throw new NoResourceAvailableException();
-          }
-          SharedSlot sharedSlot=locationConstraint.swapInNewSlot(newSlot);
-          slot=sharedSlot.allocateSubSlot(vertex.getJobvertexId());
-        }
-        updateLocalityCounters(Locality.LOCAL);
-        return slot;
-      }
-    }
     SlotSharingGroup sharingUnit=task.getSlotSharingGroup();
     if (sharingUnit != null) {
       if (queueIfNoResource) {
         throw new IllegalArgumentException("A task with a vertex sharing group was scheduled in a queued fashion.");
       }
       final SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
+      final CoLocationConstraint constraint=task.getLocationConstraint();
       AllocatedSlot newSlot=null;
-      AllocatedSlot slotFromGroup=assignment.getSlotForTask(vertex.getJobvertexId(),vertex,true);
+      AllocatedSlot slotFromGroup;
+      if (constraint == null || constraint.isUnassigned()) {
+        slotFromGroup=assignment.getSlotForTask(vertex.getJobvertexId(),vertex);
+      }
+ else {
+        slotFromGroup=assignment.getSlotForTask(vertex.getJobvertexId(),constraint);
+      }
       try {
         if (slotFromGroup != null) {
           if (slotFromGroup.getLocality() != Locality.NON_LOCAL) {
+            if (constraint != null && constraint.isUnassigned()) {
+              constraint.setLocation(slotFromGroup.getInstance());
+            }
             updateLocalityCounters(slotFromGroup.getLocality());
             return slotFromGroup;
           }
         }
-        newSlot=getFreeSlotForTask(vertex);
+        final Iterable<Instance> locations=(constraint == null || constraint.isUnassigned()) ? vertex.getPreferredLocations() : Collections.singleton(constraint.getLocation());
+        newSlot=getFreeSlotForTask(vertex,locations);
         AllocatedSlot toUse;
         if (newSlot == null) {
           if (slotFromGroup == null) {
@@ -69,24 +44,35 @@ synchronized (globalLock) {
           }
         }
  else         if (slotFromGroup == null || newSlot.getLocality() == Locality.LOCAL) {
+          if (slotFromGroup != null) {
+            slotFromGroup.releaseSlot();
+          }
           toUse=sharingUnit.getTaskAssignment().addSlotWithTask(newSlot,task.getJobVertexId());
         }
  else {
+          newSlot.releaseSlot();
           toUse=slotFromGroup;
+        }
+        if (constraint != null && constraint.isUnassigned()) {
+          constraint.setLocation(toUse.getInstance());
         }
         updateLocalityCounters(toUse.getLocality());
         return toUse;
       }
- catch (      Throwable t) {
+ catch (      NoResourceAvailableException e) {
+        throw e;
+      }
+catch (      Throwable t) {
         if (slotFromGroup != null) {
           slotFromGroup.releaseSlot();
         }
         if (newSlot != null) {
           newSlot.releaseSlot();
         }
+        ExceptionUtils.rethrow(t,"An error occurred while allocating a slot in a sharing group");
       }
     }
-    AllocatedSlot slot=getFreeSlotForTask(vertex);
+    AllocatedSlot slot=getFreeSlotForTask(vertex,vertex.getPreferredLocations());
     if (slot != null) {
       updateLocalityCounters(slot.getLocality());
       return slot;
