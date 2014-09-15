@@ -1,0 +1,43 @@
+{
+  final int NUM_TASKS=31;
+  try {
+    final AbstractJobVertex sender=new AbstractJobVertex("Sender");
+    final AbstractJobVertex receiver=new AbstractJobVertex("Receiver");
+    sender.setInvokableClass(Sender.class);
+    receiver.setInvokableClass(Receiver.class);
+    sender.setParallelism(NUM_TASKS);
+    receiver.setParallelism(NUM_TASKS);
+    receiver.connectNewDataSetAsInput(sender,DistributionPattern.POINTWISE);
+    SlotSharingGroup sharingGroup=new SlotSharingGroup(sender.getID(),receiver.getID());
+    sender.setSlotSharingGroup(sharingGroup);
+    receiver.setSlotSharingGroup(sharingGroup);
+    final JobGraph jobGraph=new JobGraph("Pointwise Job",sender,receiver);
+    final JobManager jm=startJobManager(NUM_TASKS);
+    final GlobalBufferPool bp=((LocalInstanceManager)jm.getInstanceManager()).getTaskManagers()[0].getChannelManager().getGlobalBufferPool();
+    try {
+      LibraryCacheManager.register(jobGraph.getJobID(),new String[0]);
+      JobSubmissionResult result=jm.submitJob(jobGraph);
+      if (result.getReturnCode() != AbstractJobResult.ReturnCode.SUCCESS) {
+        System.out.println(result.getDescription());
+      }
+      assertEquals(AbstractJobResult.ReturnCode.SUCCESS,result.getReturnCode());
+      ExecutionGraph eg=jm.getCurrentJobs().get(jobGraph.getJobID());
+      if (eg != null) {
+        eg.waitForJobEnd();
+        assertEquals(JobStatus.FINISHED,eg.getState());
+        assertEquals(0,eg.getRegisteredExecutions().size());
+      }
+ else {
+      }
+      waitForTaskThreadsToBeTerminated();
+      assertEquals(bp.numBuffers(),bp.numAvailableBuffers());
+    }
+  finally {
+      jm.shutdown();
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

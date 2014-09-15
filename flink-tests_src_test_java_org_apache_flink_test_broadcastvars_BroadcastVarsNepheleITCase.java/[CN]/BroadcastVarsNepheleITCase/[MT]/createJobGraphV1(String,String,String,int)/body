@@ -3,13 +3,15 @@
   JobGraph jobGraph=new JobGraph("Distance Builder");
   InputFormatVertex points=createPointsInput(jobGraph,pointsPath,numSubTasks,serializer);
   InputFormatVertex models=createModelsInput(jobGraph,centersPath,numSubTasks,serializer);
-  JobTaskVertex mapper=createMapper(jobGraph,numSubTasks,serializer);
+  AbstractJobVertex mapper=createMapper(jobGraph,numSubTasks,serializer);
   OutputFormatVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
   JobGraphUtils.connect(points,mapper,ChannelType.NETWORK,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(models,mapper,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
   JobGraphUtils.connect(mapper,output,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  points.setVertexToShareInstancesWith(output);
-  models.setVertexToShareInstancesWith(output);
-  mapper.setVertexToShareInstancesWith(output);
+  SlotSharingGroup sharing=new SlotSharingGroup();
+  points.setSlotSharingGroup(sharing);
+  models.setSlotSharingGroup(sharing);
+  mapper.setSlotSharingGroup(sharing);
+  output.setSlotSharingGroup(sharing);
   return jobGraph;
 }
