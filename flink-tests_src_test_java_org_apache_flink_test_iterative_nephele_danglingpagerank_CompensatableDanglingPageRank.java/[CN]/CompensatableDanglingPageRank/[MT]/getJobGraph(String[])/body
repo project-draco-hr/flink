@@ -40,7 +40,7 @@
   adjacencyListInputConfig.addOutputShipStrategy(ShipStrategyType.PARTITION_HASH);
   adjacencyListInputConfig.setOutputSerializer(recSerializer);
   adjacencyListInputConfig.setOutputComparator(fieldZeroComparator,0);
-  JobTaskVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"IterationHead",jobGraph,degreeOfParallelism);
+  AbstractJobVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"IterationHead",jobGraph,degreeOfParallelism);
   TaskConfig headConfig=new TaskConfig(head.getConfiguration());
   headConfig.setIterationId(ITERATION_ID);
   headConfig.addInputToGroup(0);
@@ -69,7 +69,7 @@
   headConfig.setStubParameter("compensation.failingIteration",String.valueOf(failingIteration));
   headConfig.setStubParameter("compensation.messageLoss",String.valueOf(messageLoss));
   headConfig.addIterationAggregator(CompensatableDotProductCoGroup.AGGREGATOR_NAME,new PageRankStatsAggregator());
-  JobTaskVertex intermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"IterationIntermediate",jobGraph,degreeOfParallelism);
+  AbstractJobVertex intermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"IterationIntermediate",jobGraph,degreeOfParallelism);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
   intermediateConfig.setIterationId(ITERATION_ID);
   intermediateConfig.setDriver(BuildSecondCachedMatchDriver.class);
@@ -90,7 +90,7 @@
   intermediateConfig.setStubParameter("compensation.failingWorker",failingWorkers);
   intermediateConfig.setStubParameter("compensation.failingIteration",String.valueOf(failingIteration));
   intermediateConfig.setStubParameter("compensation.messageLoss",String.valueOf(messageLoss));
-  JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,degreeOfParallelism);
+  AbstractJobVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,degreeOfParallelism);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
   tailConfig.setIterationId(ITERATION_ID);
   tailConfig.setIsWorksetUpdate();
@@ -124,8 +124,8 @@
   outputConfig.setInputSerializer(recSerializer,0);
   outputConfig.setStubWrapper(new UserCodeClassWrapper<PageWithRankOutFormat>(PageWithRankOutFormat.class));
   outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,outputPath);
-  OutputFormatVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",degreeOfParallelism);
-  OutputFormatVertex sync=JobGraphUtils.createSync(jobGraph,degreeOfParallelism);
+  AbstractJobVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",degreeOfParallelism);
+  AbstractJobVertex sync=JobGraphUtils.createSync(jobGraph,degreeOfParallelism);
   TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
   syncConfig.setNumberOfIterations(numIterations);
   syncConfig.addIterationAggregator(CompensatableDotProductCoGroup.AGGREGATOR_NAME,new PageRankStatsAggregator());
@@ -142,12 +142,17 @@
   JobGraphUtils.connect(head,output,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(tail,fakeTailOutput,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  fakeTailOutput.setVertexToShareInstancesWith(tail);
-  tail.setVertexToShareInstancesWith(head);
-  pageWithRankInput.setVertexToShareInstancesWith(head);
-  adjacencyListInput.setVertexToShareInstancesWith(head);
-  intermediate.setVertexToShareInstancesWith(head);
-  output.setVertexToShareInstancesWith(head);
-  sync.setVertexToShareInstancesWith(head);
+  SlotSharingGroup sharingGroup=new SlotSharingGroup();
+  pageWithRankInput.setSlotSharingGroup(sharingGroup);
+  adjacencyListInput.setSlotSharingGroup(sharingGroup);
+  head.setSlotSharingGroup(sharingGroup);
+  intermediate.setSlotSharingGroup(sharingGroup);
+  tail.setSlotSharingGroup(sharingGroup);
+  fakeTailOutput.setSlotSharingGroup(sharingGroup);
+  output.setSlotSharingGroup(sharingGroup);
+  sync.setSlotSharingGroup(sharingGroup);
+  fakeTailOutput.setStrictlyCoLocatedWith(tail);
+  tail.setStrictlyCoLocatedWith(head);
+  intermediate.setStrictlyCoLocatedWith(head);
   return jobGraph;
 }

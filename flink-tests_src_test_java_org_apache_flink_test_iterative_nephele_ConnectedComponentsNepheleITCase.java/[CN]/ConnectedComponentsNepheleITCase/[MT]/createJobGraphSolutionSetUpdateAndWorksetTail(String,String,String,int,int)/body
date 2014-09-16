@@ -5,13 +5,13 @@
   JobGraph jobGraph=new JobGraph("Connected Components (Intermediate Solution Set Update, Workset Tail)");
   InputFormatVertex vertices=createVerticesInput(jobGraph,verticesPath,numSubTasks,serializer,comparator);
   InputFormatVertex edges=createEdgesInput(jobGraph,edgesPath,numSubTasks,serializer,comparator);
-  JobTaskVertex head=createIterationHead(jobGraph,numSubTasks,serializer,comparator,pairComparator);
-  JobTaskVertex intermediate=createIterationIntermediate(jobGraph,numSubTasks,serializer,comparator);
+  AbstractJobVertex head=createIterationHead(jobGraph,numSubTasks,serializer,comparator,pairComparator);
+  AbstractJobVertex intermediate=createIterationIntermediate(jobGraph,numSubTasks,serializer,comparator);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
-  OutputFormatVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
-  OutputFormatVertex fakeTail=createFakeTail(jobGraph,numSubTasks);
-  OutputFormatVertex sync=createSync(jobGraph,numSubTasks,maxIterations);
-  JobTaskVertex ssJoinIntermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"Solution Set Update",jobGraph,numSubTasks);
+  AbstractJobVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
+  AbstractJobVertex fakeTail=createFakeTail(jobGraph,numSubTasks);
+  AbstractJobVertex sync=createSync(jobGraph,numSubTasks,maxIterations);
+  AbstractJobVertex ssJoinIntermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"Solution Set Update",jobGraph,numSubTasks);
   TaskConfig ssJoinIntermediateConfig=new TaskConfig(ssJoinIntermediate.getConfiguration());
 {
     ssJoinIntermediateConfig.setIterationId(ITERATION_ID);
@@ -28,7 +28,7 @@
     ssJoinIntermediateConfig.setDriverPairComparator(pairComparator);
     ssJoinIntermediateConfig.setStubWrapper(new UserCodeClassWrapper<UpdateComponentIdMatch>(UpdateComponentIdMatch.class));
   }
-  JobTaskVertex wsTail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationWorksetTail",jobGraph,numSubTasks);
+  AbstractJobVertex wsTail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationWorksetTail",jobGraph,numSubTasks);
   TaskConfig wsTailConfig=new TaskConfig(wsTail.getConfiguration());
 {
     wsTailConfig.setIterationId(ITERATION_ID);
@@ -54,13 +54,19 @@
   JobGraphUtils.connect(head,output,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(wsTail,fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  vertices.setVertexToShareInstancesWith(head);
-  edges.setVertexToShareInstancesWith(head);
-  intermediate.setVertexToShareInstancesWith(head);
-  ssJoinIntermediate.setVertexToShareInstancesWith(head);
-  wsTail.setVertexToShareInstancesWith(head);
-  output.setVertexToShareInstancesWith(head);
-  sync.setVertexToShareInstancesWith(head);
-  fakeTail.setVertexToShareInstancesWith(wsTail);
+  SlotSharingGroup sharingGroup=new SlotSharingGroup();
+  vertices.setSlotSharingGroup(sharingGroup);
+  edges.setSlotSharingGroup(sharingGroup);
+  head.setSlotSharingGroup(sharingGroup);
+  intermediate.setSlotSharingGroup(sharingGroup);
+  ssJoinIntermediate.setSlotSharingGroup(sharingGroup);
+  wsTail.setSlotSharingGroup(sharingGroup);
+  output.setSlotSharingGroup(sharingGroup);
+  sync.setSlotSharingGroup(sharingGroup);
+  fakeTail.setSlotSharingGroup(sharingGroup);
+  intermediate.setStrictlyCoLocatedWith(head);
+  ssJoinIntermediate.setStrictlyCoLocatedWith(head);
+  wsTail.setStrictlyCoLocatedWith(head);
+  fakeTail.setStrictlyCoLocatedWith(wsTail);
   return jobGraph;
 }

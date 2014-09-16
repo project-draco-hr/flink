@@ -5,13 +5,13 @@
   JobGraph jobGraph=new JobGraph("Connected Components (Unified Tails)");
   InputFormatVertex vertices=createVerticesInput(jobGraph,verticesPath,numSubTasks,serializer,comparator);
   InputFormatVertex edges=createEdgesInput(jobGraph,edgesPath,numSubTasks,serializer,comparator);
-  JobTaskVertex head=createIterationHead(jobGraph,numSubTasks,serializer,comparator,pairComparator);
-  JobTaskVertex intermediate=createIterationIntermediate(jobGraph,numSubTasks,serializer,comparator);
+  AbstractJobVertex head=createIterationHead(jobGraph,numSubTasks,serializer,comparator,pairComparator);
+  AbstractJobVertex intermediate=createIterationIntermediate(jobGraph,numSubTasks,serializer,comparator);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
   OutputFormatVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
-  OutputFormatVertex fakeTail=createFakeTail(jobGraph,numSubTasks);
-  OutputFormatVertex sync=createSync(jobGraph,numSubTasks,maxIterations);
-  JobTaskVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,numSubTasks);
+  AbstractJobVertex fakeTail=createFakeTail(jobGraph,numSubTasks);
+  AbstractJobVertex sync=createSync(jobGraph,numSubTasks,maxIterations);
+  AbstractJobVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,numSubTasks);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
 {
     tailConfig.setIterationId(ITERATION_ID);
@@ -39,12 +39,17 @@
   JobGraphUtils.connect(head,output,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(tail,fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  vertices.setVertexToShareInstancesWith(head);
-  edges.setVertexToShareInstancesWith(head);
-  intermediate.setVertexToShareInstancesWith(head);
-  tail.setVertexToShareInstancesWith(head);
-  output.setVertexToShareInstancesWith(head);
-  sync.setVertexToShareInstancesWith(head);
-  fakeTail.setVertexToShareInstancesWith(tail);
+  SlotSharingGroup sharingGroup=new SlotSharingGroup();
+  vertices.setSlotSharingGroup(sharingGroup);
+  edges.setSlotSharingGroup(sharingGroup);
+  head.setSlotSharingGroup(sharingGroup);
+  intermediate.setSlotSharingGroup(sharingGroup);
+  tail.setSlotSharingGroup(sharingGroup);
+  output.setSlotSharingGroup(sharingGroup);
+  sync.setSlotSharingGroup(sharingGroup);
+  fakeTail.setSlotSharingGroup(sharingGroup);
+  intermediate.setStrictlyCoLocatedWith(head);
+  tail.setStrictlyCoLocatedWith(head);
+  fakeTail.setStrictlyCoLocatedWith(tail);
   return jobGraph;
 }

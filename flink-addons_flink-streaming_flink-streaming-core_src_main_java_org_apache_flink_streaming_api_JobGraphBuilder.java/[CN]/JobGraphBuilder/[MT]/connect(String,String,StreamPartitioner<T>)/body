@@ -2,21 +2,16 @@
   AbstractJobVertex upStreamComponent=components.get(upStreamComponentName);
   AbstractJobVertex downStreamComponent=components.get(downStreamComponentName);
   StreamConfig config=new StreamConfig(upStreamComponent.getConfiguration());
-  try {
-    if (partitionerObject.getClass().equals(ForwardPartitioner.class)) {
-      upStreamComponent.connectTo(downStreamComponent,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-    }
+  if (partitionerObject.getClass().equals(ForwardPartitioner.class)) {
+    downStreamComponent.connectNewDataSetAsInput(upStreamComponent,DistributionPattern.POINTWISE);
+  }
  else {
-      upStreamComponent.connectTo(downStreamComponent,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
-    }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("CONNECTED: {} - {} -> {}",partitionerObject.getClass().getSimpleName(),upStreamComponentName,downStreamComponentName);
-    }
+    downStreamComponent.connectNewDataSetAsInput(upStreamComponent,DistributionPattern.BIPARTITE);
   }
- catch (  JobGraphDefinitionException e) {
-    throw new RuntimeException("Cannot connect components: " + upStreamComponentName + " to "+ downStreamComponentName,e);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("CONNECTED: {} - {} -> {}",partitionerObject.getClass().getSimpleName(),upStreamComponentName,downStreamComponentName);
   }
-  int outputIndex=upStreamComponent.getNumberOfForwardConnections() - 1;
+  int outputIndex=upStreamComponent.getNumberOfProducedIntermediateDataSets() - 1;
   config.setOutputName(outputIndex,outEdgeNames.get(upStreamComponentName).get(outputIndex));
   config.setSelectAll(outputIndex,outEdgeSelectAll.get(upStreamComponentName).get(outputIndex));
   config.setPartitioner(outputIndex,partitionerObject);
