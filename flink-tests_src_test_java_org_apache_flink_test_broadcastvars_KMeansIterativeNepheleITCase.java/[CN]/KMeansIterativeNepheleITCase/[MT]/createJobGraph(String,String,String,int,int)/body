@@ -7,7 +7,6 @@
   AbstractJobVertex head=createIterationHead(jobGraph,numSubTasks,serializer);
   AbstractJobVertex mapper=createMapper(jobGraph,numSubTasks,serializer,serializer,serializer,int0Comparator);
   AbstractJobVertex reducer=createReducer(jobGraph,numSubTasks,serializer,int0Comparator,serializer);
-  AbstractJobVertex fakeTailOutput=JobGraphUtils.createFakeOutput(jobGraph,"FakeTailOutput",numSubTasks);
   AbstractJobVertex sync=createSync(jobGraph,numIterations,numSubTasks);
   OutputFormatVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
   JobGraphUtils.connect(points,mapper,ChannelType.NETWORK,DistributionPattern.POINTWISE);
@@ -18,7 +17,6 @@
   new TaskConfig(mapper.getConfiguration()).setRelativeInputMaterializationMemory(0,MEMORY_FRACTION_PER_CONSUMER);
   JobGraphUtils.connect(mapper,reducer,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
   new TaskConfig(reducer.getConfiguration()).setGateIterativeWithNumberOfEventsUntilInterrupt(0,numSubTasks);
-  JobGraphUtils.connect(reducer,fakeTailOutput,ChannelType.NETWORK,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,output,ChannelType.NETWORK,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.BIPARTITE);
   SlotSharingGroup sharingGroup=new SlotSharingGroup();
@@ -27,11 +25,9 @@
   head.setSlotSharingGroup(sharingGroup);
   mapper.setSlotSharingGroup(sharingGroup);
   reducer.setSlotSharingGroup(sharingGroup);
-  fakeTailOutput.setSlotSharingGroup(sharingGroup);
   sync.setSlotSharingGroup(sharingGroup);
   output.setSlotSharingGroup(sharingGroup);
   mapper.setStrictlyCoLocatedWith(head);
   reducer.setStrictlyCoLocatedWith(head);
-  fakeTailOutput.setStrictlyCoLocatedWith(reducer);
   return jobGraph;
 }

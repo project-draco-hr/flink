@@ -47,7 +47,6 @@
     chainedMapperConfig.setStubWrapper(new UserCodeClassWrapper<IncrementCoordinatesMapper>(IncrementCoordinatesMapper.class));
     chainedMapperConfig.setInputLocalStrategy(0,LocalStrategy.NONE);
     chainedMapperConfig.setInputSerializer(serializer,0);
-    chainedMapperConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
     chainedMapperConfig.setOutputSerializer(serializer);
     chainedMapperConfig.setIsWorksetUpdate();
     tailConfig.addChainedTask(ChainedCollectorMapDriver.class,chainedMapperConfig,"Chained ID Mapper");
@@ -60,7 +59,6 @@
     outputConfig.setStubWrapper(new UserCodeClassWrapper<PointOutFormat>(PointOutFormat.class));
     outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,outputPath);
   }
-  AbstractJobVertex fakeTail=JobGraphUtils.createFakeOutput(jobGraph,"Fake Tail",numSubTasks);
   AbstractJobVertex sync=JobGraphUtils.createSync(jobGraph,numSubTasks);
   TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
   syncConfig.setNumberOfIterations(maxIterations);
@@ -70,15 +68,12 @@
   tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,numSubTasks);
   JobGraphUtils.connect(head,output,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
-  JobGraphUtils.connect(tail,fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   SlotSharingGroup sharingGroup=new SlotSharingGroup();
   input.setSlotSharingGroup(sharingGroup);
   head.setSlotSharingGroup(sharingGroup);
   tail.setSlotSharingGroup(sharingGroup);
-  fakeTail.setSlotSharingGroup(sharingGroup);
   output.setSlotSharingGroup(sharingGroup);
   sync.setSlotSharingGroup(sharingGroup);
   tail.setStrictlyCoLocatedWith(head);
-  fakeTail.setStrictlyCoLocatedWith(tail);
   return jobGraph;
 }

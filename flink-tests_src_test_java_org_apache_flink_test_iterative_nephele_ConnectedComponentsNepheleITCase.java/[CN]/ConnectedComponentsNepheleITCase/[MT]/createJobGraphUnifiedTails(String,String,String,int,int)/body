@@ -9,7 +9,6 @@
   AbstractJobVertex intermediate=createIterationIntermediate(jobGraph,numSubTasks,serializer,comparator);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
   OutputFormatVertex output=createOutput(jobGraph,resultPath,numSubTasks,serializer);
-  AbstractJobVertex fakeTail=createFakeTail(jobGraph,numSubTasks);
   AbstractJobVertex sync=createSync(jobGraph,numSubTasks,maxIterations);
   AbstractJobVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,numSubTasks);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
@@ -21,7 +20,6 @@
     tailConfig.setIsSolutionSetUpdateWithoutReprobe();
     tailConfig.addInputToGroup(0);
     tailConfig.setInputSerializer(serializer,0);
-    tailConfig.addOutputShipStrategy(ShipStrategyType.FORWARD);
     tailConfig.setOutputSerializer(serializer);
     tailConfig.setDriver(JoinWithSolutionSetSecondDriver.class);
     tailConfig.setDriverStrategy(DriverStrategy.HYBRIDHASH_BUILD_SECOND);
@@ -37,7 +35,6 @@
   JobGraphUtils.connect(intermediate,tail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,1);
   JobGraphUtils.connect(head,output,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
-  JobGraphUtils.connect(tail,fakeTail,ChannelType.IN_MEMORY,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,ChannelType.NETWORK,DistributionPattern.POINTWISE);
   SlotSharingGroup sharingGroup=new SlotSharingGroup();
   vertices.setSlotSharingGroup(sharingGroup);
@@ -47,9 +44,7 @@
   tail.setSlotSharingGroup(sharingGroup);
   output.setSlotSharingGroup(sharingGroup);
   sync.setSlotSharingGroup(sharingGroup);
-  fakeTail.setSlotSharingGroup(sharingGroup);
   intermediate.setStrictlyCoLocatedWith(head);
   tail.setStrictlyCoLocatedWith(head);
-  fakeTail.setStrictlyCoLocatedWith(tail);
   return jobGraph;
 }
