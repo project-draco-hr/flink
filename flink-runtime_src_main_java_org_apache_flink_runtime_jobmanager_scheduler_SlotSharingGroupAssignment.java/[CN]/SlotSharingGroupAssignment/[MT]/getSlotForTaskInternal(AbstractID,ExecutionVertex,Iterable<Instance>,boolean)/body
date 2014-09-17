@@ -1,0 +1,45 @@
+{
+  if (allSlots.isEmpty()) {
+    return null;
+  }
+  Map<Instance,List<SharedSlot>> slotsForGroup=availableSlotsPerJid.get(groupId);
+  if (slotsForGroup == null) {
+    slotsForGroup=new LinkedHashMap<Instance,List<SharedSlot>>();
+    availableSlotsPerJid.put(groupId,slotsForGroup);
+    for (    SharedSlot availableSlot : allSlots) {
+      putIntoMultiMap(slotsForGroup,availableSlot.getAllocatedSlot().getInstance(),availableSlot);
+    }
+  }
+ else   if (slotsForGroup.isEmpty()) {
+    return null;
+  }
+  boolean didNotGetPreferred=false;
+  if (preferredLocations != null) {
+    for (    Instance location : preferredLocations) {
+      didNotGetPreferred=true;
+      SharedSlot slot=removeFromMultiMap(slotsForGroup,location);
+      if (slot != null && !slot.isDisposed()) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Local assignment in shared group : " + vertex + " --> "+ slot);
+        }
+        return new ImmutablePair<SharedSlot,Locality>(slot,Locality.LOCAL);
+      }
+    }
+  }
+  if (didNotGetPreferred && localOnly) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("No local assignment in shared possible for " + vertex);
+    }
+    return null;
+  }
+  SharedSlot slot=pollFromMultiMap(slotsForGroup);
+  if (slot != null && !slot.isDisposed()) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug((didNotGetPreferred ? "Non-local" : "Unconstrained") + " assignment in shared group : " + vertex+ " --> "+ slot);
+    }
+    return new ImmutablePair<SharedSlot,Locality>(slot,didNotGetPreferred ? Locality.NON_LOCAL : Locality.UNCONSTRAINED);
+  }
+ else {
+    return null;
+  }
+}

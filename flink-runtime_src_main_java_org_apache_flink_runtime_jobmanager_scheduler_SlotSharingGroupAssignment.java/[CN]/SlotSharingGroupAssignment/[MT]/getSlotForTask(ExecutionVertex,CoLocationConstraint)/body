@@ -1,0 +1,40 @@
+{
+synchronized (lock) {
+    SharedSlot shared=constraint.getSharedSlot();
+    if (shared != null && !shared.isDisposed()) {
+      SubSlot subslot=shared.allocateSubSlot(null);
+      subslot.setLocality(Locality.LOCAL);
+      return subslot;
+    }
+ else     if (shared == null) {
+      Pair<SharedSlot,Locality> p=getSlotForTaskInternal(constraint.getGroupId(),vertex,vertex.getPreferredLocations(),false);
+      if (p == null) {
+        return null;
+      }
+ else {
+        shared=p.getLeft();
+        Locality l=p.getRight();
+        SubSlot sub=shared.allocateSubSlot(null);
+        sub.setLocality(l);
+        if (l != Locality.NON_LOCAL) {
+          constraint.setSharedSlot(shared);
+        }
+        return sub;
+      }
+    }
+ else {
+      Instance location=shared.getAllocatedSlot().getInstance();
+      Pair<SharedSlot,Locality> p=getSlotForTaskInternal(constraint.getGroupId(),vertex,Collections.singleton(location),true);
+      if (p == null) {
+        return null;
+      }
+ else {
+        shared=p.getLeft();
+        constraint.setSharedSlot(shared);
+        SubSlot subslot=shared.allocateSubSlot(null);
+        subslot.setLocality(Locality.LOCAL);
+        return subslot;
+      }
+    }
+  }
+}

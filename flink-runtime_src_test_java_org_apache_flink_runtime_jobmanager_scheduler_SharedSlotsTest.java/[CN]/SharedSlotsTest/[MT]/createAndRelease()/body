@@ -1,8 +1,17 @@
 {
   try {
     SlotSharingGroupAssignment assignment=mock(SlotSharingGroupAssignment.class);
-    when(assignment.sharedSlotAvailableForJid(any(SharedSlot.class),any(JobVertexID.class),eq(false))).thenReturn(false);
-    when(assignment.sharedSlotAvailableForJid(any(SharedSlot.class),any(JobVertexID.class),eq(true))).thenReturn(true);
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        final SubSlot sub=(SubSlot)invocation.getArguments()[0];
+        final SharedSlot shared=(SharedSlot)invocation.getArguments()[1];
+        if (shared.releaseSlot(sub) == 0) {
+          shared.dispose();
+        }
+        return null;
+      }
+    }
+).when(assignment).releaseSubSlot(any(SubSlot.class),any(SharedSlot.class));
     Instance instance=SchedulerTestUtils.getRandomInstance(1);
     SharedSlot slot=new SharedSlot(instance.allocateSlot(new JobID()),assignment);
     assertFalse(slot.isDisposed());

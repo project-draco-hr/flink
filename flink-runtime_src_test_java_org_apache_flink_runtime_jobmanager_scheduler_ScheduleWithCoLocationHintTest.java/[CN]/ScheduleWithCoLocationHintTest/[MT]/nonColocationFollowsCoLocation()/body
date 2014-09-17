@@ -1,0 +1,34 @@
+{
+  try {
+    JobVertexID jid1=new JobVertexID();
+    JobVertexID jid2=new JobVertexID();
+    Scheduler scheduler=new Scheduler();
+    Instance i1=getRandomInstance(1);
+    Instance i2=getRandomInstance(1);
+    scheduler.newInstanceAvailable(i2);
+    scheduler.newInstanceAvailable(i1);
+    assertEquals(2,scheduler.getNumberOfAvailableSlots());
+    SlotSharingGroup sharingGroup=new SlotSharingGroup();
+    CoLocationGroup ccg=new CoLocationGroup();
+    CoLocationConstraint cc1=new CoLocationConstraint(ccg);
+    CoLocationConstraint cc2=new CoLocationConstraint(ccg);
+    AllocatedSlot s1=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid1,0,2,i1),sharingGroup,cc1));
+    AllocatedSlot s2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid1,1,2,i2),sharingGroup,cc2));
+    AllocatedSlot s3=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid2,0,2,i1),sharingGroup));
+    AllocatedSlot s4=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid2,1,2,i1),sharingGroup));
+    assertEquals(2,((SubSlot)s1).getSharedSlot().getNumberOfAllocatedSubSlots());
+    assertEquals(2,((SubSlot)s2).getSharedSlot().getNumberOfAllocatedSubSlots());
+    s1.releaseSlot();
+    s2.releaseSlot();
+    s3.releaseSlot();
+    s4.releaseSlot();
+    assertEquals(2,scheduler.getNumberOfAvailableSlots());
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfSlots());
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid1));
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfAvailableSlotsForJid(jid2));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

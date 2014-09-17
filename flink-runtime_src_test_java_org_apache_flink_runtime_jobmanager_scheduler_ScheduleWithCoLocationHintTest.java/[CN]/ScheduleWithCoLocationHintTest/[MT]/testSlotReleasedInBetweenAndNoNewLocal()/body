@@ -1,0 +1,44 @@
+{
+  try {
+    JobVertexID jid1=new JobVertexID();
+    JobVertexID jid2=new JobVertexID();
+    JobVertexID jidx=new JobVertexID();
+    Scheduler scheduler=new Scheduler();
+    Instance i1=getRandomInstance(1);
+    Instance i2=getRandomInstance(1);
+    scheduler.newInstanceAvailable(i2);
+    scheduler.newInstanceAvailable(i1);
+    assertEquals(2,scheduler.getNumberOfAvailableSlots());
+    SlotSharingGroup sharingGroup=new SlotSharingGroup();
+    CoLocationGroup ccg=new CoLocationGroup();
+    CoLocationConstraint cc1=new CoLocationConstraint(ccg);
+    CoLocationConstraint cc2=new CoLocationConstraint(ccg);
+    AllocatedSlot s1=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid1,0,2,i1),sharingGroup,cc1));
+    AllocatedSlot s2=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid1,1,2,i2),sharingGroup,cc2));
+    s1.releaseSlot();
+    s2.releaseSlot();
+    assertEquals(2,scheduler.getNumberOfAvailableSlots());
+    assertEquals(0,sharingGroup.getTaskAssignment().getNumberOfSlots());
+    AllocatedSlot sa=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jidx,0,2)));
+    AllocatedSlot sb=scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jidx,1,2)));
+    try {
+      scheduler.scheduleImmediately(new ScheduledUnit(getTestVertexWithLocation(jid2,0,2,i2),sharingGroup,cc1));
+      fail("should not be able to find a resource");
+    }
+ catch (    NoResourceAvailableException e) {
+    }
+catch (    Exception e) {
+      fail("wrong exception");
+    }
+    sa.releaseSlot();
+    sb.releaseSlot();
+    assertEquals(2,scheduler.getNumberOfAvailableSlots());
+    assertEquals(2,scheduler.getNumberOfLocalizedAssignments());
+    assertEquals(0,scheduler.getNumberOfNonLocalizedAssignments());
+    assertEquals(2,scheduler.getNumberOfUnconstrainedAssignments());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
