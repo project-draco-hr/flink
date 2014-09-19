@@ -2,14 +2,14 @@
   try {
     final ActionQueue queue=new ActionQueue();
     final JobVertexID jid=new JobVertexID();
-    TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
-    final Instance instance=getInstance(taskManager);
+    final Instance instance=spy(getInstance(ActorRef.noSender()));
+    doNothing().when(instance).checkLibraryAvailability(Matchers.<JobID>any());
     final AllocatedSlot slot=instance.allocateSlot(new JobID());
     final ExecutionJobVertex ejv=getJobVertexExecutingTriggered(jid,queue);
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0]);
     final ExecutionAttemptID eid=vertex.getCurrentExecutionAttempt().getAttemptId();
-    when(taskManager.submitTask(any(TaskDeploymentDescriptor.class))).thenReturn(new TaskOperationResult(eid,true));
-    when(taskManager.cancelTask(any(ExecutionAttemptID.class))).thenReturn(new TaskOperationResult(eid,false),new TaskOperationResult(eid,true));
+    doReturn(new TaskOperationResult(eid,true)).when(instance).submitTask(Matchers.<TaskDeploymentDescriptor>any());
+    doReturn(new TaskOperationResult(eid,false)).doReturn(new TaskOperationResult(eid,true)).when(instance).cancelTask(Matchers.<ExecutionAttemptID>any());
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
     assertEquals(ExecutionState.DEPLOYING,vertex.getExecutionState());
@@ -26,8 +26,8 @@
     assertTrue(vertex.getStateTimestamp(ExecutionState.CREATED) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.DEPLOYING) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.FAILED) > 0);
-    verify(taskManager,times(2)).cancelTask(eid);
-    verify(taskManager,times(1)).submitTask(any(TaskDeploymentDescriptor.class));
+    verify(instance,times(2)).cancelTask(eid);
+    verify(instance,times(1)).submitTask(any(TaskDeploymentDescriptor.class));
   }
  catch (  Exception e) {
     e.printStackTrace();

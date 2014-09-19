@@ -34,16 +34,16 @@
     ExecutionJobVertex ejv=eg.getAllVertices().get(jid2);
     ExecutionVertex vertex=ejv.getTaskVertices()[3];
     final AtomicReference<TaskDeploymentDescriptor> reference=new AtomicReference<TaskDeploymentDescriptor>();
-    TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
-    when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenAnswer(new Answer<TaskOperationResult>(){
-      @Override public TaskOperationResult answer(      InvocationOnMock invocation){
-        final TaskDeploymentDescriptor tdd=(TaskDeploymentDescriptor)invocation.getArguments()[0];
+    final ActorRef simpleTaskManager=system.actorOf(Props.create(ExecutionGraphTestUtils.SimpleAcknowledgingTaskManager.class));
+    final Instance instance=spy(getInstance(simpleTaskManager));
+    doAnswer(new Answer<TaskOperationResult>(){
+      @Override public TaskOperationResult answer(      InvocationOnMock invocation) throws Throwable {
+        TaskDeploymentDescriptor tdd=(TaskDeploymentDescriptor)invocation.getArguments()[0];
         reference.set(tdd);
-        return new TaskOperationResult(tdd.getExecutionId(),true);
+        return (TaskOperationResult)invocation.callRealMethod();
       }
     }
-);
-    final Instance instance=getInstance(taskManager);
+).when(instance).submitTask(Matchers.<TaskDeploymentDescriptor>any());
     final AllocatedSlot slot=instance.allocateSlot(jobId);
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);

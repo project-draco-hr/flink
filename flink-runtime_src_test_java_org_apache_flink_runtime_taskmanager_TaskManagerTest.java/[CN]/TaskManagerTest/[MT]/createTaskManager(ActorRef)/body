@@ -1,0 +1,17 @@
+{
+  Configuration cfg=new Configuration();
+  cfg.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,10);
+  GlobalConfiguration.includeConfiguration(cfg);
+  String akkaURL=jm.path().toSerializationFormat();
+  cfg.setString(ConfigConstants.JOB_MANAGER_AKKA_URL,akkaURL);
+  ActorRef taskManager=TestingActors.startTestingTaskManagerWithConfiguration("localhost",cfg,system);
+  Future<Object> response=Patterns.ask(taskManager,TaskManagerMessages.NotifyWhenRegisteredAtMaster$.MODULE$,AkkaUtils.FUTURE_TIMEOUT());
+  try {
+    FiniteDuration d=new FiniteDuration(1,TimeUnit.SECONDS);
+    Await.ready(response,d);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Exception while waiting for the task manager registration.",e);
+  }
+  return taskManager;
+}

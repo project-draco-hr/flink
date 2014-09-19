@@ -1,54 +1,68 @@
 {
-  JobManager jobManager=null;
-  TaskManager tm=null;
-  try {
-    jobManager=getJobManagerMockBase();
-    tm=createTaskManager(jobManager);
-    JobID jid1=new JobID();
-    JobID jid2=new JobID();
-    JobVertexID vid1=new JobVertexID();
-    JobVertexID vid2=new JobVertexID();
-    ExecutionAttemptID eid1=new ExecutionAttemptID();
-    ExecutionAttemptID eid2=new ExecutionAttemptID();
-    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid1,vid1,eid1,"TestTask1",1,5,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid2,vid2,eid2,"TestTask2",2,7,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-    TaskOperationResult result1=tm.submitTask(tdd1);
-    TaskOperationResult result2=tm.submitTask(tdd2);
-    assertTrue(result1.getDescription(),result1.isSuccess());
-    assertTrue(result2.getDescription(),result2.isSuccess());
-    assertEquals(eid1,result1.getExecutionId());
-    assertEquals(eid2,result2.getExecutionId());
-    Map<ExecutionAttemptID,Task> tasks=tm.getAllRunningTasks();
-    assertEquals(2,tasks.size());
-    Task t1=tasks.get(eid1);
-    Task t2=tasks.get(eid2);
-    assertNotNull(t1);
-    assertNotNull(t2);
-    assertEquals(ExecutionState.RUNNING,t1.getExecutionState());
-    assertEquals(ExecutionState.RUNNING,t2.getExecutionState());
-    assertTrue(tm.cancelTask(eid1).isSuccess());
-    t1.getEnvironment().getExecutingThread().join();
-    assertEquals(ExecutionState.CANCELED,t1.getExecutionState());
-    tasks=tm.getAllRunningTasks();
-    assertEquals(1,tasks.size());
-    assertFalse(tm.cancelTask(eid1).isSuccess());
-    assertTrue(tm.cancelTask(eid2).isSuccess());
-    t2.getEnvironment().getExecutingThread().join();
-    assertEquals(ExecutionState.CANCELED,t2.getExecutionState());
-    tasks=tm.getAllRunningTasks();
-    assertEquals(0,tasks.size());
-    assertNetworkResourcesReleased(tm);
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
- finally {
-    if (jobManager != null) {
-      jobManager.shutdown();
+  new JavaTestKit(system){
+{
+      try {
+        ActorRef jobManager=system.actorOf(Props.create(SimpleJobManager.class));
+        final ActorRef tm=createTaskManager(jobManager);
+        final JobID jid1=new JobID();
+        final JobID jid2=new JobID();
+        JobVertexID vid1=new JobVertexID();
+        JobVertexID vid2=new JobVertexID();
+        final ExecutionAttemptID eid1=new ExecutionAttemptID();
+        final ExecutionAttemptID eid2=new ExecutionAttemptID();
+        final TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid1,vid1,eid1,"TestTask1",1,5,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+        final TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid2,vid2,eid2,"TestTask2",2,7,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+        final FiniteDuration d=duration("1 second");
+        new Within(d){
+          @Override protected void run(){
+            try {
+              tm.tell(new TaskManagerMessages.SubmitTask(tdd1),getRef());
+              tm.tell(new TaskManagerMessages.SubmitTask(tdd2),getRef());
+              expectMsgEquals(new TaskOperationResult(eid1,true));
+              expectMsgEquals(new TaskOperationResult(eid2,true));
+              tm.tell(TestingTaskManagerMessages.RequestRunningTasks$.MODULE$,getRef());
+              Map<ExecutionAttemptID,Task> runningTasks=expectMsgClass(TestingTaskManagerMessages.ResponseRunningTasks.class).asJava();
+              assertEquals(2,runningTasks.size());
+              Task t1=runningTasks.get(eid1);
+              Task t2=runningTasks.get(eid2);
+              assertNotNull(t1);
+              assertNotNull(t2);
+              assertEquals(ExecutionState.RUNNING,t1.getExecutionState());
+              assertEquals(ExecutionState.RUNNING,t2.getExecutionState());
+              tm.tell(new TaskManagerMessages.CancelTask(eid1),getRef());
+              expectMsgEquals(new TaskOperationResult(eid1,true));
+              Future<Object> response=Patterns.ask(tm,new NotifyWhenTaskRemoved(eid1),AkkaUtils.FUTURE_TIMEOUT());
+              Await.ready(response,d);
+              assertEquals(ExecutionState.CANCELED,t1.getExecutionState());
+              tm.tell(TestingTaskManagerMessages.RequestRunningTasks$.MODULE$,getRef());
+              runningTasks=expectMsgClass(TestingTaskManagerMessages.ResponseRunningTasks.class).asJava();
+              assertEquals(1,runningTasks.size());
+              tm.tell(new TaskManagerMessages.CancelTask(eid1),getRef());
+              expectMsgEquals(new TaskOperationResult(eid1,false,"No task with that execution ID was " + "found."));
+              tm.tell(new TaskManagerMessages.CancelTask(eid2),getRef());
+              expectMsgEquals(new TaskOperationResult(eid2,true));
+              response=Patterns.ask(tm,new NotifyWhenTaskRemoved(eid2),AkkaUtils.FUTURE_TIMEOUT());
+              Await.ready(response,d);
+              assertEquals(ExecutionState.CANCELED,t2.getExecutionState());
+              tm.tell(TestingTaskManagerMessages.RequestRunningTasks$.MODULE$,getRef());
+              runningTasks=expectMsgClass(TestingTaskManagerMessages.ResponseRunningTasks.class).asJava();
+              assertEquals(0,runningTasks.size());
+              assertNull(LibraryCacheManager.getClassLoader(jid1));
+              assertNull(LibraryCacheManager.getClassLoader(jid2));
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+      }
+ catch (      Exception e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
     }
-    if (tm != null) {
-      tm.shutdown();
-    }
   }
+;
 }

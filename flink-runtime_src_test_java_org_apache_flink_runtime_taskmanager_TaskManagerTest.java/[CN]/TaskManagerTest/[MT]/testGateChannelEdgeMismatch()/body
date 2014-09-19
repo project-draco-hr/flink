@@ -1,33 +1,45 @@
 {
-  JobManager jobManager=null;
-  TaskManager tm=null;
-  try {
-    jobManager=getJobManagerMockBase();
-    tm=createTaskManager(jobManager);
-    JobID jid=new JobID();
-    ;
-    JobVertexID vid1=new JobVertexID();
-    JobVertexID vid2=new JobVertexID();
-    ExecutionAttemptID eid1=new ExecutionAttemptID();
-    ExecutionAttemptID eid2=new ExecutionAttemptID();
-    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),Receiver.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-    assertFalse(tm.submitTask(tdd1).isSuccess());
-    assertFalse(tm.submitTask(tdd2).isSuccess());
-    Map<ExecutionAttemptID,Task> tasks=tm.getAllRunningTasks();
-    assertEquals(0,tasks.size());
-    assertNetworkResourcesReleased(tm);
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
- finally {
-    if (jobManager != null) {
-      jobManager.shutdown();
+  new JavaTestKit(system){
+{
+      try {
+        ActorRef jm=system.actorOf(Props.create(SimpleJobManager.class));
+        final ActorRef tm=createTaskManager(jm);
+        final JobID jid=new JobID();
+        JobVertexID vid1=new JobVertexID();
+        JobVertexID vid2=new JobVertexID();
+        final ExecutionAttemptID eid1=new ExecutionAttemptID();
+        final ExecutionAttemptID eid2=new ExecutionAttemptID();
+        final TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+        final TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),Receiver.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+        new Within(duration("1 second")){
+          @Override protected void run(){
+            try {
+              tm.tell(new TaskManagerMessages.SubmitTask(tdd1),getRef());
+              tm.tell(new TaskManagerMessages.SubmitTask(tdd2),getRef());
+              TaskOperationResult result=expectMsgClass(TaskOperationResult.class);
+              assertFalse(result.isSuccess());
+              assertEquals(eid1,result.getExecutionId());
+              result=expectMsgClass(TaskOperationResult.class);
+              assertFalse(result.isSuccess());
+              assertEquals(eid2,result.getExecutionId());
+              tm.tell(TestingTaskManagerMessages.RequestRunningTasks$.MODULE$,getRef());
+              Map<ExecutionAttemptID,Task> tasks=expectMsgClass(TestingTaskManagerMessages.ResponseRunningTasks.class).asJava();
+              assertEquals(0,tasks.size());
+              assertNull(LibraryCacheManager.getClassLoader(jid));
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+      }
+ catch (      Exception e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
     }
-    if (tm != null) {
-      tm.shutdown();
-    }
   }
+;
 }

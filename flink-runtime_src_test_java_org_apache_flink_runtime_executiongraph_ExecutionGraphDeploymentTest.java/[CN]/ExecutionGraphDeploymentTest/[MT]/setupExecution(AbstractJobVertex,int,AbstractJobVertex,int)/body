@@ -8,24 +8,10 @@
   eg.setQueuedSchedulingAllowed(false);
   List<AbstractJobVertex> ordered=Arrays.asList(v1,v2);
   eg.attachJobGraph(ordered);
-  TaskOperationProtocol taskManager=mock(TaskOperationProtocol.class);
-  when(taskManager.submitTask(Matchers.any(TaskDeploymentDescriptor.class))).thenAnswer(new Answer<TaskOperationResult>(){
-    @Override public TaskOperationResult answer(    InvocationOnMock invocation){
-      final TaskDeploymentDescriptor tdd=(TaskDeploymentDescriptor)invocation.getArguments()[0];
-      return new TaskOperationResult(tdd.getExecutionId(),true);
-    }
-  }
-);
-  when(taskManager.cancelTask(Matchers.any(ExecutionAttemptID.class))).thenAnswer(new Answer<TaskOperationResult>(){
-    @Override public TaskOperationResult answer(    InvocationOnMock invocation){
-      final ExecutionAttemptID id=(ExecutionAttemptID)invocation.getArguments()[0];
-      return new TaskOperationResult(id,true);
-    }
-  }
-);
+  ActorRef tm=system.actorOf(Props.create(ExecutionGraphTestUtils.SimpleAcknowledgingTaskManager.class));
   Scheduler scheduler=new Scheduler();
   for (int i=0; i < dop1 + dop2; i++) {
-    scheduler.newInstanceAvailable(getInstance(taskManager));
+    scheduler.newInstanceAvailable(ExecutionGraphTestUtils.getInstance(tm));
   }
   assertEquals(dop1 + dop2,scheduler.getNumberOfAvailableSlots());
   eg.scheduleForExecution(scheduler);
