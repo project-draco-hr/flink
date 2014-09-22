@@ -1,0 +1,28 @@
+{
+  try {
+    final GroupReduceFunction<Tuple2<String,Integer>,Tuple2<String,Integer>> reducer=new GroupReduceFunction<Tuple2<String,Integer>,Tuple2<String,Integer>>(){
+      @Override public void reduce(      Iterable<Tuple2<String,Integer>> values,      Collector<Tuple2<String,Integer>> out) throws Exception {
+        Iterator<Tuple2<String,Integer>> input=values.iterator();
+        Tuple2<String,Integer> result=input.next();
+        int sum=result.f1;
+        while (input.hasNext()) {
+          Tuple2<String,Integer> next=input.next();
+          sum+=next.f1;
+        }
+        result.f1=sum;
+        out.collect(result);
+      }
+    }
+;
+    GroupReduceOperatorBase<Tuple2<String,Integer>,Tuple2<String,Integer>,GroupReduceFunction<Tuple2<String,Integer>,Tuple2<String,Integer>>> op=new GroupReduceOperatorBase<Tuple2<String,Integer>,Tuple2<String,Integer>,GroupReduceFunction<Tuple2<String,Integer>,Tuple2<String,Integer>>>(reducer,new UnaryOperatorInformation<Tuple2<String,Integer>,Tuple2<String,Integer>>(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>")),new int[]{0},"TestReducer");
+    List<Tuple2<String,Integer>> input=new ArrayList<Tuple2<String,Integer>>(asList(new Tuple2<String,Integer>("foo",1),new Tuple2<String,Integer>("foo",3),new Tuple2<String,Integer>("bar",2),new Tuple2<String,Integer>("bar",4)));
+    List<Tuple2<String,Integer>> result=op.executeOnCollections(input,null);
+    Set<Tuple2<String,Integer>> resultSet=new HashSet<Tuple2<String,Integer>>(result);
+    Set<Tuple2<String,Integer>> expectedResult=new HashSet<Tuple2<String,Integer>>(asList(new Tuple2<String,Integer>("foo",4),new Tuple2<String,Integer>("bar",6)));
+    assertEquals(expectedResult,resultSet);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
