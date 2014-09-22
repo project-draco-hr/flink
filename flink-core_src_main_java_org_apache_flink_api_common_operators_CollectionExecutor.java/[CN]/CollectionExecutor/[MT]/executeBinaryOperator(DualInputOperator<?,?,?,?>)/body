@@ -1,0 +1,25 @@
+{
+  Operator<?> inputOp1=operator.getFirstInput();
+  Operator<?> inputOp2=operator.getSecondInput();
+  if (inputOp1 == null) {
+    throw new InvalidProgramException("The binary operation " + operator.getName() + " has no first input.");
+  }
+  if (inputOp2 == null) {
+    throw new InvalidProgramException("The binary operation " + operator.getName() + " has no second input.");
+  }
+  @SuppressWarnings("unchecked") List<IN1> inputData1=(List<IN1>)execute(inputOp1);
+  @SuppressWarnings("unchecked") List<IN2> inputData2=(List<IN2>)execute(inputOp2);
+  @SuppressWarnings("unchecked") DualInputOperator<IN1,IN2,OUT,?> typedOp=(DualInputOperator<IN1,IN2,OUT,?>)operator;
+  RuntimeUDFContext ctx;
+  if (RichFunction.class.isAssignableFrom(typedOp.getUserCodeWrapper().getUserCodeClass())) {
+    ctx=new RuntimeUDFContext(operator.getName(),1,0);
+  }
+ else {
+    ctx=null;
+  }
+  List<OUT> result=typedOp.executeOnCollections(inputData1,inputData2,ctx);
+  if (ctx != null) {
+    AccumulatorHelper.mergeInto(this.accumulators,ctx.getAllAccumulators());
+  }
+  return result;
+}

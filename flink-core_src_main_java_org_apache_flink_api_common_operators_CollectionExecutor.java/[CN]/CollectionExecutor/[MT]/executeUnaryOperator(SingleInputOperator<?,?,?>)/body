@@ -1,0 +1,20 @@
+{
+  Operator<?> inputOp=operator.getInput();
+  if (inputOp == null) {
+    throw new InvalidProgramException("The unary operation " + operator.getName() + " has no input.");
+  }
+  @SuppressWarnings("unchecked") List<IN> inputData=(List<IN>)execute(inputOp);
+  @SuppressWarnings("unchecked") SingleInputOperator<IN,OUT,?> typedOp=(SingleInputOperator<IN,OUT,?>)operator;
+  RuntimeUDFContext ctx;
+  if (RichFunction.class.isAssignableFrom(typedOp.getUserCodeWrapper().getUserCodeClass())) {
+    ctx=new RuntimeUDFContext(operator.getName(),1,0);
+  }
+ else {
+    ctx=null;
+  }
+  List<OUT> result=typedOp.executeOnCollections(inputData,ctx);
+  if (ctx != null) {
+    AccumulatorHelper.mergeInto(this.accumulators,ctx.getAllAccumulators());
+  }
+  return result;
+}
