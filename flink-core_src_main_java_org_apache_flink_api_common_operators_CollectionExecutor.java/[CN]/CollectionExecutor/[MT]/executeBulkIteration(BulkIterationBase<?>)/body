@@ -1,0 +1,33 @@
+{
+  Operator<?> inputOp=iteration.getInput();
+  if (inputOp == null) {
+    throw new InvalidProgramException("The iteration " + iteration.getName() + " has input (initial partial solution).");
+  }
+  if (iteration.getNextPartialSolution() == null) {
+    throw new InvalidProgramException("The iteration " + iteration.getName() + " has no next partial solution defined (is not closed).");
+  }
+  List<T> inputData=(List<T>)execute(inputOp);
+  Set<Operator<?>> dynamics=new LinkedHashSet<Operator<?>>();
+  DynamicPathCollector dynCollector=new DynamicPathCollector(dynamics);
+  iteration.getNextPartialSolution().accept(dynCollector);
+  if (iteration.getTerminationCriterion() != null) {
+    iteration.getTerminationCriterion().accept(dynCollector);
+  }
+  List<T> currentResult=inputData;
+  final int maxIterations=iteration.getMaximumNumberOfIterations();
+  for (int superstep=1; superstep <= maxIterations; superstep++) {
+    this.intermediateResults.put(iteration.getPartialSolution(),currentResult);
+    currentResult=(List<T>)execute(iteration.getNextPartialSolution(),superstep);
+    this.intermediateResults.put(iteration.getNextPartialSolution(),currentResult);
+    if (iteration.getTerminationCriterion() != null) {
+      List<?> term=execute(((SingleInputOperator<?,?,?>)iteration.getTerminationCriterion()).getInput(),superstep);
+      if (term.isEmpty()) {
+        break;
+      }
+    }
+    for (    Operator<?> o : dynamics) {
+      intermediateResults.remove(o);
+    }
+  }
+  return currentResult;
+}
