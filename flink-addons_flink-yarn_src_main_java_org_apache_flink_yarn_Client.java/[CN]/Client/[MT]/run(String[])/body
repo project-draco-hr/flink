@@ -95,11 +95,17 @@
     }
   }
   boolean hasLogback=false;
+  boolean hasLog4j=false;
   if (confDirPath.length() > 0) {
     File logback=new File(confDirPath + "/logback.xml");
     if (logback.exists()) {
       shipFiles.add(logback);
       hasLogback=true;
+    }
+    File log4j=new File(confDirPath + "/log4j.properties");
+    if (log4j.exists()) {
+      shipFiles.add(log4j);
+      hasLog4j=true;
     }
   }
   String queue="default";
@@ -199,8 +205,14 @@
   final String javaOpts=GlobalConfiguration.getString(ConfigConstants.FLINK_JVM_OPTIONS,"");
   ContainerLaunchContext amContainer=Records.newRecord(ContainerLaunchContext.class);
   String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jmMemory) + "M "+ javaOpts;
+  if (hasLogback || hasLog4j) {
+    amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-main.log\"";
+  }
   if (hasLogback) {
-    amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-logback.log\" "+ "-Dlogback.configurationFile=file:logback.xml";
+    amCommand+=" -Dlogback.configurationFile=file:logback.xml";
+  }
+  if (hasLog4j) {
+    amCommand+=" -Dlog4j.configuration=file:log4j.properties";
   }
   amCommand+=" " + ApplicationMaster.class.getName() + " "+ " 1>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stdout.log"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager-stderr.log";
   amContainer.setCommands(Collections.singletonList(amCommand));
