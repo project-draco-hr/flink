@@ -1,19 +1,19 @@
 {
-  if (owner.isCanceled()) {
+  if (owner.isCanceledOrFailed()) {
     owner.cancelingDone();
     return;
   }
   try {
     Thread.currentThread().setContextClassLoader(userCodeClassLoader);
     this.invokable.invoke();
-    if (this.owner.isCanceled()) {
+    if (this.owner.isCanceledOrFailed()) {
       throw new CancelTaskException();
     }
     closeInputGates();
     requestAllOutputGatesToClose();
     waitForInputChannelsToBeClosed();
     waitForOutputChannelsToBeClosed();
-    if (this.owner.isCanceled()) {
+    if (this.owner.isCanceledOrFailed()) {
       throw new CancelTaskException();
     }
     if (!owner.markAsFinished()) {
@@ -21,7 +21,7 @@
     }
   }
  catch (  Throwable t) {
-    if (!this.owner.isCanceled()) {
+    if (!this.owner.isCanceledOrFailed()) {
       try {
         this.invokable.cancel();
       }
@@ -30,7 +30,7 @@
       }
     }
     releaseAllChannelResources();
-    if (this.owner.isCanceled() || t instanceof CancelTaskException) {
+    if (this.owner.isCanceledOrFailed() || t instanceof CancelTaskException) {
       this.owner.cancelingDone();
     }
  else {

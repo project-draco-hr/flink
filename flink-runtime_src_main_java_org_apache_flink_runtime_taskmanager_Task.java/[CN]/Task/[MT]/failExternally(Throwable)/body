@@ -1,0 +1,31 @@
+{
+  while (true) {
+    ExecutionState current=this.executionState;
+    if (current == ExecutionState.FINISHED || current == ExecutionState.CANCELED || current == ExecutionState.CANCELING || current == ExecutionState.FAILED) {
+      return;
+    }
+    if (current == ExecutionState.DEPLOYING) {
+      if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.FAILED)) {
+        notifyObservers(ExecutionState.FAILED,null);
+        taskManager.notifyExecutionStateChange(jobId,executionId,ExecutionState.FAILED,cause);
+        return;
+      }
+    }
+ else     if (current == ExecutionState.RUNNING) {
+      if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.FAILED)) {
+        try {
+          this.environment.cancelExecution();
+        }
+ catch (        Throwable e) {
+          LOG.error("Error while cancelling the task.",e);
+        }
+        notifyObservers(ExecutionState.FAILED,null);
+        taskManager.notifyExecutionStateChange(jobId,executionId,ExecutionState.FAILED,cause);
+        return;
+      }
+    }
+ else {
+      throw new RuntimeException("unexpected state for cancelling: " + current);
+    }
+  }
+}
