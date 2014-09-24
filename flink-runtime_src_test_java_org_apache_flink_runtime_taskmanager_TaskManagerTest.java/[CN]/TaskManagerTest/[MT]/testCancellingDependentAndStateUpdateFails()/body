@@ -1,4 +1,6 @@
 {
+  JobManager jobManager=null;
+  TaskManager tm=null;
   try {
     JobID jid=new JobID();
     JobVertexID vid1=new JobVertexID();
@@ -7,16 +9,13 @@
     ExecutionAttemptID eid2=new ExecutionAttemptID();
     ChannelID senderId=new ChannelID();
     ChannelID receiverId=new ChannelID();
-    JobManager jobManager=getJobManagerMockBase();
+    jobManager=getJobManagerMockBase();
     when(jobManager.updateTaskExecutionState(any(TaskExecutionState.class))).thenReturn(false);
     when(jobManager.lookupConnectionInfo(Matchers.any(InstanceConnectionInfo.class),Matchers.eq(jid),Matchers.eq(senderId))).thenReturn(ConnectionInfoLookupResponse.createReceiverFoundAndReady(receiverId));
-    TaskManager tm=createTaskManager(jobManager);
+    tm=createTaskManager(jobManager);
     ChannelDeploymentDescriptor cdd=new ChannelDeploymentDescriptor(senderId,receiverId);
-    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),Collections.<GateDeploymentDescriptor>emptyList(),new String[0],0);
-    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),ReceiverBlocking.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),new String[0],0);
-    LibraryCacheManager.register(jid,new String[0]);
-    LibraryCacheManager.register(jid,new String[0]);
-    assertNotNull(LibraryCacheManager.getClassLoader(jid));
+    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),ReceiverBlocking.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),new ArrayList<BlobKey>(),0);
     TaskOperationResult result2=tm.submitTask(tdd2);
     TaskOperationResult result1=tm.submitTask(tdd1);
     assertTrue(result1.isSuccess());
@@ -40,5 +39,13 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    if (jobManager != null) {
+      jobManager.shutdown();
+    }
+    if (tm != null) {
+      tm.shutdown();
+    }
   }
 }

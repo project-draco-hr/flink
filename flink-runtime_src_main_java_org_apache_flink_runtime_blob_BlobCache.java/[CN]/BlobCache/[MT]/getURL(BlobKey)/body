@@ -1,0 +1,51 @@
+{
+  if (requiredBlob == null) {
+    throw new IllegalArgumentException("Required BLOB cannot be null.");
+  }
+  BlobClient bc=null;
+  byte[] buf=null;
+  URL url=null;
+  try {
+    final File localJarFile=BlobUtils.getStorageLocation(storageDir,requiredBlob);
+    if (!localJarFile.exists()) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Trying to download " + requiredBlob + " from "+ serverAddress);
+      }
+      if (bc == null) {
+        if (serverAddress == null) {
+          throw new IllegalArgumentException("Argument serverAddress is null: Cannot download libraries from BLOB server");
+        }
+        bc=new BlobClient(serverAddress);
+        buf=new byte[BlobServer.BUFFER_SIZE];
+      }
+      InputStream is=null;
+      OutputStream os=null;
+      try {
+        is=bc.get(requiredBlob);
+        os=new FileOutputStream(localJarFile);
+        while (true) {
+          final int read=is.read(buf);
+          if (read < 0) {
+            break;
+          }
+          os.write(buf,0,read);
+        }
+      }
+  finally {
+        if (is != null) {
+          is.close();
+        }
+        if (os != null) {
+          os.close();
+        }
+      }
+    }
+    url=localJarFile.toURI().toURL();
+  }
+  finally {
+    if (bc != null) {
+      bc.close();
+    }
+  }
+  return url;
+}

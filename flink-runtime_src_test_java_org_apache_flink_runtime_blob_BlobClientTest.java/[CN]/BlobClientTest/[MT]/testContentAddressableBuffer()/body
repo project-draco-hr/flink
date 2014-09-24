@@ -1,0 +1,32 @@
+{
+  final byte[] testBuffer=createTestBuffer();
+  final MessageDigest md=BlobUtils.createMessageDigest();
+  md.update(testBuffer);
+  final BlobKey origKey=new BlobKey(md.digest());
+  try {
+    BlobClient client=null;
+    try {
+      final InetSocketAddress serverAddress=new InetSocketAddress("localhost",BLOB_SERVER.getServerPort());
+      client=new BlobClient(serverAddress);
+      final BlobKey receivedKey=client.put(testBuffer);
+      assertEquals(origKey,receivedKey);
+      final InputStream is=client.get(receivedKey);
+      validateGet(is,testBuffer);
+      try {
+        client.get(new BlobKey());
+      }
+ catch (      FileNotFoundException fnfe) {
+        return;
+      }
+      fail("Expected FileNotFoundException did not occur");
+    }
+  finally {
+      if (client != null) {
+        client.close();
+      }
+    }
+  }
+ catch (  IOException ioe) {
+    fail(StringUtils.stringifyException(ioe));
+  }
+}

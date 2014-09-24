@@ -1,0 +1,60 @@
+{
+  Configuration config=new Configuration();
+  config.setLong(ConfigConstants.LIBRARY_CACHE_MANAGER_CLEANUP_INTERVAL,1);
+  GlobalConfiguration.includeConfiguration(config);
+  JobID jid=new JobID();
+  List<BlobKey> keys=new ArrayList<BlobKey>();
+  BlobServer server=null;
+  LibraryCacheManager libraryCacheManager=null;
+  final byte[] buf=new byte[128];
+  try {
+    server=new BlobServer();
+    InetSocketAddress blobSocketAddress=new InetSocketAddress(server.getServerPort());
+    BlobClient bc=new BlobClient(blobSocketAddress);
+    keys.add(bc.put(buf));
+    buf[0]+=1;
+    keys.add(bc.put(buf));
+    libraryCacheManager=new BlobLibraryCacheManager(server,GlobalConfiguration.getConfiguration());
+    libraryCacheManager.register(jid,keys);
+    List<File> files=new ArrayList<File>();
+    for (    BlobKey key : keys) {
+      files.add(libraryCacheManager.getFile(key));
+    }
+    assertEquals(2,files.size());
+    files.clear();
+    libraryCacheManager.unregister(jid);
+    Thread.sleep(1500);
+    int caughtExceptions=0;
+    for (    BlobKey key : keys) {
+      try {
+        files.add(libraryCacheManager.getFile(key));
+      }
+ catch (      IOException ioe) {
+        caughtExceptions++;
+      }
+    }
+    assertEquals(2,caughtExceptions);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (server != null) {
+      try {
+        server.shutdown();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+    if (libraryCacheManager != null) {
+      try {
+        libraryCacheManager.shutdown();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+}

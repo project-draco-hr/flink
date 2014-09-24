@@ -1,0 +1,22 @@
+{
+  final int bytesMissing=this.bytesToReceive - this.bytesReceived;
+  if (bytesMissing == 0) {
+    return -1;
+  }
+  final int maxRecv=Math.min(len,bytesMissing);
+  final int read=this.wrappedInputStream.read(b,off,maxRecv);
+  if (read < 0) {
+    throwEOFException();
+  }
+  this.bytesReceived+=read;
+  if (this.md != null) {
+    this.md.update(b,off,read);
+    if (this.bytesReceived == this.bytesToReceive) {
+      final BlobKey computedKey=new BlobKey(this.md.digest());
+      if (!computedKey.equals(this.blobKey)) {
+        throw new IOException("Detected data corruption during transfer");
+      }
+    }
+  }
+  return read;
+}

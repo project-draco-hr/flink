@@ -1,0 +1,60 @@
+{
+  JobID jobID=null;
+  String key=null;
+  MessageDigest md=null;
+  final int contentAdressable=inputStream.read();
+  if (contentAdressable < 0) {
+    throw new EOFException("Expected PUT header");
+  }
+  if (contentAdressable == 0) {
+    BlobServer.readFully(inputStream,buf,0,JobID.SIZE);
+    final ByteBuffer bb=ByteBuffer.wrap(buf);
+    jobID=JobID.fromByteBuffer(bb);
+    key=readKey(buf,inputStream);
+  }
+ else {
+    md=BlobUtils.createMessageDigest();
+  }
+  File incomingFile=null;
+  FileOutputStream fos=null;
+  try {
+    incomingFile=blobServer.getTemporaryFilename();
+    fos=new FileOutputStream(incomingFile);
+    while (true) {
+      final int bytesExpected=BlobServer.readLength(buf,inputStream);
+      if (bytesExpected > BlobServer.BUFFER_SIZE) {
+        throw new IOException("Unexpected number of incoming bytes: " + bytesExpected);
+      }
+      BlobServer.readFully(inputStream,buf,0,bytesExpected);
+      fos.write(buf,0,bytesExpected);
+      if (md != null) {
+        md.update(buf,0,bytesExpected);
+      }
+      if (bytesExpected < BlobServer.BUFFER_SIZE) {
+        break;
+      }
+    }
+    fos.close();
+    fos=null;
+    if (contentAdressable == 0) {
+      final File storageFile=this.blobServer.getStorageLocation(jobID,key);
+      incomingFile.renameTo(storageFile);
+      incomingFile=null;
+    }
+ else {
+      final BlobKey blobKey=new BlobKey(md.digest());
+      final File storageFile=blobServer.getStorageLocation(blobKey);
+      incomingFile.renameTo(storageFile);
+      incomingFile=null;
+      blobKey.writeToOutputStream(outputStream);
+    }
+  }
+  finally {
+    if (fos != null) {
+      fos.close();
+    }
+    if (incomingFile != null) {
+      incomingFile.delete();
+    }
+  }
+}

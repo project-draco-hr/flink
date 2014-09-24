@@ -1,0 +1,66 @@
+{
+  final byte[] buf=new byte[128];
+  final List<BlobKey> blobKeys=new ArrayList<BlobKey>(2);
+  BlobServer blobServer=null;
+  BlobCache blobCache=null;
+  try {
+    blobServer=new BlobServer();
+    final InetSocketAddress serverAddress=new InetSocketAddress(blobServer.getServerPort());
+    BlobClient blobClient=null;
+    try {
+      blobClient=new BlobClient(serverAddress);
+      blobKeys.add(blobClient.put(buf));
+      buf[0]=1;
+      blobKeys.add(blobClient.put(buf));
+    }
+  finally {
+      if (blobClient != null) {
+        blobClient.close();
+      }
+    }
+    blobCache=new BlobCache(serverAddress);
+    for (int i=0; i < blobKeys.size(); i++) {
+      blobCache.getURL(blobKeys.get(i));
+    }
+    blobServer.shutdown();
+    blobServer=null;
+    final URL[] urls=new URL[blobKeys.size()];
+    for (int i=0; i < blobKeys.size(); i++) {
+      urls[i]=blobCache.getURL(blobKeys.get(i));
+    }
+    assertEquals(blobKeys.size(),urls.length);
+    for (int i=0; i < urls.length; ++i) {
+      final URL url=urls[i];
+      assertNotNull(url);
+      try {
+        final File cachedFile=new File(url.toURI());
+        assertTrue(cachedFile.exists());
+        assertEquals(buf.length,cachedFile.length());
+      }
+ catch (      URISyntaxException e) {
+        fail(e.getMessage());
+      }
+    }
+  }
+ catch (  IOException ioe) {
+    fail(ioe.getMessage());
+  }
+ finally {
+    if (blobServer != null) {
+      try {
+        blobServer.shutdown();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+    if (blobCache != null) {
+      try {
+        blobCache.shutdown();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+}

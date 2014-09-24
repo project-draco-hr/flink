@@ -1,0 +1,28 @@
+{
+  final OutputStream os=this.socket.getOutputStream();
+  final MessageDigest md=(jobId == null || key == null) ? BlobUtils.createMessageDigest() : null;
+  final byte[] buf=new byte[AbstractID.SIZE];
+  sendPutHeader(os,jobId,key,buf);
+  int remainingBytes=value.length;
+  int bytesSent=0;
+  while (remainingBytes > 0) {
+    final int bytesToSend=Math.min(BlobServer.BUFFER_SIZE,remainingBytes);
+    BlobServer.writeLength(bytesToSend,buf,os);
+    os.write(value,offset + bytesSent,bytesToSend);
+    if (md != null) {
+      md.update(value,offset + bytesSent,bytesToSend);
+    }
+    remainingBytes-=bytesToSend;
+    bytesSent+=bytesToSend;
+  }
+  if (md == null) {
+    return null;
+  }
+  final InputStream is=this.socket.getInputStream();
+  final BlobKey localKey=new BlobKey(md.digest());
+  final BlobKey remoteKey=BlobKey.readFromInputStream(is);
+  if (!localKey.equals(remoteKey)) {
+    throw new IOException("Detected data corruption during transfer");
+  }
+  return localKey;
+}

@@ -1,15 +1,17 @@
 {
+  JobManager jobManager=null;
+  TaskManager tm=null;
   try {
-    JobManager jobManager=getJobManagerMockBase();
-    TaskManager tm=createTaskManager(jobManager);
+    jobManager=getJobManagerMockBase();
+    tm=createTaskManager(jobManager);
     JobID jid1=new JobID();
     JobID jid2=new JobID();
     JobVertexID vid1=new JobVertexID();
     JobVertexID vid2=new JobVertexID();
     ExecutionAttemptID eid1=new ExecutionAttemptID();
     ExecutionAttemptID eid2=new ExecutionAttemptID();
-    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid1,vid1,eid1,"TestTask1",1,5,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new String[0],0);
-    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid2,vid2,eid2,"TestTask2",2,7,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new String[0],0);
+    TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid1,vid1,eid1,"TestTask1",1,5,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+    TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid2,vid2,eid2,"TestTask2",2,7,new Configuration(),new Configuration(),TestInvokableBlockingCancelable.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
     TaskOperationResult result1=tm.submitTask(tdd1);
     TaskOperationResult result2=tm.submitTask(tdd2);
     assertTrue(result1.isSuccess());
@@ -35,12 +37,18 @@
     assertEquals(ExecutionState.CANCELED,t2.getExecutionState());
     tasks=tm.getAllRunningTasks();
     assertEquals(0,tasks.size());
-    assertNull(LibraryCacheManager.getClassLoader(jid1));
-    assertNull(LibraryCacheManager.getClassLoader(jid2));
     assertNetworkResourcesReleased(tm);
   }
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    if (jobManager != null) {
+      jobManager.shutdown();
+    }
+    if (tm != null) {
+      tm.shutdown();
+    }
   }
 }

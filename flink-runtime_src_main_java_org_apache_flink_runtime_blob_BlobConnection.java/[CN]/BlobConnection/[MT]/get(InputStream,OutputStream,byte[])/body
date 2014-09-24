@@ -1,0 +1,39 @@
+{
+  File blob=null;
+  final int contentAdressable=inputStream.read();
+  if (contentAdressable < 0) {
+    throw new EOFException("Expected GET header");
+  }
+  if (contentAdressable == 0) {
+    BlobServer.readFully(inputStream,buf,0,JobID.SIZE);
+    final ByteBuffer bb=ByteBuffer.wrap(buf);
+    final JobID jobID=JobID.fromByteBuffer(bb);
+    final String key=readKey(buf,inputStream);
+    blob=this.blobServer.getStorageLocation(jobID,key);
+  }
+ else {
+    final BlobKey key=BlobKey.readFromInputStream(inputStream);
+    blob=blobServer.getStorageLocation(key);
+  }
+  if (!blob.exists()) {
+    BlobServer.writeLength(-1,buf,outputStream);
+    return;
+  }
+  BlobServer.writeLength((int)blob.length(),buf,outputStream);
+  FileInputStream fis=null;
+  try {
+    fis=new FileInputStream(blob);
+    while (true) {
+      final int read=fis.read(buf);
+      if (read < 0) {
+        break;
+      }
+      outputStream.write(buf,0,read);
+    }
+  }
+  finally {
+    if (fis != null) {
+      fis.close();
+    }
+  }
+}
