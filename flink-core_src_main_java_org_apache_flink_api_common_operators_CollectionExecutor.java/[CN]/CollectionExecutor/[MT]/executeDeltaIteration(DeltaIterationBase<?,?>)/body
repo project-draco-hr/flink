@@ -1,0 +1,56 @@
+{
+  Operator<?> solutionInput=iteration.getInitialSolutionSet();
+  Operator<?> worksetInput=iteration.getInitialWorkset();
+  if (solutionInput == null) {
+    throw new InvalidProgramException("The delta iteration " + iteration.getName() + " has no initial solution set.");
+  }
+  if (worksetInput == null) {
+    throw new InvalidProgramException("The delta iteration " + iteration.getName() + " has no initial workset.");
+  }
+  if (iteration.getSolutionSetDelta() == null) {
+    throw new InvalidProgramException("The iteration " + iteration.getName() + " has no solution set delta defined (is not closed).");
+  }
+  if (iteration.getNextWorkset() == null) {
+    throw new InvalidProgramException("The iteration " + iteration.getName() + " has no workset defined (is not closed).");
+  }
+  List<T> solutionInputData=(List<T>)execute(solutionInput);
+  List<T> worksetInputData=(List<T>)execute(worksetInput);
+  Set<Operator<?>> dynamics=new LinkedHashSet<Operator<?>>();
+  DynamicPathCollector dynCollector=new DynamicPathCollector(dynamics);
+  iteration.getSolutionSetDelta().accept(dynCollector);
+  iteration.getNextWorkset().accept(dynCollector);
+  BinaryOperatorInformation<?,?,?> operatorInfo=iteration.getOperatorInfo();
+  TypeInformation<?> solutionType=operatorInfo.getFirstInputType();
+  int[] keyColumns=iteration.getSolutionSetKeyFields();
+  boolean[] inputOrderings=new boolean[keyColumns.length];
+  TypeComparator<T> inputComparator=((CompositeType<T>)solutionType).createComparator(keyColumns,inputOrderings);
+  Map<TypeComparable<T>,T> solutionMap=new HashMap<TypeComparable<T>,T>(solutionInputData.size());
+  for (  T delta : solutionInputData) {
+    TypeComparable<T> wrapper=new TypeComparable<T>(delta,inputComparator);
+    solutionMap.put(wrapper,delta);
+  }
+  List<?> currentWorkset=worksetInputData;
+  final int maxIterations=iteration.getMaximumNumberOfIterations();
+  for (int superstep=1; superstep <= maxIterations; superstep++) {
+    List<T> currentSolution=new ArrayList<T>(solutionMap.size());
+    currentSolution.addAll(solutionMap.values());
+    this.intermediateResults.put(iteration.getSolutionSet(),currentSolution);
+    this.intermediateResults.put(iteration.getWorkset(),currentWorkset);
+    List<T> solutionSetDelta=(List<T>)execute(iteration.getSolutionSetDelta(),superstep);
+    this.intermediateResults.put(iteration.getSolutionSetDelta(),solutionSetDelta);
+    for (    T delta : solutionSetDelta) {
+      TypeComparable<T> wrapper=new TypeComparable<T>(delta,inputComparator);
+      solutionMap.put(wrapper,delta);
+    }
+    currentWorkset=(List<?>)execute(iteration.getNextWorkset(),superstep);
+    if (currentWorkset.isEmpty()) {
+      break;
+    }
+    for (    Operator<?> o : dynamics) {
+      intermediateResults.remove(o);
+    }
+  }
+  List<T> currentSolution=new ArrayList<T>(solutionMap.size());
+  currentSolution.addAll(solutionMap.values());
+  return currentSolution;
+}
