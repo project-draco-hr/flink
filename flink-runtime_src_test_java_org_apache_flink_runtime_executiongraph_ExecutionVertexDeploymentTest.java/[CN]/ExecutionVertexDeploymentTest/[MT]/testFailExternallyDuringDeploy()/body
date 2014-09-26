@@ -1,10 +1,14 @@
 {
   try {
     final JobVertexID jid=new JobVertexID();
+    final ActionQueue queue=new ActionQueue();
+    final TestingUtils.QueuedActionExecutionContext ec=new TestingUtils.QueuedActionExecutionContext(queue);
+    TestingUtils.setExecutionContext(ec);
     final Instance instance=spy(getInstance(ActorRef.noSender()));
     final AllocatedSlot slot=instance.allocateSlot(new JobID());
-    final ExecutionJobVertex ejv=getJobVertexNotExecuting(jid);
+    final ExecutionJobVertex ejv=getExecutionVertex(jid);
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0]);
+    doReturn(new TaskOperationResult(vertex.getCurrentExecutionAttempt().getAttemptId(),true)).when(instance).submitTask(Matchers.<TaskDeploymentDescriptor>any());
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
     assertEquals(ExecutionState.DEPLOYING,vertex.getExecutionState());
@@ -12,6 +16,7 @@
     vertex.fail(testError);
     assertEquals(ExecutionState.FAILED,vertex.getExecutionState());
     assertEquals(testError,vertex.getFailureCause());
+    queue.triggerNextAction();
     assertTrue(vertex.getStateTimestamp(ExecutionState.CREATED) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.DEPLOYING) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.FAILED) > 0);
@@ -19,5 +24,8 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    TestingUtils.setGlobalExecutionContext();
   }
 }

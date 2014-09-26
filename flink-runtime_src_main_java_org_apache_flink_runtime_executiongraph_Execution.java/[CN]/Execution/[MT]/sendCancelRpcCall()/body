@@ -3,29 +3,24 @@
   if (slot == null) {
     return;
   }
-  Runnable cancelAction=new Runnable(){
-    @Override public void run(){
-      Throwable exception=null;
-      for (int triesLeft=NUM_CANCEL_CALL_TRIES; triesLeft > 0; --triesLeft) {
-        try {
-          TaskOperationResult result=slot.getInstance().cancelTask(attemptId);
-          if (!result.isSuccess()) {
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Cancel task call did not find task. Probably RPC call race.");
-            }
-          }
-          return;
-        }
- catch (        Throwable t) {
-          if (exception == null) {
-            exception=t;
-          }
-          LOG.error("Canceling vertex " + getVertexWithAttempt() + " failed ("+ triesLeft+ " tries left): "+ t.getMessage(),t);
-        }
-      }
-      fail(new Exception("Task could not be canceled.",exception));
+  Callable<TaskOperationResult> cancelAction=new Callable<TaskOperationResult>(){
+    @Override public TaskOperationResult call() throws Exception {
+      return slot.getInstance().cancelTask(attemptId);
     }
   }
 ;
-  vertex.execute(cancelAction);
+  Future<TaskOperationResult> cancelResult=AkkaUtils.retry(cancelAction,NUM_CANCEL_CALL_TRIES,AkkaUtils.globalExecutionContext());
+  cancelResult.onComplete(new OnComplete<TaskOperationResult>(){
+    @Override public void onComplete(    Throwable failure,    TaskOperationResult success) throws Throwable {
+      if (failure != null) {
+        fail(new Exception("Task could not be canceled.",failure));
+      }
+ else {
+        if (!success.success()) {
+          LOG.debug("Cancel task call did not find task. Probably akka message call" + " race.");
+        }
+      }
+    }
+  }
+,AkkaUtils.globalExecutionContext());
 }

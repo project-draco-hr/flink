@@ -28,31 +28,35 @@
     }
     final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot);
     vertex.getExecutionGraph().registerExecution(this);
-    Runnable deployaction=new Runnable(){
-      @Override public void run(){
-        try {
-          Instance instance=slot.getInstance();
-          TaskOperationResult result=instance.submitTask(deployment);
-          if (result == null) {
+    Future<TaskOperationResult> deployAction=future(new Callable<TaskOperationResult>(){
+      @Override public TaskOperationResult call() throws Exception {
+        Instance instance=slot.getInstance();
+        return instance.submitTask(deployment);
+      }
+    }
+,AkkaUtils.globalExecutionContext());
+    deployAction.onComplete(new OnComplete<TaskOperationResult>(){
+      @Override public void onComplete(      Throwable failure,      TaskOperationResult success) throws Throwable {
+        if (failure != null) {
+          markFailed(failure);
+        }
+ else {
+          if (success == null) {
             markFailed(new Exception("Failed to deploy the task to slot " + slot + ": TaskOperationResult was null"));
           }
- else           if (!result.getExecutionId().equals(attemptId)) {
+ else           if (!success.executionID().equals(attemptId)) {
             markFailed(new Exception("Answer execution id does not match the request execution id."));
           }
- else           if (result.isSuccess()) {
+ else           if (success.success()) {
             switchToRunning();
           }
  else {
-            markFailed(new Exception("Failed to deploy the task " + getVertexWithAttempt() + " to slot "+ slot+ ": "+ result.getDescription()));
+            markFailed(new Exception("Failed to deploy the task " + getVertexWithAttempt() + " to slot "+ slot+ ": "+ success.description()));
           }
-        }
- catch (        Throwable t) {
-          markFailed(t);
         }
       }
     }
-;
-    vertex.execute(deployaction);
+,AkkaUtils.globalExecutionContext());
   }
  catch (  Throwable t) {
     markFailed(t);

@@ -3,33 +3,68 @@
     throw new NullPointerException();
   }
   if (this.accumulators == null) {
-    final int num=accNames.length;
-    this.accumulators=new HashMap<String,Accumulator<?,?>>(num);
-    for (int i=0; i < num; i++) {
-      Accumulator<?,?> acc;
+    ByteArrayInputStream bais=new ByteArrayInputStream(serializedData);
+    ObjectInputStream ios=null;
+    try {
+      ios=new ObjectInputStream(bais);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while creating the object input stream.");
+    }
+    int numAccumulators=0;
+    try {
+      numAccumulators=ios.readInt();
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while reading the number of serialized " + "accumulators.");
+    }
+    this.accumulators=new HashMap<String,Accumulator<?,?>>(numAccumulators);
+    for (int i=0; i < numAccumulators; i++) {
+      String accumulatorName;
       try {
-        @SuppressWarnings("unchecked") Class<? extends Accumulator<?,?>> valClass=(Class<? extends Accumulator<?,?>>)Class.forName(classNames[i],true,loader);
-        acc=InstantiationUtil.instantiate(valClass,Accumulator.class);
+        accumulatorName=ios.readUTF();
+      }
+ catch (      IOException e) {
+        throw new RuntimeException("Error while reading the " + i + "th accumulator "+ "name.");
+      }
+      String className;
+      try {
+        className=ios.readUTF();
+      }
+ catch (      IOException e) {
+        throw new RuntimeException("Error while reading the " + i + "th accumulator "+ "class name.");
+      }
+      Accumulator<?,?> accumulator;
+      try {
+        @SuppressWarnings("unchecked") Class<? extends Accumulator<?,?>> valClass=(Class<? extends Accumulator<?,?>>)Class.forName(className,true,loader);
+        accumulator=InstantiationUtil.instantiate(valClass,Accumulator.class);
       }
  catch (      ClassNotFoundException e) {
-        throw new RuntimeException("Could not load user-defined class '" + classNames[i] + "'.",e);
+        throw new RuntimeException("Could not load user-defined class '" + className + "'.",e);
       }
 catch (      ClassCastException e) {
         throw new RuntimeException("User-defined accumulator class is not an Accumulator sublass.");
       }
-      DataInputStream in=new DataInputStream(new ByteArrayInputStream(serializedData[i]));
       try {
-        acc.read(new InputViewDataInputStreamWrapper(in));
-        in.close();
+        accumulator.read(ios);
       }
  catch (      IOException e) {
         throw new RuntimeException("Error while deserializing the user-defined aggregate class.",e);
       }
-      accumulators.put(accNames[i],acc);
+      accumulators.put(accumulatorName,accumulator);
     }
-    this.accNames=null;
-    this.classNames=null;
-    this.serializedData=null;
+    try {
+      ios.close();
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while closing the InputObjectStream.");
+    }
+    try {
+      bais.close();
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while closing the ByteArrayInputStream.");
+    }
   }
-  return this.accumulators;
+  return accumulators;
 }
