@@ -1,0 +1,32 @@
+{
+  String name="Partition";
+  if (pMethod == PartitionMethod.REBALANCE) {
+    UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<T,T>(getType(),getType());
+    PartitionOperatorBase<T> noop=new PartitionOperatorBase<T>(operatorInfo,pMethod,name);
+    noop.setInput(input);
+    noop.setDegreeOfParallelism(getParallelism());
+    return noop;
+  }
+ else   if (pMethod == PartitionMethod.HASH) {
+    if (pKeys instanceof Keys.FieldPositionKeys) {
+      int[] logicalKeyPositions=pKeys.computeLogicalKeyPositions();
+      UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<T,T>(getType(),getType());
+      PartitionOperatorBase<T> noop=new PartitionOperatorBase<T>(operatorInfo,pMethod,logicalKeyPositions,name);
+      noop.setInput(input);
+      noop.setDegreeOfParallelism(getParallelism());
+      return noop;
+    }
+ else     if (pKeys instanceof Keys.SelectorFunctionKeys) {
+      @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<T,?> selectorKeys=(Keys.SelectorFunctionKeys<T,?>)pKeys;
+      MapOperatorBase<?,T,?> po=translateSelectorFunctionReducer(selectorKeys,pMethod,getType(),name,input,getParallelism());
+      return po;
+    }
+ else {
+      throw new UnsupportedOperationException("Unrecognized key type.");
+    }
+  }
+ else   if (pMethod == PartitionMethod.RANGE) {
+    throw new UnsupportedOperationException("Range partitioning not yet supported");
+  }
+  return null;
+}
