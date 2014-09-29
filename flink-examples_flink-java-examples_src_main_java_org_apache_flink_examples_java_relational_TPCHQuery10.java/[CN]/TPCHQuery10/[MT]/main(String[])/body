@@ -8,27 +8,25 @@
   DataSet<Tuple4<Integer,Double,Double,String>> lineitems=getLineitemDataSet(env);
   DataSet<Tuple2<Integer,String>> nations=getNationsDataSet(env);
   DataSet<Tuple2<Integer,Integer>> ordersFilteredByYear=orders.filter(new FilterFunction<Tuple3<Integer,Integer,String>>(){
-    @Override public boolean filter(    Tuple3<Integer,Integer,String> t){
-      int year=Integer.parseInt(t.f2.substring(0,4));
-      return year > 1990;
+    @Override public boolean filter(    Tuple3<Integer,Integer,String> o){
+      return Integer.parseInt(o.f2.substring(0,4)) > 1990;
     }
   }
 ).project(0,1).types(Integer.class,Integer.class);
-  DataSet<Tuple3<Integer,Double,Double>> lineitemsFilteredByFlag=lineitems.filter(new FilterFunction<Tuple4<Integer,Double,Double,String>>(){
-    @Override public boolean filter(    Tuple4<Integer,Double,Double,String> t) throws Exception {
-      return t.f3.equals("R");
+  DataSet<Tuple2<Integer,Double>> lineitemsFilteredByFlag=lineitems.filter(new FilterFunction<Tuple4<Integer,Double,Double,String>>(){
+    @Override public boolean filter(    Tuple4<Integer,Double,Double,String> l){
+      return l.f3.equals("R");
     }
   }
-).project(0,1,2).types(Integer.class,Double.class,Double.class);
-  DataSet<Tuple3<Integer,Double,Double>> lineitemsOfCustomerKey=ordersFilteredByYear.joinWithHuge(lineitemsFilteredByFlag).where(0).equalTo(0).projectFirst(1).projectSecond(1,2).types(Integer.class,Double.class,Double.class);
-  DataSet<Tuple2<Integer,Double>> revenueOfCustomerKey=lineitemsOfCustomerKey.map(new MapFunction<Tuple3<Integer,Double,Double>,Tuple2<Integer,Double>>(){
-    @Override public Tuple2<Integer,Double> map(    Tuple3<Integer,Double,Double> t){
-      return new Tuple2<Integer,Double>(t.f0,t.f1 * (1 - t.f2));
+).map(new MapFunction<Tuple4<Integer,Double,Double,String>,Tuple2<Integer,Double>>(){
+    @Override public Tuple2<Integer,Double> map(    Tuple4<Integer,Double,Double,String> l){
+      return new Tuple2<Integer,Double>(l.f0,l.f1 * (1 - l.f2));
     }
   }
-).groupBy(0).aggregate(Aggregations.SUM,1);
+);
+  DataSet<Tuple2<Integer,Double>> revenueByCustomer=ordersFilteredByYear.joinWithHuge(lineitemsFilteredByFlag).where(0).equalTo(0).projectFirst(1).projectSecond(1).types(Integer.class,Double.class).groupBy(0).aggregate(Aggregations.SUM,1);
   DataSet<Tuple5<Integer,String,String,String,Double>> customerWithNation=customers.joinWithTiny(nations).where(3).equalTo(0).projectFirst(0,1,2).projectSecond(1).projectFirst(4).types(Integer.class,String.class,String.class,String.class,Double.class);
-  DataSet<Tuple6<Integer,String,String,String,Double,Double>> customerWithRevenue=customerWithNation.join(revenueOfCustomerKey).where(0).equalTo(0).projectFirst(0,1,2,3,4).projectSecond(1).types(Integer.class,String.class,String.class,String.class,Double.class,Double.class);
-  customerWithRevenue.writeAsCsv(outputPath);
+  DataSet<Tuple6<Integer,String,String,String,Double,Double>> result=customerWithNation.join(revenueByCustomer).where(0).equalTo(0).projectFirst(0,1,2,3,4).projectSecond(1).types(Integer.class,String.class,String.class,String.class,Double.class,Double.class);
+  result.writeAsCsv(outputPath,"\n","|");
   env.execute("TPCH Query 10 Example");
 }
