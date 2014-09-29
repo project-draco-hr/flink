@@ -1,19 +1,19 @@
 {
-  @SuppressWarnings("unchecked") Iterator<Map<Object,OUT>> reducedIterator=(Iterator<Map<Object,OUT>>)batch.getIterator();
-  Map<Object,OUT> reducedValues=reducedIterator.next();
+  Iterator<OUT> reducedIterator=currentBatch.getIterator();
+  OUT reduced=null;
+  while (reducedIterator.hasNext() && reduced == null) {
+    reduced=reducedIterator.next();
+  }
   while (reducedIterator.hasNext()) {
-    Map<Object,OUT> nextValues=reducedIterator.next();
-    for (    Entry<Object,OUT> entry : nextValues.entrySet()) {
-      OUT currentValue=reducedValues.get(entry.getKey());
-      if (currentValue == null) {
-        reducedValues.put(entry.getKey(),entry.getValue());
-      }
- else {
-        reducedValues.put(entry.getKey(),reducer.reduce(currentValue,entry.getValue()));
-      }
+    OUT next=reducedIterator.next();
+    if (next != null) {
+      reduced=reducer.reduce(reduced,next);
     }
   }
-  for (  OUT value : reducedValues.values()) {
-    collector.collect(value);
+  if (reduced != null) {
+    collector.collect(reduced);
+  }
+ else {
+    streamWindows.remove(currentBatch);
   }
 }

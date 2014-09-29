@@ -1,18 +1,12 @@
 {
-  if (getNextRecord() == null) {
+  if ((reuse=recordIterator.next(reuse)) == null) {
     throw new RuntimeException("DataStream must not be empty");
   }
-  initializeAtFirstRecord();
-  while (reuse != null && !isStateFull()) {
-    collectOneUnit();
-  }
-  reduce();
   while (reuse != null) {
-    for (int i=0; i < slideSize / granularity; i++) {
-      if (reuse != null) {
-        collectOneUnit();
-      }
-    }
-    reduce();
+    StreamBatch batch=getBatch(reuse);
+    batch.addToBuffer(reuse.getObject());
+    resetReuse();
+    reuse=recordIterator.next(reuse);
   }
+  reduceLastBatch();
 }
