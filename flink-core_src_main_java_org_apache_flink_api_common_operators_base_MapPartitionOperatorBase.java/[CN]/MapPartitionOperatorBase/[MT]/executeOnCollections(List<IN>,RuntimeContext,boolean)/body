@@ -1,0 +1,20 @@
+{
+  MapPartitionFunction<IN,OUT> function=this.userFunction.getUserCodeObject();
+  FunctionUtils.setFunctionRuntimeContext(function,ctx);
+  FunctionUtils.openFunction(function,this.parameters);
+  ArrayList<OUT> result=new ArrayList<OUT>(inputData.size() / 4);
+  if (mutableObjectSafeMode) {
+    TypeSerializer<IN> inSerializer=getOperatorInfo().getInputType().createSerializer();
+    TypeSerializer<OUT> outSerializer=getOperatorInfo().getOutputType().createSerializer();
+    CopyingIterator<IN> source=new CopyingIterator<IN>(inputData.iterator(),inSerializer);
+    CopyingListCollector<OUT> resultCollector=new CopyingListCollector<OUT>(result,outSerializer);
+    function.mapPartition(source,resultCollector);
+  }
+ else {
+    ListCollector<OUT> resultCollector=new ListCollector<OUT>(result);
+    function.mapPartition(inputData,resultCollector);
+  }
+  result.trimToSize();
+  FunctionUtils.closeFunction(function);
+  return result;
+}
