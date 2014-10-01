@@ -2,7 +2,9 @@
   RegularPactTask.initOutputWriters(this.finalOutputWriters);
   final String brokerKey=brokerKey();
   final int workerIndex=getEnvironment().getIndexInSubtaskGroup();
+  final boolean objectSolutionSet=config.isSolutionSetUnmanaged();
   CompactingHashTable<X> solutionSet=null;
+  JoinHashMap<X> solutionSetObjectMap=null;
   boolean waitForSolutionSetUpdate=config.getWaitForSolutionSetUpdate();
   boolean isWorksetIteration=config.getIsWorksetIteration();
   try {
@@ -18,10 +20,17 @@
       initialSolutionSetInput=config.getIterationHeadSolutionSetInputIndex();
       TypeSerializerFactory<X> solutionTypeSerializerFactory=config.getSolutionSetSerializer(userCodeClassLoader);
       solutionTypeSerializer=solutionTypeSerializerFactory;
-      solutionSet=initCompactingHashTable();
       @SuppressWarnings("unchecked") MutableObjectIterator<X> solutionSetInput=(MutableObjectIterator<X>)createInputIterator(inputReaders[initialSolutionSetInput],solutionTypeSerializer);
-      readInitialSolutionSet(solutionSet,solutionSetInput);
-      SolutionSetBroker.instance().handIn(brokerKey,solutionSet);
+      if (objectSolutionSet) {
+        solutionSetObjectMap=initJoinHashMap();
+        readInitialSolutionSet(solutionSetObjectMap,solutionSetInput);
+        SolutionSetBroker.instance().handIn(brokerKey,solutionSetObjectMap);
+      }
+ else {
+        solutionSet=initCompactingHashTable();
+        readInitialSolutionSet(solutionSet,solutionSetInput);
+        SolutionSetBroker.instance().handIn(brokerKey,solutionSet);
+      }
       if (waitForSolutionSetUpdate) {
         solutionSetUpdateBarrier=new SolutionSetUpdateBarrier();
         SolutionSetUpdateBarrierBroker.instance().handIn(brokerKey,solutionSetUpdateBarrier);
@@ -83,7 +92,12 @@
       log.info(formatLogString("streaming out final result after [" + currentIteration() + "] iterations"));
     }
     if (isWorksetIteration) {
-      streamSolutionSetToFinalOutput(solutionSet);
+      if (objectSolutionSet) {
+        streamSolutionSetToFinalOutput(solutionSetObjectMap);
+      }
+ else {
+        streamSolutionSetToFinalOutput(solutionSet);
+      }
     }
  else {
       streamOutFinalOutputBulk(new InputViewIterator<X>(superstepResult,this.solutionTypeSerializer.getSerializer()));

@@ -1,18 +1,31 @@
 {
+  final TypeSerializer<IT2> solutionSetSerializer;
+  final TypeComparator<IT2> solutionSetComparator;
   if (taskContext instanceof AbstractIterativePactTask) {
     AbstractIterativePactTask<?,?> iterativeTaskContext=(AbstractIterativePactTask<?,?>)taskContext;
     String identifier=iterativeTaskContext.brokerKey();
-    this.hashTable=(CompactingHashTable<IT2>)SolutionSetBroker.instance().get(identifier);
+    Object table=SolutionSetBroker.instance().get(identifier);
+    if (table instanceof CompactingHashTable) {
+      this.hashTable=(CompactingHashTable<IT2>)table;
+      solutionSetSerializer=this.hashTable.getBuildSideSerializer();
+      solutionSetComparator=this.hashTable.getBuildSideComparator().duplicate();
+    }
+ else     if (table instanceof JoinHashMap) {
+      this.objectMap=(JoinHashMap<IT2>)table;
+      solutionSetSerializer=this.objectMap.getBuildSerializer();
+      solutionSetComparator=this.objectMap.getBuildComparator().duplicate();
+    }
+ else {
+      throw new RuntimeException("Unrecognized solution set index: " + table);
+    }
   }
  else {
     throw new Exception("The task context of this driver is no iterative task context.");
   }
   TaskConfig config=taskContext.getTaskConfig();
   ClassLoader classLoader=taskContext.getUserCodeClassLoader();
-  TypeSerializer<IT2> solutionSetSerializer=this.hashTable.getBuildSideSerializer();
   TypeSerializer<IT1> probeSideSerializer=taskContext.<IT1>getInputSerializer(0).getSerializer();
   TypeComparatorFactory<IT1> probeSideComparatorFactory=config.getDriverComparator(0,classLoader);
-  TypeComparator<IT2> solutionSetComparator=this.hashTable.getBuildSideComparator().duplicate();
   this.probeSideComparator=probeSideComparatorFactory.createComparator();
   solutionSideRecord=solutionSetSerializer.createInstance();
   probeSideRecord=probeSideSerializer.createInstance();

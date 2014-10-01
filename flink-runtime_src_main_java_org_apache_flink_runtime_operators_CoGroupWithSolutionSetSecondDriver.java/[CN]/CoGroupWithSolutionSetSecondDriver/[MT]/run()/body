@@ -1,21 +1,39 @@
 {
   final CoGroupFunction<IT1,IT2,OT> coGroupStub=taskContext.getStub();
   final Collector<OT> collector=taskContext.getOutputCollector();
-  IT2 buildSideRecord=solutionSideRecord;
-  final CompactingHashTable<IT2> join=hashTable;
   final KeyGroupedIterator<IT1> probeSideInput=new KeyGroupedIterator<IT1>(taskContext.<IT1>getInput(0),probeSideSerializer,probeSideComparator);
   final SingleElementIterator<IT2> siIter=new SingleElementIterator<IT2>();
   final Iterable<IT2> emptySolutionSide=EmptyIterator.<IT2>get();
-  final CompactingHashTable<IT2>.HashTableProber<IT1> prober=join.getProber(this.probeSideComparator,this.pairComparator);
-  while (this.running && probeSideInput.nextKey()) {
-    IT1 current=probeSideInput.getCurrent();
-    buildSideRecord=prober.getMatchFor(current,buildSideRecord);
-    if (buildSideRecord != null) {
-      siIter.set(buildSideRecord);
-      coGroupStub.coGroup(probeSideInput.getValues(),siIter,collector);
-    }
+  if (this.hashTable != null) {
+    final CompactingHashTable<IT2> join=hashTable;
+    final CompactingHashTable<IT2>.HashTableProber<IT1> prober=join.getProber(this.probeSideComparator,this.pairComparator);
+    IT2 buildSideRecord=solutionSideRecord;
+    while (this.running && probeSideInput.nextKey()) {
+      IT1 current=probeSideInput.getCurrent();
+      buildSideRecord=prober.getMatchFor(current,buildSideRecord);
+      if (buildSideRecord != null) {
+        siIter.set(buildSideRecord);
+        coGroupStub.coGroup(probeSideInput.getValues(),siIter,collector);
+      }
  else {
-      coGroupStub.coGroup(probeSideInput.getValues(),emptySolutionSide,collector);
+        coGroupStub.coGroup(probeSideInput.getValues(),emptySolutionSide,collector);
+      }
+    }
+  }
+ else {
+    final JoinHashMap<IT2> join=this.objectMap;
+    final JoinHashMap<IT2>.Prober<IT1> prober=join.createProber(this.probeSideComparator,this.pairComparator);
+    final TypeSerializer<IT2> serializer=join.getBuildSerializer();
+    while (this.running && probeSideInput.nextKey()) {
+      IT1 current=probeSideInput.getCurrent();
+      IT2 buildSideRecord=prober.lookupMatch(current);
+      if (buildSideRecord != null) {
+        siIter.set(serializer.copy(buildSideRecord));
+        coGroupStub.coGroup(probeSideInput.getValues(),siIter,collector);
+      }
+ else {
+        coGroupStub.coGroup(probeSideInput.getValues(),emptySolutionSide,collector);
+      }
     }
   }
 }
