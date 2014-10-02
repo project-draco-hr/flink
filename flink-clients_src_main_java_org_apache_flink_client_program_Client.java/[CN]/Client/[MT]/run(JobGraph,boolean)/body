@@ -1,33 +1,39 @@
 {
-  JobClient client;
+  Tuple2<ActorSystem,ActorRef> pair=JobClient.startActorSystemAndActor(configuration);
+  ActorRef client=pair._2();
+  String hostname=configuration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
+  if (hostname == null) {
+    throw new ProgramInvocationException("Could not find hostname of job manager.");
+  }
   try {
-    client=new JobClient(jobGraph,configuration,this.userCodeClassLoader);
+    JobClient.uploadJarFiles(jobGraph,hostname,client);
   }
  catch (  IOException e) {
-    throw new ProgramInvocationException("Could not open job manager: " + e.getMessage());
+    throw new ProgramInvocationException("Could not upload blobs.",e);
   }
-  client.setConsoleStreamForReporting(this.printStatusDuringExecution ? System.out : null);
   try {
     if (wait) {
-      return client.submitJobAndWait();
+      return JobClient.submitJobAndWait(jobGraph,printStatusDuringExecution,client);
     }
  else {
-      JobSubmissionResult result=client.submitJob();
-      if (result.returnCode() != JobResult.SUCCESS()) {
-        throw new ProgramInvocationException("The job was not successfully submitted to the nephele job manager" + (result.description() == null ? "." : ": " + result.description()));
+      SubmissionResponse response=JobClient.submitJobDetached(jobGraph,printStatusDuringExecution,client);
+      if (response instanceof SubmissionFailure) {
+        SubmissionFailure failure=(SubmissionFailure)response;
+        throw new ProgramInvocationException("The job was not successfully submitted " + "to the flink job manager",failure.cause());
       }
     }
   }
- catch (  IOException e) {
-    throw new ProgramInvocationException("Could not submit job to job manager: " + e.getMessage());
-  }
-catch (  JobExecutionException jex) {
+ catch (  JobExecutionException jex) {
     if (jex.isJobCanceledByUser()) {
       throw new ProgramInvocationException("The program has been canceled");
     }
  else {
       throw new ProgramInvocationException("The program execution failed: " + jex.getMessage());
     }
+  }
+ finally {
+    pair._1().shutdown();
+    pair._1().awaitTermination();
   }
   return new JobExecutionResult(-1,null);
 }
