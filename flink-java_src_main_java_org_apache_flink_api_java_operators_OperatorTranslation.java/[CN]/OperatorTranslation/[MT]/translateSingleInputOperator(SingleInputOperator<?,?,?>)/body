@@ -2,14 +2,17 @@
   @SuppressWarnings("unchecked") SingleInputOperator<I,O,?> typedOp=(SingleInputOperator<I,O,?>)op;
   @SuppressWarnings("unchecked") DataSet<I> typedInput=(DataSet<I>)op.getInput();
   Operator<I> input=translate(typedInput);
-  org.apache.flink.api.common.operators.SingleInputOperator<?,O,?> dataFlowOp=typedOp.translateToDataFlow(input);
+  org.apache.flink.api.common.operators.Operator<O> dataFlowOp=typedOp.translateToDataFlow(input);
   if (op instanceof UdfOperator<?>) {
     @SuppressWarnings("unchecked") SingleInputUdfOperator<I,O,?> udfOp=(SingleInputUdfOperator<I,O,?>)op;
     Configuration opParams=udfOp.getParameters();
     if (opParams != null) {
       dataFlowOp.getParameters().addAll(opParams);
     }
-    dataFlowOp.setSemanticProperties(udfOp.getSemanticProperties());
+    if (dataFlowOp instanceof org.apache.flink.api.common.operators.SingleInputOperator) {
+      org.apache.flink.api.common.operators.SingleInputOperator<?,O,?> unaryOp=(org.apache.flink.api.common.operators.SingleInputOperator<?,O,?>)dataFlowOp;
+      unaryOp.setSemanticProperties(udfOp.getSemanticProperties());
+    }
   }
   return dataFlowOp;
 }

@@ -4,14 +4,17 @@
   @SuppressWarnings("unchecked") DataSet<I2> typedInput2=(DataSet<I2>)op.getInput2();
   Operator<I1> input1=translate(typedInput1);
   Operator<I2> input2=translate(typedInput2);
-  org.apache.flink.api.common.operators.DualInputOperator<?,?,O,?> dataFlowOp=typedOp.translateToDataFlow(input1,input2);
+  org.apache.flink.api.common.operators.Operator<O> dataFlowOp=typedOp.translateToDataFlow(input1,input2);
   if (op instanceof UdfOperator<?>) {
     @SuppressWarnings("unchecked") TwoInputUdfOperator<I1,I2,O,?> udfOp=(TwoInputUdfOperator<I1,I2,O,?>)op;
     Configuration opParams=udfOp.getParameters();
     if (opParams != null) {
       dataFlowOp.getParameters().addAll(opParams);
     }
-    dataFlowOp.setSemanticProperties(udfOp.getSemanticProperties());
+    if (dataFlowOp instanceof org.apache.flink.api.common.operators.DualInputOperator) {
+      org.apache.flink.api.common.operators.DualInputOperator<?,?,O,?> binaryOp=(org.apache.flink.api.common.operators.DualInputOperator<?,?,O,?>)dataFlowOp;
+      binaryOp.setSemanticProperties(udfOp.getSemanticProperties());
+    }
   }
   return dataFlowOp;
 }
