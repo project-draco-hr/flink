@@ -1,0 +1,32 @@
+{
+  if (!(numSubtasksInFinalState == 0 || numSubtasksInFinalState == parallelism)) {
+    throw new IllegalStateException("Cannot reset vertex that is not in final state");
+  }
+synchronized (stateMonitor) {
+    if (slotSharingGroup != null) {
+      slotSharingGroup.clearTaskAssignment();
+    }
+    if (coLocationGroup != null) {
+      coLocationGroup.resetConstraints();
+    }
+    for (int i=0; i < parallelism; i++) {
+      taskVertices[i].resetForNewExecution();
+      if (finishedSubtasks[i]) {
+        finishedSubtasks[i]=false;
+        numSubtasksInFinalState--;
+      }
+    }
+    if (numSubtasksInFinalState != 0) {
+      throw new RuntimeException("Bug: resetting the execution job vertex failed.");
+    }
+    try {
+      if (this.inputSplits != null) {
+        @SuppressWarnings("unchecked") InputSplitSource<InputSplit> splitSource=(InputSplitSource<InputSplit>)jobVertex.getInputSplitSource();
+        this.splitAssigner=splitSource.getInputSplitAssigner(this.inputSplits);
+      }
+    }
+ catch (    Throwable t) {
+      throw new RuntimeException("Re-creating the input split assigner failed: " + t.getMessage(),t);
+    }
+  }
+}

@@ -19,8 +19,20 @@ synchronized (progressLock) {
           if (current == JobStatus.CANCELLING && transitionState(current,JobStatus.CANCELED)) {
             break;
           }
-          if (current == JobStatus.FAILING && transitionState(current,JobStatus.FAILED,failureCause)) {
-            break;
+          if (current == JobStatus.FAILING) {
+            if (numberOfRetriesLeft > 0 && transitionState(current,JobStatus.RESTARTING)) {
+              numberOfRetriesLeft--;
+              execute(new Runnable(){
+                @Override public void run(){
+                  restart();
+                }
+              }
+);
+              break;
+            }
+ else             if (numberOfRetriesLeft <= 0 && transitionState(current,JobStatus.FAILED,failureCause)) {
+              break;
+            }
           }
           if (current == JobStatus.CANCELED || current == JobStatus.CREATED || current == JobStatus.FINISHED) {
             fail(new Exception("ExecutionGraph went into final state from state " + current));
