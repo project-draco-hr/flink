@@ -9,10 +9,10 @@
   HadoopInputFormat<LongWritable,Text> hadoopInputFormat=new HadoopInputFormat<LongWritable,Text>(new TextInputFormat(),LongWritable.class,Text.class,new JobConf());
   TextInputFormat.addInputPath(hadoopInputFormat.getJobConf(),new Path(inputPath));
   DataSet<Tuple2<LongWritable,Text>> text=env.createInput(hadoopInputFormat);
-  DataSet<Tuple2<Text,LongWritable>> words=text.flatMap(new HadoopMapFunction(new Tokenizer(),Text.class,LongWritable.class)).groupBy(0).reduceGroup(new HadoopReduceCombineFunction(new Counter(),new Counter(),Text.class,LongWritable.class));
+  DataSet<Tuple2<Text,LongWritable>> words=text.flatMap(new HadoopMapFunction<LongWritable,Text,Text,LongWritable>(new Tokenizer())).groupBy(0).reduceGroup(new HadoopReduceCombineFunction<Text,LongWritable,Text,LongWritable>(new Counter(),new Counter()));
   HadoopOutputFormat<Text,LongWritable> hadoopOutputFormat=new HadoopOutputFormat<Text,LongWritable>(new TextOutputFormat<Text,LongWritable>(),new JobConf());
   hadoopOutputFormat.getJobConf().set("mapred.textoutputformat.separator"," ");
   TextOutputFormat.setOutputPath(hadoopOutputFormat.getJobConf(),new Path(outputPath));
-  words.output(hadoopOutputFormat);
+  words.output(hadoopOutputFormat).setParallelism(1);
   env.execute("Hadoop Compat WordCount");
 }
