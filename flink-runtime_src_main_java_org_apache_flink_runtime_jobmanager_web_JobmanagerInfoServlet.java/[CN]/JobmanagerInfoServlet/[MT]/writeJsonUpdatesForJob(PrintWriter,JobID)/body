@@ -1,2 +1,61 @@
 {
+  try {
+    Iterable<ExecutionGraph> graphs=AkkaUtils.<RunningJobsResponse>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
+    wrt.write("{");
+    wrt.write("\"jobid\": \"" + jobId + "\",");
+    wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\",");
+    wrt.write("\"recentjobs\": [");
+    boolean first=true;
+    ExecutionGraph graph=null;
+    for (    ExecutionGraph g : graphs) {
+      if (first) {
+        first=false;
+      }
+ else {
+        wrt.write(",");
+      }
+      wrt.write("\"" + g.getJobID() + "\"");
+      if (g.getJobID() == jobId) {
+        graph=g;
+      }
+    }
+    wrt.write("],");
+    if (graph == null) {
+      wrt.write("\"vertexevents\": [],");
+      wrt.write("\"jobevents\": []");
+      wrt.write("}");
+      LOG.warn("Could not find job with job ID " + jobId);
+    }
+ else {
+      wrt.write("\"vertexevents\": [");
+      first=true;
+      for (      ExecutionVertex ev : graph.getAllExecutionVertices()) {
+        if (first) {
+          first=false;
+        }
+ else {
+          wrt.write(",");
+        }
+        wrt.write("{");
+        wrt.write("\"vertexid\": \"" + ev.getCurrentExecutionAttempt().getAttemptId() + "\",");
+        wrt.write("\"newstate\": \"" + ev.getExecutionState() + "\",");
+        wrt.write("\"timestamp\": \"" + ev.getStateTimestamp(ev.getExecutionState()) + "\"");
+        wrt.write("}");
+      }
+      wrt.write("],");
+      wrt.write("\"jobevents\": [");
+      wrt.write("{");
+      wrt.write("\"newstate\": \"" + graph.getState() + "\",");
+      wrt.write("\"timestamp\": \"" + graph.getStatusTimestamp(graph.getState()) + "\"");
+      wrt.write("}");
+      wrt.write("]");
+      wrt.write("}");
+    }
+  }
+ catch (  EofException eof) {
+    LOG.info("Info server for jobmanager: Connection closed by client, EofException");
+  }
+catch (  IOException ioe) {
+    LOG.info("Info server for jobmanager: Connection closed by client, IOException");
+  }
 }

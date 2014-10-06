@@ -1,2 +1,60 @@
 {
+  resp.setStatus(HttpServletResponse.SC_OK);
+  resp.setContentType("application/json");
+  try {
+    if ("archive".equals(req.getParameter("get"))) {
+      List<ExecutionGraph> archivedJobs=AkkaUtils.<ArchivedJobs>ask(archive,RequestArchivedJobs$.MODULE$).asJavaList();
+      writeJsonForArchive(resp.getWriter(),archivedJobs);
+    }
+ else     if ("job".equals(req.getParameter("get"))) {
+      String jobId=req.getParameter("job");
+      ArchivedJobResponse response=AkkaUtils.ask(archive,new RequestArchivedJob(JobID.fromHexString(jobId)));
+      if (response instanceof ArchivedJobFound) {
+        ExecutionGraph archivedJob=((ArchivedJobFound)response).executionGraph();
+        writeJsonForArchivedJob(resp.getWriter(),archivedJob);
+      }
+ else {
+        LOG.warn("Could not find job for job ID " + jobId);
+      }
+    }
+ else     if ("groupvertex".equals(req.getParameter("get"))) {
+      String jobId=req.getParameter("job");
+      String groupvertexId=req.getParameter("groupvertex");
+      ArchivedJobResponse response=AkkaUtils.ask(archive,new RequestArchivedJob(JobID.fromHexString(jobId)));
+      if (response instanceof ArchivedJobFound) {
+        ExecutionGraph archivedJob=((ArchivedJobFound)response).executionGraph();
+        writeJsonForArchivedJobGroupvertex(resp.getWriter(),archivedJob,JobVertexID.fromHexString(groupvertexId));
+      }
+ else {
+        LOG.warn("Could not find job for job ID " + jobId);
+      }
+    }
+ else     if ("taskmanagers".equals(req.getParameter("get"))) {
+      int numberOfTaskManagrs=AkkaUtils.<Integer>ask(jobmanager,RequestNumberRegisteredTaskManager$.MODULE$);
+      int numberOfRegisteredSltos=AkkaUtils.<Integer>ask(jobmanager,RequestAvailableSlots$.MODULE$);
+      resp.getWriter().write("{\"taskmanagers\": " + numberOfTaskManagrs + ", "+ "\"slots\": "+ numberOfRegisteredSltos+ "}");
+    }
+ else     if ("cancel".equals(req.getParameter("get"))) {
+      String jobId=req.getParameter("job");
+      AkkaUtils.<CancellationResponse>ask(jobmanager,new CancelJob(JobID.fromHexString(jobId)));
+    }
+ else     if ("updates".equals(req.getParameter("get"))) {
+      String jobId=req.getParameter("job");
+      writeJsonUpdatesForJob(resp.getWriter(),JobID.fromHexString(jobId));
+    }
+ else     if ("version".equals(req.getParameter("get"))) {
+      writeJsonForVersion(resp.getWriter());
+    }
+ else {
+      Iterable<ExecutionGraph> runningJobs=AkkaUtils.<RunningJobsResponse>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
+      writeJsonForJobs(resp.getWriter(),runningJobs);
+    }
+  }
+ catch (  Exception e) {
+    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    resp.getWriter().print(e.getMessage());
+    if (LOG.isWarnEnabled()) {
+      LOG.warn(StringUtils.stringifyException(e));
+    }
+  }
 }
