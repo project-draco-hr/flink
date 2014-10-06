@@ -8,18 +8,12 @@
   if (this.fileOutputCommitter.needsTaskCommit(this.context)) {
     this.fileOutputCommitter.commitTask(this.context);
   }
-  this.fileOutputCommitter.commitJob(this.context);
   Path outputPath=new Path(this.configuration.get("mapred.output.dir"));
   FileSystem fs=FileSystem.get(outputPath.toUri(),this.configuration);
-  final Pattern p=Pattern.compile("tmp-(.)-([0-9]+)");
-  if (fs.getFileStatus(outputPath).isDir()) {
-    FileStatus[] files=fs.listStatus(outputPath);
-    for (    FileStatus f : files) {
-      Matcher m=p.matcher(f.getPath().getName());
-      if (m.matches()) {
-        int part=Integer.valueOf(m.group(2));
-        fs.rename(f.getPath(),new Path(outputPath.toString() + "/" + part));
-      }
-    }
+  String taskNumberStr=Integer.toString(this.taskNumber);
+  String tmpFileTemplate="tmp-r-00000";
+  String tmpFile=tmpFileTemplate.substring(0,11 - taskNumberStr.length()) + taskNumberStr;
+  if (fs.exists(new Path(outputPath.toString() + "/" + tmpFile))) {
+    fs.rename(new Path(outputPath.toString() + "/" + tmpFile),new Path(outputPath.toString() + "/" + taskNumberStr));
   }
 }
