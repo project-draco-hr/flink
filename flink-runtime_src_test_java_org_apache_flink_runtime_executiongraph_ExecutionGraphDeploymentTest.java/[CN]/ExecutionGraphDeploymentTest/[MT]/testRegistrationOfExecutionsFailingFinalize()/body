@@ -1,0 +1,33 @@
+{
+  try {
+    final JobVertexID jid1=new JobVertexID();
+    final JobVertexID jid2=new JobVertexID();
+    AbstractJobVertex v1=new FailingFinalizeJobVertex("v1",jid1);
+    AbstractJobVertex v2=new AbstractJobVertex("v2",jid2);
+    Map<ExecutionAttemptID,Execution> executions=setupExecution(v1,6,v2,4);
+    List<Execution> execList=new ArrayList<Execution>();
+    execList.addAll(executions.values());
+    Collections.sort(execList,new Comparator<Execution>(){
+      @Override public int compare(      Execution o1,      Execution o2){
+        return o1.getVertex().getSimpleName().compareTo(o2.getVertex().getSimpleName());
+      }
+    }
+);
+    int cnt=0;
+    for (    Execution e : execList) {
+      cnt++;
+      e.markFinished();
+      if (cnt <= 6) {
+        assertEquals(ExecutionState.FINISHED,e.getState());
+      }
+ else {
+        assertEquals(ExecutionState.CANCELED,e.getState());
+      }
+    }
+    assertEquals(0,executions.size());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
