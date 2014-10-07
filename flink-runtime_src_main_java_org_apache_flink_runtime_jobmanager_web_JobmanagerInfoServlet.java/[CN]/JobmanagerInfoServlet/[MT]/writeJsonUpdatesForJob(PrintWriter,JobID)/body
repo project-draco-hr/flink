@@ -1,12 +1,11 @@
 {
   try {
-    Iterable<ExecutionGraph> graphs=AkkaUtils.<RunningJobsResponse>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
+    Iterable<ExecutionGraph> graphs=AkkaUtils.<RunningJobs>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
     wrt.write("{");
     wrt.write("\"jobid\": \"" + jobId + "\",");
     wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\",");
     wrt.write("\"recentjobs\": [");
     boolean first=true;
-    ExecutionGraph graph=null;
     for (    ExecutionGraph g : graphs) {
       if (first) {
         first=false;
@@ -15,18 +14,11 @@
         wrt.write(",");
       }
       wrt.write("\"" + g.getJobID() + "\"");
-      if (g.getJobID() == jobId) {
-        graph=g;
-      }
     }
     wrt.write("],");
-    if (graph == null) {
-      wrt.write("\"vertexevents\": [],");
-      wrt.write("\"jobevents\": []");
-      wrt.write("}");
-      LOG.warn("Could not find job with job ID " + jobId);
-    }
- else {
+    JobResponse response=AkkaUtils.ask(jobmanager,new RequestJob(jobId));
+    if (response instanceof JobFound) {
+      ExecutionGraph graph=((JobFound)response).executionGraph();
       wrt.write("\"vertexevents\": [");
       first=true;
       for (      ExecutionVertex ev : graph.getAllExecutionVertices()) {
@@ -50,6 +42,17 @@
       wrt.write("}");
       wrt.write("]");
       wrt.write("}");
+    }
+ else {
+      wrt.write("\"vertexevents\": [],");
+      wrt.write("\"jobevents\": [");
+      wrt.write("{");
+      wrt.write("\"newstate\": \"" + JobStatus.FINISHED + "\",");
+      wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\"");
+      wrt.write("}");
+      wrt.write("]");
+      wrt.write("}");
+      LOG.warn("WriteJsonUpdatesForJob: Could not find job with job ID " + jobId);
     }
   }
  catch (  EofException eof) {

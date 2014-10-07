@@ -3,22 +3,21 @@
     String jmHost=config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
     int jmPort=config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
     ActorRef jm=JobManager.getJobManager(new InetSocketAddress(jmHost,jmPort),system);
-    List<RecentJobEvent> recentJobs=null;
-    ArrayList<RecentJobEvent> jobs=new ArrayList<RecentJobEvent>(recentJobs);
+    Iterator<ExecutionGraph> graphs=AkkaUtils.<RunningJobs>ask(jm,RequestRunningJobs$.MODULE$).asJavaIterable().iterator();
     resp.setStatus(HttpServletResponse.SC_OK);
     PrintWriter wrt=resp.getWriter();
     wrt.write("[");
-    for (int i=0; i < jobs.size(); i++) {
-      RecentJobEvent jobEvent=jobs.get(i);
+    while (graphs.hasNext()) {
+      ExecutionGraph graph=graphs.next();
       wrt.write("{");
-      wrt.write("\"jobid\": \"" + jobEvent.getJobID() + "\",");
-      if (jobEvent.getJobName() != null) {
-        wrt.write("\"jobname\": \"" + jobEvent.getJobName() + "\",");
+      wrt.write("\"jobid\": \"" + graph.getJobID() + "\",");
+      if (graph.getJobName() != null) {
+        wrt.write("\"jobname\": \"" + graph.getJobName() + "\",");
       }
-      wrt.write("\"status\": \"" + jobEvent.getJobStatus() + "\",");
-      wrt.write("\"time\": " + jobEvent.getTimestamp());
+      wrt.write("\"status\": \"" + graph.getState() + "\",");
+      wrt.write("\"time\": " + graph.getStatusTimestamp(graph.getState()));
       wrt.write("}");
-      if (i != jobs.size() - 1) {
+      if (graphs.hasNext()) {
         wrt.write(",");
       }
     }

@@ -3,30 +3,30 @@
   resp.setContentType("application/json");
   try {
     if ("archive".equals(req.getParameter("get"))) {
-      List<ExecutionGraph> archivedJobs=AkkaUtils.<ArchivedJobs>ask(archive,RequestArchivedJobs$.MODULE$).asJavaList();
+      List<ExecutionGraph> archivedJobs=new ArrayList<ExecutionGraph>(AkkaUtils.<ArchivedJobs>ask(archive,RequestArchivedJobs$.MODULE$).asJavaCollection());
       writeJsonForArchive(resp.getWriter(),archivedJobs);
     }
  else     if ("job".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
-      ArchivedJobResponse response=AkkaUtils.ask(archive,new RequestArchivedJob(JobID.fromHexString(jobId)));
-      if (response instanceof ArchivedJobFound) {
-        ExecutionGraph archivedJob=((ArchivedJobFound)response).executionGraph();
+      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)));
+      if (response instanceof JobFound) {
+        ExecutionGraph archivedJob=((JobFound)response).executionGraph();
         writeJsonForArchivedJob(resp.getWriter(),archivedJob);
       }
  else {
-        LOG.warn("Could not find job for job ID " + jobId);
+        LOG.warn("DoGet:job: Could not find job for job ID " + jobId);
       }
     }
  else     if ("groupvertex".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
       String groupvertexId=req.getParameter("groupvertex");
-      ArchivedJobResponse response=AkkaUtils.ask(archive,new RequestArchivedJob(JobID.fromHexString(jobId)));
-      if (response instanceof ArchivedJobFound) {
-        ExecutionGraph archivedJob=((ArchivedJobFound)response).executionGraph();
+      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)));
+      if (response instanceof JobFound && groupvertexId != null) {
+        ExecutionGraph archivedJob=((JobFound)response).executionGraph();
         writeJsonForArchivedJobGroupvertex(resp.getWriter(),archivedJob,JobVertexID.fromHexString(groupvertexId));
       }
  else {
-        LOG.warn("Could not find job for job ID " + jobId);
+        LOG.warn("DoGet:groupvertex: Could not find job for job ID " + jobId);
       }
     }
  else     if ("taskmanagers".equals(req.getParameter("get"))) {
@@ -46,7 +46,7 @@
       writeJsonForVersion(resp.getWriter());
     }
  else {
-      Iterable<ExecutionGraph> runningJobs=AkkaUtils.<RunningJobsResponse>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
+      Iterable<ExecutionGraph> runningJobs=AkkaUtils.<RunningJobs>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
       writeJsonForJobs(resp.getWriter(),runningJobs);
     }
   }
