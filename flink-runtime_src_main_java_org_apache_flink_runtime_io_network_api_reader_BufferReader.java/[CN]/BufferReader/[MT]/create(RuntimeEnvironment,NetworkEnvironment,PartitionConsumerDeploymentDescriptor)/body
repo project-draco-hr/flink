@@ -1,0 +1,29 @@
+{
+  final IntermediateDataSetID resultId=desc.getResultId();
+  final int queueIndex=desc.getQueueIndex();
+  final PartitionInfo[] partitions=desc.getPartitions();
+  final int numberOfInputChannels=partitions.length;
+  final BufferReader reader=new BufferReader(runtimeEnvironment,networkEnvironment,resultId,numberOfInputChannels,queueIndex);
+  final InputChannel[] inputChannels=new InputChannel[numberOfInputChannels];
+  int channelIndex=0;
+  for (  PartitionInfo partition : partitions) {
+    final ExecutionAttemptID producerExecutionId=partition.getProducerExecutionId();
+    final IntermediateResultPartitionID partitionId=partition.getPartitionId();
+    final PartitionLocation producerLocation=partition.getProducerLocation();
+switch (producerLocation) {
+case LOCAL:
+      inputChannels[channelIndex]=new LocalInputChannel(channelIndex,producerExecutionId,partitionId,reader);
+    break;
+case REMOTE:
+  final RemoteAddress producerAddress=checkNotNull(partition.getProducerAddress(),"Missing producer address for remote intermediate result partition.");
+inputChannels[channelIndex]=new RemoteInputChannel(channelIndex,producerExecutionId,partitionId,reader,producerAddress);
+break;
+case UNKNOWN:
+inputChannels[channelIndex]=new UnknownInputChannel(channelIndex,producerExecutionId,partitionId,reader);
+break;
+}
+reader.setInputChannel(partitionId,inputChannels[channelIndex]);
+channelIndex++;
+}
+return reader;
+}

@@ -1,0 +1,42 @@
+{
+  if (fatalError) {
+    return;
+  }
+  Buffer buffer=null;
+  try {
+    if (channel.isWritable()) {
+      while (true) {
+        if (currentPartitionQueue == null && (currentPartitionQueue=queue.poll()) == null) {
+          return;
+        }
+        buffer=currentPartitionQueue.getNextBuffer();
+        if (buffer == null) {
+          if (currentPartitionQueue.subscribe(null)) {
+            numTotalSubscribeCalls++;
+            numOutstandingSubscribeCalls.incrementAndGet();
+            currentPartitionQueue=null;
+          }
+ else           if (currentPartitionQueue.isConsumed()) {
+            numConsumedPartitions++;
+            currentPartitionQueue=null;
+          }
+        }
+ else {
+          BufferResponse resp=new BufferResponse(buffer,currentPartitionQueue.getSequenceNumber(),currentPartitionQueue.getReceiverId());
+          channel.writeAndFlush(resp).addListener(writeListener);
+          return;
+        }
+      }
+    }
+  }
+ catch (  Throwable t) {
+    try {
+      if (buffer != null) {
+        buffer.recycle();
+      }
+    }
+ catch (    Throwable ignored) {
+    }
+    throw new IOException(t.getMessage(),t);
+  }
+}

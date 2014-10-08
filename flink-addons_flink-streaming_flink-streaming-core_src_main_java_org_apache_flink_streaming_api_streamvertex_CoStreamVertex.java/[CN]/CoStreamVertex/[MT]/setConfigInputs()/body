@@ -1,20 +1,41 @@
 {
   setDeserializers();
   int numberOfInputs=configuration.getNumberOfInputs();
-  ArrayList<MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>>> inputList1=new ArrayList<MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>>>();
-  ArrayList<MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>>> inputList2=new ArrayList<MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>>>();
+  ArrayList<BufferReader> inputList1=new ArrayList<BufferReader>();
+  ArrayList<BufferReader> inputList2=new ArrayList<BufferReader>();
   for (int i=0; i < numberOfInputs; i++) {
     int inputType=configuration.getInputType(i);
+    BufferReader reader=getEnvironment().getReader(i);
 switch (inputType) {
 case 1:
-      inputList1.add(new MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>>(this));
+      inputList1.add(reader);
     break;
 case 2:
-  inputList2.add(new MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>>(this));
+  inputList2.add(reader);
 break;
 default :
 throw new RuntimeException("Invalid input type number: " + inputType);
 }
 }
-coReader=new CoRecordReader<DeserializationDelegate<StreamRecord<IN1>>,DeserializationDelegate<StreamRecord<IN2>>>(inputList1,inputList2);
+MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>> reader1;
+if (inputList1.size() == 1) {
+reader1=new MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>>(inputList1.get(0));
+}
+ else if (inputList1.size() > 1) {
+reader1=new MutableRecordReader<DeserializationDelegate<StreamRecord<IN1>>>(new UnionBufferReader(inputList1.toArray(new BufferReader[inputList1.size()])));
+}
+ else {
+throw new IllegalStateException("Illegal input size for first input.");
+}
+MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>> reader2;
+if (inputList2.size() == 1) {
+reader2=new MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>>(inputList2.get(0));
+}
+ else if (inputList2.size() > 1) {
+reader2=new MutableRecordReader<DeserializationDelegate<StreamRecord<IN2>>>(new UnionBufferReader(inputList2.toArray(new BufferReader[inputList2.size()])));
+}
+ else {
+throw new IllegalStateException("Illegal input size for first input.");
+}
+coReader=new CoRecordReader<DeserializationDelegate<StreamRecord<IN1>>,DeserializationDelegate<StreamRecord<IN2>>>(reader1,reader2);
 }

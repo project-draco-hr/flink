@@ -1,4 +1,38 @@
 {
-  int id=outputs.size();
-  outputs.add(new MockOutputGate(id,outputList));
+  try {
+    BufferProvider mockBufferProvider=mock(BufferProvider.class);
+    when(mockBufferProvider.requestBufferBlocking()).thenAnswer(new Answer<Buffer>(){
+      @Override public Buffer answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        return new Buffer(new MemorySegment(new byte[bufferSize]),mock(BufferRecycler.class));
+      }
+    }
+);
+    BufferWriter mockWriter=mock(BufferWriter.class);
+    when(mockWriter.getNumberOfOutputChannels()).thenReturn(1);
+    when(mockWriter.getBufferProvider()).thenReturn(mockBufferProvider);
+    final Record record=new Record();
+    final RecordDeserializer<Record> deserializer=new AdaptiveSpanningRecordDeserializer<Record>();
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        Buffer buffer=(Buffer)invocationOnMock.getArguments()[0];
+        deserializer.setNextBuffer(buffer);
+        while (deserializer.hasUnfinishedData()) {
+          RecordDeserializer.DeserializationResult result=deserializer.getNextRecord(record);
+          if (result.isFullRecord()) {
+            outputList.add(record.createCopy());
+          }
+          if (result == RecordDeserializer.DeserializationResult.LAST_RECORD_FROM_BUFFER || result == RecordDeserializer.DeserializationResult.PARTIAL_RECORD) {
+            break;
+          }
+        }
+        return null;
+      }
+    }
+).when(mockWriter).writeBuffer(any(Buffer.class),anyInt());
+    outputs.add(mockWriter);
+  }
+ catch (  Throwable t) {
+    t.printStackTrace();
+    fail(t.getMessage());
+  }
 }

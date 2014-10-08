@@ -1,19 +1,24 @@
 {
-  ExecutorService executorService=Executors.newFixedThreadPool(subtasks * 2);
-  List<Callable<StringPair>> tasks=Lists.newArrayList();
-  Broker<String> broker=new Broker<String>();
-  for (int subtask=0; subtask < subtasks; subtask++) {
-    tasks.add(new IterationHead(broker,subtask,"value" + subtask));
-    tasks.add(new IterationTail(broker,subtask));
-  }
-  Collections.shuffle(tasks);
-  int numSuccessfulHandovers=0;
-  for (  Future<StringPair> future : executorService.invokeAll(tasks)) {
-    StringPair stringPair=future.get();
-    if (stringPair != null) {
-      assertEquals("value" + stringPair.getFirst(),stringPair.getSecond());
-      numSuccessfulHandovers++;
+  final ExecutorService executorService=Executors.newFixedThreadPool(subtasks * 2);
+  try {
+    List<Callable<StringPair>> tasks=Lists.newArrayList();
+    Broker<String> broker=new Broker<String>();
+    for (int subtask=0; subtask < subtasks; subtask++) {
+      tasks.add(new IterationHead(broker,subtask,"value" + subtask));
+      tasks.add(new IterationTail(broker,subtask));
     }
+    Collections.shuffle(tasks);
+    int numSuccessfulHandovers=0;
+    for (    Future<StringPair> future : executorService.invokeAll(tasks)) {
+      StringPair stringPair=future.get();
+      if (stringPair != null) {
+        assertEquals("value" + stringPair.getFirst(),stringPair.getSecond());
+        numSuccessfulHandovers++;
+      }
+    }
+    assertEquals(subtasks,numSuccessfulHandovers);
   }
-  assertEquals(subtasks,numSuccessfulHandovers);
+  finally {
+    executorService.shutdownNow();
+  }
 }

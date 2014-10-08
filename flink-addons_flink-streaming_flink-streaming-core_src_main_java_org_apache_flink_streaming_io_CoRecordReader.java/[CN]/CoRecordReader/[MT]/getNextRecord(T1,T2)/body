@@ -1,46 +1,41 @@
 {
-  int out;
-  while (true) {
-    if (this.nextInputGateToReadFrom == null) {
-      if (this.remainingInputGates.isEmpty()) {
-        return 0;
+  do {
+    if (finishedReader1 && finishedReader2) {
+      return 0;
+    }
+    if (endOfSuperstepReader1 && endOfSuperstepReader2) {
+      endOfSuperstepReader1=false;
+      endOfSuperstepReader2=false;
+      return 0;
+    }
+    if (!finishedReader1 && !endOfSuperstepReader1) {
+      if (reader1.next(target1)) {
+        return 1;
       }
-      this.nextInputGateToReadFrom=getNextAvailableInputGate();
-    }
-    InputChannelResult result;
-    if (inputGates1.contains(this.nextInputGateToReadFrom)) {
-      result=this.nextInputGateToReadFrom.readRecord(target1);
-      out=1;
-    }
+ else       if (reader1.isFinished()) {
+        finishedReader1=true;
+      }
+ else       if (reader1.hasReachedEndOfSuperstep()) {
+        endOfSuperstepReader1=true;
+      }
  else {
-      result=this.nextInputGateToReadFrom.readRecord(target2);
-      out=2;
+        throw new IOException("Unexpected return value from reader.");
+      }
     }
-switch (result) {
-case INTERMEDIATE_RECORD_FROM_BUFFER:
-      return out;
-case LAST_RECORD_FROM_BUFFER:
-    this.nextInputGateToReadFrom=null;
-  return out;
-case END_OF_SUPERSTEP:
-this.nextInputGateToReadFrom=null;
-if (incrementEndOfSuperstepEventAndCheck()) {
-return 0;
-}
+    if (!finishedReader2 && !endOfSuperstepReader2) {
+      if (reader2.next(target2)) {
+        return 2;
+      }
+ else       if (reader2.isFinished()) {
+        finishedReader2=true;
+      }
+ else       if (reader2.hasReachedEndOfSuperstep()) {
+        endOfSuperstepReader2=true;
+      }
  else {
-break;
-}
-case TASK_EVENT:
-handleEvent(this.nextInputGateToReadFrom.getCurrentEvent());
-this.nextInputGateToReadFrom=null;
-break;
-case END_OF_STREAM:
-this.remainingInputGates.remove(this.nextInputGateToReadFrom);
-this.nextInputGateToReadFrom=null;
-break;
-case NONE:
-this.nextInputGateToReadFrom=null;
-break;
-}
-}
+        throw new IOException("Unexpected return value from reader.");
+      }
+    }
+  }
+ while (true);
 }

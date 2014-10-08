@@ -1,14 +1,16 @@
 {
-  List<GateDeploymentDescriptor> inputGates=new ArrayList<GateDeploymentDescriptor>(inputEdges.length);
-  for (  ExecutionEdge[] channels : inputEdges) {
-    inputGates.add(GateDeploymentDescriptor.fromEdges(channels));
-  }
-  List<GateDeploymentDescriptor> outputGates=new ArrayList<GateDeploymentDescriptor>(resultPartitions.length);
+  List<PartitionDeploymentDescriptor> producedPartitions=new ArrayList<PartitionDeploymentDescriptor>(resultPartitions.length);
   for (  IntermediateResultPartition partition : resultPartitions) {
-    for (    List<ExecutionEdge> channels : partition.getConsumers()) {
-      outputGates.add(GateDeploymentDescriptor.fromEdges(channels));
-    }
+    producedPartitions.add(PartitionDeploymentDescriptor.fromIntermediateResultPartition(partition));
+  }
+  List<PartitionConsumerDeploymentDescriptor> consumedPartitions=new ArrayList<PartitionConsumerDeploymentDescriptor>();
+  for (  ExecutionEdge[] edges : inputEdges) {
+    PartitionInfo[] partitions=PartitionInfo.fromEdges(edges,slot);
+    int numConsumerEdges=edges[0].getSource().getConsumers().get(0).size();
+    int queueToRequest=subTaskIndex % numConsumerEdges;
+    IntermediateDataSetID resultId=edges[0].getSource().getIntermediateResult().getId();
+    consumedPartitions.add(new PartitionConsumerDeploymentDescriptor(resultId,partitions,queueToRequest));
   }
   List<BlobKey> jarFiles=getExecutionGraph().getRequiredJarFiles();
-  return new TaskDeploymentDescriptor(getJobId(),getJobvertexId(),executionId,getTaskName(),subTaskIndex,getTotalNumberOfParallelSubtasks(),getExecutionGraph().getJobConfiguration(),jobVertex.getJobVertex().getConfiguration(),jobVertex.getJobVertex().getInvokableClassName(),outputGates,inputGates,jarFiles,slot.getSlotNumber());
+  return new TaskDeploymentDescriptor(getJobId(),getJobvertexId(),executionId,getTaskName(),subTaskIndex,getTotalNumberOfParallelSubtasks(),getExecutionGraph().getJobConfiguration(),jobVertex.getJobVertex().getConfiguration(),jobVertex.getJobVertex().getInvokableClassName(),producedPartitions,consumedPartitions,jarFiles,slot.getSlotNumber());
 }

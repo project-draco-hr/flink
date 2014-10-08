@@ -1,0 +1,33 @@
+{
+  boolean success=true;
+  if (consumers.size() != 1) {
+    throw new IllegalStateException("Only one consumer is supported currently.");
+  }
+  final List<ExecutionEdge> consumer=consumers.get(0);
+  for (  ExecutionEdge edge : consumer) {
+    final ExecutionVertex consumerVertex=edge.getTarget();
+    final ExecutionState consumerState=consumerVertex.getExecutionState();
+    if (consumerState == CREATED) {
+      if (state == RUNNING) {
+        if (!consumerVertex.scheduleForExecution(consumerVertex.getExecutionGraph().getScheduler(),false)) {
+          success=false;
+        }
+      }
+ else {
+        success=false;
+      }
+    }
+ else     if (consumerState == RUNNING) {
+      AllocatedSlot consumerSlot=consumerVertex.getCurrentAssignedResource();
+      ExecutionAttemptID consumerExecutionId=consumerVertex.getCurrentExecutionAttempt().getAttemptId();
+      PartitionInfo partitionInfo=PartitionInfo.fromEdge(edge,consumerSlot);
+      if (!sendUpdateTaskRpcCall(consumerSlot,consumerExecutionId,edge.getSource().getIntermediateResult().getId(),partitionInfo)) {
+        success=false;
+      }
+    }
+ else     if (consumerState == SCHEDULED || consumerState == DEPLOYING) {
+      success=false;
+    }
+  }
+  return success;
+}

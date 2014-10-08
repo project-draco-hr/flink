@@ -1,0 +1,45 @@
+{
+  this.owner=checkNotNull(owner);
+  this.memoryManager=checkNotNull(memoryManager);
+  this.ioManager=checkNotNull(ioManager);
+  this.inputSplitProvider=checkNotNull(inputSplitProvider);
+  this.jobManager=checkNotNull(jobManager);
+  this.broadcastVariableManager=checkNotNull(broadcastVariableManager);
+  try {
+    final List<PartitionDeploymentDescriptor> partitions=tdd.getProducedPartitions();
+    this.producedPartitions=new IntermediateResultPartition[partitions.size()];
+    this.writers=new BufferWriter[partitions.size()];
+    for (int i=0; i < this.producedPartitions.length; i++) {
+      this.producedPartitions[i]=IntermediateResultPartition.create(this,i,owner.getJobID(),owner.getExecutionId(),networkEnvironment,partitions.get(i));
+      writers[i]=new BufferWriter(this.producedPartitions[i]);
+    }
+    final List<PartitionConsumerDeploymentDescriptor> consumedPartitions=tdd.getConsumedPartitions();
+    this.readers=new BufferReader[consumedPartitions.size()];
+    for (int i=0; i < readers.length; i++) {
+      readers[i]=BufferReader.create(this,networkEnvironment,consumedPartitions.get(i));
+      readersById.put(readers[i].getConsumedResultId(),readers[i]);
+    }
+    this.userCodeClassLoader=checkNotNull(userCodeClassLoader);
+    Class<? extends AbstractInvokable> invokableClass;
+    try {
+      final String className=tdd.getInvokableClassName();
+      invokableClass=Class.forName(className,true,userCodeClassLoader).asSubclass(AbstractInvokable.class);
+    }
+ catch (    Throwable t) {
+      throw new Exception("Could not load invokable class.",t);
+    }
+    try {
+      this.invokable=invokableClass.newInstance();
+    }
+ catch (    Throwable t) {
+      throw new Exception("Could not instantiate the invokable class.",t);
+    }
+    this.jobConfiguration=tdd.getJobConfiguration();
+    this.taskConfiguration=tdd.getTaskConfiguration();
+    this.invokable.setEnvironment(this);
+    this.invokable.registerInputOutput();
+  }
+ catch (  Throwable t) {
+    throw new Exception("Error setting up runtime environment: " + t.getMessage(),t);
+  }
+}

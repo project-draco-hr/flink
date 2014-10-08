@@ -6,13 +6,14 @@
       JobVertexID vid2=new JobVertexID();
       final ExecutionAttemptID eid1=new ExecutionAttemptID();
       final ExecutionAttemptID eid2=new ExecutionAttemptID();
-      final ChannelID senderId=new ChannelID();
-      final ChannelID receiverId=new ChannelID();
-      ActorRef jm=system.actorOf(Props.create(new SimpleLookupFailingUpdateJobManagerCreator(receiverId)));
+      ActorRef jm=system.actorOf(Props.create(new SimpleLookupFailingUpdateJobManagerCreator()));
       final ActorRef tm=createTaskManager(jm);
-      ChannelDeploymentDescriptor cdd=new ChannelDeploymentDescriptor(senderId,receiverId);
-      final TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Sender.class.getName(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),Collections.<GateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-      final TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),ReceiverBlocking.class.getName(),Collections.<GateDeploymentDescriptor>emptyList(),Collections.singletonList(new GateDeploymentDescriptor(Collections.singletonList(cdd))),new ArrayList<BlobKey>(),0);
+      IntermediateResultPartitionID partitionId=new IntermediateResultPartitionID();
+      List<PartitionDeploymentDescriptor> irpdd=new ArrayList<PartitionDeploymentDescriptor>();
+      irpdd.add(new PartitionDeploymentDescriptor(new IntermediateDataSetID(),partitionId,IntermediateResultPartitionType.PIPELINED,1));
+      PartitionConsumerDeploymentDescriptor ircdd=new PartitionConsumerDeploymentDescriptor(new IntermediateDataSetID(),new PartitionInfo[]{new PartitionInfo(partitionId,eid1,PartitionInfo.PartitionLocation.LOCAL,null)},0);
+      final TaskDeploymentDescriptor tdd1=new TaskDeploymentDescriptor(jid,vid1,eid1,"Sender",0,1,new Configuration(),new Configuration(),Tasks.Sender.class.getName(),irpdd,Collections.<PartitionConsumerDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+      final TaskDeploymentDescriptor tdd2=new TaskDeploymentDescriptor(jid,vid2,eid2,"Receiver",2,7,new Configuration(),new Configuration(),Tasks.BlockingReceiver.class.getName(),Collections.<PartitionDeploymentDescriptor>emptyList(),Collections.singletonList(ircdd),new ArrayList<BlobKey>(),0);
       final FiniteDuration d=duration("1 second");
       new Within(d){
         @Override protected void run(){

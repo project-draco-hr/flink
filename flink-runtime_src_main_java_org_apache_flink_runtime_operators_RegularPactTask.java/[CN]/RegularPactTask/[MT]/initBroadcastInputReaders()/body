@@ -1,21 +1,24 @@
 {
   final int numBroadcastInputs=this.config.getNumBroadcastInputs();
   final MutableReader<?>[] broadcastInputReaders=new MutableReader[numBroadcastInputs];
+  int currentReaderOffset=config.getNumInputs();
   for (int i=0; i < this.config.getNumBroadcastInputs(); i++) {
     final int groupSize=this.config.getBroadcastGroupSize(i);
     if (groupSize == 1) {
-      broadcastInputReaders[i]=new MutableRecordReader<IOReadableWritable>(this);
+      broadcastInputReaders[i]=new MutableRecordReader<IOReadableWritable>(getEnvironment().getReader(currentReaderOffset));
     }
  else     if (groupSize > 1) {
-      MutableRecordReader<IOReadableWritable>[] readers=new MutableRecordReader[groupSize];
+      BufferReader[] readers=new BufferReader[groupSize];
       for (int j=0; j < groupSize; ++j) {
-        readers[j]=new MutableRecordReader<IOReadableWritable>(this);
+        readers[j]=getEnvironment().getReader(currentReaderOffset + j);
       }
-      broadcastInputReaders[i]=new MutableUnionRecordReader<IOReadableWritable>(readers);
+      UnionBufferReader reader=new UnionBufferReader(readers);
+      broadcastInputReaders[i]=new MutableRecordReader<IOReadableWritable>(reader);
     }
  else {
       throw new Exception("Illegal input group size in task configuration: " + groupSize);
     }
+    currentReaderOffset+=groupSize;
   }
   this.broadcastInputReaders=broadcastInputReaders;
 }

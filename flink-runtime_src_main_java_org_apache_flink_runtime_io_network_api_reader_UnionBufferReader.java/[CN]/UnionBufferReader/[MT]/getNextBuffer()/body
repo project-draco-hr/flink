@@ -1,0 +1,47 @@
+{
+  if (!hasRequestedPartitions) {
+    for (    BufferReader reader : readers) {
+      reader.requestPartitionsOnce();
+    }
+    hasRequestedPartitions=true;
+  }
+  do {
+    if (currentReader == null) {
+      if (isFinished()) {
+        readersWithData.clear();
+        return null;
+      }
+ else       if (isIterative && remainingReaders.isEmpty()) {
+        resetRemainingReaders();
+        return null;
+      }
+ else {
+        while (true) {
+          currentReader=readersWithData.take();
+          currentReaderChannelIndexOffset=readerToIndexOffsetMap.get(currentReader);
+          if (isIterative && !remainingReaders.contains(currentReader)) {
+            readersWithData.add(currentReader);
+          }
+ else {
+            break;
+          }
+        }
+      }
+    }
+    Buffer buffer=currentReader.getNextBuffer();
+    channelIndexOfLastReadBuffer=currentReaderChannelIndexOffset + currentReader.getChannelIndexOfLastBuffer();
+    isTaskEvent=false;
+    if (buffer == null) {
+      if (currentReader.isFinished() || currentReader.hasReachedEndOfSuperstep()) {
+        remainingReaders.remove(currentReader);
+      }
+      currentReader=null;
+      return null;
+    }
+ else {
+      currentReader=null;
+      return buffer;
+    }
+  }
+ while (true);
+}

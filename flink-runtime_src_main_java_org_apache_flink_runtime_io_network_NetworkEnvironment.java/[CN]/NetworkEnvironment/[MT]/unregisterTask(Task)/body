@@ -1,0 +1,23 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Unregistering task {} ({}) from network environment (state: {}).",task.getTaskNameWithSubtasks(),task.getExecutionId(),task.getExecutionState());
+  }
+  final ExecutionAttemptID executionId=task.getExecutionId();
+  if (task.isCanceledOrFailed()) {
+    partitionManager.failIntermediateResultPartitions(executionId);
+  }
+  taskEventDispatcher.unregisterWriters(executionId);
+  final BufferReader[] readers=task.getReaders();
+  if (readers != null) {
+    for (    BufferReader reader : readers) {
+      try {
+        if (reader != null) {
+          reader.releaseAllResources();
+        }
+      }
+ catch (      IOException e) {
+        LOG.error("Error during release of reader resources: " + e.getMessage(),e);
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  try {
+    Class<?> msgClazz=msg.getClass();
+    if (msgClazz == PartitionRequest.class) {
+      PartitionRequest request=(PartitionRequest)msg;
+      IntermediateResultPartitionQueueIterator queueIterator=partitionProvider.getIntermediateResultPartitionIterator(request.producerExecutionId,request.partitionId,request.queueIndex,Optional.<BufferProvider>absent());
+      if (queueIterator != null) {
+        outboundQueue.enqueue(queueIterator,request.receiverId);
+      }
+ else {
+        respondWithError(ctx,new IllegalArgumentException("Partition not found"),request.receiverId);
+      }
+    }
+ else     if (msgClazz == TaskEventRequest.class) {
+      TaskEventRequest request=(TaskEventRequest)msg;
+      if (!taskEventDispatcher.publish(request.executionId,request.partitionId,request.event)) {
+        respondWithError(ctx,new IllegalArgumentException("Task event receiver not found."),request.receiverId);
+      }
+    }
+ else {
+      LOG.warn("Received unexpected client request: {}",msg);
+    }
+  }
+ catch (  Throwable t) {
+    respondWithError(ctx,t);
+  }
+}

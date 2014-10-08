@@ -1,0 +1,35 @@
+{
+  boolean success=false;
+  Buffer buffer=null;
+  try {
+    if ((buffer=availableBuffer.getAndSet(null)) == null) {
+      throw new IllegalStateException("Running buffer availability task w/o a buffer.");
+    }
+    buffer.setSize(stagedBufferResponse.getSize());
+    stagedBufferResponse.getNettyBuffer().readBytes(buffer.getNioBuffer());
+    stagedBufferResponse.releaseBuffer();
+    RemoteInputChannel inputChannel=inputChannels.get(stagedBufferResponse.receiverId);
+    if (inputChannel != null) {
+      inputChannel.onBuffer(buffer,stagedBufferResponse.sequenceNumber);
+      success=true;
+    }
+    stagedBufferResponse=null;
+    if (stagedMessages.isEmpty()) {
+      ctx.channel().config().setAutoRead(true);
+      ctx.channel().read();
+    }
+ else {
+      ctx.channel().eventLoop().execute(stagedMessagesHandler);
+    }
+  }
+ catch (  Throwable t) {
+    notifyAllChannelsOfErrorAndClose(t);
+  }
+ finally {
+    if (!success) {
+      if (buffer != null) {
+        buffer.recycle();
+      }
+    }
+  }
+}

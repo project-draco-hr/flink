@@ -1,0 +1,28 @@
+{
+  final Class<?> msgClazz=msg.getClass();
+  if (msgClazz == NettyMessage.BufferResponse.class) {
+    NettyMessage.BufferResponse bufferOrEvent=(NettyMessage.BufferResponse)msg;
+    RemoteInputChannel inputChannel=inputChannels.get(bufferOrEvent.receiverId);
+    if (inputChannel == null) {
+      bufferOrEvent.releaseBuffer();
+      return true;
+    }
+    return decodeBufferOrEvent(inputChannel,bufferOrEvent);
+  }
+ else   if (msgClazz == NettyMessage.ErrorResponse.class) {
+    NettyMessage.ErrorResponse error=(NettyMessage.ErrorResponse)msg;
+    if (error.isFatalError()) {
+      notifyAllChannelsOfErrorAndClose(error.error);
+    }
+ else {
+      RemoteInputChannel inputChannel=inputChannels.get(error.receiverId);
+      if (inputChannel != null) {
+        inputChannel.onError(error.error);
+      }
+    }
+  }
+ else {
+    throw new IllegalStateException("Received unknown message from producer: " + msg.getClass());
+  }
+  return true;
+}

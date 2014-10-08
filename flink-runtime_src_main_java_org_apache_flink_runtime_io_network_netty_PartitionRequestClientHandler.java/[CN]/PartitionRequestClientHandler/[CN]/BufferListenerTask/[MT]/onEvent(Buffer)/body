@@ -1,0 +1,23 @@
+{
+  boolean success=false;
+  try {
+    checkNotNull(buffer,"Buffer request could not be satisfied.");
+    if (availableBuffer.compareAndSet(null,buffer)) {
+      ctx.channel().eventLoop().execute(this);
+      success=true;
+    }
+ else {
+      throw new IllegalStateException("Received a buffer notification, but the previous one has not been handled yet.");
+    }
+  }
+ catch (  Throwable t) {
+    ctx.channel().eventLoop().execute(new AsyncErrorNotificationTask(t));
+  }
+ finally {
+    if (!success) {
+      if (buffer != null) {
+        buffer.recycle();
+      }
+    }
+  }
+}

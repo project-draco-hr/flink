@@ -1,0 +1,46 @@
+{
+  final int SERIALIZATION_OVERHEAD=4;
+  final RecordSerializer<SerializationTestType> serializer=new SpanningRecordSerializer<SerializationTestType>();
+  final RecordDeserializer<SerializationTestType> deserializer=new AdaptiveSpanningRecordDeserializer<SerializationTestType>();
+  final Buffer buffer=new Buffer(new MemorySegment(new byte[segmentSize]),Mockito.mock(BufferRecycler.class));
+  final ArrayDeque<SerializationTestType> serializedRecords=new ArrayDeque<SerializationTestType>();
+  serializer.setNextBuffer(buffer);
+  int numBytes=0;
+  int numRecords=0;
+  for (  SerializationTestType record : records) {
+    serializedRecords.add(record);
+    numRecords++;
+    numBytes+=record.length() + SERIALIZATION_OVERHEAD;
+    if (serializer.addRecord(record).isFullBuffer()) {
+      deserializer.setNextMemorySegment(serializer.getCurrentBuffer().getMemorySegment(),segmentSize);
+      while (!serializedRecords.isEmpty()) {
+        SerializationTestType expected=serializedRecords.poll();
+        SerializationTestType actual=expected.getClass().newInstance();
+        if (deserializer.getNextRecord(actual).isFullRecord()) {
+          Assert.assertEquals(expected,actual);
+          numRecords--;
+        }
+ else {
+          serializedRecords.addFirst(expected);
+          break;
+        }
+      }
+      while (serializer.setNextBuffer(buffer).isFullBuffer()) {
+        deserializer.setNextMemorySegment(serializer.getCurrentBuffer().getMemorySegment(),segmentSize);
+      }
+    }
+  }
+  deserializer.setNextMemorySegment(serializer.getCurrentBuffer().getMemorySegment(),(numBytes % segmentSize));
+  serializer.clear();
+  while (!serializedRecords.isEmpty()) {
+    SerializationTestType expected=serializedRecords.poll();
+    SerializationTestType actual=expected.getClass().newInstance();
+    DeserializationResult result=deserializer.getNextRecord(actual);
+    Assert.assertTrue(result.isFullRecord());
+    Assert.assertEquals(expected,actual);
+    numRecords--;
+  }
+  Assert.assertEquals(0,numRecords);
+  Assert.assertFalse(serializer.hasData());
+  Assert.assertFalse(deserializer.hasUnfinishedData());
+}

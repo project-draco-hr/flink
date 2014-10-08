@@ -1,0 +1,33 @@
+{
+  if (isFinished) {
+    return false;
+  }
+  while (true) {
+    if (currentRecordDeserializer != null) {
+      DeserializationResult result=currentRecordDeserializer.getNextRecord(target);
+      if (result.isBufferConsumed()) {
+        currentRecordDeserializer.getCurrentBuffer().recycle();
+        currentRecordDeserializer=null;
+      }
+      if (result.isFullRecord()) {
+        return true;
+      }
+    }
+    final Buffer nextBuffer=reader.getNextBuffer();
+    final int channelIndex=reader.getChannelIndexOfLastBuffer();
+    if (nextBuffer == null) {
+      if (reader.isFinished()) {
+        isFinished=true;
+        return false;
+      }
+ else       if (reader.hasReachedEndOfSuperstep()) {
+        return false;
+      }
+ else {
+        continue;
+      }
+    }
+    currentRecordDeserializer=recordDeserializers[channelIndex];
+    currentRecordDeserializer.setNextBuffer(nextBuffer);
+  }
+}

@@ -1,0 +1,68 @@
+{
+{
+    Buffer buffer=spy(new Buffer(new MemorySegment(new byte[1024]),mock(BufferRecycler.class)));
+    ByteBuffer nioBuffer=buffer.getNioBuffer();
+    for (int i=0; i < 1024; i+=4) {
+      nioBuffer.putInt(i);
+    }
+    NettyMessage.BufferResponse expected=new NettyMessage.BufferResponse(buffer,random.nextInt(),new InputChannelID());
+    NettyMessage.BufferResponse actual=encodeAndDecode(expected);
+    verify(buffer,times(1)).recycle();
+    final ByteBuf retainedSlice=actual.getNettyBuffer();
+    assertEquals(1,retainedSlice.refCnt());
+    assertEquals(1024,retainedSlice.readableBytes());
+    nioBuffer=retainedSlice.nioBuffer();
+    for (int i=0; i < 1024; i+=4) {
+      assertEquals(i,nioBuffer.getInt());
+    }
+    actual.releaseBuffer();
+    assertEquals(0,retainedSlice.refCnt());
+    assertEquals(expected.sequenceNumber,actual.sequenceNumber);
+    assertEquals(expected.receiverId,actual.receiverId);
+  }
+{
+{
+      IllegalStateException expectedError=new IllegalStateException();
+      InputChannelID receiverId=new InputChannelID();
+      NettyMessage.ErrorResponse expected=new NettyMessage.ErrorResponse(expectedError,receiverId);
+      NettyMessage.ErrorResponse actual=encodeAndDecode(expected);
+      assertEquals(expected.error.getClass(),actual.error.getClass());
+      assertEquals(expected.error.getMessage(),actual.error.getMessage());
+      assertEquals(receiverId,actual.receiverId);
+    }
+{
+      IllegalStateException expectedError=new IllegalStateException("Illegal illegal illegal");
+      InputChannelID receiverId=new InputChannelID();
+      NettyMessage.ErrorResponse expected=new NettyMessage.ErrorResponse(expectedError,receiverId);
+      NettyMessage.ErrorResponse actual=encodeAndDecode(expected);
+      assertEquals(expected.error.getClass(),actual.error.getClass());
+      assertEquals(expected.error.getMessage(),actual.error.getMessage());
+      assertEquals(receiverId,actual.receiverId);
+    }
+{
+      IllegalStateException expectedError=new IllegalStateException("Illegal illegal illegal");
+      NettyMessage.ErrorResponse expected=new NettyMessage.ErrorResponse(expectedError);
+      NettyMessage.ErrorResponse actual=encodeAndDecode(expected);
+      assertEquals(expected.error.getClass(),actual.error.getClass());
+      assertEquals(expected.error.getMessage(),actual.error.getMessage());
+      assertNull(actual.receiverId);
+      assertTrue(actual.isFatalError());
+    }
+  }
+{
+    NettyMessage.PartitionRequest expected=new NettyMessage.PartitionRequest(new ExecutionAttemptID(),new IntermediateResultPartitionID(),random.nextInt(),new InputChannelID());
+    NettyMessage.PartitionRequest actual=encodeAndDecode(expected);
+    assertEquals(expected.producerExecutionId,actual.producerExecutionId);
+    assertEquals(expected.partitionId,actual.partitionId);
+    assertEquals(expected.queueIndex,actual.queueIndex);
+    assertEquals(expected.receiverId,actual.receiverId);
+  }
+{
+    NettyMessage.TaskEventRequest expected=new NettyMessage.TaskEventRequest(new IntegerTaskEvent(random.nextInt()),new ExecutionAttemptID(),new IntermediateResultPartitionID(),new InputChannelID());
+    NettyMessage.TaskEventRequest actual=encodeAndDecode(expected);
+    assertEquals(expected.executionId,actual.executionId);
+    assertEquals(expected.event,actual.event);
+    assertEquals(expected.partitionId,actual.partitionId);
+    assertEquals(expected.receiverId,actual.receiverId);
+  }
+}

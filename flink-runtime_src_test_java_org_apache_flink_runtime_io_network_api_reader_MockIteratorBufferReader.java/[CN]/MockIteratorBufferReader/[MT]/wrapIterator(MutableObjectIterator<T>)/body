@@ -1,0 +1,24 @@
+{
+  checkState(inputIterator == null,"Iterator has already been set.");
+  checkState(stubbing == null,"There is already an ongoing stubbing from the MockBufferReader, which can't be mixed with an Iterator.");
+  inputIterator=iterator;
+  serializer=new SpanningRecordSerializer<T>();
+  final Answer<Buffer> answer=new Answer<Buffer>(){
+    @Override public Buffer answer(    InvocationOnMock invocationOnMock) throws Throwable {
+      if (inputIterator.next(reuse) != null) {
+        final Buffer buffer=new Buffer(new MemorySegment(new byte[bufferSize]),mock(BufferRecycler.class));
+        serializer.setNextBuffer(buffer);
+        serializer.addRecord(reuse);
+        reader.onAvailableInputChannel(inputChannel);
+        return serializer.getCurrentBuffer();
+      }
+ else {
+        when(inputChannel.isReleased()).thenReturn(true);
+        return EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE);
+      }
+    }
+  }
+;
+  stubbing=when(inputChannel.getNextBuffer()).thenAnswer(answer);
+  return this;
+}

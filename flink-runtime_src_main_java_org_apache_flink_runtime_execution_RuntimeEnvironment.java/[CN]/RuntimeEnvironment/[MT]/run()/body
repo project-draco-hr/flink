@@ -5,39 +5,39 @@
   }
   try {
     Thread.currentThread().setContextClassLoader(userCodeClassLoader);
-    this.invokable.invoke();
-    if (this.owner.isCanceledOrFailed()) {
+    invokable.invoke();
+    if (owner.isCanceledOrFailed()) {
       throw new CancelTaskException();
     }
-    closeInputGates();
-    requestAllOutputGatesToClose();
-    waitForInputChannelsToBeClosed();
-    waitForOutputChannelsToBeClosed();
-    if (this.owner.isCanceledOrFailed()) {
+    if (producedPartitions != null) {
+      for (      IntermediateResultPartition partition : producedPartitions) {
+        if (partition != null) {
+          partition.finish();
+        }
+      }
+    }
+    if (owner.isCanceledOrFailed()) {
       throw new CancelTaskException();
     }
     if (!owner.markAsFinished()) {
-      throw new Exception("Could notify job manager that the task is finished.");
+      throw new Exception("Could *not* notify job manager that the task is finished.");
     }
   }
  catch (  Throwable t) {
-    if (!this.owner.isCanceledOrFailed()) {
+    LOG.error("Error during running invokable: " + t.getMessage(),t);
+    if (!owner.isCanceledOrFailed()) {
       try {
-        this.invokable.cancel();
+        invokable.cancel();
       }
  catch (      Throwable t2) {
         LOG.error("Error while canceling the task",t2);
       }
     }
-    releaseAllChannelResources();
-    if (this.owner.isCanceledOrFailed() || t instanceof CancelTaskException) {
-      this.owner.cancelingDone();
+    if (owner.isCanceledOrFailed() || t instanceof CancelTaskException) {
+      owner.cancelingDone();
     }
  else {
-      this.owner.markFailed(t);
+      owner.markFailed(t);
     }
-  }
- finally {
-    releaseAllChannelResources();
   }
 }
