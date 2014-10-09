@@ -249,8 +249,6 @@
   Utils.setTokensFor(amContainer,paths,this.conf);
   amContainer.setLocalResources(localResources);
   fs.close();
-  int amRPCPort=GlobalConfiguration.getInteger(ConfigConstants.YARN_AM_PRC_PORT,ConfigConstants.DEFAULT_YARN_AM_RPC_PORT);
-  amRPCPort=Utils.offsetPort(amRPCPort,appNumber);
   Map<String,String> appMasterEnv=new HashMap<String,String>();
   Utils.setupEnv(conf,appMasterEnv);
   appMasterEnv.put(Client.ENV_TM_COUNT,String.valueOf(taskManagerCount));
@@ -261,7 +259,6 @@
   appMasterEnv.put(Client.ENV_CLIENT_HOME_DIR,fs.getHomeDirectory().toString());
   appMasterEnv.put(Client.ENV_CLIENT_SHIP_FILES,envShipFileList.toString());
   appMasterEnv.put(Client.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
-  appMasterEnv.put(Client.ENV_AM_PRC_PORT,String.valueOf(amRPCPort));
   appMasterEnv.put(Client.ENV_SLOTS,String.valueOf(slots));
   appMasterEnv.put(Client.ENV_APP_NUMBER,String.valueOf(appNumber));
   if (dynamicPropertiesEncoded != null) {
@@ -279,79 +276,15 @@
   LOG.info("Submitting application master " + appId);
   yarnClient.submitApplication(appContext);
   ApplicationReport appReport=yarnClient.getApplicationReport(appId);
-  YarnApplicationState appState=appReport.getYarnApplicationState();
-  boolean told=false;
-  char[] el={'/','|','\\','-'};
-  int i=0;
-  int numTaskmanagers=0;
-  int numMessages=0;
-  BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
-  while (appState != YarnApplicationState.FINISHED && appState != YarnApplicationState.KILLED && appState != YarnApplicationState.FAILED) {
-    if (!told && appState == YarnApplicationState.RUNNING) {
-      System.err.println("Flink JobManager is now running on " + appReport.getHost() + ":"+ jmPort);
-      System.err.println("JobManager Web Interface: " + appReport.getTrackingUrl());
-      Properties yarnProps=new Properties();
-      yarnProps.setProperty(CliFrontend.YARN_PROPERTIES_JOBMANAGER_KEY,appReport.getHost() + ":" + jmPort);
-      if (slots != -1) {
-        yarnProps.setProperty(CliFrontend.YARN_PROPERTIES_DOP,Integer.toString(slots * taskManagerCount));
-      }
-      if (dynamicProperties != null) {
-        yarnProps.setProperty(CliFrontend.YARN_PROPERTIES_DYNAMIC_PROPERTIES_STRING,dynamicPropertiesEncoded);
-      }
-      OutputStream out=new FileOutputStream(yarnPropertiesFile);
-      yarnProps.store(out,"Generated YARN properties file");
-      out.close();
-      yarnPropertiesFile.setReadable(true,false);
-      cmc=new ClientMasterControl(new InetSocketAddress(appReport.getHost(),amRPCPort));
-      cmc.start();
-      Runtime.getRuntime().addShutdownHook(new ClientShutdownHook());
-      told=true;
-    }
-    if (!told) {
-      System.err.print(el[i++] + "\r");
-      if (i == el.length) {
-        i=0;
-      }
-      Thread.sleep(500);
-    }
- else {
-      int newTmCount=cmc.getNumberOfTaskManagers();
-      if (numTaskmanagers != newTmCount) {
-        System.err.println("Number of connected TaskManagers changed to " + newTmCount + ". "+ "Slots available: "+ cmc.getNumberOfAvailableSlots());
-        numTaskmanagers=newTmCount;
-      }
-      if (cmc.getFailedStatus()) {
-        System.err.println("The Application Master failed!\nMessages:\n");
-        for (        Message m : cmc.getMessages()) {
-          System.err.println("Message: " + m.getMessage());
-        }
-        System.err.println("Requesting Application Master shutdown");
-        cmc.shutdownAM();
-        cmc.close();
-        System.err.println("Application Master closed.");
-      }
-      if (cmc.getMessages().size() != numMessages) {
-        System.err.println("Received new message(s) from the Application Master");
-        List<Message> msg=cmc.getMessages();
-        while (msg.size() > numMessages) {
-          System.err.println("Message: " + msg.get(numMessages).getMessage());
-          numMessages++;
-        }
-      }
-      long startTime=System.currentTimeMillis();
-      while ((System.currentTimeMillis() - startTime) < CLIENT_POLLING_INTERVALL * 1000 && !in.ready()) {
-        Thread.sleep(200);
-      }
-      if (in.ready()) {
-        String command=in.readLine();
-        evalCommand(command);
-      }
-    }
-    appReport=yarnClient.getApplicationReport(appId);
-    appState=appReport.getYarnApplicationState();
-  }
-  LOG.info("Application " + appId + " finished with"+ " state "+ appState+ " and "+ "final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
-  if (appState == YarnApplicationState.FAILED || appState == YarnApplicationState.KILLED) {
+  Runtime.getRuntime().addShutdownHook(new ClientShutdownHook());
+  LOG.info("Start actor system.");
+  actorSystem=AkkaUtils.createActorSystem();
+  String path=appReport.getHost() + ":" + jmPort;
+  LOG.info("Start application client.");
+  applicationClient=actorSystem.actorOf(Props.create(ApplicationClient.class,path,yarnClient));
+  appReport=AkkaUtils.ask(applicationClient,WaitForJobTermination$.MODULE$,AkkaUtils.FUTURE_TIMEOUT(),Duration.Inf());
+  LOG.info("Application " + appId + " finished with state "+ appReport.getYarnApplicationState()+ " and final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
+  if (appReport.getYarnApplicationState() == YarnApplicationState.FAILED || appReport.getYarnApplicationState() == YarnApplicationState.KILLED) {
     LOG.warn("Application failed. Diagnostics " + appReport.getDiagnostics());
     LOG.warn("If log aggregation is activated in the Hadoop cluster, we recommend to retreive " + "the full application log using this command:\n" + "\tyarn logs -applicationId " + appReport.getApplicationId() + "\n"+ "(It sometimes takes a few seconds until the logs are aggregated)");
   }
