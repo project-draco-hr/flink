@@ -4,16 +4,12 @@
     nepheleConfig=config;
   }
   String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
-  File webDir;
   File tmpDir;
   File uploadDir;
   File planDumpDir;
-  String webDirPath=config.getString(ConfigConstants.WEB_ROOT_PATH_KEY,ConfigConstants.DEFAULT_WEB_ROOT_DIR);
-  if (webDirPath.startsWith("/")) {
-    webDir=new File(webDirPath);
-  }
- else {
-    webDir=new File(basePath + "/" + webDirPath);
+  URL webRootDir=this.getClass().getClassLoader().getResource(WEB_ROOT_DIR);
+  if (webRootDir == null) {
+    throw new FileNotFoundException("Cannot start web interface server because the web " + "root dir " + WEB_ROOT_DIR + " is not included in the jar.");
   }
   String tmpDirPath=config.getString(ConfigConstants.WEB_TMP_DIR_KEY,ConfigConstants.DEFAULT_WEB_TMP_DIR);
   tmpDir=new File(tmpDirPath);
@@ -37,14 +33,11 @@
     planDumpDir=new File(basePath + "/" + planDumpDirPath);
   }
   if (LOG.isInfoEnabled()) {
-    LOG.info("Setting up web frontend server, using web-root directory '" + webDir.getAbsolutePath() + "'.");
+    LOG.info("Setting up web frontend server, using web-root directory '" + webRootDir.toExternalForm() + "'.");
     LOG.info("Web frontend server will store temporary files in '" + tmpDir.getAbsolutePath() + "', uploaded jobs in '"+ uploadDir.getAbsolutePath()+ "', plan-json-dumps in '"+ planDumpDir.getAbsolutePath()+ "'.");
     LOG.info("Web-frontend will submit jobs to nephele job-manager on " + config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT)+ ".");
   }
   server=new Server(port);
-  if (!webDir.exists()) {
-    throw new FileNotFoundException("The directory containing the web documents does not exist: " + webDir.getAbsolutePath());
-  }
   checkAndCreateDirectories(tmpDir,true);
   checkAndCreateDirectories(uploadDir,true);
   checkAndCreateDirectories(planDumpDir,true);
@@ -64,7 +57,7 @@
   pactPlanContext.setHandler(pactPlanHandler);
   ResourceHandler resourceHandler=new ResourceHandler();
   resourceHandler.setDirectoriesListed(false);
-  resourceHandler.setResourceBase(webDir.getAbsolutePath());
+  resourceHandler.setResourceBase(webRootDir.toExternalForm());
   HandlerList handlers=new HandlerList();
   handlers.addHandler(servletContext);
   handlers.addHandler(pactPlanContext);
