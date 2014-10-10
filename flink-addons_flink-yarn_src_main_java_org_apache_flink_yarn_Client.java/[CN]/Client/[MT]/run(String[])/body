@@ -275,14 +275,14 @@
   yarnPropertiesFile=new File(confDirPath + CliFrontend.YARN_PROPERTIES_FILE);
   LOG.info("Submitting application master " + appId);
   yarnClient.submitApplication(appContext);
-  ApplicationReport appReport=yarnClient.getApplicationReport(appId);
   Runtime.getRuntime().addShutdownHook(new ClientShutdownHook());
   LOG.info("Start actor system.");
-  actorSystem=AkkaUtils.createActorSystem();
-  String path=appReport.getHost() + ":" + jmPort;
+  actorSystem=YarnUtils.createActorSystem();
   LOG.info("Start application client.");
-  applicationClient=actorSystem.actorOf(Props.create(ApplicationClient.class,path,yarnClient));
-  appReport=AkkaUtils.ask(applicationClient,WaitForJobTermination$.MODULE$,AkkaUtils.FUTURE_TIMEOUT(),Duration.Inf());
+  applicationClient=actorSystem.actorOf(Props.create(ApplicationClient.class,appId,jmPort,yarnClient,confDirPath,slots,taskManagerCount,dynamicPropertiesEncoded));
+  actorSystem.awaitTermination();
+  actorSystem=null;
+  ApplicationReport appReport=yarnClient.getApplicationReport(appId);
   LOG.info("Application " + appId + " finished with state "+ appReport.getYarnApplicationState()+ " and final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
   if (appReport.getYarnApplicationState() == YarnApplicationState.FAILED || appReport.getYarnApplicationState() == YarnApplicationState.KILLED) {
     LOG.warn("Application failed. Diagnostics " + appReport.getDiagnostics());
