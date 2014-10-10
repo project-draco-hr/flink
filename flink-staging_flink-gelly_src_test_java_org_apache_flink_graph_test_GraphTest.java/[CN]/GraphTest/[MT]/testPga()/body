@@ -1,0 +1,36 @@
+{
+  CoGroupFunction<Tuple2<Integer,Integer>,Tuple3<Integer,Integer,Integer>,Tuple2<Integer,Integer>> sendAttribute=new CoGroupFunction<Tuple2<Integer,Integer>,Tuple3<Integer,Integer,Integer>,Tuple2<Integer,Integer>>(){
+    @Override public void coGroup(    Iterable<Tuple2<Integer,Integer>> vertices,    Iterable<Tuple3<Integer,Integer,Integer>> edges,    Collector<Tuple2<Integer,Integer>> tuple2Collector) throws Exception {
+      for (      Tuple2<Integer,Integer> vertex : vertices) {
+        for (        Tuple3<Integer,Integer,Integer> edge : edges) {
+          tuple2Collector.collect(new Tuple2<Integer,Integer>(edge.f1,vertex.f1));
+        }
+      }
+    }
+  }
+;
+  GroupReduceFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> gatherAttributes=new GroupReduceFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
+    @Override public void reduce(    Iterable<Tuple2<Integer,Integer>> messages,    Collector<Tuple2<Integer,Integer>> msgCollector) throws Exception {
+      Tuple2<Integer,Integer> minTuple=new Tuple2<Integer,Integer>(Integer.MAX_VALUE,Integer.MAX_VALUE);
+      for (      Tuple2<Integer,Integer> message : messages) {
+        if (message.f1 < minTuple.f1) {
+          minTuple=message.copy();
+        }
+      }
+      msgCollector.collect(minTuple);
+    }
+  }
+;
+  FlatJoinFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> apply=new FlatJoinFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
+    @Override public void join(    Tuple2<Integer,Integer> msg,    Tuple2<Integer,Integer> vertex,    Collector<Tuple2<Integer,Integer>> vertexCollector) throws Exception {
+      if (msg.f1 < vertex.f1) {
+        vertexCollector.collect(msg.copy());
+      }
+    }
+  }
+;
+  Graph<Integer,Integer,Integer> connected=graph.pga(sendAttribute,gatherAttributes,apply,100);
+  DataSet<Tuple2<Integer,Integer>> conVerts=connected.getVertices();
+  conVerts.print();
+  env.execute();
+}
