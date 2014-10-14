@@ -21,9 +21,31 @@
   }
  else {
     ArrayList<OperatorDescriptorDual> list=new ArrayList<OperatorDescriptorDual>();
-    list.add(new SortMergeJoinDescriptor(this.keys1,this.keys2));
-    list.add(new HashJoinBuildFirstProperties(this.keys1,this.keys2));
-    list.add(new HashJoinBuildSecondProperties(this.keys1,this.keys2));
-    return list;
-  }
+    JoinHint hint=this.joinHint == null ? JoinHint.OPTIMIZER_CHOOSES : this.joinHint;
+switch (hint) {
+case BROADCAST_HASH_FIRST:
+      list.add(new HashJoinBuildFirstProperties(this.keys1,this.keys2,true,false,false));
+    break;
+case BROADCAST_HASH_SECOND:
+  list.add(new HashJoinBuildSecondProperties(this.keys1,this.keys2,false,true,false));
+break;
+case REPARTITION_HASH_FIRST:
+list.add(new HashJoinBuildFirstProperties(this.keys1,this.keys2,false,false,true));
+break;
+case REPARTITION_HASH_SECOND:
+list.add(new HashJoinBuildSecondProperties(this.keys1,this.keys2,false,false,true));
+break;
+case REPARTITION_SORT_MERGE:
+list.add(new SortMergeJoinDescriptor(this.keys1,this.keys2,false,false,true));
+break;
+case OPTIMIZER_CHOOSES:
+list.add(new SortMergeJoinDescriptor(this.keys1,this.keys2));
+list.add(new HashJoinBuildFirstProperties(this.keys1,this.keys2));
+list.add(new HashJoinBuildSecondProperties(this.keys1,this.keys2));
+break;
+default :
+throw new CompilerException("Unrecognized join hint: " + joinHint);
+}
+return list;
+}
 }
