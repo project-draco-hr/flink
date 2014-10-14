@@ -6,7 +6,6 @@
   final int numSubtasks=tdd.getCurrentNumberOfSubtasks();
   Task task=null;
   boolean jarsRegistered=false;
-  boolean success=false;
   try {
     libraryCacheManager.register(jobID,tdd.getRequiredJarFiles());
     jarsRegistered=true;
@@ -34,20 +33,23 @@
     }
     env.addCopyTasksForCacheFile(cpTasks);
     if (!task.startExecution()) {
-      return new TaskOperationResult(executionId,false,"Task was canceled or failed.");
+      throw new CancelTaskException();
     }
     if (shutdownStarted.get()) {
       throw new Exception("Task Manager is shut down.");
     }
-    success=true;
     return new TaskOperationResult(executionId,true);
   }
  catch (  Throwable t) {
-    LOG.error("Could not instantiate task",t);
-    return new TaskOperationResult(executionId,false,ExceptionUtils.stringifyException(t));
-  }
- finally {
-    if (!success) {
+    String message;
+    if (t instanceof CancelTaskException) {
+      message="Task was canceled";
+    }
+ else {
+      LOG.error("Could not instantiate task",t);
+      message=ExceptionUtils.stringifyException(t);
+    }
+    try {
       this.runningTasks.remove(executionId);
       if (task != null) {
         removeAllTaskResources(task);
@@ -56,5 +58,9 @@
         libraryCacheManager.unregister(jobID);
       }
     }
+ catch (    Throwable t2) {
+      LOG.error("Error during cleanup of task deployment",t2);
+    }
+    return new TaskOperationResult(executionId,false,message);
   }
 }
