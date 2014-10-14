@@ -1,3 +1,52 @@
 {
-  super(pactContract);
+  super(operation);
+  boolean allowBCfirst=true;
+  boolean allowBCsecond=true;
+  if (operation instanceof CrossOperatorBase.CrossWithSmall) {
+    allowBCfirst=false;
+  }
+ else   if (operation instanceof CrossOperatorBase.CrossWithLarge) {
+    allowBCsecond=false;
+  }
+  Configuration conf=operation.getParameters();
+  String localStrategy=conf.getString(PactCompiler.HINT_LOCAL_STRATEGY,null);
+  if (localStrategy != null) {
+    final OperatorDescriptorDual fixedDriverStrat;
+    if (PactCompiler.HINT_LOCAL_STRATEGY_NESTEDLOOP_BLOCKED_OUTER_FIRST.equals(localStrategy)) {
+      fixedDriverStrat=new CrossBlockOuterFirstDescriptor(allowBCfirst,allowBCsecond);
+    }
+ else     if (PactCompiler.HINT_LOCAL_STRATEGY_NESTEDLOOP_BLOCKED_OUTER_SECOND.equals(localStrategy)) {
+      fixedDriverStrat=new CrossBlockOuterSecondDescriptor(allowBCfirst,allowBCsecond);
+    }
+ else     if (PactCompiler.HINT_LOCAL_STRATEGY_NESTEDLOOP_STREAMED_OUTER_FIRST.equals(localStrategy)) {
+      fixedDriverStrat=new CrossStreamOuterFirstDescriptor(allowBCfirst,allowBCsecond);
+    }
+ else     if (PactCompiler.HINT_LOCAL_STRATEGY_NESTEDLOOP_STREAMED_OUTER_SECOND.equals(localStrategy)) {
+      fixedDriverStrat=new CrossStreamOuterSecondDescriptor(allowBCfirst,allowBCsecond);
+    }
+ else {
+      throw new CompilerException("Invalid local strategy hint for cross contract: " + localStrategy);
+    }
+    this.dataProperties=Collections.singletonList(fixedDriverStrat);
+  }
+ else   if (operation instanceof CrossOperatorBase.CrossWithSmall) {
+    ArrayList<OperatorDescriptorDual> list=new ArrayList<OperatorDescriptorDual>();
+    list.add(new CrossBlockOuterSecondDescriptor(false,true));
+    list.add(new CrossStreamOuterFirstDescriptor(false,true));
+    this.dataProperties=list;
+  }
+ else   if (operation instanceof CrossOperatorBase.CrossWithLarge) {
+    ArrayList<OperatorDescriptorDual> list=new ArrayList<OperatorDescriptorDual>();
+    list.add(new CrossBlockOuterFirstDescriptor(true,false));
+    list.add(new CrossStreamOuterSecondDescriptor(true,false));
+    this.dataProperties=list;
+  }
+ else {
+    ArrayList<OperatorDescriptorDual> list=new ArrayList<OperatorDescriptorDual>();
+    list.add(new CrossBlockOuterFirstDescriptor());
+    list.add(new CrossBlockOuterSecondDescriptor());
+    list.add(new CrossStreamOuterFirstDescriptor());
+    list.add(new CrossStreamOuterSecondDescriptor());
+    this.dataProperties=list;
+  }
 }
