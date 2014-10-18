@@ -76,50 +76,38 @@
   String child1name="", child2name="";
   if (inConns != null && inConns.hasNext()) {
     writer.print(",\n\t\t\"predecessors\": [");
-    int connNum=0;
     int inputNum=0;
     while (inConns.hasNext()) {
-      final DumpableConnection<?> conn=inConns.next();
-      final Collection<DumpableConnection<?>> inConnsForInput;
-      if (conn.getSource() instanceof NAryUnionPlanNode) {
-        inConnsForInput=new ArrayList<DumpableConnection<?>>();
-        for (        DumpableConnection<?> inputOfUnion : conn.getSource().getDumpableInputs()) {
-          inConnsForInput.add(inputOfUnion);
-        }
+      final DumpableConnection<?> inConn=inConns.next();
+      final DumpableNode<?> source=inConn.getSource();
+      writer.print(inputNum == 0 ? "\n" : ",\n");
+      if (inputNum == 0) {
+        child1name+=child1name.length() > 0 ? ", " : "";
+        child1name+=source.getOptimizerNode().getPactContract().getName();
       }
- else {
-        inConnsForInput=Collections.<DumpableConnection<?>>singleton(conn);
+ else       if (inputNum == 1) {
+        child2name+=child2name.length() > 0 ? ", " : "";
+        child2name=source.getOptimizerNode().getPactContract().getName();
       }
-      for (      DumpableConnection<?> inConn : inConnsForInput) {
-        final DumpableNode<?> source=inConn.getSource();
-        writer.print(connNum == 0 ? "\n" : ",\n");
-        if (connNum == 0) {
-          child1name+=child1name.length() > 0 ? ", " : "";
-          child1name+=source.getOptimizerNode().getPactContract().getName();
-        }
- else         if (connNum == 1) {
-          child2name+=child2name.length() > 0 ? ", " : "";
-          child2name=source.getOptimizerNode().getPactContract().getName();
-        }
-        writer.print("\t\t\t{\"id\": " + this.nodeIds.get(source));
-        if (inConns.hasNext() || inputNum > 0) {
-          writer.print(", \"side\": \"" + (inputNum == 0 ? "first" : "second") + "\"");
-        }
-        final Channel channel=(inConn instanceof Channel) ? (Channel)inConn : null;
-        final ShipStrategyType shipType=channel != null ? channel.getShipStrategy() : ((PactConnection)inConn).getShipStrategy();
-        String shipStrategy=null;
-        if (shipType != null) {
+      writer.print("\t\t\t{\"id\": " + this.nodeIds.get(source));
+      if (inConns.hasNext() || inputNum > 0) {
+        writer.print(", \"side\": \"" + (inputNum == 0 ? "first" : "second") + "\"");
+      }
+      final Channel channel=(inConn instanceof Channel) ? (Channel)inConn : null;
+      final ShipStrategyType shipType=channel != null ? channel.getShipStrategy() : ((PactConnection)inConn).getShipStrategy();
+      String shipStrategy=null;
+      if (shipType != null) {
 switch (shipType) {
 case NONE:
-            break;
+          break;
 case FORWARD:
-          shipStrategy="Forward";
-        break;
+        shipStrategy="Forward";
+      break;
 case BROADCAST:
-      shipStrategy="Broadcast";
-    break;
+    shipStrategy="Broadcast";
+  break;
 case PARTITION_HASH:
-  shipStrategy="Hash Partition";
+shipStrategy="Hash Partition";
 break;
 case PARTITION_RANGE:
 shipStrategy="Range Partition";
@@ -131,7 +119,7 @@ case PARTITION_FORCED_REBALANCE:
 shipStrategy="Rebalance";
 break;
 default :
-throw new CompilerException("Unknown ship strategy '" + conn.getShipStrategy().name() + "' in JSON generator.");
+throw new CompilerException("Unknown ship strategy '" + inConn.getShipStrategy().name() + "' in JSON generator.");
 }
 }
 if (channel != null && channel.getShipStrategyKeys() != null && channel.getShipStrategyKeys().size() > 0) {
@@ -166,8 +154,6 @@ writer.print(", \"temp_mode\": \"" + tempMode + "\"");
 }
 }
 writer.print('}');
-connNum++;
-}
 inputNum++;
 }
 writer.print("\n\t\t]");
