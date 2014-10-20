@@ -1,0 +1,51 @@
+{
+  this.result=reusable;
+  int i=startPos;
+  byte current;
+  final int delimLimit=limit - delimiter.length + 1;
+  while (i < limit && ((current=bytes[i]) == WHITESPACE_SPACE || current == WHITESPACE_TAB)) {
+    i++;
+  }
+  if (i < limit && bytes[i] == QUOTE_DOUBLE) {
+    i++;
+    int quoteStart=i;
+    while (i < limit && bytes[i] != QUOTE_DOUBLE) {
+      i++;
+    }
+    if (i < limit) {
+      reusable.setValueAscii(bytes,quoteStart,i - quoteStart);
+      i++;
+      while (i < limit) {
+        if (i < delimLimit && delimiterNext(bytes,i,delimiter)) {
+          return i + delimiter.length;
+        }
+        current=bytes[i];
+        if (current == WHITESPACE_SPACE || current == WHITESPACE_TAB) {
+          i++;
+        }
+ else {
+          setErrorState(ParseErrorState.UNQUOTED_CHARS_AFTER_QUOTED_STRING);
+          return -1;
+        }
+      }
+      if (i > limit) {
+        i--;
+      }
+      return (i == limit ? limit : i + delimiter.length);
+    }
+ else {
+      setErrorState(ParseErrorState.UNTERMINATED_QUOTED_STRING);
+      return -1;
+    }
+  }
+ else {
+    while (i < limit) {
+      if (i < delimLimit && delimiterNext(bytes,i,delimiter)) {
+        break;
+      }
+      i++;
+    }
+    reusable.setValueAscii(bytes,startPos,i - startPos);
+    return (i == limit ? limit : i + delimiter.length);
+  }
+}
