@@ -1,0 +1,33 @@
+{
+  DataSet<K> vertexIds=this.getVertexIds();
+  DataSet<Tuple2<K,K>> verticesWithInitialIds=vertexIds.map(new MapFunction<K,Tuple2<K,K>>(){
+    @Override public Tuple2<K,K> map(    K k) throws Exception {
+      return new Tuple2<K,K>(k,k);
+    }
+  }
+);
+  DataSet<Tuple2<K,K>> edgeIds=this.getEdgeIds();
+  DeltaIteration<Tuple2<K,K>,Tuple2<K,K>> iteration=verticesWithInitialIds.iterateDelta(verticesWithInitialIds,10,0);
+  DataSet<Tuple2<K,K>> changes=iteration.getWorkset().join(edgeIds).where(0).equalTo(0).with(new JoinFunction<Tuple2<K,K>,Tuple2<K,K>,Tuple2<K,K>>(){
+    @Override public Tuple2<K,K> join(    Tuple2<K,K> vertexWithComponent,    Tuple2<K,K> edge) throws Exception {
+      return new Tuple2<K,K>(edge.f1,vertexWithComponent.f1);
+    }
+  }
+).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).with(new FlatJoinFunction<Tuple2<K,K>,Tuple2<K,K>,Tuple2<K,K>>(){
+    @Override public void join(    Tuple2<K,K> candidate,    Tuple2<K,K> old,    Collector<Tuple2<K,K>> out) throws Exception {
+      if (candidate.f1.compareTo(old.f1) < 0) {
+        out.collect(candidate);
+      }
+    }
+  }
+);
+  DataSet<Tuple2<K,K>> components=iteration.closeWith(changes,changes);
+  DataSet<Boolean> result=GraphUtils.count((DataSet<Object>)(DataSet<?>)components).map(new MapFunction<Integer,Boolean>(){
+    @Override public Boolean map(    Integer n) throws Exception {
+      if (n == 1)       return false;
+ else       return true;
+    }
+  }
+);
+  return result;
+}
