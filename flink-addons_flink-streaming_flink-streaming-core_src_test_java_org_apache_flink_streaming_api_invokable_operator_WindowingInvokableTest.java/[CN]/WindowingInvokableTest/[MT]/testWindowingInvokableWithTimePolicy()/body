@@ -1,0 +1,51 @@
+{
+  List<Integer> inputs=new ArrayList<Integer>();
+  inputs.add(1);
+  inputs.add(2);
+  inputs.add(2);
+  inputs.add(3);
+  inputs.add(4);
+  inputs.add(5);
+  inputs.add(10);
+  inputs.add(11);
+  inputs.add(11);
+  List<Integer> expected=new ArrayList<Integer>();
+  expected.add(12);
+  expected.add(12);
+  expected.add(5);
+  expected.add(10);
+  expected.add(32);
+  TimeStamp<Integer> myTimeStamp=new TimeStamp<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public long getTimestamp(    Integer value){
+      return value;
+    }
+    @Override public long getStartTime(){
+      return 1;
+    }
+  }
+;
+  ReduceFunction<Integer> myReduceFunction=new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      return value1 + value2;
+    }
+  }
+;
+  LinkedList<TriggerPolicy<Integer>> triggers=new LinkedList<TriggerPolicy<Integer>>();
+  triggers.add(new TimeTriggerPolicy<Integer>(2L,myTimeStamp,2L,new Extractor<Long,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer extract(    Long in){
+      return in.intValue();
+    }
+  }
+));
+  LinkedList<EvictionPolicy<Integer>> evictions=new LinkedList<EvictionPolicy<Integer>>();
+  evictions.add(new TimeEvictionPolicy<Integer>(4L,myTimeStamp));
+  WindowingInvokable<Integer> invokable=new WindowingInvokable<Integer>(myReduceFunction,triggers,evictions);
+  ArrayList<Integer> result=new ArrayList<Integer>();
+  for (  Tuple2<Integer,String[]> t : MockInvokable.createAndExecute(invokable,inputs)) {
+    result.add(t.f0);
+  }
+  assertEquals(expected,result);
+}

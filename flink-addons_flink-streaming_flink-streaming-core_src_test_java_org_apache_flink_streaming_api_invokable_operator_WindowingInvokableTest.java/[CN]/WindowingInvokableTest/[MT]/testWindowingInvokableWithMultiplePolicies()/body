@@ -1,0 +1,33 @@
+{
+  LinkedList<TriggerPolicy<Integer>> triggers=new LinkedList<TriggerPolicy<Integer>>();
+  triggers.add(new CountTriggerPolicy<Integer>(2));
+  triggers.add(new CountTriggerPolicy<Integer>(3));
+  LinkedList<EvictionPolicy<Integer>> evictions=new LinkedList<EvictionPolicy<Integer>>();
+  evictions.add(new CountEvictionPolicy<Integer>(2,2));
+  evictions.add(new CountEvictionPolicy<Integer>(3,3));
+  List<Integer> inputs=new ArrayList<Integer>();
+  for (Integer i=1; i <= 10; i++) {
+    inputs.add(i);
+  }
+  List<Integer> expected=new ArrayList<Integer>();
+  expected.add(3);
+  expected.add(3);
+  expected.add(4);
+  expected.add(11);
+  expected.add(15);
+  expected.add(9);
+  expected.add(10);
+  ReduceFunction<Integer> myReduceFunction=new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      return value1 + value2;
+    }
+  }
+;
+  WindowingInvokable<Integer> invokable=new WindowingInvokable<Integer>(myReduceFunction,triggers,evictions);
+  ArrayList<Integer> result=new ArrayList<Integer>();
+  for (  Tuple2<Integer,String[]> t : MockInvokable.createAndExecute(invokable,inputs)) {
+    result.add(t.f0);
+  }
+  assertEquals(expected,result);
+}
