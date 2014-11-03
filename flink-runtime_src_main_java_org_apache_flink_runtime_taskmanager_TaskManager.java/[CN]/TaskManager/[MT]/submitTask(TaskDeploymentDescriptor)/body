@@ -6,6 +6,12 @@
   final int numSubtasks=tdd.getCurrentNumberOfSubtasks();
   Task task=null;
   boolean jarsRegistered=false;
+  if (shutdownStarted.get()) {
+    return new TaskOperationResult(executionId,false,"TaskManager is shut down.");
+  }
+  if (registeredId == null) {
+    return new TaskOperationResult(executionId,false,"TaskManager lost connection to JobManager.");
+  }
   try {
     libraryCacheManager.register(jobID,tdd.getRequiredJarFiles());
     jarsRegistered=true;
@@ -35,8 +41,8 @@
     if (!task.startExecution()) {
       throw new CancelTaskException();
     }
-    if (shutdownStarted.get()) {
-      throw new Exception("Task Manager is shut down.");
+    if (shutdownStarted.get() || this.registeredId == null) {
+      throw new Exception("Task Manager is shut down or is not connected to a JobManager.");
     }
     return new TaskOperationResult(executionId,true);
   }
@@ -50,6 +56,12 @@
       message=ExceptionUtils.stringifyException(t);
     }
     try {
+      try {
+        task.failExternally(t);
+      }
+ catch (      Throwable t2) {
+        LOG.error("Error during cleanup of task deployment",t2);
+      }
       this.runningTasks.remove(executionId);
       if (task != null) {
         removeAllTaskResources(task);
