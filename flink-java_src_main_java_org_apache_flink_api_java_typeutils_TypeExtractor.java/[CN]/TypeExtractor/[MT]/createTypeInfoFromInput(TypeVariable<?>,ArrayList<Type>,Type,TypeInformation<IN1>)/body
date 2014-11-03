@@ -1,13 +1,20 @@
 {
   TypeInformation<?> info=null;
   if (inType instanceof TypeVariable) {
-    inType=materializeTypeVariable(returnTypeHierarchy,(TypeVariable<?>)inType);
+    inType=materializeTypeVariable(inputTypeHierarchy,(TypeVariable<?>)inType);
     info=findCorrespondingInfo(returnTypeVar,inType,inTypeInfo);
   }
- else   if (inType instanceof ParameterizedType && Tuple.class.isAssignableFrom(((Class<?>)((ParameterizedType)inType).getRawType()))) {
-    Type[] tupleElements=((ParameterizedType)inType).getActualTypeArguments();
+ else   if (isClassType(inType) && Tuple.class.isAssignableFrom(typeToClass(inType))) {
+    ParameterizedType tupleBaseClass=null;
+    while (!(isClassType(inType) && typeToClass(inType).getSuperclass().equals(Tuple.class))) {
+      inputTypeHierarchy.add(inType);
+      inType=typeToClass(inType).getGenericSuperclass();
+    }
+    inputTypeHierarchy.add(inType);
+    tupleBaseClass=(ParameterizedType)inType;
+    Type[] tupleElements=tupleBaseClass.getActualTypeArguments();
     for (int i=0; i < tupleElements.length; i++) {
-      info=createTypeInfoFromInput(returnTypeVar,returnTypeHierarchy,tupleElements[i],((TupleTypeInfo<?>)inTypeInfo).getTypeAt(i));
+      info=createTypeInfoFromInput(returnTypeVar,inputTypeHierarchy,tupleElements[i],((TupleTypeInfo<?>)inTypeInfo).getTypeAt(i));
       if (info != null) {
         break;
       }

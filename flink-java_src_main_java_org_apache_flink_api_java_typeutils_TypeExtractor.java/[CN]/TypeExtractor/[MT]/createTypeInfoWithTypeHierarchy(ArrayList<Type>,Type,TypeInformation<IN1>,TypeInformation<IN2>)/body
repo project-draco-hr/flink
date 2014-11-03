@@ -1,21 +1,17 @@
 {
-  if ((t instanceof Class<?> && Tuple.class.isAssignableFrom((Class<?>)t)) || (t instanceof ParameterizedType && Tuple.class.isAssignableFrom((Class<?>)((ParameterizedType)t).getRawType()))) {
+  if (isClassType(t) && Tuple.class.isAssignableFrom(typeToClass(t))) {
     Type curT=t;
-    if (curT instanceof Class<?> && ((Class<?>)curT).equals(Tuple.class)) {
+    if (typeToClass(t).equals(Tuple.class)) {
       throw new InvalidTypesException("Usage of class Tuple as a type is not allowed. Use a concrete subclass (e.g. Tuple1, Tuple2, etc.) instead.");
     }
-    while (!(curT instanceof ParameterizedType && ((Class<?>)((ParameterizedType)curT).getRawType()).getSuperclass().equals(Tuple.class)) && !(curT instanceof Class<?> && ((Class<?>)curT).getSuperclass().equals(Tuple.class))) {
+    while (!(isClassType(curT) && typeToClass(curT).getSuperclass().equals(Tuple.class))) {
       typeHierarchy.add(curT);
-      if (curT instanceof ParameterizedType) {
-        curT=((Class<?>)((ParameterizedType)curT).getRawType()).getGenericSuperclass();
-      }
- else {
-        curT=((Class<?>)curT).getGenericSuperclass();
-      }
+      curT=typeToClass(curT).getGenericSuperclass();
     }
     if (curT instanceof Class<?>) {
       throw new InvalidTypesException("Tuple needs to be parameterized by using generics.");
     }
+    typeHierarchy.add(curT);
     ParameterizedType tupleChild=(ParameterizedType)curT;
     Type[] subtypes=new Type[tupleChild.getActualTypeArguments().length];
     for (int i=0; i < subtypes.length; i++) {
@@ -39,11 +35,8 @@
       }
     }
     Class<?> tAsClass=null;
-    if (t instanceof Class<?>) {
-      tAsClass=(Class<?>)t;
-    }
- else     if (t instanceof ParameterizedType) {
-      tAsClass=(Class<? extends Tuple>)((ParameterizedType)t).getRawType();
+    if (isClassType(t)) {
+      tAsClass=typeToClass(t);
     }
     Preconditions.checkNotNull(tAsClass,"t has a unexpected type");
     int fieldCount=countFieldsInClass(tAsClass);
