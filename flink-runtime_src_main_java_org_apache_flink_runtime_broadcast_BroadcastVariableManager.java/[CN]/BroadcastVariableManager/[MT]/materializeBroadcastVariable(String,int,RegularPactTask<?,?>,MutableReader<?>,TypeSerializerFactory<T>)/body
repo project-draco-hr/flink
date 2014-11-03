@@ -1,0 +1,22 @@
+{
+  final BroadcastVariableKey key=new BroadcastVariableKey(holder.getEnvironment().getJobVertexId(),name,superstep);
+  while (true) {
+    final BroadcastVariableMaterialization<T,Object> newMat=new BroadcastVariableMaterialization<T,Object>(key);
+    final BroadcastVariableMaterialization<?,?> previous=variables.putIfAbsent(key,newMat);
+    @SuppressWarnings("unchecked") final BroadcastVariableMaterialization<T,?> materialization=(previous == null) ? newMat : (BroadcastVariableMaterialization<T,?>)previous;
+    try {
+      materialization.materializeVariable(reader,serializerFactory,holder);
+      return materialization;
+    }
+ catch (    MaterializationExpiredException e) {
+      if (variables.replace(key,previous,newMat)) {
+        try {
+          newMat.materializeVariable(reader,serializerFactory,holder);
+          return newMat;
+        }
+ catch (        MaterializationExpiredException ee) {
+        }
+      }
+    }
+  }
+}
