@@ -1,16 +1,18 @@
 {
 synchronized (lockObject) {
-    Iterator<BlobKey> it=registeredBlobs.iterator();
-    while (it.hasNext()) {
-      BlobKey key=it.next();
+    Iterator<Map.Entry<BlobKey,Integer>> entryIter=blobKeyReferenceCounters.entrySet().iterator();
+    while (entryIter.hasNext()) {
+      Map.Entry<BlobKey,Integer> entry=entryIter.next();
+      BlobKey key=entry.getKey();
+      int references=entry.getValue();
       try {
-        if (!blobKeyReferenceCounter.containsKey(key)) {
+        if (references <= 0) {
           blobService.delete(key);
-          it.remove();
+          entryIter.remove();
         }
       }
- catch (      IOException ioe) {
-        LOG.warn("Could not delete file with blob key" + key,ioe);
+ catch (      Throwable t) {
+        LOG.warn("Could not delete file with blob key" + key,t);
       }
     }
   }

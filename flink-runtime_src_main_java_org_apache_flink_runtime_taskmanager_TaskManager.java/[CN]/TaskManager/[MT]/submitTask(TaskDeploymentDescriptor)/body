@@ -5,7 +5,6 @@
   final int taskIndex=tdd.getIndexInSubtaskGroup();
   final int numSubtasks=tdd.getCurrentNumberOfSubtasks();
   Task task=null;
-  boolean jarsRegistered=false;
   if (shutdownStarted.get()) {
     return new TaskOperationResult(executionId,false,"TaskManager is shut down.");
   }
@@ -13,8 +12,7 @@
     return new TaskOperationResult(executionId,false,"TaskManager lost connection to JobManager.");
   }
   try {
-    libraryCacheManager.register(jobID,tdd.getRequiredJarFiles());
-    jarsRegistered=true;
+    libraryCacheManager.registerTask(jobID,executionId,tdd.getRequiredJarFiles());
     final ClassLoader userCodeClassLoader=libraryCacheManager.getClassLoader(jobID);
     if (userCodeClassLoader == null) {
       throw new Exception("No user code ClassLoader available.");
@@ -66,9 +64,7 @@
       if (task != null) {
         removeAllTaskResources(task);
       }
-      if (jarsRegistered) {
-        libraryCacheManager.unregister(jobID);
-      }
+      libraryCacheManager.unregisterTask(jobID,executionId);
     }
  catch (    Throwable t2) {
       LOG.error("Error during cleanup of task deployment",t2);
