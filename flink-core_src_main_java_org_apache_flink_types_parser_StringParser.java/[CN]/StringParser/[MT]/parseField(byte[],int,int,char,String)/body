@@ -5,36 +5,53 @@
   while (i < limit && ((current=bytes[i]) == WHITESPACE_SPACE || current == WHITESPACE_TAB)) {
     i++;
   }
-  if (i < limit && bytes[i] == QUOTE_DOUBLE) {
-    i++;
-    int quoteStart=i;
-    while (i < limit && bytes[i] != QUOTE_DOUBLE) {
-      i++;
+  ParserStates parserState=ParserStates.NONE;
+  int endOfCellPosition=i - 1;
+  while (parserState != ParserStates.STOP && endOfCellPosition < limit) {
+    endOfCellPosition++;
+    if (endOfCellPosition == limit) {
+      break;
     }
-    if (i < limit) {
-      this.result=new String(bytes,quoteStart,i - quoteStart);
-      i++;
-      while (i < limit && (current=bytes[i]) != delByte) {
-        if (current == WHITESPACE_SPACE || current == WHITESPACE_TAB) {
-          i++;
-        }
- else {
-          setErrorState(ParseErrorState.UNQUOTED_CHARS_AFTER_QUOTED_STRING);
-          return -1;
-        }
+    current=bytes[endOfCellPosition];
+    if (current == delByte) {
+      parserState=parserState == ParserStates.IN_QUOTE ? parserState : ParserStates.STOP;
+    }
+ else     if (current == QUOTE_DOUBLE) {
+      if (parserState == ParserStates.IN_QUOTE) {
+        parserState=ParserStates.NONE;
       }
-      return (i == limit ? limit : i + 1);
-    }
  else {
-      setErrorState(ParseErrorState.UNTERMINATED_QUOTED_STRING);
-      return -1;
+        parserState=ParserStates.IN_QUOTE;
+      }
     }
   }
- else {
-    while (i < limit && bytes[i] != delByte) {
-      i++;
+  if (parserState == ParserStates.IN_QUOTE) {
+    setErrorState(ParseErrorState.UNTERMINATED_QUOTED_STRING);
+    return -1;
+  }
+  if (i < limit && bytes[i] == QUOTE_DOUBLE) {
+    current=bytes[endOfCellPosition - 1];
+    if (!(current == WHITESPACE_SPACE || current == WHITESPACE_TAB || current == QUOTE_DOUBLE)) {
+      setErrorState(ParseErrorState.UNQUOTED_CHARS_AFTER_QUOTED_STRING);
+      return -1;
     }
-    this.result=new String(bytes,startPos,i - startPos);
-    return (i == limit ? limit : i + 1);
+    int skipAtEnd=0;
+    while (bytes[endOfCellPosition - 1 - skipAtEnd] == WHITESPACE_SPACE || bytes[endOfCellPosition - 1 - skipAtEnd] == WHITESPACE_TAB) {
+      skipAtEnd++;
+    }
+    boolean notEscaped=true;
+    int endOfContent=i + 1;
+    for (int counter=endOfContent; counter < endOfCellPosition - skipAtEnd; counter++) {
+      notEscaped=bytes[counter] != QUOTE_DOUBLE || !notEscaped;
+      if (notEscaped) {
+        bytes[endOfContent++]=bytes[counter];
+      }
+    }
+    this.result=new String(bytes,i + 1,endOfContent - i - 1);
+    return (endOfCellPosition == limit ? limit : endOfCellPosition + 1);
+  }
+ else {
+    this.result=new String(bytes,i,endOfCellPosition - i);
+    return (endOfCellPosition == limit ? limit : endOfCellPosition + 1);
   }
 }
