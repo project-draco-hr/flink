@@ -1,0 +1,27 @@
+{
+  try {
+    TaskOperationProtocol tm1=getSimpleAcknowledgingTaskmanager();
+    TaskOperationProtocol tm2=getSimpleAcknowledgingTaskmanager();
+    Instance instance1=getInstance(tm1,10);
+    Instance instance2=getInstance(tm2,10);
+    Scheduler scheduler=new Scheduler();
+    scheduler.newInstanceAvailable(instance1);
+    scheduler.newInstanceAvailable(instance2);
+    final AbstractJobVertex sender=new AbstractJobVertex("Task");
+    sender.setInvokableClass(NoOpInvokable.class);
+    sender.setParallelism(20);
+    final JobGraph jobGraph=new JobGraph("Pointwise Job",sender);
+    ExecutionGraph eg=new ExecutionGraph(new JobID(),"test job",new Configuration());
+    eg.setNumberOfRetriesLeft(0);
+    eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+    assertEquals(JobStatus.CREATED,eg.getState());
+    eg.scheduleForExecution(scheduler);
+    assertEquals(JobStatus.RUNNING,eg.getState());
+    instance1.markDead();
+    assertEquals(JobStatus.FAILING,eg.getState());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
