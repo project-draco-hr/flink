@@ -43,20 +43,37 @@ throw new IllegalArgumentException("Invalid write mode: " + writeMode);
 }
 }
 if (createDirectory) {
+long now=System.currentTimeMillis();
+long deadline=now + 30000;
+do {
 try {
 if (!this.exists(outPath)) {
-this.mkdirs(outPath);
+  this.mkdirs(outPath);
 }
 }
  catch (IOException ioe) {
 }
 try {
 FileStatus check=getFileStatus(outPath);
-return check.isDir();
+if (check != null) {
+  if (check.isDir()) {
+    return true;
+  }
+ else {
+    throw new IOException("FileSystem should create an output directory, but the path points to a file instead.");
+  }
+}
 }
  catch (FileNotFoundException e) {
-return false;
 }
+try {
+Thread.sleep(1000);
+}
+ catch (InterruptedException ie) {
+}
+}
+ while (System.currentTimeMillis() < deadline);
+return false;
 }
  else {
 return !this.exists(outPath);
