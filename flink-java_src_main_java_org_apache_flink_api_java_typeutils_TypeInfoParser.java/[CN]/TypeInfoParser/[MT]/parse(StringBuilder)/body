@@ -2,12 +2,13 @@
   String infoString=sb.toString();
   final Matcher tupleMatcher=tuplePattern.matcher(infoString);
   final Matcher writableMatcher=writablePattern.matcher(infoString);
+  final Matcher enumMatcher=enumPattern.matcher(infoString);
   final Matcher basicTypeMatcher=basicTypePattern.matcher(infoString);
   final Matcher basicType2Matcher=basicType2Pattern.matcher(infoString);
   final Matcher valueTypeMatcher=valueTypePattern.matcher(infoString);
   final Matcher basicArrayTypeMatcher=basicArrayTypePattern.matcher(infoString);
   final Matcher basicArrayType2Matcher=basicArrayType2Pattern.matcher(infoString);
-  final Matcher customObjectMatcher=customObjectPattern.matcher(infoString);
+  final Matcher pojoGenericMatcher=pojoGenericObjectPattern.matcher(infoString);
   if (infoString.length() == 0) {
     return null;
   }
@@ -56,14 +57,16 @@
  else   if (writableMatcher.find()) {
     String className=writableMatcher.group(1);
     String fullyQualifiedName=writableMatcher.group(3);
-    sb.delete(0,className.length() + 1 + fullyQualifiedName.length());
-    try {
-      Class<?> clazz=Class.forName(fullyQualifiedName);
-      returnType=WritableTypeInfo.getWritableTypeInfo((Class)clazz);
-    }
- catch (    ClassNotFoundException e) {
-      throw new IllegalArgumentException("Class '" + fullyQualifiedName + "' could not be found for use as writable type. Please note that inner classes must be declared static.");
-    }
+    sb.delete(0,className.length() + 1 + fullyQualifiedName.length()+ 1);
+    Class<?> clazz=loadClass(fullyQualifiedName);
+    returnType=WritableTypeInfo.getWritableTypeInfo((Class)clazz);
+  }
+ else   if (enumMatcher.find()) {
+    String className=enumMatcher.group(1);
+    String fullyQualifiedName=enumMatcher.group(3);
+    sb.delete(0,className.length() + 1 + fullyQualifiedName.length()+ 1);
+    Class<?> clazz=loadClass(fullyQualifiedName);
+    returnType=new EnumTypeInfo(clazz);
   }
  else   if (basicTypeMatcher.find()) {
     String className=basicTypeMatcher.group(1);
@@ -161,29 +164,39 @@
     }
     returnType=PrimitiveArrayTypeInfo.getInfoFor(clazz);
   }
- else   if (customObjectMatcher.find()) {
-    String fullyQualifiedName=customObjectMatcher.group(1);
+ else   if (pojoGenericMatcher.find()) {
+    String fullyQualifiedName=pojoGenericMatcher.group(1);
     sb.delete(0,fullyQualifiedName.length());
-    if (fullyQualifiedName.contains("<")) {
-      throw new IllegalArgumentException("Parameterized custom classes are not supported by parser.");
-    }
-    if (fullyQualifiedName.endsWith("[]")) {
-      fullyQualifiedName=fullyQualifiedName.substring(0,fullyQualifiedName.length() - 2);
-      try {
-        Class<?> clazz=Class.forName("[L" + fullyQualifiedName + ";");
-        returnType=ObjectArrayTypeInfo.getInfoFor(clazz);
+    boolean isPojo=pojoGenericMatcher.group(2) != null;
+    if (isPojo) {
+      sb.deleteCharAt(0);
+      Class<?> clazz=loadClass(fullyQualifiedName);
+      ArrayList<PojoField> fields=new ArrayList<PojoField>();
+      while (sb.charAt(0) != '>') {
+        final Matcher fieldMatcher=fieldPattern.matcher(sb);
+        if (!fieldMatcher.find()) {
+          throw new IllegalArgumentException("Field name missing.");
+        }
+        String fieldName=fieldMatcher.group(1);
+        sb.delete(0,fieldName.length() + 1);
+        Field field=null;
+        try {
+          field=clazz.getDeclaredField(fieldName);
+        }
+ catch (        Exception e) {
+          throw new IllegalArgumentException("Field '" + fieldName + "'could not be accessed.");
+        }
+        fields.add(new PojoField(field,parse(sb)));
       }
- catch (      ClassNotFoundException e) {
-        throw new IllegalArgumentException("Class '" + fullyQualifiedName + "' could not be found for use as object array. Please note that inner classes must be declared static.");
-      }
+      returnType=new PojoTypeInfo(clazz,fields);
     }
  else {
-      try {
-        Class<?> clazz=Class.forName(fullyQualifiedName);
-        returnType=new GenericTypeInfo(clazz);
+      if (fullyQualifiedName.endsWith("[]")) {
+        fullyQualifiedName=fullyQualifiedName.substring(0,fullyQualifiedName.length() - 2);
+        returnType=ObjectArrayTypeInfo.getInfoFor(loadClass("[L" + fullyQualifiedName + ";"));
       }
- catch (      ClassNotFoundException e) {
-        throw new IllegalArgumentException("Class '" + fullyQualifiedName + "' could not be found for use as custom object. Please note that inner classes must be declared static.");
+ else {
+        returnType=new GenericTypeInfo(loadClass(fullyQualifiedName));
       }
     }
   }
