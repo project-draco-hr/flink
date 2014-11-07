@@ -1,0 +1,35 @@
+{
+  while (alive) {
+    ReadRequest request=null;
+    while (alive && request == null) {
+      try {
+        request=this.requestQueue.take();
+      }
+ catch (      InterruptedException e) {
+        if (!this.alive) {
+          return;
+        }
+ else {
+          IOManagerAsync.LOG.warn(Thread.currentThread() + " was interrupted without shutdown.");
+        }
+      }
+    }
+    IOException ioex=null;
+    try {
+      request.read();
+    }
+ catch (    IOException e) {
+      ioex=e;
+    }
+catch (    Throwable t) {
+      ioex=new IOException("The buffer could not be read: " + t.getMessage(),t);
+      IOManagerAsync.LOG.error("I/O reading thread encountered an error" + (t.getMessage() == null ? "." : ": " + t.getMessage()),t);
+    }
+    try {
+      request.requestDone(ioex);
+    }
+ catch (    Throwable t) {
+      IOManagerAsync.LOG.error("The handler of the request-complete-callback threw an exception" + (t.getMessage() == null ? "." : ": " + t.getMessage()),t);
+    }
+  }
+}

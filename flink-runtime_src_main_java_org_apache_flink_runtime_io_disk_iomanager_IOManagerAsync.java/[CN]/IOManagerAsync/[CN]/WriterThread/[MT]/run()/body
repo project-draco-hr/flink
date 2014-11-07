@@ -1,0 +1,35 @@
+{
+  while (this.alive) {
+    WriteRequest request=null;
+    while (alive && request == null) {
+      try {
+        request=requestQueue.take();
+      }
+ catch (      InterruptedException e) {
+        if (!this.alive) {
+          return;
+        }
+ else {
+          IOManagerAsync.LOG.warn(Thread.currentThread() + " was interrupted without shutdown.");
+        }
+      }
+    }
+    IOException ioex=null;
+    try {
+      request.write();
+    }
+ catch (    IOException e) {
+      ioex=e;
+    }
+catch (    Throwable t) {
+      ioex=new IOException("The buffer could not be written: " + t.getMessage(),t);
+      IOManagerAsync.LOG.error("I/O writing thread encountered an error" + (t.getMessage() == null ? "." : ": " + t.getMessage()),t);
+    }
+    try {
+      request.requestDone(ioex);
+    }
+ catch (    Throwable t) {
+      IOManagerAsync.LOG.error("The handler of the request-complete-callback threw an exception" + (t.getMessage() == null ? "." : ": " + t.getMessage()),t);
+    }
+  }
+}
