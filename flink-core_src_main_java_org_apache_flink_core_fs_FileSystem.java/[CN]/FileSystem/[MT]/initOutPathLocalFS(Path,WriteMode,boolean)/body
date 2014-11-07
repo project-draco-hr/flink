@@ -2,56 +2,60 @@
   if (this.isDistributedFS()) {
     return false;
   }
-  FileStatus status=null;
-  try {
-    status=getFileStatus(outPath);
-  }
- catch (  FileNotFoundException e) {
-  }
-  if (status != null) {
+  final long now=System.currentTimeMillis();
+  final long deadline=now + 30000;
+  Exception lastError=null;
+  do {
+    FileStatus status=null;
+    try {
+      status=getFileStatus(outPath);
+    }
+ catch (    FileNotFoundException e) {
+    }
+    if (status != null) {
 switch (writeMode) {
 case NO_OVERWRITE:
-      if (status.isDir() && createDirectory) {
-        return true;
-      }
+        if (status.isDir() && createDirectory) {
+          return true;
+        }
  else {
-        throw new IOException("File or directory already exists. Existing files and directories are not overwritten in " + WriteMode.NO_OVERWRITE.name() + " mode. Use "+ WriteMode.OVERWRITE.name()+ " mode to overwrite existing files and directories.");
-      }
+          throw new IOException("File or directory already exists. Existing files and directories are not overwritten in " + WriteMode.NO_OVERWRITE.name() + " mode. Use "+ WriteMode.OVERWRITE.name()+ " mode to overwrite existing files and directories.");
+        }
 case OVERWRITE:
-    if (status.isDir()) {
-      if (createDirectory) {
-        return true;
+      if (status.isDir()) {
+        if (createDirectory) {
+          return true;
+        }
+ else {
+          try {
+            this.delete(outPath,true);
+          }
+ catch (          IOException e) {
+            lastError=e;
+          }
+        }
       }
  else {
         try {
-          this.delete(outPath,true);
+          this.delete(outPath,false);
         }
- catch (        IOException ioe) {
+ catch (        IOException e) {
+          lastError=e;
         }
       }
-    }
- else {
-      try {
-        this.delete(outPath,false);
-      }
- catch (      IOException ioe) {
-      }
-    }
-  break;
+    break;
 default :
-throw new IllegalArgumentException("Invalid write mode: " + writeMode);
+  throw new IllegalArgumentException("Invalid write mode: " + writeMode);
 }
 }
 if (createDirectory) {
-long now=System.currentTimeMillis();
-long deadline=now + 30000;
-do {
 try {
 if (!this.exists(outPath)) {
   this.mkdirs(outPath);
 }
 }
- catch (IOException ioe) {
+ catch (IOException e) {
+lastError=e;
 }
 try {
 FileStatus check=getFileStatus(outPath);
@@ -60,22 +64,28 @@ if (check != null) {
     return true;
   }
  else {
-    throw new IOException("FileSystem should create an output directory, but the path points to a file instead.");
+    lastError=new IOException("FileSystem should create an output directory, but the path points to a file instead.");
   }
 }
 }
  catch (FileNotFoundException e) {
 }
-try {
-Thread.sleep(1000);
-}
- catch (InterruptedException ie) {
-}
-}
- while (System.currentTimeMillis() < deadline);
-return false;
 }
  else {
 return !this.exists(outPath);
+}
+try {
+Thread.sleep(10);
+}
+ catch (InterruptedException e) {
+throw new IOException("Thread was interrupted");
+}
+}
+ while (System.currentTimeMillis() < deadline);
+if (lastError != null) {
+throw new IOException("File system failed to prepare output path " + outPath + " with write mode "+ writeMode.name(),lastError);
+}
+ else {
+return false;
 }
 }
