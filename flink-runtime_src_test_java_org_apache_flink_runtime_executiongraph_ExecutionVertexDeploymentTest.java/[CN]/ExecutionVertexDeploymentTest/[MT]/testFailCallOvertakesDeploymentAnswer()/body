@@ -1,16 +1,15 @@
 {
   try {
-    final ActionQueue queue=new ActionQueue();
+    ActionQueue queue=new ActionQueue();
+    TestingUtils.QueuedActionExecutionContext context=new TestingUtils.QueuedActionExecutionContext(queue);
+    TestingUtils.setExecutionContext(context);
     final JobVertexID jid=new JobVertexID();
-    final TestingUtils.QueuedActionExecutionContext ec=new TestingUtils.QueuedActionExecutionContext(queue);
-    TestingUtils.setExecutionContext(ec);
-    final Instance instance=spy(getInstance(ActorRef.noSender()));
-    final AllocatedSlot slot=instance.allocateSlot(new JobID());
     final ExecutionJobVertex ejv=getExecutionVertex(jid);
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0]);
     final ExecutionAttemptID eid=vertex.getCurrentExecutionAttempt().getAttemptId();
-    doReturn(new TaskOperationResult(eid,true)).when(instance).submitTask(Matchers.<TaskDeploymentDescriptor>any());
-    doReturn(new TaskOperationResult(eid,false)).doReturn(new TaskOperationResult(eid,true)).when(instance).cancelTask(Matchers.<ExecutionAttemptID>any());
+    final TestActorRef simpleTaskManager=TestActorRef.create(system,Props.create(new ExecutionVertexCancelTest.CancelSequenceTaskManagerCreator(new TaskOperationResult(eid,false),new TaskOperationResult(eid,true))));
+    final Instance instance=getInstance(simpleTaskManager);
+    final AllocatedSlot slot=instance.allocateSlot(new JobID());
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
     assertEquals(ExecutionState.DEPLOYING,vertex.getExecutionState());
@@ -20,16 +19,16 @@
     Runnable deploy=queue.popNextAction();
     Runnable cancel1=queue.popNextAction();
     cancel1.run();
+    queue.triggerNextAction();
     deploy.run();
     assertEquals(ExecutionState.FAILED,vertex.getExecutionState());
+    queue.triggerNextAction();
     queue.triggerNextAction();
     assertEquals(testError,vertex.getFailureCause());
     assertTrue(vertex.getStateTimestamp(ExecutionState.CREATED) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.DEPLOYING) > 0);
     assertTrue(vertex.getStateTimestamp(ExecutionState.FAILED) > 0);
     assertTrue(queue.isEmpty());
-    verify(instance,times(2)).cancelTask(eid);
-    verify(instance,times(1)).submitTask(any(TaskDeploymentDescriptor.class));
   }
  catch (  Exception e) {
     e.printStackTrace();

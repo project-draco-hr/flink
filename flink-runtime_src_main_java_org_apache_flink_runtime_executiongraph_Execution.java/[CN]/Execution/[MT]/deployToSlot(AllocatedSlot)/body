@@ -28,30 +28,26 @@
     }
     final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot);
     vertex.getExecutionGraph().registerExecution(this);
-    Future<TaskOperationResult> deployAction=future(new Callable<TaskOperationResult>(){
-      @Override public TaskOperationResult call() throws Exception {
-        Instance instance=slot.getInstance();
-        return (TaskOperationResult)Patterns.ask(instance.getTaskManager(),new TaskManagerMessages.SubmitTask(deployment),AkkaUtils.FUTURE_TIMEOUT());
-      }
-    }
-,AkkaUtils.globalExecutionContext());
-    deployAction.onComplete(new OnComplete<TaskOperationResult>(){
-      @Override public void onComplete(      Throwable failure,      TaskOperationResult success) throws Throwable {
+    Instance instance=slot.getInstance();
+    Future<Object> deployAction=Patterns.ask(instance.getTaskManager(),new TaskManagerMessages.SubmitTask(deployment),AkkaUtils.FUTURE_TIMEOUT());
+    deployAction.onComplete(new OnComplete<Object>(){
+      @Override public void onComplete(      Throwable failure,      Object success) throws Throwable {
         if (failure != null) {
           markFailed(failure);
         }
  else {
+          TaskOperationResult result=(TaskOperationResult)success;
           if (success == null) {
             markFailed(new Exception("Failed to deploy the task to slot " + slot + ": TaskOperationResult was null"));
           }
- else           if (!success.executionID().equals(attemptId)) {
+ else           if (!result.executionID().equals(attemptId)) {
             markFailed(new Exception("Answer execution id does not match the request execution id."));
           }
- else           if (success.success()) {
+ else           if (result.success()) {
             switchToRunning();
           }
  else {
-            markFailed(new Exception("Failed to deploy the task " + getVertexWithAttempt() + " to slot "+ slot+ ": "+ success.description()));
+            markFailed(new Exception("Failed to deploy the task " + getVertexWithAttempt() + " to slot "+ slot+ ": "+ result.description()));
           }
         }
       }

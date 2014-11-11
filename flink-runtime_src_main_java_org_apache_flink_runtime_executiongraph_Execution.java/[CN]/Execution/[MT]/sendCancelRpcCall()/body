@@ -3,20 +3,15 @@
   if (slot == null) {
     return;
   }
-  Callable<TaskOperationResult> cancelAction=new Callable<TaskOperationResult>(){
-    @Override public TaskOperationResult call() throws Exception {
-      return slot.getInstance().cancelTask(attemptId);
-    }
-  }
-;
-  Future<TaskOperationResult> cancelResult=AkkaUtils.retry(cancelAction,NUM_CANCEL_CALL_TRIES,AkkaUtils.globalExecutionContext());
-  cancelResult.onComplete(new OnComplete<TaskOperationResult>(){
-    @Override public void onComplete(    Throwable failure,    TaskOperationResult success) throws Throwable {
+  Future<Object> cancelResult=AkkaUtils.retry(slot.getInstance().getTaskManager(),new TaskManagerMessages.CancelTask(attemptId),NUM_CANCEL_CALL_TRIES,AkkaUtils.globalExecutionContext());
+  cancelResult.onComplete(new OnComplete<Object>(){
+    @Override public void onComplete(    Throwable failure,    Object success) throws Throwable {
       if (failure != null) {
         fail(new Exception("Task could not be canceled.",failure));
       }
  else {
-        if (!success.success()) {
+        TaskOperationResult result=(TaskOperationResult)success;
+        if (!result.success()) {
           LOG.debug("Cancel task call did not find task. Probably akka message call" + " race.");
         }
       }
