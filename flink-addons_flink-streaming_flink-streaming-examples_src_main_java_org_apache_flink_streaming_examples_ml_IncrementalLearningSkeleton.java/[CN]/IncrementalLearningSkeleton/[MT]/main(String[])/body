@@ -1,8 +1,15 @@
 {
+  if (!parseParameters(args)) {
+    return;
+  }
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  IncrementalLearningSkeleton.SOURCE_PARALLELISM=env.getDegreeOfParallelism();
-  DataStream<Double[]> model=env.addSource(new TrainingDataSource(),SOURCE_PARALLELISM).window(5000).reduceGroup(new PartialModelBuilder());
-  DataStream<Integer> prediction=env.addSource(new NewDataSource(),SOURCE_PARALLELISM).connect(model).map(new Predictor());
-  prediction.print();
-  env.execute();
+  DataStream<Double[]> model=env.addSource(new TrainingDataSource()).window(5000).reduceGroup(new PartialModelBuilder());
+  DataStream<Integer> prediction=env.addSource(new NewDataSource()).connect(model).map(new Predictor());
+  if (fileOutput) {
+    prediction.writeAsText(outputPath,1);
+  }
+ else {
+    prediction.print();
+  }
+  env.execute("Streaming Incremental Learning");
 }
