@@ -3,12 +3,12 @@
   resp.setContentType("application/json");
   try {
     if ("archive".equals(req.getParameter("get"))) {
-      List<ExecutionGraph> archivedJobs=new ArrayList<ExecutionGraph>(AkkaUtils.<ArchivedJobs>ask(archive,RequestArchivedJobs$.MODULE$).asJavaCollection());
+      List<ExecutionGraph> archivedJobs=new ArrayList<ExecutionGraph>(AkkaUtils.<ArchivedJobs>ask(archive,RequestArchivedJobs$.MODULE$,timeout).asJavaCollection());
       writeJsonForArchive(resp.getWriter(),archivedJobs);
     }
  else     if ("job".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
-      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)));
+      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)),timeout);
       if (response instanceof JobFound) {
         ExecutionGraph archivedJob=((JobFound)response).executionGraph();
         writeJsonForArchivedJob(resp.getWriter(),archivedJob);
@@ -20,7 +20,7 @@
  else     if ("groupvertex".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
       String groupvertexId=req.getParameter("groupvertex");
-      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)));
+      JobResponse response=AkkaUtils.ask(archive,new RequestJob(JobID.fromHexString(jobId)),timeout);
       if (response instanceof JobFound && groupvertexId != null) {
         ExecutionGraph archivedJob=((JobFound)response).executionGraph();
         writeJsonForArchivedJobGroupvertex(resp.getWriter(),archivedJob,JobVertexID.fromHexString(groupvertexId));
@@ -30,13 +30,13 @@
       }
     }
  else     if ("taskmanagers".equals(req.getParameter("get"))) {
-      int numberOfTaskManagers=AkkaUtils.<Integer>ask(jobmanager,RequestNumberRegisteredTaskManager$.MODULE$);
-      int numberOfRegisteredSlots=AkkaUtils.<Integer>ask(jobmanager,RequestTotalNumberOfSlots$.MODULE$);
+      int numberOfTaskManagers=AkkaUtils.<Integer>ask(jobmanager,RequestNumberRegisteredTaskManager$.MODULE$,timeout);
+      int numberOfRegisteredSlots=AkkaUtils.<Integer>ask(jobmanager,RequestTotalNumberOfSlots$.MODULE$,timeout);
       resp.getWriter().write("{\"taskmanagers\": " + numberOfTaskManagers + ", "+ "\"slots\": "+ numberOfRegisteredSlots+ "}");
     }
  else     if ("cancel".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
-      AkkaUtils.<CancellationResponse>ask(jobmanager,new CancelJob(JobID.fromHexString(jobId)));
+      AkkaUtils.<CancellationResponse>ask(jobmanager,new CancelJob(JobID.fromHexString(jobId)),timeout);
     }
  else     if ("updates".equals(req.getParameter("get"))) {
       String jobId=req.getParameter("job");
@@ -46,7 +46,7 @@
       writeJsonForVersion(resp.getWriter());
     }
  else {
-      Iterable<ExecutionGraph> runningJobs=AkkaUtils.<RunningJobs>ask(jobmanager,RequestRunningJobs$.MODULE$).asJavaIterable();
+      Iterable<ExecutionGraph> runningJobs=AkkaUtils.<RunningJobs>ask(jobmanager,RequestRunningJobs$.MODULE$,timeout).asJavaIterable();
       writeJsonForJobs(resp.getWriter(),runningJobs);
     }
   }

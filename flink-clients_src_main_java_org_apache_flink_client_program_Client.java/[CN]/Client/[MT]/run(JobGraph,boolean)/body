@@ -2,11 +2,12 @@
   Tuple2<ActorSystem,ActorRef> pair=JobClient.startActorSystemAndActor(configuration);
   ActorRef client=pair._2();
   String hostname=configuration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
+  FiniteDuration timeout=new FiniteDuration(configuration.getInteger(ConfigConstants.AKKA_ASK_TIMEOUT,ConfigConstants.DEFAULT_AKKA_ASK_TIMEOUT),TimeUnit.SECONDS);
   if (hostname == null) {
     throw new ProgramInvocationException("Could not find hostname of job manager.");
   }
   try {
-    JobClient.uploadJarFiles(jobGraph,hostname,client);
+    JobClient.uploadJarFiles(jobGraph,hostname,client,timeout);
   }
  catch (  IOException e) {
     throw new ProgramInvocationException("Could not upload blobs.",e);
@@ -16,7 +17,7 @@
       return JobClient.submitJobAndWait(jobGraph,printStatusDuringExecution,client);
     }
  else {
-      SubmissionResponse response=JobClient.submitJobDetached(jobGraph,client);
+      SubmissionResponse response=JobClient.submitJobDetached(jobGraph,client,timeout);
       if (response instanceof SubmissionFailure) {
         SubmissionFailure failure=(SubmissionFailure)response;
         throw new ProgramInvocationException("The job was not successfully submitted " + "to the flink job manager",failure.cause());
