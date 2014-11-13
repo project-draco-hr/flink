@@ -9,9 +9,9 @@
   DataSet<K> vertexIds=graph.getVertexIds();
   DataSet<Tuple2<K,K>> verticesWithInitialIds=vertexIds.map(new DuplicateVertexIDMapper<K>());
   DataSet<Tuple2<K,K>> edgeIds=graph.getEdgeIds();
-  DeltaIteration<Tuple2<K,K>,Tuple2<K,K>> iteration=verticesWithInitialIds.iterateDelta(verticesWithInitialIds,0);
+  DeltaIteration<Tuple2<K,K>,Tuple2<K,K>> iteration=verticesWithInitialIds.iterateDelta(verticesWithInitialIds,maxIterations,0);
   DataSet<Tuple2<K,K>> changes=iteration.getWorkset().join(edgeIds).where(0).equalTo(0).with(new FindNeighborsJoin<K>()).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).with(new VertexWithNewComponentJoin<K>());
   DataSet<Tuple2<K,K>> components=iteration.closeWith(changes,changes);
-  DataSet<Boolean> result=GraphUtils.count(components).map(new CheckIfOneComponentMapper());
+  DataSet<Boolean> result=GraphUtils.count(components.groupBy(1).reduceGroup(new EmitFirstReducer<K>())).map(new CheckIfOneComponentMapper());
   return result;
 }
