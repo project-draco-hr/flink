@@ -18,7 +18,8 @@
           throw new Exception("Incompatibe serializer-/comparator factories.");
         }
         final DataDistribution distribution=config.getOutputDataDistribution(i,cl);
-        oe=new RecordOutputEmitter(strategy,comparator,distribution);
+        final Partitioner<?> partitioner=config.getOutputPartitioner(i,cl);
+        oe=new RecordOutputEmitter(strategy,comparator,partitioner,distribution);
       }
       writers.add(new RecordWriter<Record>(task,oe));
     }
@@ -33,18 +34,15 @@
     for (int i=0; i < numOutputs; i++) {
       final ShipStrategyType strategy=config.getOutputShipStrategy(i);
       final TypeComparatorFactory<T> compFactory=config.getOutputComparator(i,cl);
-      final DataDistribution dataDist=config.getOutputDataDistribution(i,cl);
       final ChannelSelector<SerializationDelegate<T>> oe;
       if (compFactory == null) {
         oe=new OutputEmitter<T>(strategy);
       }
- else       if (dataDist == null) {
-        final TypeComparator<T> comparator=compFactory.createComparator();
-        oe=new OutputEmitter<T>(strategy,comparator);
-      }
  else {
+        final DataDistribution dataDist=config.getOutputDataDistribution(i,cl);
+        final Partitioner<?> partitioner=config.getOutputPartitioner(i,cl);
         final TypeComparator<T> comparator=compFactory.createComparator();
-        oe=new OutputEmitter<T>(strategy,comparator,dataDist);
+        oe=new OutputEmitter<T>(strategy,comparator,partitioner,dataDist);
       }
       writers.add(new RecordWriter<SerializationDelegate<T>>(task,oe));
     }
