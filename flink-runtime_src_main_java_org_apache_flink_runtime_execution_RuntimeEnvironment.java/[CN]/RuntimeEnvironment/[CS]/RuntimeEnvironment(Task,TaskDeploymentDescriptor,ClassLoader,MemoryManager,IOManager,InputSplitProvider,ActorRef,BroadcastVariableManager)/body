@@ -1,0 +1,57 @@
+{
+  Preconditions.checkNotNull(owner);
+  Preconditions.checkNotNull(memoryManager);
+  Preconditions.checkNotNull(ioManager);
+  Preconditions.checkNotNull(inputSplitProvider);
+  Preconditions.checkNotNull(accumulator);
+  Preconditions.checkNotNull(userCodeClassLoader);
+  Preconditions.checkNotNull(bcVarManager);
+  this.owner=owner;
+  this.memoryManager=memoryManager;
+  this.ioManager=ioManager;
+  this.inputSplitProvider=inputSplitProvider;
+  this.accumulator=accumulator;
+  this.bcVarManager=bcVarManager;
+  this.userCodeClassLoader=userCodeClassLoader;
+  try {
+    final String className=tdd.getInvokableClassName();
+    this.invokableClass=Class.forName(className,true,userCodeClassLoader).asSubclass(AbstractInvokable.class);
+  }
+ catch (  Throwable t) {
+    throw new Exception("Could not load invokable class.",t);
+  }
+  try {
+    this.invokable=this.invokableClass.newInstance();
+  }
+ catch (  Throwable t) {
+    throw new Exception("Could not instantiate the invokable class.",t);
+  }
+  this.jobConfiguration=tdd.getJobConfiguration();
+  this.taskConfiguration=tdd.getTaskConfiguration();
+  this.invokable.setEnvironment(this);
+{
+    Thread currentThread=Thread.currentThread();
+    ClassLoader context=currentThread.getContextClassLoader();
+    currentThread.setContextClassLoader(userCodeClassLoader);
+    try {
+      this.invokable.registerInputOutput();
+    }
+  finally {
+      currentThread.setContextClassLoader(context);
+    }
+  }
+  List<GateDeploymentDescriptor> inGates=tdd.getInputGates();
+  List<GateDeploymentDescriptor> outGates=tdd.getOutputGates();
+  if (this.inputGates.size() != inGates.size()) {
+    throw new Exception("The number of readers created in 'registerInputOutput()' " + "is different than the number of connected incoming edges in the job graph.");
+  }
+  if (this.outputGates.size() != outGates.size()) {
+    throw new Exception("The number of writers created in 'registerInputOutput()' " + "is different than the number of connected outgoing edges in the job graph.");
+  }
+  for (int i=0; i < inGates.size(); i++) {
+    this.inputGates.get(i).initializeChannels(inGates.get(i));
+  }
+  for (int i=0; i < outGates.size(); i++) {
+    this.outputGates.get(i).initializeChannels(outGates.get(i));
+  }
+}
