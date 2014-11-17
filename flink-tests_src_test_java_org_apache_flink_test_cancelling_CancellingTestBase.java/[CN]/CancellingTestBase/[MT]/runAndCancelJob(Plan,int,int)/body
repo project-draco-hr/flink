@@ -1,2 +1,26 @@
 {
+  try {
+    final JobGraph jobGraph=getJobGraph(plan);
+    final ActorRef client=this.executor.getJobClient();
+    final ActorSystem actorSystem=executor.getJobClientActorSystem();
+    boolean jobSuccessfullyCancelled=false;
+    Future<Object> result=Patterns.ask(client,new JobClientMessages.SubmitJobAndWait(jobGraph,false),new Timeout(AkkaUtils.DEFAULT_TIMEOUT()));
+    actorSystem.scheduler().scheduleOnce(new FiniteDuration(msecsTillCanceling,TimeUnit.MILLISECONDS),client,new JobManagerMessages.CancelJob(jobGraph.getJobID()),actorSystem.dispatcher(),ActorRef.noSender());
+    try {
+      Await.result(result,AkkaUtils.DEFAULT_TIMEOUT());
+    }
+ catch (    JobExecutionException exception) {
+      if (!exception.isJobCanceledByUser()) {
+        throw new IllegalStateException("Job Failed.");
+      }
+      jobSuccessfullyCancelled=true;
+    }
+    if (!jobSuccessfullyCancelled) {
+      throw new IllegalStateException("Job was not successfully cancelled.");
+    }
+  }
+ catch (  Exception e) {
+    LOG.error("Exception found in runAndCancelJob.",e);
+    Assert.fail(StringUtils.stringifyException(e));
+  }
 }
