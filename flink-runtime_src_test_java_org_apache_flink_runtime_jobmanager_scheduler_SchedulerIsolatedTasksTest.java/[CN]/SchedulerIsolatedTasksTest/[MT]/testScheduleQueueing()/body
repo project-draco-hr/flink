@@ -2,8 +2,9 @@
   final int NUM_INSTANCES=50;
   final int NUM_SLOTS_PER_INSTANCE=3;
   final int NUM_TASKS_TO_SCHEDULE=2000;
+  final ExecutorService executor=Executors.newFixedThreadPool(4,ExecutorThreadFactory.INSTANCE);
   try {
-    Scheduler scheduler=new Scheduler(Executors.newFixedThreadPool(4,ExecutorThreadFactory.INSTANCE));
+    Scheduler scheduler=new Scheduler(executor);
     for (int i=0; i < NUM_INSTANCES; i++) {
       scheduler.newInstanceAvailable(getRandomInstance((int)(Math.random() * NUM_SLOTS_PER_INSTANCE) + 1));
     }
@@ -58,10 +59,15 @@ synchronized (toRelease) {
       slotsAfter.add(future.waitTillAllocated());
     }
     assertTrue(areAllDistinct(slotsAfter.toArray()));
+    executor.shutdown();
+    executor.awaitTermination(30,TimeUnit.SECONDS);
     assertEquals(totalSlots,scheduler.getNumberOfAvailableSlots());
   }
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    executor.shutdownNow();
   }
 }
