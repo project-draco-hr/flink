@@ -4,14 +4,15 @@
     return run(prog.getPlanWithJars(),parallelism,wait);
   }
  else   if (prog.isUsingInteractiveMode()) {
-    ContextEnvironment env=new ContextEnvironment(this,prog.getAllLibraries(),prog.getUserCodeClassLoader());
-    if (parallelism > 0) {
-      env.setDegreeOfParallelism(parallelism);
-    }
-    env.setAsContext();
-    ContextEnvironment.disableLocalExecution();
+    ContextEnvironment.setAsContext(this,prog.getAllLibraries(),prog.getUserCodeClassLoader(),parallelism);
+    ContextEnvironment.enableLocalExecution(false);
     if (wait) {
-      prog.invokeInteractiveModeForExecution();
+      try {
+        prog.invokeInteractiveModeForExecution();
+      }
+  finally {
+        ContextEnvironment.enableLocalExecution(true);
+      }
     }
  else {
       Thread backGroundRunner=new Thread("Program Runner"){
@@ -21,6 +22,9 @@
           }
  catch (          Throwable t) {
             LOG.error("The program execution failed.",t);
+          }
+ finally {
+            ContextEnvironment.enableLocalExecution(true);
           }
         }
       }
