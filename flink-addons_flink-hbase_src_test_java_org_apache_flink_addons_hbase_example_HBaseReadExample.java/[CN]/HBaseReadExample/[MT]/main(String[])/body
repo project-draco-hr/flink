@@ -1,0 +1,33 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  @SuppressWarnings("serial") DataSet<Tuple2<String,String>> hbaseDs=env.createInput(new TableInputFormat<Tuple2<String,String>>(){
+    private final byte[] CF_SOME="someCf".getBytes();
+    private final byte[] Q_SOME="someQual".getBytes();
+    @Override public String getTableName(){
+      return "test-table";
+    }
+    @Override protected Scan getScanner(){
+      Scan scan=new Scan();
+      scan.addColumn(CF_SOME,Q_SOME);
+      return scan;
+    }
+    private Tuple2<String,String> reuse=new Tuple2<String,String>();
+    @Override protected Tuple2<String,String> mapResultToTuple(    Result r){
+      String key=Bytes.toString(r.getRow());
+      String val=Bytes.toString(r.getValue(CF_SOME,Q_SOME));
+      reuse.setField(key,0);
+      reuse.setField(val,1);
+      return reuse;
+    }
+  }
+).filter(new FilterFunction<Tuple2<String,String>>(){
+    @Override public boolean filter(    Tuple2<String,String> t) throws Exception {
+      String val=t.getField(1);
+      if (val.startsWith("someStr"))       return true;
+      return false;
+    }
+  }
+);
+  hbaseDs.print();
+  env.execute();
+}
