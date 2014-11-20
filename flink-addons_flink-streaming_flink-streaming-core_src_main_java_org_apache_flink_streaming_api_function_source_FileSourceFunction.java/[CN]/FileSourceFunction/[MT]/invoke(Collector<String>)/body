@@ -1,11 +1,26 @@
 {
-  BufferedReader br=new BufferedReader(new FileReader(path));
-  String line=br.readLine();
-  while (line != null) {
-    if (!line.equals("")) {
-      collector.collect(line);
+  final TypeSerializer<String> serializer=serializerFactory.getSerializer();
+  final Iterator<InputSplit> splitIterator=getInputSplits();
+  @SuppressWarnings("unchecked") final InputFormat<String,InputSplit> format=(InputFormat<String,InputSplit>)this.format;
+  try {
+    while (!this.taskCanceled && splitIterator.hasNext()) {
+      final InputSplit split=splitIterator.next();
+      String record=serializer.createInstance();
+      format.open(split);
+      try {
+        while (!this.taskCanceled && !format.reachedEnd()) {
+          if ((record=format.nextRecord(record)) != null) {
+            collector.collect(record);
+          }
+        }
+      }
+  finally {
+        format.close();
+      }
     }
-    line=br.readLine();
+    collector.close();
   }
-  br.close();
+ catch (  Exception ex) {
+    ex.printStackTrace();
+  }
 }
