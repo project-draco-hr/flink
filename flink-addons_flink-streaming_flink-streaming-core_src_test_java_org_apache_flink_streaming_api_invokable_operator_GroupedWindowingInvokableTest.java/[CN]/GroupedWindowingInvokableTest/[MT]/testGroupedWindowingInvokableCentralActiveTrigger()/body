@@ -1,0 +1,81 @@
+{
+  List<Tuple2<Integer,String>> inputs=new ArrayList<Tuple2<Integer,String>>();
+  inputs.add(new Tuple2<Integer,String>(1,"a"));
+  inputs.add(new Tuple2<Integer,String>(1,"b"));
+  inputs.add(new Tuple2<Integer,String>(1,"c"));
+  inputs.add(new Tuple2<Integer,String>(2,"a"));
+  inputs.add(new Tuple2<Integer,String>(2,"b"));
+  inputs.add(new Tuple2<Integer,String>(2,"c"));
+  inputs.add(new Tuple2<Integer,String>(2,"b"));
+  inputs.add(new Tuple2<Integer,String>(2,"a"));
+  inputs.add(new Tuple2<Integer,String>(2,"c"));
+  inputs.add(new Tuple2<Integer,String>(3,"c"));
+  inputs.add(new Tuple2<Integer,String>(3,"a"));
+  inputs.add(new Tuple2<Integer,String>(3,"b"));
+  inputs.add(new Tuple2<Integer,String>(4,"a"));
+  inputs.add(new Tuple2<Integer,String>(4,"b"));
+  inputs.add(new Tuple2<Integer,String>(4,"c"));
+  inputs.add(new Tuple2<Integer,String>(5,"c"));
+  inputs.add(new Tuple2<Integer,String>(5,"a"));
+  inputs.add(new Tuple2<Integer,String>(5,"b"));
+  inputs.add(new Tuple2<Integer,String>(10,"b"));
+  inputs.add(new Tuple2<Integer,String>(10,"a"));
+  inputs.add(new Tuple2<Integer,String>(10,"c"));
+  inputs.add(new Tuple2<Integer,String>(11,"a"));
+  inputs.add(new Tuple2<Integer,String>(11,"a"));
+  inputs.add(new Tuple2<Integer,String>(11,"c"));
+  inputs.add(new Tuple2<Integer,String>(11,"c"));
+  inputs.add(new Tuple2<Integer,String>(11,"b"));
+  inputs.add(new Tuple2<Integer,String>(11,"b"));
+  List<Tuple2<Integer,String>> expected=new ArrayList<Tuple2<Integer,String>>();
+  expected.add(new Tuple2<Integer,String>(12,"a"));
+  expected.add(new Tuple2<Integer,String>(12,"b"));
+  expected.add(new Tuple2<Integer,String>(12,"c"));
+  expected.add(new Tuple2<Integer,String>(12,"a"));
+  expected.add(new Tuple2<Integer,String>(12,"b"));
+  expected.add(new Tuple2<Integer,String>(12,"c"));
+  expected.add(new Tuple2<Integer,String>(5,"a"));
+  expected.add(new Tuple2<Integer,String>(5,"b"));
+  expected.add(new Tuple2<Integer,String>(5,"c"));
+  expected.add(new Tuple2<Integer,String>(10,"a"));
+  expected.add(new Tuple2<Integer,String>(10,"b"));
+  expected.add(new Tuple2<Integer,String>(10,"c"));
+  expected.add(new Tuple2<Integer,String>(32,"a"));
+  expected.add(new Tuple2<Integer,String>(32,"b"));
+  expected.add(new Tuple2<Integer,String>(32,"c"));
+  TimeStamp<Tuple2<Integer,String>> myTimeStamp=new TimeStamp<Tuple2<Integer,String>>(){
+    private static final long serialVersionUID=1L;
+    @Override public long getTimestamp(    Tuple2<Integer,String> value){
+      return value.f0;
+    }
+    @Override public long getStartTime(){
+      return 1;
+    }
+  }
+;
+  ReduceFunction<Tuple2<Integer,String>> myReduceFunction=new ReduceFunction<Tuple2<Integer,String>>(){
+    private static final long serialVersionUID=1L;
+    @Override public Tuple2<Integer,String> reduce(    Tuple2<Integer,String> value1,    Tuple2<Integer,String> value2) throws Exception {
+      return new Tuple2<Integer,String>(value1.f0 + value2.f0,value1.f1);
+    }
+  }
+;
+  LinkedList<TriggerPolicy<Tuple2<Integer,String>>> triggers=new LinkedList<TriggerPolicy<Tuple2<Integer,String>>>();
+  triggers.add(new TimeTriggerPolicy<Tuple2<Integer,String>>(2L,myTimeStamp,2L,new Extractor<Long,Tuple2<Integer,String>>(){
+    private static final long serialVersionUID=1L;
+    @Override public Tuple2<Integer,String> extract(    Long in){
+      return new Tuple2<Integer,String>(in.intValue(),null);
+    }
+  }
+));
+  LinkedList<CloneableEvictionPolicy<Tuple2<Integer,String>>> evictions=new LinkedList<CloneableEvictionPolicy<Tuple2<Integer,String>>>();
+  evictions.add(new TimeEvictionPolicy<Tuple2<Integer,String>>(4L,myTimeStamp));
+  LinkedList<CloneableTriggerPolicy<Tuple2<Integer,String>>> distributedTriggers=new LinkedList<CloneableTriggerPolicy<Tuple2<Integer,String>>>();
+  GroupedWindowingInvokable<Tuple2<Integer,String>> invokable=new GroupedWindowingInvokable<Tuple2<Integer,String>>(myReduceFunction,new TupleKeySelector<Tuple2<Integer,String>>(1),distributedTriggers,evictions,triggers);
+  ArrayList<Tuple2<Integer,String>> result=new ArrayList<Tuple2<Integer,String>>();
+  for (  Tuple2<Tuple2<Integer,String>,String[]> t : MockInvokable.createAndExecute(invokable,inputs)) {
+    result.add(t.f0);
+  }
+  assertEquals(new HashSet<Tuple2<Integer,String>>(expected),new HashSet<Tuple2<Integer,String>>(result));
+  assertEquals(expected.size(),result.size());
+}

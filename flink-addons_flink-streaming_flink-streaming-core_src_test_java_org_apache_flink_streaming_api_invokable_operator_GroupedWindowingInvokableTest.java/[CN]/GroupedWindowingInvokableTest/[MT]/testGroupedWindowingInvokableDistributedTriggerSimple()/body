@@ -1,0 +1,43 @@
+{
+  List<Integer> inputs=new ArrayList<Integer>();
+  inputs.add(1);
+  inputs.add(1);
+  inputs.add(5);
+  inputs.add(5);
+  inputs.add(5);
+  inputs.add(1);
+  inputs.add(1);
+  inputs.add(5);
+  inputs.add(1);
+  inputs.add(5);
+  List<Integer> expected=new ArrayList<Integer>();
+  expected.add(15);
+  expected.add(3);
+  expected.add(3);
+  expected.add(15);
+  LinkedList<CloneableTriggerPolicy<Integer>> triggers=new LinkedList<CloneableTriggerPolicy<Integer>>();
+  triggers.add(new CountTriggerPolicy<Integer>(2,-1));
+  LinkedList<CloneableEvictionPolicy<Integer>> evictions=new LinkedList<CloneableEvictionPolicy<Integer>>();
+  evictions.add(new CountEvictionPolicy<Integer>(2,2,-1));
+  LinkedList<TriggerPolicy<Integer>> centralTriggers=new LinkedList<TriggerPolicy<Integer>>();
+  GroupedWindowingInvokable<Integer> invokable=new GroupedWindowingInvokable<Integer>(new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      return value1 + value2;
+    }
+  }
+,new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer getKey(    Integer value){
+      return value;
+    }
+  }
+,triggers,evictions,centralTriggers);
+  List<Tuple2<Integer,String[]>> result=MockInvokable.createAndExecute(invokable,inputs);
+  List<Integer> actual=new LinkedList<Integer>();
+  for (  Tuple2<Integer,String[]> current : result) {
+    actual.add(current.f0);
+  }
+  assertEquals(new HashSet<Integer>(expected),new HashSet<Integer>(actual));
+  assertEquals(expected.size(),actual.size());
+}
