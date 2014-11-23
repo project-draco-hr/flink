@@ -1,25 +1,18 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
   env.setBufferTimeout(100);
-  TriggerPolicy<Integer> triggerPolicy=new TimeTriggerPolicy<Integer>(1000L,new DefaultTimeStamp<Integer>(),new Extractor<Long,Integer>(){
+  DataStream<Integer> stream=env.addSource(new CountingSourceWithSleep()).groupBy(new KeySelector<Integer,Integer>(){
     private static final long serialVersionUID=1L;
-    @Override public Integer extract(    Long in){
-      return in.intValue();
+    @Override public Integer getKey(    Integer value) throws Exception {
+      if (value < 3) {
+        return 0;
+      }
+ else {
+        return 1;
+      }
     }
   }
-);
-  EvictionPolicy<Integer> evictionPolicy=new CountEvictionPolicy<Integer>(100);
-  ReduceFunction<Integer> reduceFunction=new ReduceFunction<Integer>(){
-    /** 
- * default version ID
- */
-    private static final long serialVersionUID=1L;
-    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
-      return value1 + value2;
-    }
-  }
-;
-  DataStream<Tuple2<Integer,String[]>> stream=env.addSource(new CountingSourceWithSleep()).window(triggerPolicy,evictionPolicy,reduceFunction);
+).window(Count.of(100)).every(Time.of(1000,TimeUnit.MILLISECONDS)).sum();
   stream.print();
   env.execute();
 }

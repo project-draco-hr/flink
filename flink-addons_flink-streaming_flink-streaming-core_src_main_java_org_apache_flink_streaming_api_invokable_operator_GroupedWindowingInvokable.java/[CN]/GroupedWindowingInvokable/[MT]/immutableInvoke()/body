@@ -3,14 +3,14 @@
     throw new RuntimeException("DataStream must not be empty");
   }
   while (reuse != null) {
-    WindowingInvokable<IN> groupInvokable=windowingGroups.get(keySelector.getKey(reuse.getObject()));
+    WindowingInvokable<IN,OUT> groupInvokable=windowingGroups.get(keySelector.getKey(reuse.getObject()));
     if (groupInvokable == null) {
       groupInvokable=makeNewGroup(reuse);
     }
     for (    ActiveTriggerPolicy<IN> trigger : activeCentralTriggerPolicies) {
       IN[] result=trigger.preNotifyTrigger(reuse.getObject());
       for (      IN in : result) {
-        for (        WindowingInvokable<IN> group : windowingGroups.values()) {
+        for (        WindowingInvokable<IN,OUT> group : windowingGroups.values()) {
           group.processFakeElement(in,trigger);
         }
       }
@@ -24,7 +24,7 @@
       groupInvokable.processRealElement(reuse.getObject());
     }
  else {
-      for (      WindowingInvokable<IN> group : windowingGroups.values()) {
+      for (      WindowingInvokable<IN,OUT> group : windowingGroups.values()) {
         if (group == groupInvokable) {
           group.processRealElement(reuse.getObject(),currentTriggerPolicies);
         }
@@ -40,7 +40,7 @@
   for (  Thread t : activePolicyThreads) {
     t.interrupt();
   }
-  for (  WindowingInvokable<IN> group : windowingGroups.values()) {
+  for (  WindowingInvokable<IN,OUT> group : windowingGroups.values()) {
     group.emitFinalWindow(centralTriggerPolicies);
   }
 }
