@@ -6,29 +6,25 @@
  catch (  IncompatibleKeysException e) {
     throw new InvalidProgramException("The types of the key fields do not match.",e);
   }
+  final org.apache.flink.api.common.operators.base.CoGroupOperatorBase<?,?,OUT,?> po;
   if (keys1 instanceof Keys.SelectorFunctionKeys && keys2 instanceof Keys.SelectorFunctionKeys) {
     @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
     @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
-    PlanBothUnwrappingCoGroupOperator<I1,I2,OUT,?> po=translateSelectorFunctionCoGroup(selectorKeys1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
+    po=translateSelectorFunctionCoGroup(selectorKeys1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
     po.setDegreeOfParallelism(getParallelism());
     po.setCustomPartitioner(customPartitioner);
-    return po;
   }
  else   if (keys2 instanceof Keys.SelectorFunctionKeys) {
     int[] logicalKeyPositions1=keys1.computeLogicalKeyPositions();
     @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
-    PlanRightUnwrappingCoGroupOperator<I1,I2,OUT,?> po=translateSelectorFunctionCoGroupRight(logicalKeyPositions1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
+    po=translateSelectorFunctionCoGroupRight(logicalKeyPositions1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
     po.setDegreeOfParallelism(getParallelism());
     po.setCustomPartitioner(customPartitioner);
-    return po;
   }
  else   if (keys1 instanceof Keys.SelectorFunctionKeys) {
     @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
     int[] logicalKeyPositions2=keys2.computeLogicalKeyPositions();
-    PlanLeftUnwrappingCoGroupOperator<I1,I2,OUT,?> po=translateSelectorFunctionCoGroupLeft(selectorKeys1,logicalKeyPositions2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
-    po.setDegreeOfParallelism(getParallelism());
-    po.setCustomPartitioner(customPartitioner);
-    return po;
+    po=translateSelectorFunctionCoGroupLeft(selectorKeys1,logicalKeyPositions2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
   }
  else   if (keys1 instanceof Keys.ExpressionKeys && keys2 instanceof Keys.ExpressionKeys) {
     try {
@@ -39,14 +35,29 @@
     }
     int[] logicalKeyPositions1=keys1.computeLogicalKeyPositions();
     int[] logicalKeyPositions2=keys2.computeLogicalKeyPositions();
-    CoGroupOperatorBase<I1,I2,OUT,CoGroupFunction<I1,I2,OUT>> po=new CoGroupOperatorBase<I1,I2,OUT,CoGroupFunction<I1,I2,OUT>>(function,new BinaryOperatorInformation<I1,I2,OUT>(getInput1Type(),getInput2Type(),getResultType()),logicalKeyPositions1,logicalKeyPositions2,name);
-    po.setFirstInput(input1);
-    po.setSecondInput(input2);
-    po.setDegreeOfParallelism(getParallelism());
-    po.setCustomPartitioner(customPartitioner);
-    return po;
+    CoGroupOperatorBase<I1,I2,OUT,CoGroupFunction<I1,I2,OUT>> op=new CoGroupOperatorBase<I1,I2,OUT,CoGroupFunction<I1,I2,OUT>>(function,new BinaryOperatorInformation<I1,I2,OUT>(getInput1Type(),getInput2Type(),getResultType()),logicalKeyPositions1,logicalKeyPositions2,name);
+    op.setFirstInput(input1);
+    op.setSecondInput(input2);
+    po=op;
   }
  else {
     throw new UnsupportedOperationException("Unrecognized or incompatible key types.");
   }
+  po.setDegreeOfParallelism(getParallelism());
+  po.setCustomPartitioner(customPartitioner);
+  if (groupSortKeyOrderFirst.size() > 0) {
+    Ordering o=new Ordering();
+    for (    Pair<Integer,Order> entry : groupSortKeyOrderFirst) {
+      o.appendOrdering(entry.getLeft(),null,entry.getRight());
+    }
+    po.setGroupOrderForInputOne(o);
+  }
+  if (groupSortKeyOrderSecond.size() > 0) {
+    Ordering o=new Ordering();
+    for (    Pair<Integer,Order> entry : groupSortKeyOrderSecond) {
+      o.appendOrdering(entry.getLeft(),null,entry.getRight());
+    }
+    po.setGroupOrderForInputTwo(o);
+  }
+  return po;
 }
