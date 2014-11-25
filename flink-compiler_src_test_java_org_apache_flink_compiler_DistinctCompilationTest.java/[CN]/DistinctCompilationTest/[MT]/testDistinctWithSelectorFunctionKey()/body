@@ -1,0 +1,40 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(8);
+    DataSet<Tuple2<String,Double>> data=env.readCsvFile("file:///will/never/be/read").types(String.class,Double.class).name("source").setParallelism(6);
+    data.distinct(new KeySelector<Tuple2<String,Double>,String>(){
+      public String getKey(      Tuple2<String,Double> value){
+        return value.f0;
+      }
+    }
+).name("reducer").print().name("sink");
+    Plan p=env.createProgramPlan();
+    OptimizedPlan op=compileNoStats(p);
+    OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(op);
+    SourcePlanNode sourceNode=resolver.getNode("source");
+    SingleInputPlanNode reduceNode=resolver.getNode("reducer");
+    SinkPlanNode sinkNode=resolver.getNode("sink");
+    SingleInputPlanNode combineNode=(SingleInputPlanNode)reduceNode.getInput().getSource();
+    SingleInputPlanNode keyExtractor=(SingleInputPlanNode)combineNode.getInput().getSource();
+    SingleInputPlanNode keyProjector=(SingleInputPlanNode)sinkNode.getInput().getSource();
+    assertEquals(sourceNode,keyExtractor.getInput().getSource());
+    assertEquals(keyProjector,sinkNode.getInput().getSource());
+    assertEquals(DriverStrategy.SORTED_GROUP_REDUCE,reduceNode.getDriverStrategy());
+    assertEquals(DriverStrategy.SORTED_GROUP_COMBINE,combineNode.getDriverStrategy());
+    assertEquals(new FieldList(0),reduceNode.getKeys(0));
+    assertEquals(new FieldList(0),combineNode.getKeys(0));
+    assertEquals(new FieldList(0),reduceNode.getInput().getLocalStrategyKeys());
+    assertEquals(6,sourceNode.getDegreeOfParallelism());
+    assertEquals(6,keyExtractor.getDegreeOfParallelism());
+    assertEquals(6,combineNode.getDegreeOfParallelism());
+    assertEquals(8,reduceNode.getDegreeOfParallelism());
+    assertEquals(8,keyProjector.getDegreeOfParallelism());
+    assertEquals(8,sinkNode.getDegreeOfParallelism());
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail(e.getClass().getSimpleName() + " in test: " + e.getMessage());
+  }
+}

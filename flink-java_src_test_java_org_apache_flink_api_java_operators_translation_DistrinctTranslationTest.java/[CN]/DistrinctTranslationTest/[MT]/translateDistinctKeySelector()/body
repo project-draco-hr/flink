@@ -1,0 +1,31 @@
+{
+  try {
+    final int DOP=8;
+    ExecutionEnvironment env=ExecutionEnvironment.createLocalEnvironment(DOP);
+    DataSet<Tuple3<Double,StringValue,LongValue>> initialData=getSourceDataSet(env);
+    initialData.distinct(new KeySelector<Tuple3<Double,StringValue,LongValue>,StringValue>(){
+      public StringValue getKey(      Tuple3<Double,StringValue,LongValue> value){
+        return value.f1;
+      }
+    }
+).setParallelism(4).print();
+    Plan p=env.createProgramPlan();
+    GenericDataSinkBase<?> sink=p.getDataSinks().iterator().next();
+    PlanUnwrappingReduceGroupOperator<?,?,?> reducer=(PlanUnwrappingReduceGroupOperator<?,?,?>)sink.getInput();
+    MapOperatorBase<?,?,?> keyExtractor=(MapOperatorBase<?,?,?>)reducer.getInput();
+    assertEquals(1,keyExtractor.getDegreeOfParallelism());
+    assertEquals(4,reducer.getDegreeOfParallelism());
+    TypeInformation<?> keyValueInfo=new TupleTypeInfo<Tuple2<StringValue,Tuple3<Double,StringValue,LongValue>>>(new ValueTypeInfo<StringValue>(StringValue.class),initialData.getType());
+    assertEquals(initialData.getType(),keyExtractor.getOperatorInfo().getInputType());
+    assertEquals(keyValueInfo,keyExtractor.getOperatorInfo().getOutputType());
+    assertEquals(keyValueInfo,reducer.getOperatorInfo().getInputType());
+    assertEquals(initialData.getType(),reducer.getOperatorInfo().getOutputType());
+    assertEquals(KeyExtractingMapper.class,keyExtractor.getUserCodeWrapper().getUserCodeClass());
+    assertTrue(keyExtractor.getInput() instanceof GenericDataSourceBase<?,?>);
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail("Test caused an error: " + e.getMessage());
+  }
+}

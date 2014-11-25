@@ -1,0 +1,32 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(8);
+    DataSet<Tuple2<String,Double>> data=env.readCsvFile("file:///will/never/be/read").types(String.class,Double.class).name("source").setParallelism(6);
+    DistinctOperator<Tuple2<String,Double>> reduced=data.distinct(1).name("reducer");
+    reduced.print().name("sink");
+    Plan p=env.createProgramPlan();
+    OptimizedPlan op=compileNoStats(p);
+    OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(op);
+    SourcePlanNode sourceNode=resolver.getNode("source");
+    SingleInputPlanNode reduceNode=resolver.getNode("reducer");
+    SinkPlanNode sinkNode=resolver.getNode("sink");
+    SingleInputPlanNode combineNode=(SingleInputPlanNode)reduceNode.getInput().getSource();
+    assertEquals(sourceNode,combineNode.getInput().getSource());
+    assertEquals(reduceNode,sinkNode.getInput().getSource());
+    assertEquals(DriverStrategy.SORTED_GROUP_REDUCE,reduceNode.getDriverStrategy());
+    assertEquals(DriverStrategy.SORTED_GROUP_COMBINE,combineNode.getDriverStrategy());
+    assertEquals(new FieldList(1),reduceNode.getKeys(0));
+    assertEquals(new FieldList(1),combineNode.getKeys(0));
+    assertEquals(new FieldList(1),reduceNode.getInput().getLocalStrategyKeys());
+    assertEquals(6,sourceNode.getDegreeOfParallelism());
+    assertEquals(6,combineNode.getDegreeOfParallelism());
+    assertEquals(8,reduceNode.getDegreeOfParallelism());
+    assertEquals(8,sinkNode.getDegreeOfParallelism());
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    fail(e.getClass().getSimpleName() + " in test: " + e.getMessage());
+  }
+}
