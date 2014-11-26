@@ -1,0 +1,32 @@
+{
+  this.clazz=clazz;
+  this.fieldSerializers=(TypeSerializer<Object>[])fieldSerializers;
+  this.fields=fields;
+  this.numFields=fieldSerializers.length;
+  this.executionConfig=executionConfig;
+  Set<Class<?>> registeredPojoTypes=executionConfig.getRegisteredPojoTypes();
+  for (int i=0; i < numFields; i++) {
+    this.fields[i].setAccessible(true);
+  }
+  cl=Thread.currentThread().getContextClassLoader();
+  subclassSerializerCache=new HashMap<Class<?>,TypeSerializer>();
+  List<Class<?>> cleanedTaggedClasses=new ArrayList<Class<?>>(registeredPojoTypes.size());
+  for (  Class<?> registeredClass : registeredPojoTypes) {
+    if (registeredClass.equals(clazz)) {
+      continue;
+    }
+    if (!clazz.isAssignableFrom(registeredClass)) {
+      continue;
+    }
+    cleanedTaggedClasses.add(registeredClass);
+  }
+  this.registeredClasses=new LinkedHashMap<Class<?>,Integer>(cleanedTaggedClasses.size());
+  registeredSerializers=new TypeSerializer[cleanedTaggedClasses.size()];
+  int id=0;
+  for (  Class<?> registeredClass : cleanedTaggedClasses) {
+    this.registeredClasses.put(registeredClass,id);
+    TypeInformation<?> typeInfo=TypeExtractor.createTypeInfo(registeredClass);
+    registeredSerializers[id]=typeInfo.createSerializer(executionConfig);
+    id++;
+  }
+}

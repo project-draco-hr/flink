@@ -1,0 +1,24 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<String> text=env.readTextFile(textPath);
+  DataSet<WCBase> counts=text.flatMap(new Tokenizer()).groupBy("word").reduce(new ReduceFunction<WCBase>(){
+    private static final long serialVersionUID=1L;
+    public WCBase reduce(    WCBase value1,    WCBase value2){
+      WC wc1=(WC)value1;
+      WC wc2=(WC)value2;
+      int c=wc1.secretCount.getCount() + wc2.secretCount.getCount();
+      wc1.secretCount.setCount(c);
+      return wc1;
+    }
+  }
+).map(new MapFunction<WCBase,WCBase>(){
+    @Override public WCBase map(    WCBase value) throws Exception {
+      WC wc=(WC)value;
+      wc.count=wc.secretCount.getCount();
+      return wc;
+    }
+  }
+);
+  counts.writeAsText(resultPath);
+  env.execute("WordCount with custom data types example");
+}

@@ -1,22 +1,58 @@
 {
-  boolean isNull=source.readBoolean();
-  if (isNull) {
+  int flags=source.readByte();
+  if ((flags & IS_NULL) != 0) {
     return null;
   }
-  try {
-    for (int i=0; i < numFields; i++) {
-      isNull=source.readBoolean();
-      if (isNull) {
-        fields[i].set(reuse,null);
-      }
- else {
-        Object field=fieldSerializers[i].deserialize(fields[i].get(reuse),source);
-        fields[i].set(reuse,field);
-      }
+  Class<?> subclass=null;
+  TypeSerializer subclassSerializer=null;
+  if ((flags & IS_SUBCLASS) != 0) {
+    String subclassName=source.readUTF();
+    try {
+      subclass=Class.forName(subclassName,true,cl);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new RuntimeException("Cannot instantiate class.",e);
+    }
+    subclassSerializer=getSubclassSerializer(subclass);
+    if (reuse == null || subclass != reuse.getClass()) {
+      reuse=(T)subclassSerializer.createInstance();
+      initializeFields(reuse);
     }
   }
- catch (  IllegalAccessException e) {
-    throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+ else   if ((flags & IS_TAGGED_SUBCLASS) != 0) {
+    int subclassTag=source.readByte();
+    subclassSerializer=registeredSerializers[subclassTag];
+    if (reuse == null || ((PojoSerializer)subclassSerializer).clazz != reuse.getClass()) {
+      reuse=(T)subclassSerializer.createInstance();
+      initializeFields(reuse);
+    }
+  }
+ else {
+    if (reuse == null || clazz != reuse.getClass()) {
+      reuse=createInstance();
+    }
+  }
+  if ((flags & NO_SUBCLASS) != 0) {
+    try {
+      for (int i=0; i < numFields; i++) {
+        boolean isNull=source.readBoolean();
+        if (isNull) {
+          fields[i].set(reuse,null);
+        }
+ else {
+          Object field=fieldSerializers[i].deserialize(fields[i].get(reuse),source);
+          fields[i].set(reuse,field);
+        }
+      }
+    }
+ catch (    IllegalAccessException e) {
+      throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+    }
+  }
+ else {
+    if (subclassSerializer != null) {
+      reuse=(T)subclassSerializer.deserialize(reuse,source);
+    }
   }
   return reuse;
 }

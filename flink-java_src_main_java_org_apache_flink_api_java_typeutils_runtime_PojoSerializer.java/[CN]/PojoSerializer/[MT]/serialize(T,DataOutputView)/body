@@ -1,24 +1,54 @@
 {
+  int flags=0;
   if (value == null) {
-    target.writeBoolean(true);
+    flags|=IS_NULL;
+    target.writeByte(flags);
     return;
   }
+  Integer subclassTag=-1;
+  Class<?> actualClass=value.getClass();
+  TypeSerializer subclassSerializer=null;
+  if (clazz != actualClass) {
+    subclassTag=registeredClasses.get(actualClass);
+    if (subclassTag != null) {
+      flags|=IS_TAGGED_SUBCLASS;
+      subclassSerializer=registeredSerializers[subclassTag];
+    }
  else {
-    target.writeBoolean(false);
-  }
-  try {
-    for (int i=0; i < numFields; i++) {
-      Object o=fields[i].get(value);
-      if (o == null) {
-        target.writeBoolean(true);
-      }
- else {
-        target.writeBoolean(false);
-        fieldSerializers[i].serialize(o,target);
-      }
+      flags|=IS_SUBCLASS;
+      subclassSerializer=getSubclassSerializer(actualClass);
     }
   }
- catch (  IllegalAccessException e) {
-    throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+ else {
+    flags|=NO_SUBCLASS;
+  }
+  target.writeByte(flags);
+  if ((flags & IS_SUBCLASS) != 0) {
+    target.writeUTF(actualClass.getName());
+  }
+ else   if ((flags & IS_TAGGED_SUBCLASS) != 0) {
+    target.writeByte(subclassTag);
+  }
+  if ((flags & NO_SUBCLASS) != 0) {
+    try {
+      for (int i=0; i < numFields; i++) {
+        Object o=fields[i].get(value);
+        if (o == null) {
+          target.writeBoolean(true);
+        }
+ else {
+          target.writeBoolean(false);
+          fieldSerializers[i].serialize(o,target);
+        }
+      }
+    }
+ catch (    IllegalAccessException e) {
+      throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+    }
+  }
+ else {
+    if (subclassSerializer != null) {
+      subclassSerializer.serialize(value,target);
+    }
   }
 }

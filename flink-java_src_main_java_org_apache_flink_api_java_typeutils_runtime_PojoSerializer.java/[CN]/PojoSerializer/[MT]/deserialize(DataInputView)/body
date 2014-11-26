@@ -1,29 +1,53 @@
 {
-  boolean isNull=source.readBoolean();
-  if (isNull) {
+  int flags=source.readByte();
+  if ((flags & IS_NULL) != 0) {
     return null;
   }
   T target;
-  try {
-    target=clazz.newInstance();
+  Class<?> actualSubclass=null;
+  TypeSerializer subclassSerializer=null;
+  if ((flags & IS_SUBCLASS) != 0) {
+    String subclassName=source.readUTF();
+    try {
+      actualSubclass=Class.forName(subclassName,true,cl);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new RuntimeException("Cannot instantiate class.",e);
+    }
+    subclassSerializer=getSubclassSerializer(actualSubclass);
+    target=(T)subclassSerializer.createInstance();
+    initializeFields(target);
   }
- catch (  Throwable t) {
-    throw new RuntimeException("Cannot instantiate class.",t);
+ else   if ((flags & IS_TAGGED_SUBCLASS) != 0) {
+    int subclassTag=source.readByte();
+    subclassSerializer=registeredSerializers[subclassTag];
+    target=(T)subclassSerializer.createInstance();
+    initializeFields(target);
   }
-  try {
-    for (int i=0; i < numFields; i++) {
-      isNull=source.readBoolean();
-      if (isNull) {
-        fields[i].set(target,null);
-      }
  else {
-        Object field=fieldSerializers[i].deserialize(source);
-        fields[i].set(target,field);
+    target=createInstance();
+  }
+  if ((flags & NO_SUBCLASS) != 0) {
+    try {
+      for (int i=0; i < numFields; i++) {
+        boolean isNull=source.readBoolean();
+        if (isNull) {
+          fields[i].set(target,null);
+        }
+ else {
+          Object field=fieldSerializers[i].deserialize(source);
+          fields[i].set(target,field);
+        }
       }
     }
+ catch (    IllegalAccessException e) {
+      throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+    }
   }
- catch (  IllegalAccessException e) {
-    throw new RuntimeException("Error during POJO copy, this should not happen since we check the fields" + "before.");
+ else {
+    if (subclassSerializer != null) {
+      target=(T)subclassSerializer.deserialize(target,source);
+    }
   }
   return target;
 }

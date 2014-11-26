@@ -1,10 +1,38 @@
 {
-  target.writeBoolean(source.readBoolean());
-  for (int i=0; i < numFields; i++) {
-    boolean isNull=source.readBoolean();
-    target.writeBoolean(isNull);
-    if (!isNull) {
-      fieldSerializers[i].copy(source,target);
+  int flags=source.readByte();
+  target.writeByte(flags);
+  if ((flags & IS_NULL) != 0) {
+    return;
+  }
+  TypeSerializer<?> subclassSerializer=null;
+  if ((flags & IS_SUBCLASS) != 0) {
+    String className=source.readUTF();
+    target.writeUTF(className);
+    try {
+      Class<?> subclass=Class.forName(className,true,Thread.currentThread().getContextClassLoader());
+      subclassSerializer=getSubclassSerializer(subclass);
+    }
+ catch (    ClassNotFoundException e) {
+      throw new RuntimeException("Cannot instantiate class.",e);
+    }
+  }
+ else   if ((flags & IS_TAGGED_SUBCLASS) != 0) {
+    int subclassTag=source.readByte();
+    target.writeByte(subclassTag);
+    subclassSerializer=registeredSerializers[subclassTag];
+  }
+  if ((flags & NO_SUBCLASS) != 0) {
+    for (int i=0; i < numFields; i++) {
+      boolean isNull=source.readBoolean();
+      target.writeBoolean(isNull);
+      if (!isNull) {
+        fieldSerializers[i].copy(source,target);
+      }
+    }
+  }
+ else {
+    if (subclassSerializer != null) {
+      subclassSerializer.copy(source,target);
     }
   }
 }
