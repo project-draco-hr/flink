@@ -1,14 +1,29 @@
 {
-  if (this.outputFormat == null) {
-    TaskConfig cfg=new TaskConfig(getConfiguration());
-    UserCodeWrapper<OutputFormat<?>> wrapper=cfg.<OutputFormat<?>>getStubWrapper(loader);
-    if (wrapper == null) {
-      throw new Exception("No output format present in OutputFormatVertex's task configuration.");
-    }
-    this.outputFormat=wrapper.getUserCodeObject(OutputFormat.class,loader);
-    this.outputFormat.configure(cfg.getStubParameters());
+  final TaskConfig cfg=new TaskConfig(getConfiguration());
+  UserCodeWrapper<OutputFormat<?>> wrapper;
+  try {
+    wrapper=cfg.<OutputFormat<?>>getStubWrapper(loader);
   }
-  if (this.outputFormat instanceof InitializeOnMaster) {
-    ((InitializeOnMaster)this.outputFormat).initializeGlobal(getParallelism());
+ catch (  Throwable t) {
+    throw new Exception("Deserializing the OutputFormat (" + formatDescription + ") failed: "+ t.getMessage(),t);
+  }
+  if (wrapper == null) {
+    throw new Exception("No input format present in InputFormatVertex's task configuration.");
+  }
+  OutputFormat<?> outputFormat;
+  try {
+    outputFormat=wrapper.getUserCodeObject(OutputFormat.class,loader);
+  }
+ catch (  Throwable t) {
+    throw new Exception("Instantiating the OutputFormat (" + formatDescription + ") failed: "+ t.getMessage(),t);
+  }
+  try {
+    outputFormat.configure(cfg.getStubParameters());
+  }
+ catch (  Throwable t) {
+    throw new Exception("Configuring the OutputFormat (" + formatDescription + ") failed: "+ t.getMessage(),t);
+  }
+  if (outputFormat instanceof InitializeOnMaster) {
+    ((InitializeOnMaster)outputFormat).initializeGlobal(getParallelism());
   }
 }
