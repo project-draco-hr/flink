@@ -1,0 +1,29 @@
+{
+  final IOManager ioManager=new IOManagerAsync();
+  try {
+    MemoryManager memMan=new DefaultMemoryManager(4 * 16 * 1024,1,16 * 1024);
+    List<MemorySegment> memory=new ArrayList<MemorySegment>();
+    memMan.allocatePages(new DummyInvokable(),memory,4);
+    FileIOChannel.ID channel=ioManager.createChannel();
+{
+      FileWriter wrt=new FileWriter(channel.getPath());
+      wrt.write("test data");
+      wrt.close();
+    }
+    BlockChannelReader reader=ioManager.createBlockChannelReader(channel);
+    FileChannelInputView in=new FileChannelInputView(reader,memMan,memory,9);
+    in.readInt();
+    in.close();
+    assertTrue(memMan.verifyEmpty());
+    in.close();
+    in.closeAndDelete();
+    assertFalse(new File(channel.getPath()).exists());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    ioManager.shutdown();
+  }
+}

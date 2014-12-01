@@ -1,0 +1,29 @@
+{
+  super(0);
+  checkNotNull(reader);
+  checkNotNull(memManager);
+  checkNotNull(memory);
+  checkArgument(!reader.isClosed());
+  checkArgument(memory.size() > 0);
+  this.reader=reader;
+  this.memManager=memManager;
+  this.memory=memory;
+  this.sizeOfLastBlock=sizeOfLastBlock;
+  try {
+    final long channelLength=reader.getSize();
+    final int segmentSize=memManager.getPageSize();
+    this.numBlocksRemaining=MathUtils.checkedDownCast(channelLength / segmentSize);
+    if (channelLength % segmentSize != 0) {
+      this.numBlocksRemaining++;
+    }
+    this.numRequestsRemaining=numBlocksRemaining;
+    for (int i=0; i < memory.size(); i++) {
+      sendReadRequest(memory.get(i));
+    }
+    advance();
+  }
+ catch (  IOException e) {
+    memManager.release(memory);
+    throw e;
+  }
+}

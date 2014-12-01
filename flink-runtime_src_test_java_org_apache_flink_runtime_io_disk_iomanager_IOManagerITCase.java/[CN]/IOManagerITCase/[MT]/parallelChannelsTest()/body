@@ -1,5 +1,4 @@
 {
-  LOG.info("Starting parallel channels test.");
   final Random rnd=new Random(SEED);
   final AbstractInvokable memOwner=new DefaultMemoryManagerTest.DummyInvokable();
   FileIOChannel.ID[] ids=new FileIOChannel.ID[NUM_CHANNELS];
@@ -12,33 +11,22 @@
   for (int i=0; i < NUM_CHANNELS; i++) {
     ids[i]=this.ioManager.createChannel();
     writers[i]=this.ioManager.createBlockChannelWriter(ids[i]);
-    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(NUMBER_OF_SEGMENTS - 2) + 2);
+    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(MAXIMUM_NUMBER_OF_SEGMENTS_PER_CHANNEL - 1) + 1);
     outs[i]=new ChannelWriterOutputView(writers[i],memSegs,this.memoryManager.getPageSize());
   }
   Value val=new Value();
-  int nextLogCount=0;
-  float nextLogFraction=0.0f;
-  LOG.info("Writing to channels...");
   for (int i=0; i < NUMBERS_TO_BE_WRITTEN; i++) {
-    if (i == nextLogCount) {
-      LOG.info("... " + (int)(nextLogFraction * 100) + "% done.");
-      nextLogFraction+=0.05;
-      nextLogCount=(int)(nextLogFraction * NUMBERS_TO_BE_WRITTEN);
-    }
     int channel=skewedSample(rnd,NUM_CHANNELS - 1);
     val.value=String.valueOf(writingCounters[channel]++);
     val.write(outs[channel]);
   }
-  LOG.info("Writing done, flushing contents...");
   for (int i=0; i < NUM_CHANNELS; i++) {
     this.memoryManager.release(outs[i].close());
   }
   outs=null;
   writers=null;
-  LOG.info("Reading channels sequentially...");
   for (int i=0; i < NUM_CHANNELS; i++) {
-    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(NUMBER_OF_SEGMENTS - 2) + 2);
-    LOG.info("Reading channel " + (i + 1) + "/"+ NUM_CHANNELS+ '.');
+    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(MAXIMUM_NUMBER_OF_SEGMENTS_PER_CHANNEL - 1) + 1);
     final BlockChannelReader reader=this.ioManager.createBlockChannelReader(ids[i]);
     final ChannelReaderInputView in=new ChannelReaderInputView(reader,memSegs,false);
     int nextVal=0;
@@ -61,21 +49,12 @@
     Assert.assertEquals("NUmber of written numbers differs from number of read numbers.",writingCounters[i],nextVal);
     this.memoryManager.release(in.close());
   }
-  LOG.info("Sequential reading done.");
-  LOG.info("Reading channels randomly...");
   for (int i=0; i < NUM_CHANNELS; i++) {
-    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(NUMBER_OF_SEGMENTS - 2) + 2);
+    List<MemorySegment> memSegs=this.memoryManager.allocatePages(memOwner,rnd.nextInt(MAXIMUM_NUMBER_OF_SEGMENTS_PER_CHANNEL - 1) + 1);
     readers[i]=this.ioManager.createBlockChannelReader(ids[i]);
     ins[i]=new ChannelReaderInputView(readers[i],memSegs,false);
   }
-  nextLogCount=0;
-  nextLogFraction=0.0f;
   for (int i=0; i < NUMBERS_TO_BE_WRITTEN; i++) {
-    if (i == nextLogCount) {
-      LOG.info("... " + (int)(nextLogFraction * 100) + "% done.");
-      nextLogFraction+=0.05;
-      nextLogCount=(int)(nextLogFraction * NUMBERS_TO_BE_WRITTEN);
-    }
     while (true) {
       final int channel=skewedSample(rnd,NUM_CHANNELS - 1);
       if (ins[channel] != null) {
@@ -99,7 +78,6 @@
       }
     }
   }
-  LOG.info("Random reading done.");
   for (int i=0; i < NUM_CHANNELS; i++) {
     if (ins[i] != null) {
       this.memoryManager.release(ins[i].close());

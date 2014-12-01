@@ -1,0 +1,22 @@
+{
+  final int block=MathUtils.checkedDownCast(position / segmentSize);
+  final int positionInBlock=(int)(position % segmentSize);
+  if (position < 0 || block >= numBlocksTotal || (block == numBlocksTotal - 1 && positionInBlock > sizeOfLastBlock)) {
+    throw new IllegalArgumentException("Position is out of range");
+  }
+  clear();
+  if (reader != null) {
+    reader.close();
+  }
+  reader=ioManager.createBlockChannelReader(channelId);
+  if (block > 0) {
+    reader.seekToPosition(block * segmentSize);
+  }
+  this.numBlocksRemaining=this.numBlocksTotal - block;
+  this.numRequestsRemaining=numBlocksRemaining;
+  for (int i=0; i < memory.size(); i++) {
+    sendReadRequest(memory.get(i));
+  }
+  numBlocksRemaining--;
+  seekInput(reader.getNextReturnedSegment(),positionInBlock,numBlocksRemaining == 0 ? sizeOfLastBlock : segmentSize);
+}
