@@ -1,0 +1,45 @@
+{
+  if (hasBeenShutDown.getAndSet(true)) {
+    return;
+  }
+  if (removeShutdownHook) {
+    Runtime.getRuntime().removeShutdownHook(clientShutdownHook);
+  }
+  if (actorSystem != null) {
+    LOG.info("Sending shutdown request to the Application Master");
+    if (applicationClient != ActorRef.noSender()) {
+      Future<Object> future=ask(applicationClient,new Messages.StopYarnSession(FinalApplicationStatus.SUCCEEDED),akkaTimeout);
+      awaitUtil(future,"Error while stopping YARN Application Client");
+    }
+    actorSystem.shutdown();
+    actorSystem.awaitTermination();
+    actorSystem=null;
+  }
+  LOG.info("Deleting files in " + sessionFilesDir);
+  try {
+    FileSystem shutFS=FileSystem.get(hadoopConfig);
+    shutFS.delete(sessionFilesDir,true);
+    shutFS.close();
+  }
+ catch (  IOException e) {
+    LOG.error("Could not delete the Flink jar and configuration files in HDFS..",e);
+  }
+  try {
+    actorRunner.join(1000);
+  }
+ catch (  InterruptedException e) {
+    LOG.warn("Shutdown of the actor runner was interrupted",e);
+    Thread.currentThread().interrupt();
+  }
+  try {
+    pollingRunner.stopRunner();
+    pollingRunner.join(1000);
+  }
+ catch (  InterruptedException e) {
+    LOG.warn("Shutdown of the polling runner was interrupted",e);
+    Thread.currentThread().interrupt();
+  }
+  LOG.info("YARN Client is shutting down");
+  yarnClient.stop();
+  yarnClient=null;
+}

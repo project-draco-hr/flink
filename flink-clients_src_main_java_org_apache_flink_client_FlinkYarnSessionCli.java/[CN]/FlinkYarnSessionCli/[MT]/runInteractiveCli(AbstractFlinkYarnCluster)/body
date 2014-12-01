@@ -1,0 +1,48 @@
+{
+  final String HELP="Available commands:\n" + "help - show these commands\n" + "stop - stop the YARN session";
+  int numTaskmanagers=0;
+  try {
+    BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
+    while (true) {
+      FlinkYarnClusterStatus status=yarnCluster.getClusterStatus();
+      if (status != null && numTaskmanagers != status.getNumberOfTaskManagers()) {
+        System.err.println("Number of connected TaskManagers changed to " + status.getNumberOfTaskManagers() + ". "+ "Slots available: "+ status.getNumberOfSlots());
+        numTaskmanagers=status.getNumberOfTaskManagers();
+      }
+      List<String> messages=yarnCluster.getNewMessages();
+      if (messages != null && messages.size() > 0) {
+        System.err.println("New messages from the YARN cluster: ");
+        for (        String msg : messages) {
+          System.err.println(msg);
+        }
+      }
+      if (yarnCluster.hasFailed()) {
+        System.err.println("The YARN cluster has failed");
+      }
+      long startTime=System.currentTimeMillis();
+      while ((System.currentTimeMillis() - startTime) < CLIENT_POLLING_INTERVALL * 1000 && !in.ready()) {
+        Thread.sleep(200);
+      }
+      if (in.ready()) {
+        String command=in.readLine();
+        if (command.equals("quit") || command.equals("stop")) {
+          break;
+        }
+ else         if (command.equals("help")) {
+          System.err.println(HELP);
+        }
+ else {
+          System.err.println("Unknown command '" + command + "'. Showing help: \n"+ HELP);
+        }
+      }
+      if (yarnCluster.hasBeenStopped()) {
+        LOG.info("Stopping interactive command line interface, YARN cluster has been stopped.");
+        break;
+      }
+    }
+  }
+ catch (  Exception e) {
+    LOG.warn("Exception while running the interactive command line interface",e);
+    return;
+  }
+}
