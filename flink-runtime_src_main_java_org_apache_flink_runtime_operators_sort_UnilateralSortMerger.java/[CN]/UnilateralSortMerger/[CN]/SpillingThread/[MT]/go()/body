@@ -7,13 +7,7 @@
       element=this.queues.spill.take();
     }
  catch (    InterruptedException iex) {
-      if (isRunning()) {
-        LOG.error("Sorting thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
-        continue;
-      }
- else {
-        return;
-      }
+      throw new IOException("The spilling thread was interrupted.");
     }
     if (element == SPILLING_MARKER) {
       break;
@@ -27,13 +21,32 @@
   if (!isRunning()) {
     return;
   }
+  MutableObjectIterator<E> largeRecords=null;
+  if (cacheOnly && largeRecordHandler != null && largeRecordHandler.hasData()) {
+    List<MemorySegment> memoryForLargeRecordSorting=new ArrayList<MemorySegment>();
+    CircularElement<E> circElement;
+    while ((circElement=this.queues.empty.poll()) != null) {
+      memoryForLargeRecordSorting.addAll(circElement.buffer.dispose());
+    }
+    if (memoryForLargeRecordSorting.isEmpty()) {
+      cacheOnly=false;
+      LOG.debug("Going to disk-based merge because of large records.");
+    }
+ else {
+      LOG.debug("Sorting large records, to add them to in-memory merge.");
+      largeRecords=largeRecordHandler.finishWriteAndSortKeys(memoryForLargeRecordSorting);
+    }
+  }
   if (cacheOnly) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Initiating in memory merge.");
     }
-    List<MutableObjectIterator<E>> iterators=new ArrayList<MutableObjectIterator<E>>(cache.size());
+    List<MutableObjectIterator<E>> iterators=new ArrayList<MutableObjectIterator<E>>(cache.size() + 1);
     for (    CircularElement<E> cached : cache) {
       iterators.add(cached.buffer.getIterator());
+    }
+    if (largeRecords != null) {
+      iterators.add(largeRecords);
     }
     if (LOG.isDebugEnabled()) {
       LOG.debug("Releasing unused sort-buffer memory.");
@@ -86,21 +99,51 @@
     LOG.debug("Releasing sort-buffer memory.");
   }
   disposeSortBuffers(false);
-  while (isRunning() && channelIDs.size() > this.maxNumFileHandles) {
-    channelIDs=mergeChannelList(channelIDs,this.sortReadMemory,this.writeMemory);
+  List<MemorySegment> mergeReadMemory;
+  if (largeRecordHandler != null && largeRecordHandler.hasData()) {
+    List<MemorySegment> longRecMem;
+    if (channelIDs.isEmpty()) {
+      longRecMem=this.mergeReadMemory;
+      mergeReadMemory=Collections.emptyList();
+    }
+ else {
+      int maxMergedStreams=Math.min(this.maxFanIn,channelIDs.size());
+      int pagesPerStream=Math.max(MIN_NUM_WRITE_BUFFERS,Math.min(MAX_NUM_WRITE_BUFFERS,this.mergeReadMemory.size() / 2 / maxMergedStreams));
+      int totalMergeReadMemory=maxMergedStreams * pagesPerStream;
+      mergeReadMemory=new ArrayList<MemorySegment>(totalMergeReadMemory);
+      for (int i=0; i < totalMergeReadMemory; i++) {
+        mergeReadMemory.add(this.mergeReadMemory.get(i));
+      }
+      longRecMem=new ArrayList<MemorySegment>();
+      for (int i=totalMergeReadMemory; i < this.mergeReadMemory.size(); i++) {
+        longRecMem.add(this.mergeReadMemory.get(i));
+      }
+    }
+    largeRecords=largeRecordHandler.finishWriteAndSortKeys(longRecMem);
+  }
+ else {
+    mergeReadMemory=this.mergeReadMemory;
+  }
+  while (isRunning() && channelIDs.size() > this.maxFanIn) {
+    channelIDs=mergeChannelList(channelIDs,mergeReadMemory,this.writeMemory);
   }
   this.memManager.release(this.writeMemory);
   this.writeMemory.clear();
   if (channelIDs.isEmpty()) {
-    setResultIterator(EmptyMutableObjectIterator.<E>get());
+    if (largeRecords == null) {
+      setResultIterator(EmptyMutableObjectIterator.<E>get());
+    }
+ else {
+      setResultIterator(largeRecords);
+    }
   }
  else {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Beginning final merge.");
     }
     List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelIDs.size());
-    getSegmentsForReaders(readBuffers,this.sortReadMemory,channelIDs.size());
-    setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<FileIOChannel>(channelIDs.size())));
+    getSegmentsForReaders(readBuffers,mergeReadMemory,channelIDs.size());
+    setResultIterator(getMergingIterator(channelIDs,readBuffers,new ArrayList<FileIOChannel>(channelIDs.size()),largeRecords));
   }
   if (LOG.isDebugEnabled()) {
     LOG.debug("Spilling and merging thread done.");

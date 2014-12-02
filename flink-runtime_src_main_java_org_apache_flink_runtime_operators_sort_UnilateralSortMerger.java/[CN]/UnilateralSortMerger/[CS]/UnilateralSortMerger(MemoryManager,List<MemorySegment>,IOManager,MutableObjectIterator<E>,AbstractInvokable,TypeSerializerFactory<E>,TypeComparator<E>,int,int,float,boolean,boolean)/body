@@ -1,0 +1,110 @@
+{
+  if (memoryManager == null | (ioManager == null && !noSpillingMemory) | serializerFactory == null | comparator == null) {
+    throw new NullPointerException();
+  }
+  if (parentTask == null) {
+    throw new NullPointerException("Parent Task must not be null.");
+  }
+  if (maxNumFileHandles < 2) {
+    throw new IllegalArgumentException("Merger cannot work with less than two file handles.");
+  }
+  this.memoryManager=memoryManager;
+  final int numPagesTotal=memory.size();
+  if (numPagesTotal < MIN_NUM_WRITE_BUFFERS + MIN_NUM_SORT_MEM_SEGMENTS) {
+    throw new IllegalArgumentException("Too little memory provided to sorter to perform task. " + "Required are at least " + (MIN_NUM_WRITE_BUFFERS + MIN_NUM_SORT_MEM_SEGMENTS) + " pages. Current page size is "+ memoryManager.getPageSize()+ " bytes.");
+  }
+  final int numWriteBuffers;
+  final int numLargeRecordBuffers;
+  if (noSpillingMemory && !handleLargeRecords) {
+    numWriteBuffers=0;
+    numLargeRecordBuffers=0;
+  }
+ else {
+    int numConsumers=(noSpillingMemory ? 0 : 1) + (handleLargeRecords ? 2 : 0);
+    final int minBuffersForMerging=maxNumFileHandles + numConsumers * MIN_NUM_WRITE_BUFFERS;
+    if (minBuffersForMerging > numPagesTotal) {
+      numWriteBuffers=noSpillingMemory ? 0 : MIN_NUM_WRITE_BUFFERS;
+      numLargeRecordBuffers=handleLargeRecords ? 2 * MIN_NUM_WRITE_BUFFERS : 0;
+      maxNumFileHandles=numPagesTotal - numConsumers * MIN_NUM_WRITE_BUFFERS;
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Reducing maximal merge fan-in to " + maxNumFileHandles + " due to limited memory availability during merge");
+      }
+    }
+ else {
+      final int fractionalAuxBuffers=numPagesTotal / (numConsumers * 100);
+      if (fractionalAuxBuffers >= MAX_NUM_WRITE_BUFFERS) {
+        numWriteBuffers=noSpillingMemory ? 0 : MAX_NUM_WRITE_BUFFERS;
+        numLargeRecordBuffers=handleLargeRecords ? 2 * MAX_NUM_WRITE_BUFFERS : 0;
+      }
+ else {
+        numWriteBuffers=noSpillingMemory ? 0 : Math.max(MIN_NUM_WRITE_BUFFERS,fractionalAuxBuffers);
+        numLargeRecordBuffers=handleLargeRecords ? Math.max(2 * MIN_NUM_WRITE_BUFFERS,fractionalAuxBuffers) : 0;
+      }
+    }
+  }
+  final int sortMemPages=numPagesTotal - numWriteBuffers - numLargeRecordBuffers;
+  final long sortMemory=((long)sortMemPages) * memoryManager.getPageSize();
+  if (numSortBuffers < 1) {
+    if (sortMemory > 100 * 1024 * 1024) {
+      numSortBuffers=2;
+    }
+ else {
+      numSortBuffers=1;
+    }
+  }
+  final int numSegmentsPerSortBuffer=sortMemPages / numSortBuffers;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(String.format("Instantiating sorter with %d pages of sorting memory (=" + "%d bytes total) divided over %d sort buffers (%d pages per buffer). Using %d" + " buffers for writing sorted results and merging maximally %d streams at once. "+ "Using %d memory segments for large record spilling.",sortMemPages,sortMemory,numSortBuffers,numSegmentsPerSortBuffer,numWriteBuffers,maxNumFileHandles,numLargeRecordBuffers));
+  }
+  this.sortReadMemory=memory;
+  this.writeMemory=new ArrayList<MemorySegment>(numWriteBuffers);
+  final TypeSerializer<E> serializer=serializerFactory.getSerializer();
+  if (numWriteBuffers > 0) {
+    for (int i=0; i < numWriteBuffers; i++) {
+      this.writeMemory.add(this.sortReadMemory.remove(this.sortReadMemory.size() - 1));
+    }
+  }
+  if (numLargeRecordBuffers > 0) {
+    List<MemorySegment> mem=new ArrayList<MemorySegment>();
+    for (int i=0; i < numLargeRecordBuffers; i++) {
+      mem.add(this.sortReadMemory.remove(this.sortReadMemory.size() - 1));
+    }
+    this.largeRecordHandler=new LargeRecordHandler<E>(serializer,comparator.duplicate(),ioManager,memoryManager,mem,parentTask,maxNumFileHandles);
+  }
+ else {
+    this.largeRecordHandler=null;
+  }
+  final CircularQueues<E> circularQueues=new CircularQueues<E>();
+  final Iterator<MemorySegment> segments=this.sortReadMemory.iterator();
+  for (int i=0; i < numSortBuffers; i++) {
+    final List<MemorySegment> sortSegments=new ArrayList<MemorySegment>(numSegmentsPerSortBuffer);
+    for (int k=(i == numSortBuffers - 1 ? Integer.MAX_VALUE : numSegmentsPerSortBuffer); k > 0 && segments.hasNext(); k--) {
+      sortSegments.add(segments.next());
+    }
+    final TypeComparator<E> comp=comparator.duplicate();
+    final InMemorySorter<E> buffer;
+    if (comp.supportsSerializationWithKeyNormalization() && serializer.getLength() > 0 && serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+      buffer=new FixedLengthRecordSorter<E>(serializerFactory.getSerializer(),comp,sortSegments);
+    }
+ else {
+      buffer=new NormalizedKeySorter<E>(serializerFactory.getSerializer(),comp,sortSegments);
+    }
+    CircularElement<E> element=new CircularElement<E>(i,buffer);
+    circularQueues.empty.add(element);
+  }
+  ExceptionHandler<IOException> exceptionHandler=new ExceptionHandler<IOException>(){
+    public void handleException(    IOException exception){
+      if (!closed) {
+        setResultIteratorException(exception);
+        close();
+      }
+    }
+  }
+;
+  this.channelsToDeleteAtShutdown=new HashSet<FileIOChannel.ID>(64);
+  this.openChannels=new HashSet<FileIOChannel>(64);
+  this.readThread=getReadingThread(exceptionHandler,input,circularQueues,largeRecordHandler,parentTask,serializer,((long)(startSpillingFraction * sortMemory)));
+  this.sortThread=getSortingThread(exceptionHandler,circularQueues,parentTask);
+  this.spillThread=getSpillingThread(exceptionHandler,circularQueues,parentTask,memoryManager,ioManager,serializerFactory,comparator,this.sortReadMemory,this.writeMemory,maxNumFileHandles);
+  startThreads();
+}

@@ -1,0 +1,66 @@
+{
+  if (recordsOutFile == null) {
+    if (closed) {
+      throw new IllegalStateException("The large record handler has been closed.");
+    }
+    if (recordsReader != null) {
+      throw new IllegalStateException("The handler has already switched to sorting.");
+    }
+    LOG.debug("Initializing the large record spilling...");
+{
+      final TypeComparator<?>[] keyComps=comparator.getFlatComparators();
+      numKeyFields=keyComps.length;
+      Object[] keyHolder=new Object[numKeyFields];
+      comparator.extractKeys(record,keyHolder,0);
+      TypeSerializer<?>[] keySers=new TypeSerializer<?>[numKeyFields];
+      TypeSerializer<?>[] tupleSers=new TypeSerializer<?>[numKeyFields + 1];
+      int[] keyPos=new int[numKeyFields];
+      for (int i=0; i < numKeyFields; i++) {
+        keyPos[i]=i;
+        keySers[i]=createSerializer(keyHolder[i],i);
+        tupleSers[i]=keySers[i];
+      }
+      tupleSers[numKeyFields]=LongSerializer.INSTANCE;
+      keySerializer=new TupleSerializer<Tuple>((Class<Tuple>)Tuple.getTupleClass(numKeyFields + 1),tupleSers);
+      keyComparator=new TupleComparator<Tuple>(keyPos,keyComps,keySers);
+      if (keySerializer.isStateful()) {
+        ClassLoader cl=getClassLoader(tupleSers);
+        RuntimeStatefulSerializerFactory<Tuple> factory=new RuntimeStatefulSerializerFactory<Tuple>(keySerializer,keySerializer.getTupleClass());
+        factory.setClassLoader(cl);
+        keySerializerFactory=factory;
+      }
+ else {
+        keySerializerFactory=new RuntimeStatelessSerializerFactory<Tuple>(keySerializer,keySerializer.getTupleClass());
+      }
+      keyTuple=keySerializer.createInstance();
+    }
+    final int totalNumSegments=memory.size();
+    final int segmentsForKeys=(totalNumSegments >= 2 * MAX_SEGMENTS_FOR_KEY_SPILLING) ? MAX_SEGMENTS_FOR_KEY_SPILLING : Math.max(MIN_SEGMENTS_FOR_KEY_SPILLING,totalNumSegments - MAX_SEGMENTS_FOR_KEY_SPILLING);
+    List<MemorySegment> recordsMemory=new ArrayList<MemorySegment>();
+    List<MemorySegment> keysMemory=new ArrayList<MemorySegment>();
+    for (int i=0; i < segmentsForKeys; i++) {
+      keysMemory.add(memory.get(i));
+    }
+    for (int i=segmentsForKeys; i < totalNumSegments; i++) {
+      recordsMemory.add(memory.get(i));
+    }
+    recordsChannel=ioManager.createChannel();
+    keysChannel=ioManager.createChannel();
+    recordsOutFile=new FileChannelOutputView(ioManager.createBlockChannelWriter(recordsChannel),memManager,recordsMemory,memManager.getPageSize());
+    keysOutFile=new FileChannelOutputView(ioManager.createBlockChannelWriter(keysChannel),memManager,keysMemory,memManager.getPageSize());
+  }
+  final long offset=recordsOutFile.getWriteOffset();
+  if (offset < 0) {
+    throw new RuntimeException("wrong offset");
+  }
+  Object[] keyHolder=new Object[numKeyFields];
+  comparator.extractKeys(record,keyHolder,0);
+  for (int i=0; i < numKeyFields; i++) {
+    keyTuple.setField(keyHolder[i],i);
+  }
+  keyTuple.setField(offset,numKeyFields);
+  keySerializer.serialize(keyTuple,keysOutFile);
+  serializer.serialize(record,recordsOutFile);
+  recordCounter++;
+  return offset;
+}

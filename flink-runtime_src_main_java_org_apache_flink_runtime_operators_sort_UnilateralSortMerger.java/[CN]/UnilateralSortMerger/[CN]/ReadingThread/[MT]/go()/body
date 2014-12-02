@@ -15,12 +15,7 @@
         element=this.queues.empty.take();
       }
  catch (      InterruptedException iex) {
-        if (isRunning()) {
-          LOG.error("Reading thread was interrupted (without being shut down) while grabbing a buffer. " + "Retrying to grab buffer...");
-        }
- else {
-          return;
-        }
+        throw new IOException(iex);
       }
     }
     final InMemorySorter<E> buffer=element.buffer;
@@ -32,7 +27,13 @@
     }
     if (leftoverRecord != null) {
       if (!buffer.write(leftoverRecord)) {
-        throw new IOException("Record could not be written to empty buffer: Serialized record exceeds buffer capacity.");
+        if (this.largeRecords != null) {
+          this.largeRecords.addRecord(leftoverRecord);
+        }
+ else {
+          throw new IOException("The record exceeds the maximum size of a sort buffer (current maximum: " + buffer.getCapacity() + " bytes).");
+        }
+        buffer.reset();
       }
       leftoverRecord=null;
     }
@@ -104,6 +105,7 @@
       this.queues.sort.add(element);
     }
  else {
+      buffer.reset();
       this.queues.empty.add(element);
     }
     element=null;
