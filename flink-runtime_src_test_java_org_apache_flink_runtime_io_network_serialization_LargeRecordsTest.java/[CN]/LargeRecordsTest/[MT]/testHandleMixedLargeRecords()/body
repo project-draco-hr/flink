@@ -1,0 +1,68 @@
+{
+  try {
+    final int NUM_RECORDS=99;
+    final int SEGMENT_SIZE=32 * 1024;
+    final RecordSerializer<SerializationTestType> serializer=new SpanningRecordSerializer<SerializationTestType>();
+    final RecordDeserializer<SerializationTestType> deserializer=new AdaptiveSpanningRecordDeserializer<SerializationTestType>();
+    final Buffer buffer=new Buffer(new MemorySegment(new byte[SEGMENT_SIZE]),SEGMENT_SIZE,null);
+    List<SerializationTestType> originalRecords=new ArrayList<SerializationTestType>();
+    List<SerializationTestType> deserializedRecords=new ArrayList<SerializationTestType>();
+    LargeObjectType genLarge=new LargeObjectType();
+    Random rnd=new Random();
+    for (int i=0; i < NUM_RECORDS; i++) {
+      if (i % 2 == 0) {
+        originalRecords.add(new IntType(42));
+        deserializedRecords.add(new IntType());
+      }
+ else {
+        originalRecords.add(genLarge.getRandom(rnd));
+        deserializedRecords.add(new LargeObjectType());
+      }
+    }
+    serializer.setNextBuffer(buffer);
+    int numRecordsDeserialized=0;
+    for (    SerializationTestType record : originalRecords) {
+      if (serializer.addRecord(record).isFullBuffer()) {
+        deserializer.setNextMemorySegment(serializer.getCurrentBuffer().getMemorySegment(),SEGMENT_SIZE);
+        while (numRecordsDeserialized < deserializedRecords.size()) {
+          SerializationTestType next=deserializedRecords.get(numRecordsDeserialized);
+          if (deserializer.getNextRecord(next).isFullRecord()) {
+            assertEquals(originalRecords.get(numRecordsDeserialized),next);
+            numRecordsDeserialized++;
+          }
+ else {
+            break;
+          }
+        }
+        while (serializer.setNextBuffer(buffer).isFullBuffer()) {
+          deserializer.setNextMemorySegment(serializer.getCurrentBuffer().getMemorySegment(),SEGMENT_SIZE);
+        }
+        while (numRecordsDeserialized < deserializedRecords.size()) {
+          SerializationTestType next=deserializedRecords.get(numRecordsDeserialized);
+          if (deserializer.getNextRecord(next).isFullRecord()) {
+            assertEquals(originalRecords.get(numRecordsDeserialized),next);
+            numRecordsDeserialized++;
+          }
+ else {
+            break;
+          }
+        }
+      }
+    }
+    Buffer last=serializer.getCurrentBuffer();
+    deserializer.setNextMemorySegment(last.getMemorySegment(),last.size());
+    serializer.clear();
+    while (numRecordsDeserialized < deserializedRecords.size()) {
+      SerializationTestType next=deserializedRecords.get(numRecordsDeserialized);
+      assertTrue(deserializer.getNextRecord(next).isFullRecord());
+      assertEquals(originalRecords.get(numRecordsDeserialized),next);
+      numRecordsDeserialized++;
+    }
+    assertFalse(serializer.hasData());
+    assertFalse(deserializer.hasUnfinishedData());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
