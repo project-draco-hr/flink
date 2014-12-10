@@ -2,9 +2,26 @@
   if (this.rs == null) {
     throw new IOException("No table result scanner provided!");
   }
-  Result res=this.rs.next();
-  if (res != null) {
-    return mapResultToTuple(res);
+  try {
+    Result res=this.rs.next();
+    if (res != null) {
+      scannedRows++;
+      lastRow=res.getRow();
+      return mapResultToTuple(res);
+    }
+  }
+ catch (  Exception e) {
+    this.rs.close();
+    StringBuffer logMsg=new StringBuffer("Error after scan of ").append(scannedRows).append(" rows. Retry with a new scanner...");
+    LOG.warn(logMsg.toString(),e);
+    this.scan.setStartRow(lastRow);
+    this.rs=table.getScanner(scan);
+    Result res=this.rs.next();
+    if (res != null) {
+      scannedRows++;
+      lastRow=res.getRow();
+      return mapResultToTuple(res);
+    }
   }
   this.endReached=true;
   return null;
