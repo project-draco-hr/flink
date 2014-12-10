@@ -1,30 +1,39 @@
 {
   final FileStatus file=fs.getFileStatus(filePath);
   long latestModTime=file.getModificationTime();
+  long totalLength=0;
+  if (!acceptFile(file)) {
+    throw new IOException("The given file does not pass the file-filter");
+  }
   if (file.isDir()) {
     FileStatus[] fss=fs.listStatus(filePath);
     files.ensureCapacity(fss.length);
     for (    FileStatus s : fss) {
       if (!s.isDir()) {
-        files.add(s);
-        latestModTime=Math.max(s.getModificationTime(),latestModTime);
-        testForUnsplittable(s);
+        if (acceptFile(s)) {
+          files.add(s);
+          totalLength+=s.getLen();
+          latestModTime=Math.max(s.getModificationTime(),latestModTime);
+          testForUnsplittable(s);
+        }
+      }
+ else {
+        if (enumerateNestedFiles) {
+          totalLength+=addNestedFiles(s.getPath(),files,0);
+        }
       }
     }
   }
  else {
     files.add(file);
     testForUnsplittable(file);
+    totalLength+=file.getLen();
   }
   if (cachedStats != null && latestModTime <= cachedStats.getLastModificationTime()) {
     return cachedStats;
   }
-  long len=0;
-  for (  FileStatus s : files) {
-    len+=s.getLen();
+  if (totalLength <= 0) {
+    totalLength=BaseStatistics.SIZE_UNKNOWN;
   }
-  if (len <= 0) {
-    len=BaseStatistics.SIZE_UNKNOWN;
-  }
-  return new FileBaseStatistics(latestModTime,len,BaseStatistics.AVG_RECORD_BYTES_UNKNOWN);
+  return new FileBaseStatistics(latestModTime,totalLength,BaseStatistics.AVG_RECORD_BYTES_UNKNOWN);
 }
