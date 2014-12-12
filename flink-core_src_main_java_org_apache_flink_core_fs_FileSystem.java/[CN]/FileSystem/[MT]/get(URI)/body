@@ -23,26 +23,33 @@ synchronized (SYNCHRONIZATION_OBJECT) {
       return CACHE.get(key);
     }
     if (!FSDIRECTORY.containsKey(uri.getScheme())) {
-      throw new IOException("No file system found with scheme " + uri.getScheme() + ", referenced in file URI '"+ uri.toString()+ "'.");
+      Class<?> wrapperClass=getHadoopWrapperClassNameForFileSystem(uri.getScheme());
+      if (wrapperClass != null) {
+        FSKey wrappedKey=new FSKey(HADOOP_WRAPPER_SCHEME + "+" + uri.getScheme(),uri.getAuthority());
+        if (CACHE.containsKey(wrappedKey)) {
+          return CACHE.get(wrappedKey);
+        }
+        fs=instantiateHadoopFileSystemWrapper(wrapperClass);
+        fs.initialize(uri);
+        System.out.println("Initializing new instance of wrapper for " + wrapperClass);
+        CACHE.put(wrappedKey,fs);
+      }
+ else {
+        throw new IOException("No file system found with scheme " + uri.getScheme() + ", referenced in file URI '"+ uri.toString()+ "'.");
+      }
     }
-    Class<? extends FileSystem> fsClass;
-    try {
-      fsClass=ClassUtils.getFileSystemByName(FSDIRECTORY.get(uri.getScheme()));
+ else {
+      String fsClass=FSDIRECTORY.get(uri.getScheme());
+      if (fsClass.equals(HADOOP_WRAPPER_FILESYSTEM_CLASS)) {
+        fs=instantiateHadoopFileSystemWrapper(null);
+      }
+ else {
+        fs=instantiateFileSystem(fsClass);
+      }
+      System.out.println("Initializing new instance of native class for " + fsClass);
+      fs.initialize(uri);
+      CACHE.put(key,fs);
     }
- catch (    ClassNotFoundException e1) {
-      throw new IOException(StringUtils.stringifyException(e1));
-    }
-    try {
-      fs=fsClass.newInstance();
-    }
- catch (    InstantiationException e) {
-      throw new IOException("Could not instantiate file system class: " + e.getMessage(),e);
-    }
-catch (    IllegalAccessException e) {
-      throw new IOException("Could not instantiate file system class: " + e.getMessage(),e);
-    }
-    fs.initialize(uri);
-    CACHE.put(key,fs);
   }
   return fs;
 }
