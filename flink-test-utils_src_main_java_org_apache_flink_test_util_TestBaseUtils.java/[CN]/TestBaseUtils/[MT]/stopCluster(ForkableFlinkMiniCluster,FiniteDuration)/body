@@ -1,0 +1,21 @@
+{
+  if (executor != null) {
+    int numUnreleasedBCVars=0;
+{
+      List<ActorRef> tms=executor.getTaskManagersAsJava();
+      List<Future<Object>> responseFutures=new ArrayList<Future<Object>>();
+      for (      ActorRef tm : tms) {
+        responseFutures.add(Patterns.ask(tm,TestingTaskManagerMessages.RequestBroadcastVariablesWithReferences$.MODULE$,new Timeout(timeout)));
+      }
+      Future<Iterable<Object>> futureResponses=Futures.sequence(responseFutures,AkkaUtils.globalExecutionContext());
+      Iterable<Object> responses=Await.result(futureResponses,timeout);
+      for (      Object response : responses) {
+        numUnreleasedBCVars+=((TestingTaskManagerMessages.ResponseBroadcastVariablesWithReferences)response).number();
+      }
+    }
+    executor.stop();
+    FileSystem.closeAll();
+    System.gc();
+    Assert.assertEquals("Not all broadcast variables were released.",0,numUnreleasedBCVars);
+  }
+}

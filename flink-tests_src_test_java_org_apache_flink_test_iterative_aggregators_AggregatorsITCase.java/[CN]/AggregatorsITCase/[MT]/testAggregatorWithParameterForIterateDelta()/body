@@ -1,0 +1,15 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setDegreeOfParallelism(DOP);
+  DataSet<Tuple2<Integer,Integer>> initialSolutionSet=CollectionDataSets.getIntegerDataSet(env).map(new TupleMakerMap());
+  DeltaIteration<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> iteration=initialSolutionSet.iterateDelta(initialSolutionSet,MAX_ITERATIONS,0);
+  LongSumAggregator aggr=new LongSumAggregatorWithParameter(4);
+  iteration.registerAggregator(NEGATIVE_ELEMENTS_AGGR,aggr);
+  DataSet<Tuple2<Integer,Integer>> updatedDs=iteration.getWorkset().map(new AggregateMapDelta());
+  DataSet<Tuple2<Integer,Integer>> newElements=updatedDs.join(iteration.getSolutionSet()).where(0).equalTo(0).flatMap(new UpdateFilter());
+  DataSet<Tuple2<Integer,Integer>> iterationRes=iteration.closeWith(newElements,newElements);
+  DataSet<Integer> result=iterationRes.map(new ProjectSecondMapper());
+  result.writeAsText(resultPath);
+  env.execute();
+  expected="1\n" + "2\n" + "2\n"+ "3\n"+ "3\n"+ "3\n"+ "4\n"+ "4\n"+ "4\n"+ "4\n"+ "5\n"+ "5\n"+ "5\n"+ "5\n"+ "5\n";
+}
