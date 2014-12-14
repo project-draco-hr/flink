@@ -1,0 +1,29 @@
+{
+  int nonSpanningRemaining=this.nonSpanningWrapper.remaining();
+  if (nonSpanningRemaining >= 4) {
+    int len=this.nonSpanningWrapper.readInt();
+    if (len <= nonSpanningRemaining - 4) {
+      target.read(this.nonSpanningWrapper);
+      return (this.nonSpanningWrapper.remaining() == 0) ? DeserializationResult.LAST_RECORD_FROM_BUFFER : DeserializationResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+    }
+ else {
+      this.spanningWrapper.initializeWithPartialRecord(this.nonSpanningWrapper,len);
+      this.nonSpanningWrapper.clear();
+      return DeserializationResult.PARTIAL_RECORD;
+    }
+  }
+ else   if (nonSpanningRemaining > 0) {
+    this.spanningWrapper.initializeWithPartialLength(this.nonSpanningWrapper);
+    this.nonSpanningWrapper.clear();
+    return DeserializationResult.PARTIAL_RECORD;
+  }
+  if (this.spanningWrapper.hasFullRecord()) {
+    target.read(this.spanningWrapper.getInputView());
+    this.spanningWrapper.moveRemainderToNonSpanningDeserializer(this.nonSpanningWrapper);
+    this.spanningWrapper.clear();
+    return (this.nonSpanningWrapper.remaining() == 0) ? DeserializationResult.LAST_RECORD_FROM_BUFFER : DeserializationResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+  }
+ else {
+    return DeserializationResult.PARTIAL_RECORD;
+  }
+}

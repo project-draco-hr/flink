@@ -1,0 +1,45 @@
+{
+  int segmentPosition=0;
+  if (this.lengthBuffer.position() > 0) {
+    int toPut=Math.min(this.lengthBuffer.remaining(),numBytesInSegment);
+    segment.get(0,this.lengthBuffer,toPut);
+    if (this.lengthBuffer.hasRemaining()) {
+      return;
+    }
+ else {
+      this.recordLength=this.lengthBuffer.getInt(0);
+      this.lengthBuffer.clear();
+      segmentPosition=toPut;
+      if (this.recordLength > THRESHOLD_FOR_SPILLING) {
+        this.spillingChannel=createSpillingChannel();
+      }
+    }
+  }
+  int needed=this.recordLength - this.accumulatedRecordBytes;
+  int available=numBytesInSegment - segmentPosition;
+  int toCopy=Math.min(needed,available);
+  if (spillingChannel != null) {
+    ByteBuffer toWrite=segment.wrap(segmentPosition,toCopy);
+    this.spillingChannel.write(toWrite);
+  }
+ else {
+    ensureBufferCapacity(accumulatedRecordBytes + toCopy);
+    segment.get(segmentPosition,buffer,this.accumulatedRecordBytes,toCopy);
+  }
+  this.accumulatedRecordBytes+=toCopy;
+  if (toCopy < available) {
+    this.leftOverData=segment;
+    this.leftOverStart=segmentPosition + toCopy;
+    this.leftOverLimit=numBytesInSegment;
+  }
+  if (accumulatedRecordBytes == recordLength) {
+    if (spillingChannel == null) {
+      this.serializationReadBuffer.setBuffer(buffer,0,recordLength);
+    }
+ else {
+      spillingChannel.close();
+      DataInputStream inStream=new DataInputStream(new BufferedInputStream(new FileInputStream(spillFile),2 * 1024 * 1024));
+      this.spillFileReader=new InputViewDataInputStreamWrapper(inStream);
+    }
+  }
+}
