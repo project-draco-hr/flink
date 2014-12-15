@@ -8,14 +8,29 @@
   MutableObjectIterator<IT2> input2=this.taskContext.getInput(1);
   TypePairComparatorFactory<IT1,IT2> pairComparatorFactory=this.taskContext.getTaskConfig().getPairComparatorFactory(this.taskContext.getUserCodeClassLoader());
   double availableMemory=config.getRelativeMemoryDriver();
-  if (buildSideIndex == 0 && probeSideIndex == 1) {
-    matchIterator=new BuildFirstReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator21(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
-  }
- else   if (buildSideIndex == 1 && probeSideIndex == 0) {
-    matchIterator=new BuildSecondReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator12(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
+  ExecutionConfig executionConfig=taskContext.getExecutionConfig();
+  objectReuseEnabled=executionConfig.isObjectReuseEnabled();
+  if (objectReuseEnabled) {
+    if (buildSideIndex == 0 && probeSideIndex == 1) {
+      matchIterator=new ReusingBuildFirstReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator21(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
+    }
+ else     if (buildSideIndex == 1 && probeSideIndex == 0) {
+      matchIterator=new ReusingBuildSecondReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator12(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
+    }
+ else {
+      throw new Exception("Error: Inconsistent setup for repeatable hash join driver.");
+    }
   }
  else {
-    throw new Exception("Error: Inconcistent setup for repeatable hash join driver.");
+    if (buildSideIndex == 0 && probeSideIndex == 1) {
+      matchIterator=new NonReusingBuildFirstReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator21(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
+    }
+ else     if (buildSideIndex == 1 && probeSideIndex == 0) {
+      matchIterator=new NonReusingBuildSecondReOpenableHashMatchIterator<IT1,IT2,OT>(input1,input2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory.createComparator12(comparator1,comparator2),this.taskContext.getMemoryManager(),this.taskContext.getIOManager(),this.taskContext.getOwningNepheleTask(),availableMemory);
+    }
+ else {
+      throw new Exception("Error: Inconsistent setup for repeatable hash join driver.");
+    }
   }
   this.matchIterator.open();
 }

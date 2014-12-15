@@ -1,8 +1,17 @@
 {
   final MutableObjectIterator<T> input=this.taskContext.getInput(0);
   final Collector<T> output=this.taskContext.getOutputCollector();
-  T record=this.taskContext.<T>getInputSerializer(0).getSerializer().createInstance();
-  while (this.running && ((record=input.next(record)) != null)) {
-    output.collect(record);
+  if (objectReuseEnabled) {
+    T record=this.taskContext.<T>getInputSerializer(0).getSerializer().createInstance();
+    while (this.running && ((record=input.next(record)) != null)) {
+      output.collect(record);
+    }
+  }
+ else {
+    T record;
+    TypeSerializer<T> serializer=this.taskContext.<T>getInputSerializer(0).getSerializer();
+    while (this.running && ((record=input.next(serializer.createInstance())) != null)) {
+      output.collect(record);
+    }
   }
 }

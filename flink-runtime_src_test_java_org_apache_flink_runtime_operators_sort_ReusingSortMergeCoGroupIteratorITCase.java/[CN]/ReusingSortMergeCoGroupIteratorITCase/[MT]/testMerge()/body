@@ -1,0 +1,61 @@
+{
+  try {
+    generator1=new Generator(SEED1,500,4096,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
+    generator2=new Generator(SEED2,500,2048,KeyMode.SORTED,ValueMode.RANDOM_LENGTH);
+    reader1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
+    reader2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
+    Map<TestData.Key,Collection<TestData.Value>> expectedValuesMap1=collectData(generator1,INPUT_1_SIZE);
+    Map<TestData.Key,Collection<TestData.Value>> expectedValuesMap2=collectData(generator2,INPUT_2_SIZE);
+    Map<TestData.Key,List<Collection<TestData.Value>>> expectedCoGroupsMap=coGroupValues(expectedValuesMap1,expectedValuesMap2);
+    generator1.reset();
+    generator2.reset();
+    ReusingSortMergeCoGroupIterator<Record,Record> iterator=new ReusingSortMergeCoGroupIterator<Record,Record>(this.reader1,this.reader2,this.serializer1,this.comparator1,this.serializer2,this.comparator2,this.pairComparator);
+    iterator.open();
+    final TestData.Key key=new TestData.Key();
+    while (iterator.next()) {
+      Iterator<Record> iter1=iterator.getValues1().iterator();
+      Iterator<Record> iter2=iterator.getValues2().iterator();
+      TestData.Value v1=null;
+      TestData.Value v2=null;
+      if (iter1.hasNext()) {
+        Record rec=iter1.next();
+        rec.getFieldInto(0,key);
+        v1=rec.getField(1,TestData.Value.class);
+      }
+ else       if (iter2.hasNext()) {
+        Record rec=iter2.next();
+        rec.getFieldInto(0,key);
+        v2=rec.getField(1,TestData.Value.class);
+      }
+ else {
+        Assert.fail("No input on both sides.");
+      }
+      Assert.assertTrue("No matches for key " + key,expectedCoGroupsMap.containsKey(key));
+      Collection<TestData.Value> expValues1=expectedCoGroupsMap.get(key).get(0);
+      Collection<TestData.Value> expValues2=expectedCoGroupsMap.get(key).get(1);
+      if (v1 != null) {
+        expValues1.remove(v1);
+      }
+ else {
+        expValues2.remove(v2);
+      }
+      while (iter1.hasNext()) {
+        Record rec=iter1.next();
+        Assert.assertTrue("Value not in expected set of first input",expValues1.remove(rec.getField(1,TestData.Value.class)));
+      }
+      Assert.assertTrue("Expected set of first input not empty",expValues1.isEmpty());
+      while (iter2.hasNext()) {
+        Record rec=iter2.next();
+        Assert.assertTrue("Value not in expected set of second input",expValues2.remove(rec.getField(1,TestData.Value.class)));
+      }
+      Assert.assertTrue("Expected set of second input not empty",expValues2.isEmpty());
+      expectedCoGroupsMap.remove(key);
+    }
+    iterator.close();
+    Assert.assertTrue("Expected key set not empty",expectedCoGroupsMap.isEmpty());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("An exception occurred during the test: " + e.getMessage());
+  }
+}

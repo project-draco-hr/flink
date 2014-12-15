@@ -7,19 +7,42 @@
     final ReduceFunction<T> function=this.reducer;
     final Collector<T> output=this.output;
     final MutableObjectIterator<T> input=sorter.getIterator();
-    T value=input.next(serializer.createInstance());
-    while (this.running && value != null) {
-      comparator.setReference(value);
-      T res=value;
-      while ((value=input.next(serializer.createInstance())) != null) {
-        if (comparator.equalToReference(value)) {
-          res=function.reduce(res,value);
-        }
+    if (objectReuseEnabled) {
+      T reuse1=serializer.createInstance();
+      T reuse2=serializer.createInstance();
+      T value=input.next(reuse1);
+      while (this.running && value != null) {
+        comparator.setReference(value);
+        T res=value;
+        while ((value=input.next(reuse2)) != null) {
+          if (comparator.equalToReference(value)) {
+            res=function.reduce(res,value);
+          }
  else {
-          break;
+            break;
+          }
+        }
+        output.collect(res);
+        if (value != null) {
+          value=serializer.copy(value,reuse1);
         }
       }
-      output.collect(res);
+    }
+ else {
+      T value=input.next(serializer.createInstance());
+      while (this.running && value != null) {
+        comparator.setReference(value);
+        T res=value;
+        while ((value=input.next(serializer.createInstance())) != null) {
+          if (comparator.equalToReference(value)) {
+            res=function.reduce(res,value);
+          }
+ else {
+            break;
+          }
+        }
+        output.collect(res);
+      }
     }
   }
 }

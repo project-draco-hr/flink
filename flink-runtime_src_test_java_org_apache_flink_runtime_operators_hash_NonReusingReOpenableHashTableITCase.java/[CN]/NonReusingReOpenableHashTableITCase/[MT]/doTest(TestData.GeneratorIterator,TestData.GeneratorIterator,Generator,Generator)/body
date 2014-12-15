@@ -1,0 +1,36 @@
+{
+  final Map<Key,Collection<RecordMatch>> expectedFirstMatchesMap=NonReusingHashMatchIteratorITCase.matchRecordValues(NonReusingHashMatchIteratorITCase.collectRecordData(buildInput),NonReusingHashMatchIteratorITCase.collectRecordData(probeInput));
+  final List<Map<Key,Collection<RecordMatch>>> expectedNMatchesMapList=new ArrayList<Map<Key,Collection<RecordMatch>>>(NUM_PROBES);
+  final JoinFunction[] nMatcher=new RecordMatchRemovingJoin[NUM_PROBES];
+  for (int i=0; i < NUM_PROBES; i++) {
+    Map<Key,Collection<RecordMatch>> tmp;
+    expectedNMatchesMapList.add(tmp=deepCopy(expectedFirstMatchesMap));
+    nMatcher[i]=new RecordMatchRemovingJoin(tmp);
+  }
+  final JoinFunction firstMatcher=new RecordMatchRemovingJoin(expectedFirstMatchesMap);
+  final Collector<Record> collector=new DiscardingOutputCollector<Record>();
+  bgen.reset();
+  pgen.reset();
+  buildInput.reset();
+  probeInput.reset();
+  NonReusingBuildFirstReOpenableHashMatchIterator<Record,Record,Record> iterator=new NonReusingBuildFirstReOpenableHashMatchIterator<Record,Record,Record>(buildInput,probeInput,this.recordSerializer,this.record1Comparator,this.recordSerializer,this.record2Comparator,this.recordPairComparator,this.memoryManager,ioManager,this.parentTask,1.0);
+  iterator.open();
+  while (iterator.callWithNextKey(firstMatcher,collector))   ;
+  for (  Entry<Key,Collection<RecordMatch>> entry : expectedFirstMatchesMap.entrySet()) {
+    if (!entry.getValue().isEmpty()) {
+      Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+    }
+  }
+  for (int i=0; i < NUM_PROBES; i++) {
+    pgen.reset();
+    probeInput.reset();
+    iterator.reopenProbe(probeInput);
+    while (iterator.callWithNextKey(nMatcher[i],collector))     ;
+    for (    Entry<Key,Collection<RecordMatch>> entry : expectedNMatchesMapList.get(i).entrySet()) {
+      if (!entry.getValue().isEmpty()) {
+        Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+      }
+    }
+  }
+  iterator.close();
+}

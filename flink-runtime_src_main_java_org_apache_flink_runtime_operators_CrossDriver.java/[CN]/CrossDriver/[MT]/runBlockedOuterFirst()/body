@@ -10,22 +10,36 @@
   this.blockIter=blockVals;
   final SpillingResettableMutableObjectIterator<T2> spillVals=new SpillingResettableMutableObjectIterator<T2>(in2,serializer2,this.memManager,this.taskContext.getIOManager(),this.memPagesForSpillingSide,this.taskContext.getOwningNepheleTask());
   this.spillIter=spillVals;
-  T1 val1;
-  final T1 val1Reuse=serializer1.createInstance();
-  T2 val2;
-  final T2 val2Reuse=serializer2.createInstance();
-  T2 val2Copy=serializer2.createInstance();
   final CrossFunction<T1,T2,OT> crosser=this.taskContext.getStub();
   final Collector<OT> collector=this.taskContext.getOutputCollector();
-  do {
-    while (this.running && ((val2=spillVals.next(val2Reuse)) != null)) {
-      while ((val1=blockVals.next(val1Reuse)) != null) {
-        val2Copy=serializer2.copy(val2,val2Copy);
-        collector.collect(crosser.cross(val1,val2Copy));
+  if (objectReuseEnabled) {
+    final T1 val1Reuse=serializer1.createInstance();
+    final T2 val2Reuse=serializer2.createInstance();
+    T1 val1;
+    T2 val2;
+    do {
+      while (this.running && ((val2=spillVals.next(val2Reuse)) != null)) {
+        while ((val1=blockVals.next(val1Reuse)) != null) {
+          collector.collect(crosser.cross(val1,val2));
+        }
+        blockVals.reset();
       }
-      blockVals.reset();
+      spillVals.reset();
     }
-    spillVals.reset();
-  }
  while (this.running && blockVals.nextBlock());
+  }
+ else {
+    T1 val1;
+    T2 val2;
+    do {
+      while (this.running && ((val2=spillVals.next()) != null)) {
+        while ((val1=blockVals.next()) != null) {
+          collector.collect(crosser.cross(val1,serializer2.copy(val2)));
+        }
+        blockVals.reset();
+      }
+      spillVals.reset();
+    }
+ while (this.running && blockVals.nextBlock());
+  }
 }

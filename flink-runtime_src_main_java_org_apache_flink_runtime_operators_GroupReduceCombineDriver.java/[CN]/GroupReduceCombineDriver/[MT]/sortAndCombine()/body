@@ -1,12 +1,25 @@
 {
   final InMemorySorter<T> sorter=this.sorter;
-  if (!sorter.isEmpty()) {
-    this.sortAlgo.sort(sorter);
-    final KeyGroupedIterator<T> keyIter=new KeyGroupedIterator<T>(sorter.getIterator(),this.serializer,this.groupingComparator);
-    final FlatCombineFunction<T> combiner=this.combiner;
-    final Collector<T> output=this.output;
-    while (this.running && keyIter.nextKey()) {
-      combiner.combine(keyIter.getValues(),output);
+  if (objectReuseEnabled) {
+    if (!sorter.isEmpty()) {
+      this.sortAlgo.sort(sorter);
+      final ReusingKeyGroupedIterator<T> keyIter=new ReusingKeyGroupedIterator<T>(sorter.getIterator(),this.serializer,this.groupingComparator);
+      final FlatCombineFunction<T> combiner=this.combiner;
+      final Collector<T> output=this.output;
+      while (this.running && keyIter.nextKey()) {
+        combiner.combine(keyIter.getValues(),output);
+      }
+    }
+  }
+ else {
+    if (!sorter.isEmpty()) {
+      this.sortAlgo.sort(sorter);
+      final NonReusingKeyGroupedIterator<T> keyIter=new NonReusingKeyGroupedIterator<T>(sorter.getIterator(),this.serializer,this.groupingComparator);
+      final FlatCombineFunction<T> combiner=this.combiner;
+      final Collector<T> output=this.output;
+      while (this.running && keyIter.nextKey()) {
+        combiner.combine(keyIter.getValues(),output);
+      }
     }
   }
 }

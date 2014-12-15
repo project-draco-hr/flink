@@ -13,7 +13,17 @@
   if (pairComparatorFactory == null) {
     throw new Exception("Missing pair comparator factory for CoGroup driver");
   }
-  this.coGroupIterator=new SortMergeCoGroupIterator<IT1,IT2>(in1,in2,serializer1,groupComparator1,serializer2,groupComparator2,pairComparatorFactory.createComparator12(groupComparator1,groupComparator2));
+  ExecutionConfig executionConfig=taskContext.getExecutionConfig();
+  this.objectReuseEnabled=executionConfig.isObjectReuseEnabled();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("CoGroupDriver object reuse: " + (this.objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+  }
+  if (objectReuseEnabled) {
+    this.coGroupIterator=new ReusingSortMergeCoGroupIterator<IT1,IT2>(in1,in2,serializer1,groupComparator1,serializer2,groupComparator2,pairComparatorFactory.createComparator12(groupComparator1,groupComparator2));
+  }
+ else {
+    this.coGroupIterator=new NonReusingSortMergeCoGroupIterator<IT1,IT2>(in1,in2,serializer1,groupComparator1,serializer2,groupComparator2,pairComparatorFactory.createComparator12(groupComparator1,groupComparator2));
+  }
   this.coGroupIterator.open();
   if (LOG.isDebugEnabled()) {
     LOG.debug(this.taskContext.formatLogString("CoGroup task iterator ready."));

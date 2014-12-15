@@ -2,6 +2,23 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug(getLogString("Starting data source operator"));
   }
+  ExecutionConfig executionConfig=new ExecutionConfig();
+  try {
+    ExecutionConfig c=(ExecutionConfig)InstantiationUtil.readObjectFromConfig(getJobConfiguration(),ExecutionConfig.CONFIG_KEY,this.getClass().getClassLoader());
+    if (c != null) {
+      executionConfig=c;
+    }
+  }
+ catch (  IOException e) {
+    throw new RuntimeException("Could not load ExecutionConfig from Job Configuration: " + e);
+  }
+catch (  ClassNotFoundException e) {
+    throw new RuntimeException("Could not load ExecutionConfig from Job Configuration: " + e);
+  }
+  boolean objectReuseEnabled=executionConfig.isObjectReuseEnabled();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("DataSourceTask object reuse: " + (objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+  }
   final TypeSerializer<OT> serializer=this.serializerFactory.getSerializer();
   try {
     RegularPactTask.initOutputWriters(this.eventualOutputs);
@@ -9,7 +26,6 @@
     final Iterator<InputSplit> splitIterator=getInputSplits();
     while (!this.taskCanceled && splitIterator.hasNext()) {
       final InputSplit split=splitIterator.next();
-      OT record=serializer.createInstance();
       if (LOG.isDebugEnabled()) {
         LOG.debug(getLogString("Opening input split " + split.toString()));
       }
@@ -19,33 +35,21 @@
         LOG.debug(getLogString("Starting to read input from split " + split.toString()));
       }
       try {
-        if (this.output instanceof OutputCollector) {
-          final OutputCollector<OT> output=(OutputCollector<OT>)this.output;
+        final Collector<OT> output=this.output;
+        if (objectReuseEnabled) {
+          OT reuse=serializer.createInstance();
           while (!this.taskCanceled && !format.reachedEnd()) {
             OT returned;
-            if ((returned=format.nextRecord(record)) != null) {
+            if ((returned=format.nextRecord(reuse)) != null) {
               output.collect(returned);
-              record=returned;
-            }
-          }
-        }
- else         if (this.output instanceof ChainedCollectorMapDriver) {
-          @SuppressWarnings("unchecked") final ChainedCollectorMapDriver<OT,?> output=(ChainedCollectorMapDriver<OT,?>)this.output;
-          while (!this.taskCanceled && !format.reachedEnd()) {
-            OT returned;
-            if ((returned=format.nextRecord(record)) != null) {
-              output.collect(returned);
-              record=returned;
             }
           }
         }
  else {
-          final Collector<OT> output=this.output;
           while (!this.taskCanceled && !format.reachedEnd()) {
             OT returned;
-            if ((returned=format.nextRecord(record)) != null) {
+            if ((returned=format.nextRecord(serializer.createInstance())) != null) {
               output.collect(returned);
-              record=returned;
             }
           }
         }

@@ -1,0 +1,28 @@
+{
+  try {
+    Generator generator1=new Generator(SEED1,500,4096,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    Generator generator2=new Generator(SEED2,500,2048,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.GeneratorIterator input1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
+    final TestData.GeneratorIterator input2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
+    final Map<TestData.Key,Collection<RecordMatch>> expectedMatchesMap=matchRecordValues(collectRecordData(input1),collectRecordData(input2));
+    final JoinFunction matcher=new RecordMatchRemovingJoin(expectedMatchesMap);
+    final Collector<Record> collector=new DiscardingOutputCollector<Record>();
+    generator1.reset();
+    generator2.reset();
+    input1.reset();
+    input2.reset();
+    ReusingBuildFirstHashMatchIterator<Record,Record,Record> iterator=new ReusingBuildFirstHashMatchIterator<Record,Record,Record>(input1,input2,this.recordSerializer,this.record1Comparator,this.recordSerializer,this.record2Comparator,this.recordPairComparator,this.memoryManager,ioManager,this.parentTask,1.0);
+    iterator.open();
+    while (iterator.callWithNextKey(matcher,collector))     ;
+    iterator.close();
+    for (    Entry<TestData.Key,Collection<RecordMatch>> entry : expectedMatchesMap.entrySet()) {
+      if (!entry.getValue().isEmpty()) {
+        Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+      }
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    Assert.fail("An exception occurred during the test: " + e.getMessage());
+  }
+}
