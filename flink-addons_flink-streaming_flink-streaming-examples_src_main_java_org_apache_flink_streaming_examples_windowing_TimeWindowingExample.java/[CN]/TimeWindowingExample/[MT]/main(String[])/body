@@ -1,19 +1,14 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
-  env.setBufferTimeout(100);
-  KeySelector<Integer,Integer> myKey=new KeySelector<Integer,Integer>(){
-    private static final long serialVersionUID=1L;
-    @Override public Integer getKey(    Integer value) throws Exception {
-      if (value < 2) {
-        return 0;
-      }
- else {
-        return 1;
-      }
-    }
+  if (!parseParameters(args)) {
+    return;
   }
-;
-  DataStream<Integer> stream=env.addSource(new CountingSourceWithSleep()).window(Count.of(100)).every(Time.of(1000,TimeUnit.MILLISECONDS)).groupBy(myKey).sum(0);
-  stream.print();
-  env.execute();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Integer> stream=env.addSource(new CountingSourceWithSleep()).window(Count.of(100)).every(Time.of(1000,TimeUnit.MILLISECONDS)).groupBy(new MyKey()).sum(0);
+  if (fileOutput) {
+    stream.writeAsText(outputPath,1);
+  }
+ else {
+    stream.print();
+  }
+  env.execute("Time Windowing Example");
 }

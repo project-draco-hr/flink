@@ -1,20 +1,14 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
-  GroupReduceFunction<String,String> reducer=new GroupReduceFunction<String,String>(){
-    /** 
- * Auto generates version ID
- */
-    private static final long serialVersionUID=1L;
-    @Override public void reduce(    Iterable<String> values,    Collector<String> out) throws Exception {
-      String output="|";
-      for (      String v : values) {
-        output=output + v + "|";
-      }
-      out.collect(output);
-    }
+  if (!parseParameters(args)) {
+    return;
   }
-;
-  DataStream<String> stream=env.addSource(new BasicSource()).groupBy(0).window(Count.of(2)).every(Count.of(3),Count.of(5)).reduceGroup(reducer);
-  stream.print();
-  env.execute();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<String> stream=env.addSource(new BasicSource()).groupBy(0).window(Count.of(2)).every(Count.of(3),Count.of(5)).reduceGroup(new Concat());
+  if (fileOutput) {
+    stream.writeAsText(outputPath,1);
+  }
+ else {
+    stream.print();
+  }
+  env.execute("Multiple Policies Example");
 }

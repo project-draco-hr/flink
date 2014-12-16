@@ -1,12 +1,14 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
-  ReduceFunction<Tuple3<Double,Double,String>> concatStrings=new ReduceFunction<Tuple3<Double,Double,String>>(){
-    @Override public Tuple3 reduce(    Tuple3 value1,    Tuple3 value2) throws Exception {
-      return new Tuple3(value1.f0,value2.f1,value1.f2 + "|" + value2.f2);
-    }
+  if (!parseParameters(args)) {
+    return;
   }
-;
-  DataStream dstream=env.addSource(new CountingSource()).window(Delta.of(new EuclideanDistance(new FieldsFromTuple(0,1)),new Tuple3(0d,0d,"foo"),1.2)).every(Count.of(2)).reduce(concatStrings);
-  dstream.print();
-  env.execute();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  @SuppressWarnings({"unchecked","rawtypes"}) DataStream dstream=env.addSource(new CountingSource()).window(Delta.of(new EuclideanDistance(new FieldsFromTuple(0,1)),new Tuple3(0d,0d,"foo"),1.2)).every(Count.of(2)).reduce(new ConcatStrings());
+  if (fileOutput) {
+    dstream.writeAsText(outputPath,1);
+  }
+ else {
+    dstream.print();
+  }
+  env.execute("Delta Extract Example");
 }

@@ -1,16 +1,14 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(PARALLELISM);
-  ReduceFunction<String> reduceFunction=new ReduceFunction<String>(){
-    /** 
- * default version ID
- */
-    private static final long serialVersionUID=1L;
-    @Override public String reduce(    String value1,    String value2) throws Exception {
-      return value1 + "|" + value2;
-    }
+  if (!parseParameters(args)) {
+    return;
   }
-;
-  DataStream<String> stream=env.addSource(new CountingSource()).window(Count.of(5).withDelete(4)).every(Count.of(4).startingAt(-1)).reduce(reduceFunction);
-  stream.print();
-  env.execute();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<String> stream=env.addSource(new CountingSource()).window(Count.of(5).withDelete(4)).every(Count.of(4).startingAt(-1)).reduce(new Concat());
+  if (fileOutput) {
+    stream.writeAsText(outputPath,1);
+  }
+ else {
+    stream.print();
+  }
+  env.execute("Sliding Example");
 }
