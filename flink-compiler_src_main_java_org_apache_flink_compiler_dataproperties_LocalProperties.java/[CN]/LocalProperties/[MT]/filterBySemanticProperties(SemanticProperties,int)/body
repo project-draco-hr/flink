@@ -1,79 +1,81 @@
 {
-  Ordering no=this.ordering;
-  FieldList ngf=this.groupedFields;
-  Set<FieldSet> nuf=this.uniqueFields;
-  FieldList forwardList=null;
   if (props == null) {
-    return new LocalProperties();
+    throw new NullPointerException("SemanticProperties may not be null.");
   }
+  LocalProperties returnProps=new LocalProperties();
   if (this.ordering != null) {
-    no=new Ordering();
-    final FieldList involvedIndexes=this.ordering.getInvolvedIndexes();
-    for (int i=0; i < involvedIndexes.size(); i++) {
-      forwardList=props.getForwardFields(input,involvedIndexes.get(i)) == null ? null : props.getForwardFields(input,involvedIndexes.get(i)).toFieldList();
-      if (forwardList == null) {
-        no=null;
-        ngf=null;
-        break;
-      }
- else {
-        no.appendOrdering(forwardList.get(0),this.ordering.getType(i),this.ordering.getOrder(i));
-        ngf=no.getInvolvedIndexes();
-      }
-    }
-  }
- else   if (this.groupedFields != null) {
-    for (    Integer index : this.groupedFields) {
-      forwardList=props.getForwardFields(input,index) == null ? null : props.getForwardFields(input,index).toFieldList();
-      if (forwardList == null) {
-        ngf=null;
-        break;
-      }
- else       if (!forwardList.contains(index)) {
-        FieldList grouped=new FieldList();
-        for (        Integer value : ngf.toFieldList()) {
-          if (value.intValue() == index) {
-            grouped=grouped.addFields(forwardList);
-          }
- else {
-            grouped=grouped.addField(value);
-          }
-        }
-        ngf=grouped;
-      }
-    }
-  }
-  if (this.uniqueFields != null) {
-    HashSet<FieldSet> newSet=new HashSet<FieldSet>();
-    newSet.addAll(this.uniqueFields);
-    for (Iterator<FieldSet> combos=this.uniqueFields.iterator(); combos.hasNext(); ) {
-      FieldSet current=combos.next();
-      FieldSet nfs=new FieldSet();
-      for (      Integer field : current) {
-        if (props.getForwardFields(input,field) == null) {
-          newSet.remove(current);
-          nfs=null;
+    Ordering newOrdering=new Ordering();
+    for (int i=0; i < this.ordering.getInvolvedIndexes().size(); i++) {
+      int sourceField=this.ordering.getInvolvedIndexes().get(i);
+      FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+      if (targetField == null || targetField.size() == 0) {
+        if (i == 0) {
+          newOrdering=null;
           break;
         }
  else {
-          nfs=nfs.addFields(props.getForwardFields(input,field));
+          break;
         }
       }
-      if (nfs != null) {
-        newSet.remove(current);
-        newSet.add(nfs);
+ else {
+        if (targetField.size() > 1) {
+          LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+        }
+        newOrdering.appendOrdering(targetField.toArray()[0],this.ordering.getType(i),this.ordering.getOrder(i));
       }
     }
-    nuf=newSet.isEmpty() ? null : newSet;
-  }
-  if (no == this.ordering && ngf == this.groupedFields && nuf == this.uniqueFields) {
-    return this;
-  }
+    returnProps.ordering=newOrdering;
+    if (newOrdering != null) {
+      returnProps.groupedFields=newOrdering.getInvolvedIndexes();
+    }
  else {
-    LocalProperties lp=new LocalProperties();
-    lp.ordering=no;
-    lp.groupedFields=ngf;
-    lp.uniqueFields=nuf;
-    return lp;
+      returnProps.groupedFields=null;
+    }
   }
+ else   if (this.groupedFields != null) {
+    FieldList newGroupedFields=new FieldList();
+    for (    Integer sourceField : this.groupedFields) {
+      FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+      if (targetField == null || targetField.size() == 0) {
+        newGroupedFields=null;
+        break;
+      }
+ else {
+        if (targetField.size() > 1) {
+          LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+        }
+        newGroupedFields=newGroupedFields.addField(targetField.toArray()[0]);
+      }
+    }
+    returnProps.groupedFields=newGroupedFields;
+  }
+  if (this.uniqueFields != null) {
+    Set<FieldSet> newUniqueFields=new HashSet<FieldSet>();
+    for (    FieldSet fields : this.uniqueFields) {
+      FieldSet newFields=new FieldSet();
+      for (      Integer sourceField : fields) {
+        FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+        if (targetField == null || targetField.size() == 0) {
+          newFields=null;
+          break;
+        }
+ else {
+          if (targetField.size() > 1) {
+            LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+          }
+          newFields=newFields.addField(targetField.toArray()[0]);
+        }
+      }
+      if (newFields != null) {
+        newUniqueFields.add(newFields);
+      }
+    }
+    if (!newUniqueFields.isEmpty()) {
+      returnProps.uniqueFields=newUniqueFields;
+    }
+ else {
+      returnProps.uniqueFields=null;
+    }
+  }
+  return returnProps;
 }

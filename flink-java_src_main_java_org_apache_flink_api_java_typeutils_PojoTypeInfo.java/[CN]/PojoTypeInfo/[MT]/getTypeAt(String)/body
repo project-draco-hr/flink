@@ -1,0 +1,36 @@
+{
+  Matcher matcher=PATTERN_NESTED_FIELDS.matcher(fieldExpression);
+  if (!matcher.matches()) {
+    if (fieldExpression.startsWith(ExpressionKeys.SELECT_ALL_CHAR) || fieldExpression.startsWith(ExpressionKeys.SELECT_ALL_CHAR_SCALA)) {
+      throw new InvalidFieldReferenceException("Wildcard expressions are not allowed here.");
+    }
+ else {
+      throw new InvalidFieldReferenceException("Invalid format of POJO field expression \"" + fieldExpression + "\".");
+    }
+  }
+  String field=matcher.group(1);
+  int fieldPos=-1;
+  TypeInformation<?> fieldType=null;
+  for (int i=0; i < fields.length; i++) {
+    if (fields[i].field.getName().equals(field)) {
+      fieldPos=i;
+      fieldType=fields[i].type;
+      break;
+    }
+  }
+  if (fieldPos == -1) {
+    throw new InvalidFieldReferenceException("Unable to find field \"" + field + "\" in type "+ this+ ".");
+  }
+  String tail=matcher.group(3);
+  if (tail == null) {
+    return fieldType;
+  }
+ else {
+    if (fieldType instanceof CompositeType<?>) {
+      return ((CompositeType)fieldType).getTypeAt(tail);
+    }
+ else {
+      throw new InvalidFieldReferenceException("Nested field expression \"" + tail + "\" not possible on atomic type "+ fieldType+ ".");
+    }
+  }
+}

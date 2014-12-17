@@ -1,0 +1,34 @@
+{
+  Matcher matcher=PATTERN_NESTED_FIELDS.matcher(fieldExpression);
+  if (!matcher.matches()) {
+    if (fieldExpression.equals(ExpressionKeys.SELECT_ALL_CHAR) || fieldExpression.equals(ExpressionKeys.SELECT_ALL_CHAR_SCALA)) {
+      throw new InvalidFieldReferenceException("Wildcard expressions are not allowed here.");
+    }
+ else {
+      throw new InvalidFieldReferenceException("Invalid format of tuple field expression \"" + fieldExpression + "\".");
+    }
+  }
+  String fieldStr=matcher.group(1);
+  Matcher fieldMatcher=PATTERN_FIELD.matcher(fieldStr);
+  if (!fieldMatcher.matches()) {
+    throw new RuntimeException("Invalid matcher pattern");
+  }
+  String field=fieldMatcher.group(2);
+  int fieldPos=Integer.valueOf(field);
+  if (fieldPos >= this.getArity()) {
+    throw new InvalidFieldReferenceException("Tuple field expression \"" + fieldStr + "\" out of bounds of "+ this.toString()+ ".");
+  }
+  TypeInformation<X> fieldType=this.getTypeAt(fieldPos);
+  String tail=matcher.group(5);
+  if (tail == null) {
+    return fieldType;
+  }
+ else {
+    if (fieldType instanceof CompositeType<?>) {
+      return ((CompositeType)fieldType).getTypeAt(tail);
+    }
+ else {
+      throw new InvalidFieldReferenceException("Nested field expression \"" + tail + "\" not possible on atomic type "+ fieldType+ ".");
+    }
+  }
+}

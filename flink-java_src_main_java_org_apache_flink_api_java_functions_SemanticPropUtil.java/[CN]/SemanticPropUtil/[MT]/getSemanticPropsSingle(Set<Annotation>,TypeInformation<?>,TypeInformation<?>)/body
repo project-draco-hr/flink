@@ -1,29 +1,32 @@
 {
   if (set == null) {
-    return null;
+    return new SingleInputSemanticProperties();
   }
   Iterator<Annotation> it=set.iterator();
-  SingleInputSemanticProperties result=null;
-  if (!inType.isTupleType() || !outType.isTupleType()) {
-    return null;
-  }
+  String[] forwarded=null;
+  String[] nonForwarded=null;
+  String[] read=null;
   while (it.hasNext()) {
-    if (result == null) {
-      result=new SingleInputSemanticProperties();
-    }
     Annotation ann=it.next();
-    if (ann instanceof ConstantFields) {
-      ConstantFields cf=(ConstantFields)ann;
-      parseConstantFields(cf.value(),result,inType,outType);
+    if (ann instanceof ForwardedFields) {
+      forwarded=((ForwardedFields)ann).value();
     }
- else     if (ann instanceof ConstantFieldsExcept) {
-      ConstantFieldsExcept cfe=(ConstantFieldsExcept)ann;
-      parseConstantFieldsExcept(cfe.value(),result,inType,outType);
+ else     if (ann instanceof NonForwardedFields) {
+      nonForwarded=((NonForwardedFields)ann).value();
     }
  else     if (ann instanceof ReadFields) {
-      ReadFields rf=(ReadFields)ann;
-      parseReadFields(rf.value(),result,inType,outType);
+      read=((ReadFields)ann).value();
+    }
+ else     if (ann instanceof ForwardedFieldsFirst || ann instanceof ForwardedFieldsSecond || ann instanceof NonForwardedFieldsFirst|| ann instanceof NonForwardedFieldsSecond|| ann instanceof ReadFieldsFirst|| ann instanceof ReadFieldsSecond) {
+      throw new InvalidSemanticAnnotationException("Annotation " + ann.getClass() + " invalid for single input function.");
     }
   }
-  return result;
+  if (forwarded != null || nonForwarded != null || read != null) {
+    SingleInputSemanticProperties result=new SingleInputSemanticProperties();
+    getSemanticPropsSingleFromString(result,forwarded,nonForwarded,read,inType,outType);
+    return result;
+  }
+ else {
+    return new SingleInputSemanticProperties();
+  }
 }

@@ -1,41 +1,47 @@
 {
-  FieldList sourceList;
-  RequestedGlobalProperties returnProps=null;
+  RequestedGlobalProperties returnProps=new RequestedGlobalProperties();
   if (props == null) {
+    throw new NullPointerException("SemanticProperties may not be null.");
+  }
+  RequestedGlobalProperties rgProp=new RequestedGlobalProperties();
+switch (this.partitioning) {
+case FULL_REPLICATION:
+case FORCED_REBALANCED:
+case CUSTOM_PARTITIONING:
+case RANDOM:
+    return null;
+case HASH_PARTITIONED:
+case ANY_PARTITIONING:
+  FieldSet newFields=new FieldSet();
+for (Integer targetField : this.partitioningFields) {
+  int sourceField=props.getForwardingSourceField(input,targetField);
+  if (sourceField >= 0) {
+    newFields=newFields.addField(sourceField);
+  }
+ else {
     return null;
   }
-  if (this.ordering != null) {
-    Ordering no=new Ordering();
-    returnProps=new RequestedGlobalProperties();
-    returnProps.setPartitioningFields(new FieldSet(),this.partitioning);
-    for (int index=0; index < this.ordering.getInvolvedIndexes().size(); index++) {
-      int value=this.ordering.getInvolvedIndexes().get(index);
-      sourceList=props.getSourceField(input,value) == null ? null : props.getSourceField(input,value).toFieldList();
-      if (sourceList != null) {
-        no.appendOrdering(sourceList.get(0),this.ordering.getType(index),this.ordering.getOrder(index));
-      }
+}
+rgProp.partitioning=this.partitioning;
+rgProp.partitioningFields=newFields;
+return rgProp;
+case RANGE_PARTITIONED:
+Ordering newOrdering=new Ordering();
+for (int i=0; i < this.ordering.getInvolvedIndexes().size(); i++) {
+int value=this.ordering.getInvolvedIndexes().get(i);
+int sourceField=props.getForwardingSourceField(input,value);
+if (sourceField >= 0) {
+newOrdering.appendOrdering(sourceField,this.ordering.getType(i),this.ordering.getOrder(i));
+}
  else {
-        return null;
-      }
-    }
-    returnProps.setOrdering(no);
-  }
- else   if (this.partitioningFields != null) {
-    returnProps=new RequestedGlobalProperties();
-    returnProps.setPartitioningFields(new FieldSet(),this.partitioning);
-    for (    Integer index : this.partitioningFields) {
-      sourceList=props.getSourceField(input,index) == null ? null : props.getSourceField(input,index).toFieldList();
-      if (sourceList != null) {
-        returnProps.setPartitioningFields(returnProps.getPartitionedFields().addFields(sourceList),this.partitioning);
-      }
- else {
-        return null;
-      }
-    }
-  }
-  final PartitioningProperty partitioning=this.partitioning;
-  if (partitioning == PartitioningProperty.FULL_REPLICATION || partitioning == PartitioningProperty.FORCED_REBALANCED || partitioning == PartitioningProperty.CUSTOM_PARTITIONING) {
-    return null;
-  }
-  return returnProps;
+return null;
+}
+}
+rgProp.partitioning=this.partitioning;
+rgProp.ordering=newOrdering;
+rgProp.dataDistribution=this.dataDistribution;
+return rgProp;
+default :
+throw new RuntimeException("Unknown partitioning type encountered.");
+}
 }

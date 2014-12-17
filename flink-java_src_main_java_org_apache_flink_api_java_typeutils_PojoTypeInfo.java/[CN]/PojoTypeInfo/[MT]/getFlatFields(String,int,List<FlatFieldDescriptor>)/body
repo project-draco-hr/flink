@@ -1,0 +1,67 @@
+{
+  Matcher matcher=PATTERN_NESTED_FIELDS_WILDCARD.matcher(fieldExpression);
+  if (!matcher.matches()) {
+    throw new InvalidFieldReferenceException("Invalid POJO field reference \"" + fieldExpression + "\".");
+  }
+  String field=matcher.group(0);
+  if (field.equals(ExpressionKeys.SELECT_ALL_CHAR) || field.equals(ExpressionKeys.SELECT_ALL_CHAR_SCALA)) {
+    int keyPosition=0;
+    for (    PojoField pField : fields) {
+      if (pField.type instanceof CompositeType) {
+        CompositeType<?> cType=(CompositeType<?>)pField.type;
+        cType.getFlatFields(String.valueOf(ExpressionKeys.SELECT_ALL_CHAR),offset + keyPosition,result);
+        keyPosition+=cType.getTotalFields() - 1;
+      }
+ else {
+        result.add(new NamedFlatFieldDescriptor(pField.field.getName(),offset + keyPosition,pField.type));
+      }
+      keyPosition++;
+    }
+    return;
+  }
+ else {
+    field=matcher.group(1);
+  }
+  int fieldPos=-1;
+  TypeInformation<?> fieldType=null;
+  for (int i=0; i < fields.length; i++) {
+    if (fields[i].field.getName().equals(field)) {
+      fieldPos=i;
+      fieldType=fields[i].type;
+      break;
+    }
+  }
+  if (fieldPos == -1) {
+    throw new InvalidFieldReferenceException("Unable to find field \"" + field + "\" in type "+ this+ ".");
+  }
+  String tail=matcher.group(3);
+  if (tail == null) {
+    if (fieldType instanceof CompositeType) {
+      for (int i=0; i < fieldPos; i++) {
+        offset+=this.getTypeAt(i).getTotalFields();
+      }
+      ((CompositeType)fieldType).getFlatFields("*",offset,result);
+      return;
+    }
+ else {
+      int flatFieldPos=offset;
+      for (int i=0; i < fieldPos; i++) {
+        flatFieldPos+=this.getTypeAt(i).getTotalFields();
+      }
+      result.add(new FlatFieldDescriptor(flatFieldPos,fieldType));
+      return;
+    }
+  }
+ else {
+    if (fieldType instanceof CompositeType<?>) {
+      for (int i=0; i < fieldPos; i++) {
+        offset+=this.getTypeAt(i).getTotalFields();
+      }
+      ((CompositeType)fieldType).getFlatFields(tail,offset,result);
+      return;
+    }
+ else {
+      throw new InvalidFieldReferenceException("Nested field expression \"" + tail + "\" not possible on atomic type "+ fieldType+ ".");
+    }
+  }
+}

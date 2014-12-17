@@ -1,0 +1,40 @@
+{
+  if (readFieldStrings == null) {
+    return;
+  }
+  for (  String s : readFieldStrings) {
+    FieldSet readFields=new FieldSet();
+    s=s.replaceAll("\\s","");
+    Matcher wcMatcher=PATTERN_WILDCARD.matcher(s);
+    if (wcMatcher.matches()) {
+      for (int i=0; i < inType.getTotalFields(); i++) {
+        readFields=readFields.addField(i);
+      }
+    }
+ else {
+      Matcher matcher=PATTERN_LIST.matcher(s);
+      if (!matcher.matches()) {
+        throw new InvalidSemanticAnnotationException("Invalid format of read field annotation \"" + s + "\".");
+      }
+      matcher=PATTERN_FIELD.matcher(s);
+      while (matcher.find()) {
+        String fieldStr=matcher.group();
+        try {
+          List<FlatFieldDescriptor> ffds=getFlatFields(fieldStr,inType);
+          for (          FlatFieldDescriptor ffd : ffds) {
+            readFields=readFields.addField(ffd.getPosition());
+          }
+        }
+ catch (        InvalidFieldReferenceException ifre) {
+          throw new InvalidSemanticAnnotationException("Invalid field reference in read field annotation \"" + fieldStr + "\".",ifre);
+        }
+      }
+    }
+    if (sp instanceof SingleInputSemanticProperties) {
+      ((SingleInputSemanticProperties)sp).addReadFields(readFields);
+    }
+ else     if (sp instanceof DualInputSemanticProperties) {
+      ((DualInputSemanticProperties)sp).addReadFields(input,readFields);
+    }
+  }
+}

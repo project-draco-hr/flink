@@ -1,68 +1,87 @@
 {
-  FieldList forwardFields=null;
-  GlobalProperties returnProps=this;
   if (props == null) {
-    return new GlobalProperties();
+    throw new NullPointerException("SemanticProperties may not be null.");
   }
-  if (this.ordering != null) {
-    Ordering no=new Ordering();
-    for (    int index : this.ordering.getInvolvedIndexes()) {
-      forwardFields=props.getForwardFields(input,index) == null ? null : props.getForwardFields(input,index).toFieldList();
-      if (forwardFields == null) {
-        returnProps=new GlobalProperties();
-        no=null;
-        break;
-      }
- else {
-        returnProps=returnProps == this ? this.clone() : returnProps;
-        for (int i=0; i < forwardFields.size(); i++) {
-          no.appendOrdering(forwardFields.get(i),this.ordering.getType(index),this.ordering.getOrder(index));
-        }
-      }
-      returnProps.setOrdering(no);
-    }
-  }
-  if (this.partitioningFields != null) {
-    returnProps=returnProps == this ? this.clone() : returnProps;
-    returnProps.setPartitioningFields(new FieldList());
-    for (    int index : this.partitioningFields) {
-      forwardFields=props.getForwardFields(input,index) == null ? null : props.getForwardFields(input,index).toFieldList();
-      if (forwardFields == null) {
-        returnProps=new GlobalProperties();
-        break;
-      }
- else {
-        returnProps.setPartitioningFields(returnProps.getPartitioningFields().addFields(forwardFields));
-      }
-    }
-  }
-  if (this.uniqueFieldCombinations != null) {
-    HashSet<FieldSet> newSet=new HashSet<FieldSet>();
-    newSet.addAll(this.uniqueFieldCombinations);
-    for (Iterator<FieldSet> combos=this.uniqueFieldCombinations.iterator(); combos.hasNext(); ) {
-      FieldSet current=combos.next();
-      FieldSet nfs=new FieldSet();
-      for (      Integer field : current) {
-        if (props.getForwardFields(input,field) == null) {
-          newSet.remove(current);
-          nfs=null;
-          break;
-        }
- else {
-          nfs=nfs.addFields(props.getForwardFields(input,field));
-        }
-      }
-      if (nfs != null) {
-        newSet.remove(current);
-        newSet.add(nfs);
-      }
-    }
-    GlobalProperties gp=returnProps.clone();
-    gp.uniqueFieldCombinations=newSet.isEmpty() ? null : newSet;
+  GlobalProperties gp=new GlobalProperties();
+switch (this.partitioning) {
+case FULL_REPLICATION:
     return gp;
+case RANGE_PARTITIONED:
+  Ordering newOrdering=new Ordering();
+for (int i=0; i < this.ordering.getInvolvedIndexes().size(); i++) {
+  int sourceField=this.ordering.getInvolvedIndexes().get(i);
+  FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+  if (targetField == null || targetField.size() == 0) {
+    newOrdering=null;
+    break;
   }
-  if (this.partitioning == PartitioningProperty.FULL_REPLICATION) {
-    return new GlobalProperties();
+ else {
+    if (targetField.size() > 1) {
+      LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+    }
+    newOrdering.appendOrdering(targetField.toArray()[0],this.ordering.getType(i),this.ordering.getOrder(i));
   }
-  return returnProps;
+}
+if (newOrdering != null) {
+gp.partitioning=PartitioningProperty.RANGE_PARTITIONED;
+gp.ordering=newOrdering;
+gp.partitioningFields=newOrdering.getInvolvedIndexes();
+}
+break;
+case HASH_PARTITIONED:
+case ANY_PARTITIONING:
+case CUSTOM_PARTITIONING:
+FieldList newPartitioningFields=new FieldList();
+for (int sourceField : this.partitioningFields) {
+FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+if (targetField == null || targetField.size() == 0) {
+newPartitioningFields=null;
+break;
+}
+ else {
+if (targetField.size() > 1) {
+LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+}
+newPartitioningFields=newPartitioningFields.addField(targetField.toArray()[0]);
+}
+}
+if (newPartitioningFields != null) {
+gp.partitioning=this.partitioning;
+gp.partitioningFields=newPartitioningFields;
+gp.customPartitioner=this.customPartitioner;
+}
+break;
+case FORCED_REBALANCED:
+case RANDOM:
+gp.partitioning=this.partitioning;
+break;
+default :
+throw new RuntimeException("Unknown partitioning type.");
+}
+if (this.uniqueFieldCombinations != null) {
+Set<FieldSet> newUniqueFieldCombinations=new HashSet<FieldSet>();
+for (FieldSet fieldCombo : this.uniqueFieldCombinations) {
+FieldSet newFieldCombo=new FieldSet();
+for (Integer sourceField : fieldCombo) {
+FieldSet targetField=props.getForwardingTargetFields(input,sourceField);
+if (targetField == null || targetField.size() == 0) {
+newFieldCombo=null;
+break;
+}
+ else {
+if (targetField.size() > 1) {
+LOG.warn("Found that a field is forwarded to more than one target field in " + "semantic forwarded field information. Will only use the field with the lowest index.");
+}
+newFieldCombo=newFieldCombo.addField(targetField.toArray()[0]);
+}
+}
+if (newFieldCombo != null) {
+newUniqueFieldCombinations.add(newFieldCombo);
+}
+}
+if (!newUniqueFieldCombinations.isEmpty()) {
+gp.uniqueFieldCombinations=newUniqueFieldCombinations;
+}
+}
+return gp;
 }
