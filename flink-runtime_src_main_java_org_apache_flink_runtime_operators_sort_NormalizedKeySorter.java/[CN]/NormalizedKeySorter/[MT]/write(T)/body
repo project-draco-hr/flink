@@ -10,18 +10,20 @@
       return false;
     }
   }
-  this.currentSortIndexSegment.putLong(this.currentSortIndexOffset,this.currentDataBufferOffset);
+  try {
+    this.serializer.serialize(record,this.recordCollector);
+  }
+ catch (  EOFException e) {
+    return false;
+  }
+  final long newOffset=this.recordCollector.getCurrentOffset();
+  final boolean shortRecord=newOffset - this.currentDataBufferOffset < LARGE_RECORD_THRESHOLD;
+  this.currentSortIndexSegment.putLong(this.currentSortIndexOffset,shortRecord ? this.currentDataBufferOffset : -this.currentDataBufferOffset);
   if (this.numKeyBytes != 0) {
     this.comparator.putNormalizedKey(record,this.currentSortIndexSegment,this.currentSortIndexOffset + OFFSET_LEN,this.numKeyBytes);
   }
-  try {
-    this.serializer.serialize(record,this.recordCollector);
-    this.currentSortIndexOffset+=this.indexEntrySize;
-    this.currentDataBufferOffset=this.recordCollector.getCurrentOffset();
-    this.numRecords++;
-    return true;
-  }
- catch (  EOFException eofex) {
-    return false;
-  }
+  this.currentSortIndexOffset+=this.indexEntrySize;
+  this.currentDataBufferOffset=newOffset;
+  this.numRecords++;
+  return true;
 }
