@@ -1,0 +1,69 @@
+{
+  File input=null;
+  File sorted=null;
+  try {
+    input=generateFileWithStrings(300000,"http://some-uri.com/that/is/a/common/prefix/to/all");
+    sorted=File.createTempFile("sorted_strings","txt");
+    String[] command={"/bin/bash","-c","export LC_ALL=\"C\" && cat \"" + input.getAbsolutePath() + "\" | sort > \""+ sorted.getAbsolutePath()+ "\""};
+    Process p=null;
+    try {
+      p=Runtime.getRuntime().exec(command);
+      int retCode=p.waitFor();
+      if (retCode != 0) {
+        throw new Exception("Command failed with return code " + retCode);
+      }
+      p=null;
+    }
+  finally {
+      if (p != null) {
+        p.destroy();
+      }
+    }
+    UnilateralSortMerger<StringValue> sorter=null;
+    BufferedReader reader=null;
+    BufferedReader verifyReader=null;
+    try {
+      MemoryManager mm=new DefaultMemoryManager(1024 * 1024,1);
+      IOManager ioMan=new IOManagerAsync();
+      TypeSerializer<StringValue> serializer=new CopyableValueSerializer<StringValue>(StringValue.class);
+      TypeComparator<StringValue> comparator=new CopyableValueComparator<StringValue>(true,StringValue.class);
+      reader=new BufferedReader(new FileReader(input));
+      MutableObjectIterator<StringValue> inputIterator=new StringValueReaderMutableObjectIterator(reader);
+      sorter=new UnilateralSortMerger<StringValue>(mm,ioMan,inputIterator,new DummyInvokable(),new RuntimeStatelessSerializerFactory<StringValue>(serializer,StringValue.class),comparator,1.0,4,0.8f);
+      MutableObjectIterator<StringValue> sortedData=sorter.getIterator();
+      reader.close();
+      verifyReader=new BufferedReader(new FileReader(sorted));
+      String nextVerify;
+      StringValue nextFromFlinkSort=new StringValue();
+      while ((nextVerify=verifyReader.readLine()) != null) {
+        nextFromFlinkSort=sortedData.next(nextFromFlinkSort);
+        Assert.assertNotNull(nextFromFlinkSort);
+        Assert.assertEquals(nextVerify,nextFromFlinkSort.getValue());
+      }
+    }
+  finally {
+      if (reader != null) {
+        reader.close();
+      }
+      if (verifyReader != null) {
+        verifyReader.close();
+      }
+      if (sorter != null) {
+        sorter.close();
+      }
+    }
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+ finally {
+    if (input != null) {
+      input.delete();
+    }
+    if (sorted != null) {
+      sorted.delete();
+    }
+  }
+}

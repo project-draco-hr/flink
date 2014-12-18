@@ -1,0 +1,77 @@
+{
+  final int NUM_STRINGS=300000;
+  File input=null;
+  File sorted=null;
+  try {
+    input=generateFileWithStringTuples(NUM_STRINGS,"http://some-uri.com/that/is/a/common/prefix/to/all");
+    sorted=File.createTempFile("sorted_strings","txt");
+    String[] command={"/bin/bash","-c","export LC_ALL=\"C\" && cat \"" + input.getAbsolutePath() + "\" | sort > \""+ sorted.getAbsolutePath()+ "\""};
+    Process p=null;
+    try {
+      p=Runtime.getRuntime().exec(command);
+      int retCode=p.waitFor();
+      if (retCode != 0) {
+        throw new Exception("Command failed with return code " + retCode);
+      }
+      p=null;
+    }
+  finally {
+      if (p != null) {
+        p.destroy();
+      }
+    }
+    UnilateralSortMerger<Tuple2<StringValue,StringValue[]>> sorter=null;
+    BufferedReader reader=null;
+    BufferedReader verifyReader=null;
+    try {
+      MemoryManager mm=new DefaultMemoryManager(1024 * 1024,1);
+      IOManager ioMan=new IOManagerAsync();
+      TupleTypeInfo<Tuple2<StringValue,StringValue[]>> typeInfo=(TupleTypeInfo<Tuple2<StringValue,StringValue[]>>)(TupleTypeInfo<?>)TypeInfoParser.parse("Tuple2<org.apache.flink.types.StringValue, org.apache.flink.types.StringValue[]>");
+      TypeSerializer<Tuple2<StringValue,StringValue[]>> serializer=typeInfo.createSerializer();
+      TypeComparator<Tuple2<StringValue,StringValue[]>> comparator=typeInfo.createComparator(new int[]{0},new boolean[]{true},0);
+      reader=new BufferedReader(new FileReader(input));
+      MutableObjectIterator<Tuple2<StringValue,StringValue[]>> inputIterator=new StringValueTupleReaderMutableObjectIterator(reader);
+      sorter=new UnilateralSortMerger<Tuple2<StringValue,StringValue[]>>(mm,ioMan,inputIterator,new DummyInvokable(),new RuntimeStatelessSerializerFactory<Tuple2<StringValue,StringValue[]>>(serializer,(Class<Tuple2<StringValue,StringValue[]>>)(Class<?>)Tuple2.class),comparator,1.0,4,0.8f);
+      MutableObjectIterator<Tuple2<StringValue,StringValue[]>> sortedData=sorter.getIterator();
+      reader.close();
+      verifyReader=new BufferedReader(new FileReader(sorted));
+      MutableObjectIterator<Tuple2<StringValue,StringValue[]>> verifyIterator=new StringValueTupleReaderMutableObjectIterator(verifyReader);
+      Tuple2<StringValue,StringValue[]> nextVerify=new Tuple2<StringValue,StringValue[]>(new StringValue(),new StringValue[0]);
+      Tuple2<StringValue,StringValue[]> nextFromFlinkSort=new Tuple2<StringValue,StringValue[]>(new StringValue(),new StringValue[0]);
+      int num=0;
+      while ((nextVerify=verifyIterator.next(nextVerify)) != null) {
+        num++;
+        nextFromFlinkSort=sortedData.next(nextFromFlinkSort);
+        Assert.assertNotNull(nextFromFlinkSort);
+        Assert.assertEquals(nextVerify.f0,nextFromFlinkSort.f0);
+        Assert.assertArrayEquals(nextVerify.f1,nextFromFlinkSort.f1);
+      }
+      Assert.assertNull(sortedData.next(nextFromFlinkSort));
+      Assert.assertEquals(NUM_STRINGS,num);
+    }
+  finally {
+      if (reader != null) {
+        reader.close();
+      }
+      if (verifyReader != null) {
+        verifyReader.close();
+      }
+      if (sorter != null) {
+        sorter.close();
+      }
+    }
+  }
+ catch (  Exception e) {
+    System.err.println(e.getMessage());
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+ finally {
+    if (input != null) {
+      input.delete();
+    }
+    if (sorted != null) {
+      sorted.delete();
+    }
+  }
+}

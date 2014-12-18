@@ -1,0 +1,27 @@
+{
+  ByteArrayOutputStream baos=new ByteArrayOutputStream(4096);
+  OutputViewDataOutputStreamWrapper serializer=new OutputViewDataOutputStreamWrapper(new DataOutputStream(baos));
+  StringValue sValue=new StringValue();
+  for (  String value : values) {
+    sValue.setValue(value);
+    sValue.write(serializer);
+  }
+  serializer.close();
+  baos.close();
+  ByteArrayInputStream bais=new ByteArrayInputStream(baos.toByteArray());
+  InputViewDataInputStreamWrapper source=new InputViewDataInputStreamWrapper(new DataInputStream(bais));
+  ByteArrayOutputStream targetOutput=new ByteArrayOutputStream(4096);
+  OutputViewDataOutputStreamWrapper target=new OutputViewDataOutputStreamWrapper(new DataOutputStream(targetOutput));
+  for (int i=0; i < values.length; i++) {
+    sValue.copy(source,target);
+  }
+  ByteArrayInputStream validateInput=new ByteArrayInputStream(targetOutput.toByteArray());
+  InputViewDataInputStreamWrapper validate=new InputViewDataInputStreamWrapper(new DataInputStream(validateInput));
+  int num=0;
+  while (validateInput.available() > 0) {
+    sValue.read(validate);
+    assertEquals("DeserializedString differs from original string.",values[num],sValue.getValue());
+    num++;
+  }
+  assertEquals("Wrong number of deserialized values",values.length,num);
+}
