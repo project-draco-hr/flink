@@ -1,4 +1,12 @@
 {
+  if (LOG.isDebugEnabled()) {
+    if (largeRecordsOutput == null) {
+      LOG.debug("Spilling sort buffer without large record handling.");
+    }
+ else {
+      LOG.debug("Spilling sort buffer with large record handling.");
+    }
+  }
   final int numRecords=this.numRecords;
   int currentMemSeg=0;
   int currentRecord=0;
@@ -6,12 +14,15 @@
     final MemorySegment currentIndexSegment=this.sortIndex.get(currentMemSeg++);
     for (int offset=0; currentRecord < numRecords && offset <= this.lastIndexEntryOffset; currentRecord++, offset+=this.indexEntrySize) {
       final long pointer=currentIndexSegment.getLong(offset);
-      if (pointer >= 0) {
+      if (pointer >= 0 || largeRecordsOutput == null) {
         this.recordBuffer.setReadPosition(pointer);
         this.serializer.copy(this.recordBuffer,output);
       }
  else {
-        this.recordBuffer.setReadPosition(-pointer);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Spilling large record to large record fetch file.");
+        }
+        this.recordBuffer.setReadPosition(pointer & POINTER_MASK);
         T record=this.serializer.deserialize(this.recordBuffer);
         largeRecordsOutput.addRecord(record);
       }
