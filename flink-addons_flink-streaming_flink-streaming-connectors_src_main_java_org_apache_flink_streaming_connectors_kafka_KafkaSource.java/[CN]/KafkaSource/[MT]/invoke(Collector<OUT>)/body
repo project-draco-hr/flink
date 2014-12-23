@@ -1,19 +1,13 @@
 {
-  initializeConnection();
-  Map<String,Integer> topicCountMap=new HashMap<String,Integer>();
-  topicCountMap.put(topicId,numThreads);
-  Map<String,List<KafkaStream<byte[],byte[]>>> consumerMap=consumer.createMessageStreams(topicCountMap);
+  Map<String,List<KafkaStream<byte[],byte[]>>> consumerMap=consumer.createMessageStreams(Collections.singletonMap(topicId,1));
   KafkaStream<byte[],byte[]> stream=consumerMap.get(topicId).get(0);
   ConsumerIterator<byte[],byte[]> it=stream.iterator();
   while (it.hasNext()) {
-    OUT out=deserialize(it.next().message());
-    if (closeWithoutSend) {
+    OUT out=scheme.deserialize(it.next().message());
+    if (scheme.isEndOfStream(out)) {
       break;
     }
     collector.collect(out);
-    if (sendAndClose) {
-      break;
-    }
   }
   consumer.shutdown();
 }
