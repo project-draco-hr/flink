@@ -43,16 +43,14 @@
   expected.add(new Tuple2<Integer,String>(32,"a"));
   expected.add(new Tuple2<Integer,String>(32,"b"));
   expected.add(new Tuple2<Integer,String>(32,"c"));
-  TimeStamp<Tuple2<Integer,String>> myTimeStamp=new TimeStamp<Tuple2<Integer,String>>(){
+  Timestamp<Tuple2<Integer,String>> myTimeStamp=new Timestamp<Tuple2<Integer,String>>(){
     private static final long serialVersionUID=1L;
     @Override public long getTimestamp(    Tuple2<Integer,String> value){
       return value.f0;
     }
-    @Override public long getStartTime(){
-      return 1;
-    }
   }
 ;
+  TimestampWrapper<Tuple2<Integer,String>> myTimeStampWrapper=new TimestampWrapper<Tuple2<Integer,String>>(myTimeStamp,1);
   ReduceFunction<Tuple2<Integer,String>> myReduceFunction=new ReduceFunction<Tuple2<Integer,String>>(){
     private static final long serialVersionUID=1L;
     @Override public Tuple2<Integer,String> reduce(    Tuple2<Integer,String> value1,    Tuple2<Integer,String> value2) throws Exception {
@@ -61,9 +59,9 @@
   }
 ;
   LinkedList<TriggerPolicy<Tuple2<Integer,String>>> triggers=new LinkedList<TriggerPolicy<Tuple2<Integer,String>>>();
-  triggers.add(new TimeTriggerPolicy<Tuple2<Integer,String>>(2L,myTimeStamp,2L));
+  triggers.add(new TimeTriggerPolicy<Tuple2<Integer,String>>(2L,myTimeStampWrapper,2L));
   LinkedList<CloneableEvictionPolicy<Tuple2<Integer,String>>> evictions=new LinkedList<CloneableEvictionPolicy<Tuple2<Integer,String>>>();
-  evictions.add(new TimeEvictionPolicy<Tuple2<Integer,String>>(4L,myTimeStamp));
+  evictions.add(new TimeEvictionPolicy<Tuple2<Integer,String>>(4L,myTimeStampWrapper));
   LinkedList<CloneableTriggerPolicy<Tuple2<Integer,String>>> distributedTriggers=new LinkedList<CloneableTriggerPolicy<Tuple2<Integer,String>>>();
   GroupedWindowInvokable<Tuple2<Integer,String>,Tuple2<Integer,String>> invokable=new GroupedWindowInvokable<Tuple2<Integer,String>,Tuple2<Integer,String>>(myReduceFunction,keySelector,distributedTriggers,evictions,triggers,null);
   ArrayList<Tuple2<Integer,String>> result=new ArrayList<Tuple2<Integer,String>>();
@@ -73,10 +71,10 @@
   assertEquals(new HashSet<Tuple2<Integer,String>>(expected),new HashSet<Tuple2<Integer,String>>(result));
   assertEquals(expected.size(),result.size());
   triggers.clear();
-  triggers.add(new TimeTriggerPolicy<Tuple2<Integer,String>>(2L,myTimeStamp,2L));
+  triggers.add(new TimeTriggerPolicy<Tuple2<Integer,String>>(2L,myTimeStampWrapper,2L));
   evictions.clear();
   LinkedList<EvictionPolicy<Tuple2<Integer,String>>> centralEvictions=new LinkedList<EvictionPolicy<Tuple2<Integer,String>>>();
-  centralEvictions.add(new TimeEvictionPolicy<Tuple2<Integer,String>>(4L,myTimeStamp));
+  centralEvictions.add(new TimeEvictionPolicy<Tuple2<Integer,String>>(4L,myTimeStampWrapper));
   invokable=new GroupedWindowInvokable<Tuple2<Integer,String>,Tuple2<Integer,String>>(myReduceFunction,keySelector,distributedTriggers,evictions,triggers,centralEvictions);
   result=new ArrayList<Tuple2<Integer,String>>();
   for (  Tuple2<Integer,String> t : MockContext.createAndExecute(invokable,inputs)) {
