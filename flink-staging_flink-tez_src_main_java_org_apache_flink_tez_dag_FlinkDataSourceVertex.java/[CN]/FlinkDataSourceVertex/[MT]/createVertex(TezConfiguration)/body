@@ -1,0 +1,19 @@
+{
+  try {
+    this.writeInputPositionsToConfig();
+    this.writeSubTasksInOutputToConfig();
+    taskConfig.setDatasourceProcessorName(this.getUniqueName());
+    conf.set(TezTaskConfig.TEZ_TASK_CONFIG,EncodingUtils.encodeObjectToString(taskConfig));
+    ProcessorDescriptor descriptor=ProcessorDescriptor.create(DataSourceProcessor.class.getName());
+    descriptor.setUserPayload(TezUtils.createUserPayloadFromConf(conf));
+    InputDescriptor inputDescriptor=InputDescriptor.create(FlinkInput.class.getName());
+    InputInitializerDescriptor inputInitializerDescriptor=InputInitializerDescriptor.create(FlinkInputSplitGenerator.class.getName()).setUserPayload(TezUtils.createUserPayloadFromConf(conf));
+    DataSourceDescriptor dataSourceDescriptor=DataSourceDescriptor.create(inputDescriptor,inputInitializerDescriptor,new Credentials());
+    cached=Vertex.create(this.getUniqueName(),descriptor,getParallelism());
+    cached.addDataSource("Input " + this.getUniqueName(),dataSourceDescriptor);
+    return cached;
+  }
+ catch (  IOException e) {
+    throw new CompilerException("An error occurred while creating a Tez Vertex: " + e.getMessage(),e);
+  }
+}

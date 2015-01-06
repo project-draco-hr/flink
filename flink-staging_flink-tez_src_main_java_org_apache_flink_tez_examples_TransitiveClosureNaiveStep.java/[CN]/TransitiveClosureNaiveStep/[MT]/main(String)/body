@@ -1,0 +1,25 @@
+{
+  if (!parseParameters(args)) {
+    return;
+  }
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env);
+  DataSet<Tuple2<Long,Long>> nextPaths=edges.join(edges).where(1).equalTo(0).with(new JoinFunction<Tuple2<Long,Long>,Tuple2<Long,Long>,Tuple2<Long,Long>>(){
+    @Override public Tuple2<Long,Long> join(    Tuple2<Long,Long> left,    Tuple2<Long,Long> right) throws Exception {
+      return new Tuple2<Long,Long>(new Long(left.f0),new Long(right.f1));
+    }
+  }
+).union(edges).groupBy(0,1).reduceGroup(new GroupReduceFunction<Tuple2<Long,Long>,Tuple2<Long,Long>>(){
+    @Override public void reduce(    Iterable<Tuple2<Long,Long>> values,    Collector<Tuple2<Long,Long>> out) throws Exception {
+      out.collect(values.iterator().next());
+    }
+  }
+);
+  if (fileOutput) {
+    nextPaths.writeAsCsv(outputPath,"\n"," ");
+  }
+ else {
+    nextPaths.print();
+  }
+  env.execute("Transitive Closure Example");
+}

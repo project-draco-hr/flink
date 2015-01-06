@@ -1,0 +1,43 @@
+{
+  final TypeSerializer<OT> serializer=this.serializerFactory.getSerializer();
+  try {
+    InputSplit split=input.getSplit();
+    OT record=serializer.createInstance();
+    final InputFormat<OT,InputSplit> format=this.format;
+    format.open(split);
+    int numOutputs=outputs.size();
+    ArrayList<TezChannelSelector<OT>> channelSelectors=new ArrayList<TezChannelSelector<OT>>(numOutputs);
+    ArrayList<Integer> numStreamsInOutputs=this.config.getNumberSubtasksInOutput();
+    for (int i=0; i < numOutputs; i++) {
+      final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+      final TypeComparatorFactory<OT> compFactory=config.getOutputComparator(i,this.userCodeClassLoader);
+      final DataDistribution dataDist=config.getOutputDataDistribution(i,this.userCodeClassLoader);
+      if (compFactory == null) {
+        channelSelectors.add(i,new TezOutputEmitter<OT>(strategy));
+      }
+ else       if (dataDist == null) {
+        final TypeComparator<OT> comparator=compFactory.createComparator();
+        channelSelectors.add(i,new TezOutputEmitter<OT>(strategy,comparator));
+      }
+ else {
+        final TypeComparator<OT> comparator=compFactory.createComparator();
+        channelSelectors.add(i,new TezOutputEmitter<OT>(strategy,comparator,dataDist));
+      }
+    }
+    collector=new TezOutputCollector<OT>(writers,channelSelectors,serializerFactory.getSerializer(),numStreamsInOutputs);
+    while (!format.reachedEnd()) {
+      if ((record=format.nextRecord(record)) != null) {
+        collector.collect(record);
+      }
+    }
+    format.close();
+    collector.close();
+  }
+ catch (  Exception ex) {
+    try {
+      this.format.close();
+    }
+ catch (    Throwable t) {
+    }
+  }
+}

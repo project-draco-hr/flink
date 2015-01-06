@@ -1,0 +1,18 @@
+{
+  if (!parseParameters(args)) {
+    return;
+  }
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Long> pagesInput=getPagesDataSet(env);
+  DataSet<Tuple2<Long,Long>> linksInput=getLinksDataSet(env);
+  DataSet<Tuple2<Long,Double>> pagesWithRanks=pagesInput.map(new RankAssigner((1.0d / numPages)));
+  DataSet<Tuple2<Long,Long[]>> adjacencyListInput=linksInput.groupBy(0).reduceGroup(new BuildOutgoingEdgeList());
+  DataSet<Tuple2<Long,Double>> newRanks=pagesWithRanks.join(adjacencyListInput).where(0).equalTo(0).flatMap(new JoinVertexWithEdgesMatch()).groupBy(0).aggregate(SUM,1).map(new Dampener(DAMPENING_FACTOR,numPages));
+  if (fileOutput) {
+    newRanks.writeAsCsv(outputPath,"\n"," ");
+  }
+ else {
+    newRanks.print();
+  }
+  env.execute("Basic Page Rank Example");
+}

@@ -1,0 +1,56 @@
+{
+  try {
+switch (this.config.getInputLocalStrategy(0)) {
+case NONE:
+      localStrategy=null;
+    input=reader;
+  break;
+case SORT:
+try {
+  TypeComparatorFactory<IT> compFact=this.config.getInputComparator(0,this.userCodeClassLoader);
+  if (compFact == null) {
+    throw new Exception("Missing comparator factory for local strategy on input " + 0);
+  }
+  UnilateralSortMerger<IT> sorter=new UnilateralSortMerger<IT>(this.runtimeEnvironment.getMemoryManager(),this.runtimeEnvironment.getIOManager(),this.reader,this.invokable,this.inputTypeSerializerFactory,compFact.createComparator(),this.config.getRelativeMemoryInput(0),this.config.getFilehandlesInput(0),this.config.getSpillingThresholdInput(0));
+  this.localStrategy=sorter;
+  this.input=sorter.getIterator();
+}
+ catch (Exception e) {
+  throw new RuntimeException("Initializing the input processing failed" + e.getMessage() == null ? "." : ": " + e.getMessage(),e);
+}
+break;
+default :
+throw new RuntimeException("Invalid local strategy for DataSinkTask");
+}
+final TypeSerializer<IT> serializer=this.inputTypeSerializerFactory.getSerializer();
+final MutableObjectIterator<IT> input=this.input;
+final OutputFormat<IT> format=this.format;
+IT record=serializer.createInstance();
+format.open(this.getContext().getTaskIndex(),this.getContext().getVertexParallelism());
+while (((record=input.next(record)) != null)) {
+format.writeRecord(record);
+}
+this.format.close();
+this.format=null;
+}
+ catch (IOException e) {
+e.printStackTrace();
+throw new RuntimeException();
+}
+ finally {
+if (this.format != null) {
+try {
+this.format.close();
+}
+ catch (Throwable t) {
+}
+}
+if (localStrategy != null) {
+try {
+this.localStrategy.close();
+}
+ catch (Throwable t) {
+}
+}
+}
+}

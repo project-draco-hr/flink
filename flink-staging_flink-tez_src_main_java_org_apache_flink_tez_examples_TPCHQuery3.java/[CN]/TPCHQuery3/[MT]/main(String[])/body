@@ -1,0 +1,48 @@
+{
+  if (!parseParameters(args)) {
+    return;
+  }
+  final RemoteTezEnvironment env=RemoteTezEnvironment.create();
+  env.setParallelism(400);
+  DataSet<Lineitem> lineitems=getLineitemDataSet(env);
+  DataSet<Order> orders=getOrdersDataSet(env);
+  DataSet<Customer> customers=getCustomerDataSet(env);
+  customers=customers.filter(new FilterFunction<Customer>(){
+    @Override public boolean filter(    Customer c){
+      return c.getMktsegment().equals("AUTOMOBILE");
+    }
+  }
+);
+  orders=orders.filter(new FilterFunction<Order>(){
+    private final DateFormat format=new SimpleDateFormat("yyyy-MM-dd");
+    private final Date date=format.parse("1995-03-12");
+    @Override public boolean filter(    Order o) throws ParseException {
+      return format.parse(o.getOrderdate()).before(date);
+    }
+  }
+);
+  lineitems=lineitems.filter(new FilterFunction<Lineitem>(){
+    private final DateFormat format=new SimpleDateFormat("yyyy-MM-dd");
+    private final Date date=format.parse("1995-03-12");
+    @Override public boolean filter(    Lineitem l) throws ParseException {
+      return format.parse(l.getShipdate()).after(date);
+    }
+  }
+);
+  DataSet<ShippingPriorityItem> customerWithOrders=customers.join(orders).where(0).equalTo(1).with(new JoinFunction<Customer,Order,ShippingPriorityItem>(){
+    @Override public ShippingPriorityItem join(    Customer c,    Order o){
+      return new ShippingPriorityItem(o.getOrderKey(),0.0,o.getOrderdate(),o.getShippriority());
+    }
+  }
+);
+  DataSet<ShippingPriorityItem> result=customerWithOrders.join(lineitems).where(0).equalTo(0).with(new JoinFunction<ShippingPriorityItem,Lineitem,ShippingPriorityItem>(){
+    @Override public ShippingPriorityItem join(    ShippingPriorityItem i,    Lineitem l){
+      i.setRevenue(l.getExtendedprice() * (1 - l.getDiscount()));
+      return i;
+    }
+  }
+).groupBy(0,2,3).aggregate(Aggregations.SUM,1);
+  result.writeAsCsv(outputPath,"\n","|");
+  env.registerMainClass(TPCHQuery3.class);
+  env.execute("TPCH Query 3 Example");
+}

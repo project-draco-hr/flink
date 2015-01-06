@@ -1,0 +1,17 @@
+{
+  if (!parseParameters(args)) {
+    return;
+  }
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Long> vertices=getVertexDataSet(env);
+  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env).flatMap(new UndirectEdge());
+  DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new DuplicateValue<Long>());
+  DataSet<Tuple2<Long,Long>> nextComponenets=verticesWithInitialId.join(edges).where(0).equalTo(0).with(new NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1).join(verticesWithInitialId).where(0).equalTo(0).with(new ComponentIdFilter());
+  if (fileOutput) {
+    nextComponenets.writeAsCsv(outputPath,"\n"," ");
+  }
+ else {
+    nextComponenets.print();
+  }
+  env.execute("Connected Components Example");
+}

@@ -1,0 +1,20 @@
+{
+  Configuration tezConf=TezUtils.createConfFromUserPayload(this.getContext().getUserPayload());
+  TezTaskConfig taskConfig=(TezTaskConfig)EncodingUtils.decodeObjectFromString(tezConf.get(TezTaskConfig.TEZ_TASK_CONFIG),getClass().getClassLoader());
+  this.format=taskConfig.getInputFormat();
+  int numTasks=this.getContext().getNumTasks();
+  LOG.info("Creating splits for " + numTasks + " tasks for input format "+ format);
+  InputSplit[] splits=format.createInputSplits((numTasks > 0) ? numTasks : 1);
+  LOG.info("Created " + splits.length + " input splits"+ " tasks for input format "+ format);
+  LOG.info("Sending input split events");
+  LinkedList<Event> events=new LinkedList<Event>();
+  for (int i=0; i < splits.length; i++) {
+    byte[] bytes=InstantiationUtil.serializeObject(splits[i]);
+    ByteBuffer buf=ByteBuffer.wrap(bytes);
+    InputDataInformationEvent event=InputDataInformationEvent.createWithSerializedPayload(i % numTasks,buf);
+    event.setTargetIndex(i % numTasks);
+    events.add(event);
+    LOG.info("Added event of index " + i + ": "+ event);
+  }
+  return events;
+}

@@ -1,0 +1,46 @@
+{
+  if (this.localStrategies[inputNum] != null) {
+    throw new IllegalStateException();
+  }
+  final LocalStrategy localStrategy=this.config.getInputLocalStrategy(inputNum);
+  if (localStrategy != null) {
+switch (localStrategy) {
+case NONE:
+      this.inputs[inputNum]=this.inputIterators[inputNum];
+    break;
+case SORT:
+  @SuppressWarnings({"rawtypes","unchecked"}) UnilateralSortMerger<?> sorter=new UnilateralSortMerger(getMemoryManager(),getIOManager(),this.inputIterators[inputNum],this.invokable,this.inputSerializers[inputNum],getLocalStrategyComparator(inputNum),this.config.getRelativeMemoryInput(inputNum),this.config.getFilehandlesInput(inputNum),this.config.getSpillingThresholdInput(inputNum));
+this.inputs[inputNum]=null;
+this.localStrategies[inputNum]=sorter;
+break;
+case COMBININGSORT:
+if (inputNum != 0) {
+throw new IllegalStateException("Performing combining sort outside a (group)reduce task!");
+}
+final Class<S> userCodeFunctionType=this.driver.getStubType();
+if (userCodeFunctionType == null) {
+throw new IllegalStateException("Performing combining sort outside a reduce task!");
+}
+final S localStub;
+try {
+localStub=initStub(userCodeFunctionType);
+}
+ catch (Exception e) {
+throw new RuntimeException("Initializing the user code and the configuration failed" + e.getMessage() == null ? "." : ": " + e.getMessage(),e);
+}
+if (!(localStub instanceof GroupCombineFunction)) {
+throw new IllegalStateException("Performing combining sort outside a reduce task!");
+}
+@SuppressWarnings({"rawtypes","unchecked"}) CombiningUnilateralSortMerger<?> cSorter=new CombiningUnilateralSortMerger((GroupCombineFunction)localStub,getMemoryManager(),getIOManager(),this.inputIterators[inputNum],this.invokable,this.inputSerializers[inputNum],getLocalStrategyComparator(inputNum),this.config.getRelativeMemoryInput(inputNum),this.config.getFilehandlesInput(inputNum),this.config.getSpillingThresholdInput(inputNum));
+cSorter.setUdfConfiguration(this.config.getStubParameters());
+this.inputs[inputNum]=null;
+this.localStrategies[inputNum]=cSorter;
+break;
+default :
+throw new Exception("Unrecognized local strategy provided: " + localStrategy.name());
+}
+}
+ else {
+this.inputs[inputNum]=this.inputIterators[inputNum];
+}
+}

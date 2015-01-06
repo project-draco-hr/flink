@@ -1,0 +1,34 @@
+{
+  int numInputs=readers.size();
+  Preconditions.checkArgument(numInputs == driver.getNumberOfInputs());
+  this.inputIterators=new MutableObjectIterator[numInputs];
+  this.localStrategies=new CloseableInputProvider[numInputs];
+  this.inputs=new MutableObjectIterator[numInputs];
+  int numComparators=driver.getNumberOfDriverComparators();
+  initInputsSerializersAndComparators(numInputs,numComparators);
+  int index=0;
+  for (  KeyValueReader reader : readers) {
+    this.inputIterators[index]=new TezReaderIterator<Object>(reader);
+    initInputLocalStrategy(index);
+    index++;
+  }
+  int numOutputs=writers.size();
+  ArrayList<TezChannelSelector<OT>> channelSelectors=new ArrayList<TezChannelSelector<OT>>(numOutputs);
+  for (int i=0; i < numOutputs; i++) {
+    final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+    final TypeComparatorFactory<OT> compFactory=config.getOutputComparator(i,this.userCodeClassLoader);
+    final DataDistribution dataDist=config.getOutputDataDistribution(i,this.userCodeClassLoader);
+    if (compFactory == null) {
+      channelSelectors.add(i,new TezOutputEmitter<OT>(strategy));
+    }
+ else     if (dataDist == null) {
+      final TypeComparator<OT> comparator=compFactory.createComparator();
+      channelSelectors.add(i,new TezOutputEmitter<OT>(strategy,comparator));
+    }
+ else {
+      final TypeComparator<OT> comparator=compFactory.createComparator();
+      channelSelectors.add(i,new TezOutputEmitter<OT>(strategy,comparator,dataDist));
+    }
+  }
+  this.output=new TezOutputCollector<OT>(writers,channelSelectors,outSerializer,numberOfSubTasksInOutputs);
+}
