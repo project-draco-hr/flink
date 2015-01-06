@@ -3,16 +3,16 @@
     final JobID jid=new JobID();
     final JobVertexID vid=new JobVertexID();
     final ExecutionAttemptID eid=new ExecutionAttemptID();
-    final TaskManager taskManager=mock(TaskManager.class);
     TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"TestTask",2,7,new Configuration(),new Configuration(),TestInvokableCorrect.class.getName(),Collections.<PartitionDeploymentDescriptor>emptyList(),Collections.<PartitionConsumerDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-    Task task=new Task(jid,vid,2,7,eid,"TestTask",taskManager);
+    Task task=spy(new Task(jid,vid,2,7,eid,"TestTask",ActorRef.noSender()));
+    doNothing().when(task).notifyExecutionStateChange(any(ExecutionState.class),any(Throwable.class));
     RuntimeEnvironment env=new RuntimeEnvironment(mock(ActorRef.class),task,tdd,getClass().getClassLoader(),mock(MemoryManager.class),mock(IOManager.class),mock(InputSplitProvider.class),new BroadcastVariableManager(),MockNetworkEnvironment.getMock());
     task.setEnvironment(env);
     assertEquals(ExecutionState.DEPLOYING,task.getExecutionState());
     task.startExecution();
     task.getEnvironment().getExecutingThread().join();
     assertEquals(ExecutionState.FINISHED,task.getExecutionState());
-    verify(taskManager).notifyExecutionStateChange(jid,eid,ExecutionState.FINISHED,null);
+    verify(task).notifyExecutionStateChange(ExecutionState.FINISHED,null);
   }
  catch (  Exception e) {
     e.printStackTrace();
