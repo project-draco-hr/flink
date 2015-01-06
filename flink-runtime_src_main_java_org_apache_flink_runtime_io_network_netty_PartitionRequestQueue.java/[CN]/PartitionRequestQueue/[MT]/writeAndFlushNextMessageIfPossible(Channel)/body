@@ -11,18 +11,22 @@
         }
         buffer=currentPartitionQueue.getNextBuffer();
         if (buffer == null) {
-          if (currentPartitionQueue.subscribe(null)) {
+          if (currentPartitionQueue.registerListener(null)) {
             numTotalSubscribeCalls++;
             numOutstandingSubscribeCalls.incrementAndGet();
             currentPartitionQueue=null;
           }
- else           if (currentPartitionQueue.isConsumed()) {
-            numConsumedPartitions++;
+ else           if (currentPartitionQueue.isReleased()) {
             currentPartitionQueue=null;
           }
         }
  else {
           BufferResponse resp=new BufferResponse(buffer,currentPartitionQueue.getSequenceNumber(),currentPartitionQueue.getReceiverId());
+          if (!buffer.isBuffer() && EventSerializer.fromBuffer(buffer,getClass().getClassLoader()).getClass() == EndOfPartitionEvent.class) {
+            currentPartitionQueue.notifySubpartitionConsumed();
+            currentPartitionQueue.releaseAllResources();
+            currentPartitionQueue=null;
+          }
           channel.writeAndFlush(resp).addListener(writeListener);
           return;
         }
@@ -30,12 +34,8 @@
     }
   }
  catch (  Throwable t) {
-    try {
-      if (buffer != null) {
-        buffer.recycle();
-      }
-    }
- catch (    Throwable ignored) {
+    if (buffer != null) {
+      buffer.recycle();
     }
     throw new IOException(t.getMessage(),t);
   }

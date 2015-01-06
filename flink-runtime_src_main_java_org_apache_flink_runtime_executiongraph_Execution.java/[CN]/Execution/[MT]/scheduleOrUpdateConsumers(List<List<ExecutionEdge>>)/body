@@ -1,13 +1,15 @@
 {
-  if (consumers.size() != 1) {
-    fail(new IllegalStateException("Only one consumer is supported currently."));
+  if (allConsumers.size() != 1) {
+    fail(new IllegalStateException("Currently, only a single consumer group per partition is supported."));
   }
-  final List<ExecutionEdge> consumer=consumers.get(0);
-  for (  ExecutionEdge edge : consumer) {
+  for (  ExecutionEdge edge : allConsumers.get(0)) {
     final ExecutionVertex consumerVertex=edge.getTarget();
-    final ExecutionState consumerState=consumerVertex.getExecutionState();
+    final Execution consumer=consumerVertex.getCurrentExecutionAttempt();
+    final ExecutionState consumerState=consumer.getState();
+    final IntermediateResultPartition partition=edge.getSource();
     if (consumerState == CREATED) {
-      consumerVertex.cachePartitionInfo(PartialPartitionInfo.fromEdge(edge));
+      final Execution partitionExecution=partition.getProducer().getCurrentExecutionAttempt();
+      consumerVertex.cachePartitionInfo(PartialInputChannelDeploymentDescriptor.fromEdge(partition,partitionExecution));
       future(new Callable<Boolean>(){
         @Override public Boolean call() throws Exception {
           try {
@@ -24,28 +26,33 @@
         consumerVertex.sendPartitionInfos();
       }
     }
- else     if (consumerState == RUNNING) {
-      SimpleSlot consumerSlot=consumerVertex.getCurrentAssignedResource();
-      ExecutionAttemptID consumerExecutionId=consumerVertex.getCurrentExecutionAttempt().getAttemptId();
-      IntermediateResultPartitionID partitionID=edge.getSource().getPartitionId();
-      int connectionIndex=edge.getSource().getIntermediateResult().getConnectionIndex();
-      PartitionInfo.PartitionLocation producerLocation;
-      RemoteAddress producerAddress=null;
-      if (consumerSlot.getInstance().getInstanceConnectionInfo().equals(getAssignedResourceLocation())) {
-        producerLocation=PartitionInfo.PartitionLocation.LOCAL;
-      }
  else {
-        producerLocation=PartitionInfo.PartitionLocation.REMOTE;
-        producerAddress=new RemoteAddress(getAssignedResourceLocation(),connectionIndex);
+      if (consumerState == RUNNING) {
+        final SimpleSlot consumerSlot=consumer.getAssignedResource();
+        if (consumerSlot == null) {
+          continue;
+        }
+        final Instance consumerInstance=consumerSlot.getInstance();
+        final ResultPartitionID partitionId=new ResultPartitionID(partition.getPartitionId(),attemptId);
+        final Instance partitionInstance=partition.getProducer().getCurrentAssignedResource().getInstance();
+        final ResultPartitionLocation partitionLocation;
+        if (consumerInstance.equals(partitionInstance)) {
+          partitionLocation=ResultPartitionLocation.createLocal();
+        }
+ else {
+          final ConnectionID connectionId=new ConnectionID(partitionInstance.getInstanceConnectionInfo(),partition.getIntermediateResult().getConnectionIndex());
+          partitionLocation=ResultPartitionLocation.createRemote(connectionId);
+        }
+        final InputChannelDeploymentDescriptor descriptor=new InputChannelDeploymentDescriptor(partitionId,partitionLocation);
+        final UpdateTask updateTaskMessage=new UpdateTaskSinglePartitionInfo(consumer.getAttemptId(),partition.getIntermediateResult().getId(),descriptor);
+        sendUpdateTaskRpcCall(consumerSlot,updateTaskMessage);
       }
-      PartitionInfo partitionInfo=new PartitionInfo(partitionID,attemptId,producerLocation,producerAddress);
-      TaskManagerMessages.UpdateTask updateTaskMessage=new TaskManagerMessages.UpdateTaskSinglePartitionInfo(consumerExecutionId,edge.getSource().getIntermediateResult().getId(),partitionInfo);
-      sendUpdateTaskRpcCall(consumerSlot,updateTaskMessage);
-    }
- else     if (consumerState == SCHEDULED || consumerState == DEPLOYING) {
-      consumerVertex.cachePartitionInfo(PartialPartitionInfo.fromEdge(edge));
-      if (consumerVertex.getExecutionState() == RUNNING) {
-        consumerVertex.sendPartitionInfos();
+ else       if (consumerState == SCHEDULED || consumerState == DEPLOYING) {
+        final Execution partitionExecution=partition.getProducer().getCurrentExecutionAttempt();
+        consumerVertex.cachePartitionInfo(PartialInputChannelDeploymentDescriptor.fromEdge(partition,partitionExecution));
+        if (consumerVertex.getExecutionState() == RUNNING) {
+          consumerVertex.sendPartitionInfos();
+        }
       }
     }
   }

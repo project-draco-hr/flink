@@ -1,0 +1,12 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  int numIterations=20;
+  DataSet<Point> points=env.readCsvFile(dataPath).fieldDelimiter("|").includeFields(true,true).types(Double.class,Double.class).map(new TuplePointConverter());
+  DataSet<Centroid> centroids=env.readCsvFile(clusterPath).fieldDelimiter("|").includeFields(true,true,true).types(Integer.class,Double.class,Double.class).map(new TupleCentroidConverter());
+  IterativeDataSet<Centroid> loop=centroids.iterate(numIterations);
+  DataSet<Centroid> newCentroids=points.map(new SelectNearestCenter()).withBroadcastSet(loop,"centroids").map(new CountAppender()).groupBy("field0").reduce(new CentroidAccumulator()).map(new CentroidAverager());
+  DataSet<Centroid> finalCentroids=loop.closeWith(newCentroids);
+  DataSet<Tuple2<Integer,Point>> clusteredPoints=points.map(new SelectNearestCenter()).withBroadcastSet(finalCentroids,"centroids");
+  clusteredPoints.writeAsCsv(resultPath,"\n"," ");
+  env.execute("KMeansForTest");
+}

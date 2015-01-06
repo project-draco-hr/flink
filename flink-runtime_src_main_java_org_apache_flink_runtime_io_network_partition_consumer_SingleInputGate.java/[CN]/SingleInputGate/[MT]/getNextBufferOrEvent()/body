@@ -1,9 +1,12 @@
 {
-  if (releasedResourcesFlag) {
+  if (isReleased) {
     throw new IllegalStateException("The input has already been consumed. This indicates misuse of the input gate.");
   }
   requestPartitions();
-  final InputChannel currentChannel=inputChannelsWithData.take();
+  InputChannel currentChannel=null;
+  while (currentChannel == null) {
+    currentChannel=inputChannelsWithData.poll(2,TimeUnit.SECONDS);
+  }
   final Buffer buffer=currentChannel.getNextBuffer();
   if (buffer == null) {
     throw new IllegalStateException("Bug in input gate/channel logic: input gate got" + "notified by channel about available data, but none was available.");
@@ -14,6 +17,7 @@
  else {
     final AbstractEvent event=EventSerializer.fromBuffer(buffer,getClass().getClassLoader());
     if (event.getClass() == EndOfPartitionEvent.class) {
+      currentChannel.notifySubpartitionConsumed();
       currentChannel.releaseAllResources();
     }
     return new BufferOrEvent(event,currentChannel.getChannelIndex());

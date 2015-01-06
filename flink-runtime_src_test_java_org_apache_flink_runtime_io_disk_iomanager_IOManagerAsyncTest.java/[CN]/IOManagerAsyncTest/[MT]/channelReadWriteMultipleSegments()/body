@@ -7,9 +7,9 @@
       memSegs.add(new MemorySegment(new byte[32 * 1024]));
     }
     final FileIOChannel.ID channelID=this.ioManager.createChannel();
-    final BlockChannelWriter writer=this.ioManager.createBlockChannelWriter(channelID);
+    final BlockChannelWriter<MemorySegment> writer=this.ioManager.createBlockChannelWriter(channelID);
     for (int i=0; i < NUM_IOS; i++) {
-      final MemorySegment memSeg=memSegs.isEmpty() ? writer.getNextReturnedSegment() : memSegs.remove(memSegs.size() - 1);
+      final MemorySegment memSeg=memSegs.isEmpty() ? writer.getNextReturnedBlock() : memSegs.remove(memSegs.size() - 1);
       for (int pos=0; pos < memSeg.size(); pos+=4) {
         memSeg.putInt(pos,i);
       }
@@ -17,14 +17,14 @@
     }
     writer.close();
     while (memSegs.size() < NUM_SEGS) {
-      memSegs.add(writer.getNextReturnedSegment());
+      memSegs.add(writer.getNextReturnedBlock());
     }
-    final BlockChannelReader reader=this.ioManager.createBlockChannelReader(channelID);
+    final BlockChannelReader<MemorySegment> reader=this.ioManager.createBlockChannelReader(channelID);
     while (!memSegs.isEmpty()) {
       reader.readBlock(memSegs.remove(0));
     }
     for (int i=0; i < NUM_IOS; i++) {
-      final MemorySegment memSeg=reader.getNextReturnedSegment();
+      final MemorySegment memSeg=reader.getNextReturnedBlock();
       for (int pos=0; pos < memSeg.size(); pos+=4) {
         if (memSeg.getInt(pos) != i) {
           fail("Read memory segment contains invalid data.");
@@ -34,7 +34,7 @@
     }
     reader.closeAndDelete();
     while (memSegs.size() < NUM_SEGS) {
-      memSegs.add(reader.getNextReturnedSegment());
+      memSegs.add(reader.getNextReturnedBlock());
     }
   }
  catch (  Exception ex) {

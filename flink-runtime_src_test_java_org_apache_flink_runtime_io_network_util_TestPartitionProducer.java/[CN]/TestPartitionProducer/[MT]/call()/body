@@ -1,0 +1,29 @@
+{
+  try {
+    BufferOrEvent bufferOrEvent;
+    while ((bufferOrEvent=source.getNextBufferOrEvent()) != null) {
+      int targetChannelIndex=bufferOrEvent.getChannelIndex();
+      if (bufferOrEvent.isBuffer()) {
+        partition.add(bufferOrEvent.getBuffer(),targetChannelIndex);
+      }
+ else       if (bufferOrEvent.isEvent()) {
+        final Buffer buffer=EventSerializer.toBuffer(bufferOrEvent.getEvent());
+        partition.add(buffer,targetChannelIndex);
+      }
+ else {
+        throw new IllegalStateException("BufferOrEvent instance w/o buffer nor event.");
+      }
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
+      if (isSlowProducer) {
+        Thread.sleep(random.nextInt(MAX_SLEEP_TIME_MS + 1));
+      }
+    }
+    partition.finish();
+    return true;
+  }
+  finally {
+    partition.release();
+  }
+}

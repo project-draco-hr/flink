@@ -12,11 +12,20 @@
     }
   }
   finally {
+    NotificationListener listener=null;
 synchronized (this.closeLock) {
-      final int num=this.requestsNotReturned.decrementAndGet();
-      if (this.closed && num == 0) {
-        this.closeLock.notifyAll();
+      if (this.requestsNotReturned.decrementAndGet() == 0) {
+        if (this.closed) {
+          this.closeLock.notifyAll();
+        }
+synchronized (listenerLock) {
+          listener=allRequestsProcessedListener;
+          allRequestsProcessedListener=null;
+        }
       }
+    }
+    if (listener != null) {
+      listener.onNotification();
     }
   }
 }

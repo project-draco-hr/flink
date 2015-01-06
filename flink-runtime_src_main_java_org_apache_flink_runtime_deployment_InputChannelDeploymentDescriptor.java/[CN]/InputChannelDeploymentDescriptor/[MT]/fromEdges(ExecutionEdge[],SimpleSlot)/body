@@ -1,0 +1,27 @@
+{
+  final InputChannelDeploymentDescriptor[] icdd=new InputChannelDeploymentDescriptor[edges.length];
+  for (int i=0; i < edges.length; i++) {
+    final IntermediateResultPartition consumedPartition=edges[i].getSource();
+    final Execution producer=consumedPartition.getProducer().getCurrentExecutionAttempt();
+    final ExecutionState producerState=producer.getState();
+    final SimpleSlot producerSlot=producer.getAssignedResource();
+    final ResultPartitionLocation partitionLocation;
+    if (consumedPartition.isConsumable() && producerSlot != null && (producerState == ExecutionState.RUNNING || producerState == ExecutionState.FINISHED)) {
+      final Instance partitionInstance=producerSlot.getInstance();
+      if (partitionInstance.equals(consumerSlot.getInstance())) {
+        partitionLocation=ResultPartitionLocation.createLocal();
+      }
+ else {
+        final ConnectionID connectionId=new ConnectionID(partitionInstance.getInstanceConnectionInfo(),consumedPartition.getIntermediateResult().getConnectionIndex());
+        partitionLocation=ResultPartitionLocation.createRemote(connectionId);
+      }
+    }
+ else {
+      partitionLocation=ResultPartitionLocation.createUnknown();
+    }
+    final ResultPartitionID consumedPartitionId=new ResultPartitionID(consumedPartition.getPartitionId(),producer.getAttemptId());
+    icdd[i]=new InputChannelDeploymentDescriptor(consumedPartitionId,partitionLocation);
+  }
+  LOG.debug("Created {} from edges {}.",Arrays.toString(icdd),Arrays.toString(edges));
+  return icdd;
+}

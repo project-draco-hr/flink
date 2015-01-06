@@ -1,0 +1,43 @@
+{
+  BufferFileWriter[] writers=new BufferFileWriter[]{createWriterAndWriteBuffers(ioManager,writerBufferPool,512),createWriterAndWriteBuffers(ioManager,writerBufferPool,512)};
+  final ResultSubpartitionView[] readers=new ResultSubpartitionView[writers.length];
+  final BufferProvider inputBuffers=new TestPooledBufferProvider(2);
+  final ResultSubpartition parent=mock(ResultSubpartition.class);
+  try {
+    for (    BufferFileWriter writer : writers) {
+      writer.close();
+    }
+    for (int i=0; i < readers.length; i++) {
+      if (ioMode.isSynchronous()) {
+        readers[i]=new SpilledSubpartitionViewSyncIO(parent,inputBuffers.getMemorySegmentSize(),writers[i].getChannelID(),0);
+      }
+ else {
+        readers[i]=new SpilledSubpartitionViewAsyncIO(parent,inputBuffers,ioManager,writers[i].getChannelID(),0);
+      }
+    }
+    final List<Future<Boolean>> results=Lists.newArrayList();
+    for (    ResultSubpartitionView view : readers) {
+      results.add(executor.submit(new TestSubpartitionConsumer(view,false,new RecyclingCallback())));
+    }
+    for (    Future<Boolean> res : results) {
+      try {
+        res.get(2,TimeUnit.MINUTES);
+      }
+ catch (      TimeoutException e) {
+        throw new TimeoutException("There has been a timeout in the test. This " + "indicates that there is a bug/deadlock in the tested subpartition " + "view. The timed out test was in " + ioMode + " mode.");
+      }
+    }
+  }
+  finally {
+    for (    BufferFileWriter writer : writers) {
+      if (writer != null) {
+        writer.deleteChannel();
+      }
+    }
+    for (    ResultSubpartitionView reader : readers) {
+      if (reader != null) {
+        reader.releaseAllResources();
+      }
+    }
+  }
+}

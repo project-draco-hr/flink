@@ -1,22 +1,21 @@
 {
-  final ExecutionAttemptID executionId=task.getExecutionId();
-  final IntermediateResultPartition[] producedPartitions=task.getProducedPartitions();
-  final BufferWriter[] writers=task.getWriters();
+  final ResultPartition[] producedPartitions=task.getProducedPartitions();
+  final ResultPartitionWriter[] writers=task.getWriters();
   if (writers.length != producedPartitions.length) {
     throw new IllegalStateException("Unequal number of writers and partitions.");
   }
   for (int i=0; i < producedPartitions.length; i++) {
-    final IntermediateResultPartition partition=producedPartitions[i];
-    final BufferWriter writer=writers[i];
+    final ResultPartition partition=producedPartitions[i];
+    final ResultPartitionWriter writer=writers[i];
     BufferPool bufferPool=null;
     try {
-      bufferPool=networkBufferPool.createBufferPool(partition.getNumberOfQueues(),false);
-      partition.setBufferPool(bufferPool);
+      bufferPool=networkBufferPool.createBufferPool(partition.getNumberOfSubpartitions(),false);
+      partition.registerBufferPool(bufferPool);
       partitionManager.registerIntermediateResultPartition(partition);
     }
  catch (    Throwable t) {
       if (bufferPool != null) {
-        bufferPool.destroy();
+        bufferPool.lazyDestroy();
       }
       if (t instanceof IOException) {
         throw (IOException)t;
@@ -25,7 +24,7 @@
         throw new IOException(t.getMessage(),t);
       }
     }
-    taskEventDispatcher.registerWriterForIncomingTaskEvents(executionId,writer.getPartitionId(),writer);
+    taskEventDispatcher.registerWriterForIncomingTaskEvents(writer.getPartitionId(),writer);
   }
   final SingleInputGate[] inputGates=task.getInputGates();
   for (  SingleInputGate gate : inputGates) {
@@ -36,7 +35,7 @@
     }
  catch (    Throwable t) {
       if (bufferPool != null) {
-        bufferPool.destroy();
+        bufferPool.lazyDestroy();
       }
       if (t instanceof IOException) {
         throw (IOException)t;

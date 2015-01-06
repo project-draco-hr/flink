@@ -1,0 +1,45 @@
+{
+  final int producerBufferPoolSize=8;
+  final int producerNumberOfBuffersToProduce=128;
+  final TestProducerSource producerSource=new TestProducerSource(){
+    private BufferProvider bufferProvider=new TestPooledBufferProvider(producerBufferPoolSize);
+    private int numberOfBuffers;
+    @Override public BufferOrEvent getNextBufferOrEvent() throws Exception {
+      if (numberOfBuffers == producerNumberOfBuffersToProduce) {
+        return null;
+      }
+      final Buffer buffer=bufferProvider.requestBufferBlocking();
+      final MemorySegment segment=buffer.getMemorySegment();
+      int next=numberOfBuffers * (segment.size() / 4);
+      for (int i=0; i < segment.size(); i+=4) {
+        segment.putInt(i,next);
+        next++;
+      }
+      numberOfBuffers++;
+      return new BufferOrEvent(buffer,0);
+    }
+  }
+;
+  final TestConsumerCallback consumerCallback=new TestConsumerCallback(){
+    private int numberOfBuffers;
+    @Override public void onBuffer(    Buffer buffer){
+      final MemorySegment segment=buffer.getMemorySegment();
+      int expected=numberOfBuffers * (segment.size() / 4);
+      for (int i=0; i < segment.size(); i+=4) {
+        assertEquals(expected,segment.getInt(i));
+        expected++;
+      }
+      numberOfBuffers++;
+      buffer.recycle();
+    }
+    @Override public void onEvent(    AbstractEvent event){
+    }
+  }
+;
+  final PipelinedSubpartition subpartition=createSubpartition();
+  final PipelinedSubpartitionView view=subpartition.getReadView(Optional.<BufferProvider>absent());
+  Future<Boolean> producer=executorService.submit(new TestSubpartitionProducer(subpartition,isSlowProducer,producerSource));
+  Future<Boolean> consumer=executorService.submit(new TestSubpartitionConsumer(view,isSlowConsumer,consumerCallback));
+  producer.get();
+  consumer.get();
+}

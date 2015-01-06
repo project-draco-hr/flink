@@ -6,17 +6,19 @@
   this.jobManager=checkNotNull(jobManager);
   this.broadcastVariableManager=checkNotNull(broadcastVariableManager);
   try {
-    final List<PartitionDeploymentDescriptor> partitions=tdd.getProducedPartitions();
-    this.producedPartitions=new IntermediateResultPartition[partitions.size()];
-    this.writers=new BufferWriter[partitions.size()];
+    final List<ResultPartitionDeploymentDescriptor> partitions=tdd.getProducedPartitions();
+    this.producedPartitions=new ResultPartition[partitions.size()];
+    this.writers=new ResultPartitionWriter[partitions.size()];
     for (int i=0; i < this.producedPartitions.length; i++) {
-      this.producedPartitions[i]=IntermediateResultPartition.create(this,i,owner.getJobID(),owner.getExecutionId(),networkEnvironment,partitions.get(i));
-      writers[i]=new BufferWriter(this.producedPartitions[i]);
+      ResultPartitionDeploymentDescriptor desc=partitions.get(i);
+      ResultPartitionID partitionId=new ResultPartitionID(desc.getPartitionId(),owner.getExecutionId());
+      this.producedPartitions[i]=new ResultPartition(owner.getJobID(),partitionId,desc.getPartitionType(),desc.getNumberOfSubpartitions(),networkEnvironment,ioManager);
+      writers[i]=new ResultPartitionWriter(this.producedPartitions[i]);
     }
-    final List<PartitionConsumerDeploymentDescriptor> consumedPartitions=tdd.getConsumedPartitions();
+    final List<InputGateDeploymentDescriptor> consumedPartitions=tdd.getInputGates();
     this.inputGates=new SingleInputGate[consumedPartitions.size()];
     for (int i=0; i < inputGates.length; i++) {
-      inputGates[i]=SingleInputGate.create(networkEnvironment,consumedPartitions.get(i));
+      inputGates[i]=SingleInputGate.create(consumedPartitions.get(i),networkEnvironment);
       inputGatesById.put(inputGates[i].getConsumedResultId(),inputGates[i]);
     }
     this.jobConfiguration=tdd.getJobConfiguration();

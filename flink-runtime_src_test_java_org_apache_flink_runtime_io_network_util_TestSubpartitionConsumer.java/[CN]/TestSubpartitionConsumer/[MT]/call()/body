@@ -1,0 +1,40 @@
+{
+  final TestNotificationListener listener=new TestNotificationListener();
+  try {
+    while (true) {
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
+      final Buffer buffer=subpartitionView.getNextBuffer();
+      if (isSlowConsumer) {
+        Thread.sleep(random.nextInt(MAX_SLEEP_TIME_MS + 1));
+      }
+      if (buffer != null) {
+        if (buffer.isBuffer()) {
+          callback.onBuffer(buffer);
+        }
+ else {
+          final AbstractEvent event=EventSerializer.fromBuffer(buffer,getClass().getClassLoader());
+          callback.onEvent(event);
+          buffer.recycle();
+          if (event.getClass() == EndOfPartitionEvent.class) {
+            subpartitionView.notifySubpartitionConsumed();
+            return true;
+          }
+        }
+      }
+ else {
+        int current=listener.getNumberOfNotifications();
+        if (subpartitionView.registerListener(listener)) {
+          listener.waitForNotification(current);
+        }
+ else         if (subpartitionView.isReleased()) {
+          return true;
+        }
+      }
+    }
+  }
+  finally {
+    subpartitionView.releaseAllResources();
+  }
+}

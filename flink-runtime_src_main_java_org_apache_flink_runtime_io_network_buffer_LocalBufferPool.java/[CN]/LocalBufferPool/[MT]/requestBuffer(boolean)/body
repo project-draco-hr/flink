@@ -1,10 +1,11 @@
 {
 synchronized (availableMemorySegments) {
-    if (isDestroyed) {
-      return null;
-    }
     returnExcessMemorySegments();
+    boolean askToRecycle=owner != null;
     while (availableMemorySegments.isEmpty()) {
+      if (isDestroyed) {
+        return null;
+      }
       if (numberOfRequestedMemorySegments < currentPoolSize) {
         final MemorySegment segment=networkBufferPool.requestMemorySegment();
         if (segment != null) {
@@ -12,6 +13,9 @@ synchronized (availableMemorySegments) {
           availableMemorySegments.add(segment);
           continue;
         }
+      }
+      if (askToRecycle) {
+        owner.releaseMemory(1);
       }
       if (isBlocking) {
         availableMemorySegments.wait(2000);

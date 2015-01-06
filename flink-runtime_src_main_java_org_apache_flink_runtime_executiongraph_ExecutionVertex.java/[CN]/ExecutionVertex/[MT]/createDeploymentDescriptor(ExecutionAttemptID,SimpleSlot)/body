@@ -1,16 +1,16 @@
 {
-  List<PartitionDeploymentDescriptor> producedPartitions=new ArrayList<PartitionDeploymentDescriptor>(resultPartitions.length);
-  for (  IntermediateResultPartition partition : resultPartitions) {
-    producedPartitions.add(PartitionDeploymentDescriptor.fromIntermediateResultPartition(partition));
+  List<ResultPartitionDeploymentDescriptor> producedPartitions=new ArrayList<ResultPartitionDeploymentDescriptor>(resultPartitions.size());
+  for (  IntermediateResultPartition partition : resultPartitions.values()) {
+    producedPartitions.add(ResultPartitionDeploymentDescriptor.from(partition));
   }
-  List<PartitionConsumerDeploymentDescriptor> consumedPartitions=new ArrayList<PartitionConsumerDeploymentDescriptor>();
+  List<InputGateDeploymentDescriptor> consumedPartitions=new ArrayList<InputGateDeploymentDescriptor>();
   for (  ExecutionEdge[] edges : inputEdges) {
-    PartitionInfo[] partitions=PartitionInfo.fromEdges(edges,slot);
+    InputChannelDeploymentDescriptor[] partitions=InputChannelDeploymentDescriptor.fromEdges(edges,targetSlot);
     int numConsumerEdges=edges[0].getSource().getConsumers().get(0).size();
     int queueToRequest=subTaskIndex % numConsumerEdges;
     IntermediateDataSetID resultId=edges[0].getSource().getIntermediateResult().getId();
-    consumedPartitions.add(new PartitionConsumerDeploymentDescriptor(resultId,partitions,queueToRequest));
+    consumedPartitions.add(new InputGateDeploymentDescriptor(resultId,queueToRequest,partitions));
   }
   List<BlobKey> jarFiles=getExecutionGraph().getRequiredJarFiles();
-  return new TaskDeploymentDescriptor(getJobId(),getJobvertexId(),executionId,getTaskName(),subTaskIndex,getTotalNumberOfParallelSubtasks(),getExecutionGraph().getJobConfiguration(),jobVertex.getJobVertex().getConfiguration(),jobVertex.getJobVertex().getInvokableClassName(),producedPartitions,consumedPartitions,jarFiles,slot.getSlotNumber(),operatorState);
+  return new TaskDeploymentDescriptor(getJobId(),getJobvertexId(),executionId,getTaskName(),subTaskIndex,getTotalNumberOfParallelSubtasks(),getExecutionGraph().getJobConfiguration(),jobVertex.getJobVertex().getConfiguration(),jobVertex.getJobVertex().getInvokableClassName(),producedPartitions,consumedPartitions,jarFiles,targetSlot.getSlotNumber(),operatorState);
 }

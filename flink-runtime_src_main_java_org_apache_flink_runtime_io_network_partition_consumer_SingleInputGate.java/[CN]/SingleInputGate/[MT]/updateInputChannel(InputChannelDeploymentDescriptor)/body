@@ -1,0 +1,32 @@
+{
+synchronized (requestLock) {
+    if (isReleased) {
+      return;
+    }
+    final IntermediateResultPartitionID partitionId=icdd.getConsumedPartitionId().getPartitionId();
+    InputChannel current=inputChannels.get(partitionId);
+    if (current.getClass() == UnknownInputChannel.class) {
+      UnknownInputChannel unknownChannel=(UnknownInputChannel)current;
+      InputChannel newChannel;
+      ResultPartitionLocation partitionLocation=icdd.getConsumedPartitionLocation();
+      if (partitionLocation.isLocal()) {
+        newChannel=unknownChannel.toLocalInputChannel();
+      }
+ else       if (partitionLocation.isRemote()) {
+        newChannel=unknownChannel.toRemoteInputChannel(partitionLocation.getConnectionId());
+      }
+ else {
+        throw new IllegalStateException("Tried to update unknown channel with unknown channel.");
+      }
+      LOG.debug("Updated unknown input channel to {}.",newChannel);
+      inputChannels.put(partitionId,newChannel);
+      newChannel.requestSubpartition(consumedSubpartitionIndex);
+      for (      TaskEvent event : pendingEvents) {
+        newChannel.sendTaskEvent(event);
+      }
+      if (--numberOfUninitializedChannels == 0) {
+        pendingEvents.clear();
+      }
+    }
+  }
+}

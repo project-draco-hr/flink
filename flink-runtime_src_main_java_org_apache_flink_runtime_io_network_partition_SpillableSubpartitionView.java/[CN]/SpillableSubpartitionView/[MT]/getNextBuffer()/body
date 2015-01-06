@@ -1,0 +1,30 @@
+{
+  if (isReleased.get()) {
+    return null;
+  }
+synchronized (parent.buffers) {
+    if (parent.spillWriter == null) {
+      if (currentQueuePosition < numberOfBuffers) {
+        Buffer buffer=parent.buffers.get(currentQueuePosition);
+        buffer.retain();
+        currentBytesRead+=buffer.getSize() + 8;
+        currentQueuePosition++;
+        return buffer;
+      }
+      return null;
+    }
+  }
+  if (spilledView != null) {
+    return spilledView.getNextBuffer();
+  }
+  if (parent.spillWriter.getNumberOfOutstandingRequests() > 0) {
+    return null;
+  }
+  if (ioMode.isSynchronous()) {
+    spilledView=new SpilledSubpartitionViewSyncIO(parent,bufferProvider.getMemorySegmentSize(),parent.spillWriter.getChannelID(),0);
+  }
+ else {
+    spilledView=new SpilledSubpartitionViewAsyncIO(parent,bufferProvider,parent.ioManager,parent.spillWriter.getChannelID(),0);
+  }
+  return spilledView.getNextBuffer();
+}
