@@ -1,0 +1,36 @@
+{
+  while (true) {
+    Pair<Instance,Locality> instanceLocalityPair=findInstance(requestedLocations);
+    if (instanceLocalityPair == null) {
+      return null;
+    }
+    Instance instanceToUse=instanceLocalityPair.getLeft();
+    Locality locality=instanceLocalityPair.getRight();
+    if (LOG.isDebugEnabled()) {
+      if (locality == Locality.LOCAL) {
+        LOG.debug("Local assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
+      }
+ else       if (locality == Locality.NON_LOCAL) {
+        LOG.debug("Non-local assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
+      }
+ else       if (locality == Locality.UNCONSTRAINED) {
+        LOG.debug("Unconstrained assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
+      }
+    }
+    try {
+      AbstractID groupID=constraint == null ? vertex.getJobvertexId() : constraint.getGroupId();
+      SharedSlot sharedSlot=instanceToUse.allocateSharedSlot(vertex.getJobId(),groupAssignment,groupID);
+      SimpleSlot slot=groupAssignment.addSharedSlotAndAllocateSubSlot(sharedSlot,locality,groupID,constraint);
+      if (instanceToUse.hasResourcesAvailable()) {
+        this.instancesWithAvailableResources.add(instanceToUse);
+      }
+      if (slot != null) {
+        return slot;
+      }
+    }
+ catch (    InstanceDiedException e) {
+      this.allInstances.remove(instanceToUse);
+      this.instancesWithAvailableResources.remove(instanceToUse);
+    }
+  }
+}

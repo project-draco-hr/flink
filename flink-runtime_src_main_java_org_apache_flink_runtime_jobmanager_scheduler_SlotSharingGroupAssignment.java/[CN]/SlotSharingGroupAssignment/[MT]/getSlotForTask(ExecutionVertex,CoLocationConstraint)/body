@@ -1,8 +1,8 @@
 {
 synchronized (lock) {
     SharedSlot shared=constraint.getSharedSlot();
-    if (shared != null && !shared.isDisposed()) {
-      SubSlot subslot=shared.allocateSubSlot(null);
+    if (shared != null && !shared.isDead()) {
+      SimpleSlot subslot=shared.allocateSubSlot(null);
       subslot.setLocality(Locality.LOCAL);
       return subslot;
     }
@@ -14,26 +14,28 @@ synchronized (lock) {
  else {
         shared=p.getLeft();
         Locality l=p.getRight();
-        SubSlot sub=shared.allocateSubSlot(null);
+        SharedSlot constraintGroupSlot=shared.allocateSharedSlot(constraint.getGroupId());
+        SimpleSlot sub=constraintGroupSlot.allocateSubSlot(null);
         sub.setLocality(l);
         if (l != Locality.NON_LOCAL) {
-          constraint.setSharedSlot(shared);
+          constraint.setSharedSlot(constraintGroupSlot);
         }
         return sub;
       }
     }
  else {
-      Instance location=shared.getAllocatedSlot().getInstance();
+      Instance location=shared.getInstance();
       Pair<SharedSlot,Locality> p=getSlotForTaskInternal(constraint.getGroupId(),vertex,Collections.singleton(location),true);
       if (p == null) {
         return null;
       }
  else {
         shared=p.getLeft();
-        constraint.setSharedSlot(shared);
-        SubSlot subslot=shared.allocateSubSlot(null);
-        subslot.setLocality(Locality.LOCAL);
-        return subslot;
+        SharedSlot constraintGroupSlot=shared.allocateSharedSlot(constraint.getGroupId());
+        constraint.setSharedSlot(constraintGroupSlot);
+        SimpleSlot subSlot=constraintGroupSlot.allocateSubSlot(null);
+        subSlot.setLocality(Locality.LOCAL);
+        return subSlot;
       }
     }
   }

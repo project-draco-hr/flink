@@ -1,45 +1,24 @@
 {
   while (true) {
-    if (this.instancesWithAvailableResources.isEmpty()) {
-      Instance queuedInstance=this.newlyAvailableInstances.poll();
-      if (queuedInstance == null) {
-        return null;
-      }
- else {
-        this.instancesWithAvailableResources.add(queuedInstance);
-      }
+    Pair<Instance,Locality> instanceLocalityPair=findInstance(requestedLocations);
+    if (instanceLocalityPair == null) {
+      return null;
     }
-    Iterator<Instance> locations=requestedLocations == null ? null : requestedLocations.iterator();
-    Instance instanceToUse=null;
-    Locality locality=Locality.UNCONSTRAINED;
-    if (locations != null && locations.hasNext()) {
-      while (locations.hasNext()) {
-        Instance location=locations.next();
-        if (location != null && this.instancesWithAvailableResources.remove(location)) {
-          instanceToUse=location;
-          locality=Locality.LOCAL;
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Local assignment: " + vertex.getSimpleName() + " --> "+ location);
-          }
-          break;
-        }
+    Instance instanceToUse=instanceLocalityPair.getLeft();
+    Locality locality=instanceLocalityPair.getRight();
+    if (LOG.isDebugEnabled()) {
+      if (locality == Locality.LOCAL) {
+        LOG.debug("Local assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
       }
-      if (instanceToUse == null) {
-        instanceToUse=this.instancesWithAvailableResources.poll();
-        locality=Locality.NON_LOCAL;
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Non-local assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
-        }
+ else       if (locality == Locality.NON_LOCAL) {
+        LOG.debug("Non-local assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
       }
-    }
- else {
-      instanceToUse=this.instancesWithAvailableResources.poll();
-      if (LOG.isDebugEnabled()) {
+ else       if (locality == Locality.UNCONSTRAINED) {
         LOG.debug("Unconstrained assignment: " + vertex.getSimpleName() + " --> "+ instanceToUse);
       }
     }
     try {
-      AllocatedSlot slot=instanceToUse.allocateSlot(vertex.getJobId());
+      SimpleSlot slot=instanceToUse.allocateSimpleSlot(vertex.getJobId(),vertex.getJobvertexId());
       if (instanceToUse.hasResourcesAvailable()) {
         this.instancesWithAvailableResources.add(instanceToUse);
       }

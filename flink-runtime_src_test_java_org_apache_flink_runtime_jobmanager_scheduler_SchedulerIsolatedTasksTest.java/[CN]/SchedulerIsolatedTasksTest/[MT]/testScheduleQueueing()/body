@@ -11,10 +11,10 @@
     assertEquals(NUM_INSTANCES,scheduler.getNumberOfAvailableInstances());
     final int totalSlots=scheduler.getNumberOfAvailableSlots();
     List<SlotAllocationFuture> allAllocatedSlots=new ArrayList<SlotAllocationFuture>();
-    final Set<AllocatedSlot> toRelease=new HashSet<AllocatedSlot>();
+    final Set<SimpleSlot> toRelease=new HashSet<SimpleSlot>();
     final AtomicBoolean errored=new AtomicBoolean(false);
     SlotAllocationFutureAction action=new SlotAllocationFutureAction(){
-      @Override public void slotAllocated(      AllocatedSlot slot){
+      @Override public void slotAllocated(      SimpleSlot slot){
 synchronized (toRelease) {
           toRelease.add(slot);
           toRelease.notifyAll();
@@ -31,8 +31,8 @@ synchronized (toRelease) {
               while (toRelease.isEmpty()) {
                 toRelease.wait();
               }
-              Iterator<AllocatedSlot> iter=toRelease.iterator();
-              AllocatedSlot next=iter.next();
+              Iterator<SimpleSlot> iter=toRelease.iterator();
+              SimpleSlot next=iter.next();
               iter.remove();
               next.releaseSlot();
               recycled++;
@@ -54,7 +54,7 @@ synchronized (toRelease) {
     }
     disposeThread.join();
     assertFalse("The slot releasing thread caused an error.",errored.get());
-    List<AllocatedSlot> slotsAfter=new ArrayList<AllocatedSlot>();
+    List<SimpleSlot> slotsAfter=new ArrayList<SimpleSlot>();
     for (    SlotAllocationFuture future : allAllocatedSlots) {
       slotsAfter.add(future.waitTillAllocated());
     }

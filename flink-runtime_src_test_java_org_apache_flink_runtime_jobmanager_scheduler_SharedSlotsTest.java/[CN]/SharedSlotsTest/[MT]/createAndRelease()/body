@@ -1,33 +1,35 @@
 {
   try {
     SlotSharingGroupAssignment assignment=mock(SlotSharingGroupAssignment.class);
-    doAnswer(new Answer<Void>(){
-      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
-        final SubSlot sub=(SubSlot)invocation.getArguments()[0];
-        final SharedSlot shared=(SharedSlot)invocation.getArguments()[1];
-        if (shared.releaseSlot(sub) == 0) {
-          shared.dispose();
+    doAnswer(new Answer<Boolean>(){
+      @Override public Boolean answer(      InvocationOnMock invocation) throws Throwable {
+        final SimpleSlot slot=(SimpleSlot)invocation.getArguments()[0];
+        final SharedSlot shared=slot.getParent();
+        if (shared.freeSubSlot(slot) == 0) {
+          shared.markDead();
+          return true;
         }
-        return null;
+        return false;
       }
     }
-).when(assignment).releaseSubSlot(any(SubSlot.class),any(SharedSlot.class));
+).when(assignment).releaseSimpleSlot(any(SimpleSlot.class));
+    JobVertexID id1=new JobVertexID();
     Instance instance=SchedulerTestUtils.getRandomInstance(1);
-    SharedSlot slot=new SharedSlot(instance.allocateSlot(new JobID()),assignment);
-    assertFalse(slot.isDisposed());
-    SubSlot ss1=slot.allocateSubSlot(new JobVertexID());
+    SharedSlot slot=instance.allocateSharedSlot(new JobID(),assignment,id1);
+    assertFalse(slot.isDead());
+    SimpleSlot ss1=slot.allocateSubSlot(id1);
     assertNotNull(ss1);
     assertEquals(instance,ss1.getInstance());
     assertEquals(0,ss1.getSlotNumber());
-    assertEquals(slot.getAllocatedSlot().getJobID(),ss1.getJobID());
-    SubSlot ss2=slot.allocateSubSlot(new JobVertexID());
+    assertEquals(slot.getJobID(),ss1.getJobID());
+    SimpleSlot ss2=slot.allocateSubSlot(new JobVertexID());
     assertNotNull(ss2);
-    assertEquals(2,slot.getNumberOfAllocatedSubSlots());
+    assertEquals(2,slot.getNumberLeaves());
     ss1.releaseSlot();
-    assertFalse(slot.isDisposed());
+    assertFalse(slot.isDead());
     ss2.releaseSlot();
-    assertTrue(slot.isDisposed());
-    assertEquals(0,slot.getNumberOfAllocatedSubSlots());
+    assertTrue(slot.isDead());
+    assertEquals(0,slot.getNumberLeaves());
     assertNull(slot.allocateSubSlot(new JobVertexID()));
   }
  catch (  Exception e) {

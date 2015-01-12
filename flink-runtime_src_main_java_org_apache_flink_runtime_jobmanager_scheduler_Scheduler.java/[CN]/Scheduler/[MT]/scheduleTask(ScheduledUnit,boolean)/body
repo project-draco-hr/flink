@@ -14,14 +14,14 @@ synchronized (globalLock) {
       }
       final SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
       final CoLocationConstraint constraint=task.getLocationConstraint();
-      SubSlot slotFromGroup;
+      SimpleSlot slotFromGroup;
       if (constraint == null) {
         slotFromGroup=assignment.getSlotForTask(vertex);
       }
  else {
         slotFromGroup=assignment.getSlotForTask(vertex,constraint);
       }
-      AllocatedSlot newSlot=null;
+      SimpleSlot newSlot=null;
       try {
         if (slotFromGroup != null) {
           if (slotFromGroup.getLocality() != Locality.NON_LOCAL) {
@@ -30,12 +30,12 @@ synchronized (globalLock) {
           }
         }
         final Iterable<Instance> locations=(constraint == null || constraint.isUnassigned()) ? vertex.getPreferredLocations() : Collections.singleton(constraint.getLocation());
-        newSlot=getFreeSlotForTask(vertex,locations);
-        SubSlot toUse;
+        newSlot=getFreeSubSlotForTask(vertex,locations,assignment,constraint);
+        SimpleSlot toUse;
         if (newSlot == null) {
           if (slotFromGroup == null) {
             if (constraint == null || constraint.isUnassigned()) {
-              throw new NoResourceAvailableException(task,getNumberOfAvailableInstances(),getTotalNumberOfSlots());
+              throw new NoResourceAvailableException(task,getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
             }
  else {
               throw new NoResourceAvailableException("Could not allocate a slot on instance " + constraint.getLocation() + ", as required by the co-location constraint.");
@@ -49,12 +49,7 @@ synchronized (globalLock) {
           if (slotFromGroup != null) {
             slotFromGroup.releaseSlot();
           }
-          if (constraint == null) {
-            toUse=assignment.addNewSlotWithTask(newSlot,vertex);
-          }
- else {
-            toUse=assignment.addNewSlotWithTask(newSlot,vertex,constraint);
-          }
+          toUse=newSlot;
         }
  else {
           newSlot.releaseSlot();
@@ -62,7 +57,7 @@ synchronized (globalLock) {
         }
         if (constraint != null) {
           if (constraint.isUnassigned() || toUse.getLocality() == Locality.LOCAL) {
-            constraint.setSharedSlot(toUse.getSharedSlot());
+            constraint.setSharedSlot(toUse.getParent());
           }
  else {
             throw new NoResourceAvailableException("Could not allocate a slot on instance " + constraint.getLocation() + ", as required by the co-location constraint.");
@@ -84,7 +79,7 @@ catch (      Throwable t) {
         ExceptionUtils.rethrow(t,"An error occurred while allocating a slot in a sharing group");
       }
     }
-    AllocatedSlot slot=getFreeSlotForTask(vertex,vertex.getPreferredLocations());
+    SimpleSlot slot=getFreeSlotForTask(vertex,vertex.getPreferredLocations());
     if (slot != null) {
       updateLocalityCounters(slot.getLocality());
       return slot;
@@ -96,7 +91,7 @@ catch (      Throwable t) {
         return future;
       }
  else {
-        throw new NoResourceAvailableException(getNumberOfAvailableInstances(),getTotalNumberOfSlots());
+        throw new NoResourceAvailableException(getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
       }
     }
   }

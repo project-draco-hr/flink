@@ -1,0 +1,31 @@
+{
+  if (slot.markDead()) {
+    if (slot.getParent() == null) {
+      if (slot instanceof SharedSlot) {
+        removeSharedSlot((SharedSlot)slot);
+      }
+ else {
+        throw new IllegalStateException("Simple slot cannot be returned from SlotSharingGroupAssignment.");
+      }
+    }
+ else {
+      AbstractID groupID=slot.getGroupID();
+      SharedSlot parent=slot.getParent();
+      if (groupID != null) {
+        if (!allSlots.contains(parent)) {
+          throw new IllegalArgumentException("Slot was not associated with this SlotSharingGroup before.");
+        }
+        Map<Instance,List<SharedSlot>> slotsForJid=availableSlotsPerJid.get(groupID);
+        if (slotsForJid == null) {
+          throw new IllegalStateException("Trying to return a slot for group " + groupID + " when available slots indicated that all slots were available.");
+        }
+        putIntoMultiMap(slotsForJid,parent.getInstance(),parent);
+      }
+      if (slot.markDisposed()) {
+        if (slot.getParent().freeSubSlot(slot) == 0) {
+          releaseSharedSlot(slot.getParent());
+        }
+      }
+    }
+  }
+}
