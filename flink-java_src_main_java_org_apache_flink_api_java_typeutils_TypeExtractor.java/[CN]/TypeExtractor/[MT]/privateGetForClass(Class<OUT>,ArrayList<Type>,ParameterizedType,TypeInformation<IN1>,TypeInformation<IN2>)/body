@@ -1,0 +1,58 @@
+{
+  Validate.notNull(clazz);
+  if (!clazz.isPrimitive() && (Modifier.isInterface(clazz.getModifiers()) || (Modifier.isAbstract(clazz.getModifiers()) && !clazz.isArray()))) {
+    throw new InvalidTypesException("Interfaces and abstract classes are not valid types: " + clazz);
+  }
+  if (clazz.equals(Object.class)) {
+    return new GenericTypeInfo<OUT>(clazz);
+  }
+  if (clazz.isArray()) {
+    PrimitiveArrayTypeInfo<OUT> primitiveArrayInfo=PrimitiveArrayTypeInfo.getInfoFor(clazz);
+    if (primitiveArrayInfo != null) {
+      return primitiveArrayInfo;
+    }
+    BasicArrayTypeInfo<OUT,?> basicArrayInfo=BasicArrayTypeInfo.getInfoFor(clazz);
+    if (basicArrayInfo != null) {
+      return basicArrayInfo;
+    }
+ else {
+      return ObjectArrayTypeInfo.getInfoFor(clazz);
+    }
+  }
+  if (Writable.class.isAssignableFrom(clazz)) {
+    return (TypeInformation<OUT>)WritableTypeInfo.getWritableTypeInfo((Class<? extends Writable>)clazz);
+  }
+  TypeInformation<OUT> basicTypeInfo=BasicTypeInfo.getInfoFor(clazz);
+  if (basicTypeInfo != null) {
+    return basicTypeInfo;
+  }
+  if (Value.class.isAssignableFrom(clazz)) {
+    Class<? extends Value> valueClass=clazz.asSubclass(Value.class);
+    return (TypeInformation<OUT>)ValueTypeInfo.getValueTypeInfo(valueClass);
+  }
+  if (Tuple.class.isAssignableFrom(clazz)) {
+    throw new InvalidTypesException("Type information extraction for tuples cannot be done based on the class.");
+  }
+  if (Enum.class.isAssignableFrom(clazz)) {
+    return (TypeInformation<OUT>)new EnumTypeInfo(clazz);
+  }
+  if (alreadySeen.contains(clazz)) {
+    return new GenericTypeInfo<OUT>(clazz);
+  }
+  alreadySeen.add(clazz);
+  if (clazz.equals(Class.class)) {
+    return new GenericTypeInfo<OUT>(clazz);
+  }
+  try {
+    TypeInformation<OUT> pojoType=analyzePojo(clazz,new ArrayList<Type>(typeHierarchy),parameterizedType,in1Type,in2Type);
+    if (pojoType != null) {
+      return pojoType;
+    }
+  }
+ catch (  InvalidTypesException e) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Unable to handle type " + clazz + " as POJO. Message: "+ e.getMessage(),e);
+    }
+  }
+  return new GenericTypeInfo<OUT>(clazz);
+}

@@ -1,0 +1,52 @@
+{
+  if (sameTypeVars(type,typeVar)) {
+    return corrInfo;
+  }
+ else   if (type instanceof TypeVariable && sameTypeVars(materializeTypeVariable(typeHierarchy,(TypeVariable<?>)type),typeVar)) {
+    return corrInfo;
+  }
+ else   if (type instanceof GenericArrayType) {
+    TypeInformation<?> componentInfo=null;
+    if (corrInfo instanceof BasicArrayTypeInfo) {
+      componentInfo=((BasicArrayTypeInfo<?,?>)corrInfo).getComponentInfo();
+    }
+ else     if (corrInfo instanceof PrimitiveArrayTypeInfo) {
+      componentInfo=BasicTypeInfo.getInfoFor(corrInfo.getTypeClass().getComponentType());
+    }
+ else     if (corrInfo instanceof ObjectArrayTypeInfo) {
+      componentInfo=((ObjectArrayTypeInfo<?,?>)corrInfo).getComponentInfo();
+    }
+    TypeInformation<?> info=findCorrespondingInfo(typeVar,((GenericArrayType)type).getGenericComponentType(),componentInfo,typeHierarchy);
+    if (info != null) {
+      return info;
+    }
+  }
+ else   if (corrInfo instanceof TupleTypeInfo && type instanceof ParameterizedType && Tuple.class.isAssignableFrom((Class<?>)((ParameterizedType)type).getRawType())) {
+    ParameterizedType tuple=(ParameterizedType)type;
+    Type[] args=tuple.getActualTypeArguments();
+    for (int i=0; i < args.length; i++) {
+      TypeInformation<?> info=findCorrespondingInfo(typeVar,args[i],((TupleTypeInfo<?>)corrInfo).getTypeAt(i),typeHierarchy);
+      if (info != null) {
+        return info;
+      }
+    }
+  }
+ else   if (corrInfo instanceof PojoTypeInfo && isClassType(type)) {
+    List<Field> fields=getAllDeclaredFields(typeToClass(type));
+    for (    Field field : fields) {
+      Type fieldType=field.getGenericType();
+      if (fieldType instanceof TypeVariable && sameTypeVars(typeVar,materializeTypeVariable(typeHierarchy,(TypeVariable<?>)fieldType))) {
+        return getTypeOfPojoField(corrInfo,field);
+      }
+ else       if (fieldType instanceof ParameterizedType || fieldType instanceof GenericArrayType) {
+        ArrayList<Type> typeHierarchyWithFieldType=new ArrayList<Type>(typeHierarchy);
+        typeHierarchyWithFieldType.add(fieldType);
+        TypeInformation<?> info=findCorrespondingInfo(typeVar,fieldType,getTypeOfPojoField(corrInfo,field),typeHierarchyWithFieldType);
+        if (info != null) {
+          return info;
+        }
+      }
+    }
+  }
+  return null;
+}

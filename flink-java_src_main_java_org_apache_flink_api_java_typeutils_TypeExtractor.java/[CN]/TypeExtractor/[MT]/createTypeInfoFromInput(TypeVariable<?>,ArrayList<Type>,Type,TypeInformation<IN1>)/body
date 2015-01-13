@@ -2,9 +2,22 @@
   TypeInformation<?> info=null;
   if (inType instanceof TypeVariable) {
     inType=materializeTypeVariable(inputTypeHierarchy,(TypeVariable<?>)inType);
-    info=findCorrespondingInfo(returnTypeVar,inType,inTypeInfo);
+    info=findCorrespondingInfo(returnTypeVar,inType,inTypeInfo,inputTypeHierarchy);
   }
- else   if (isClassType(inType) && Tuple.class.isAssignableFrom(typeToClass(inType))) {
+ else   if (inType instanceof GenericArrayType) {
+    TypeInformation<?> componentInfo=null;
+    if (inTypeInfo instanceof BasicArrayTypeInfo) {
+      componentInfo=((BasicArrayTypeInfo<?,?>)inTypeInfo).getComponentInfo();
+    }
+ else     if (inTypeInfo instanceof PrimitiveArrayTypeInfo) {
+      componentInfo=BasicTypeInfo.getInfoFor(inTypeInfo.getTypeClass().getComponentType());
+    }
+ else     if (inTypeInfo instanceof ObjectArrayTypeInfo) {
+      componentInfo=((ObjectArrayTypeInfo<?,?>)inTypeInfo).getComponentInfo();
+    }
+    info=createTypeInfoFromInput(returnTypeVar,inputTypeHierarchy,((GenericArrayType)inType).getGenericComponentType(),componentInfo);
+  }
+ else   if (inTypeInfo instanceof TupleTypeInfo && isClassType(inType) && Tuple.class.isAssignableFrom(typeToClass(inType))) {
     ParameterizedType tupleBaseClass=null;
     while (!(isClassType(inType) && typeToClass(inType).getSuperclass().equals(Tuple.class))) {
       inputTypeHierarchy.add(inType);
@@ -19,6 +32,10 @@
         break;
       }
     }
+  }
+ else   if (inTypeInfo instanceof PojoTypeInfo) {
+    getTypeHierarchy(inputTypeHierarchy,inType,Object.class);
+    info=findCorrespondingInfo(returnTypeVar,inType,inTypeInfo,inputTypeHierarchy);
   }
   return info;
 }
