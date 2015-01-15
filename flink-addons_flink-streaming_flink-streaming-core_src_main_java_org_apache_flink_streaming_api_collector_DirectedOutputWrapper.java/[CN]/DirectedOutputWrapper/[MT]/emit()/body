@@ -1,0 +1,38 @@
+{
+  Iterable<String> outputNames=outputSelector.select(serializationDelegate.getInstance().getObject());
+  emitted.clear();
+  for (  StreamOutput<OUT> output : selectAllOutputs) {
+    try {
+      output.collect(serializationDelegate);
+    }
+ catch (    Exception e) {
+      if (LOG.isErrorEnabled()) {
+        LOG.error("Emit to {} failed due to: {}",output,StringUtils.stringifyException(e));
+      }
+    }
+  }
+  for (  String outputName : outputNames) {
+    List<StreamOutput<OUT>> outputList=outputMap.get(outputName);
+    try {
+      if (outputList == null) {
+        if (LOG.isErrorEnabled()) {
+          String format=String.format("Cannot emit because no output is selected with the name: %s",outputName);
+          LOG.error(format);
+        }
+      }
+ else {
+        for (        StreamOutput<OUT> output : outputList) {
+          if (!emitted.contains(output)) {
+            output.collect(serializationDelegate);
+            emitted.add(output);
+          }
+        }
+      }
+    }
+ catch (    Exception e) {
+      if (LOG.isErrorEnabled()) {
+        LOG.error("Emit to {} failed due to: {}",outputName,StringUtils.stringifyException(e));
+      }
+    }
+  }
+}
