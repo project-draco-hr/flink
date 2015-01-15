@@ -1,5 +1,12 @@
 {
   TypeInformation<K> keyType=((TupleTypeInfo<?>)edges.getType()).getTypeAt(0);
-  DataSet<Edge<K,NV>> mappedEdges=edges.map(new ApplyMapperToEdgeWithType<K,EV,NV>(mapper,keyType));
+  TypeInformation<NV> valueType=TypeExtractor.createTypeInfo(MapFunction.class,mapper.getClass(),1,null,null);
+  TypeInformation<Edge<K,NV>> returnType=(TypeInformation<Edge<K,NV>>)new TupleTypeInfo(Edge.class,keyType,keyType,valueType);
+  DataSet<Edge<K,NV>> mappedEdges=edges.map(new MapFunction<Edge<K,EV>,Edge<K,NV>>(){
+    public Edge<K,NV> map(    Edge<K,EV> value) throws Exception {
+      return new Edge<K,NV>(value.f0,value.f1,mapper.map(value));
+    }
+  }
+).returns(returnType);
   return new Graph<K,VV,NV>(this.vertices,mappedEdges,this.context);
 }

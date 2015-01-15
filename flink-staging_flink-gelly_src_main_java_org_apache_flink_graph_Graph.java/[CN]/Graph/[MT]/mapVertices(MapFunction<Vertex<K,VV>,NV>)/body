@@ -1,5 +1,12 @@
 {
   TypeInformation<K> keyType=((TupleTypeInfo<?>)vertices.getType()).getTypeAt(0);
-  DataSet<Vertex<K,NV>> mappedVertices=vertices.map(new ApplyMapperToVertexWithType<K,VV,NV>(mapper,keyType));
+  TypeInformation<NV> valueType=TypeExtractor.createTypeInfo(MapFunction.class,mapper.getClass(),1,null,null);
+  TypeInformation<Vertex<K,NV>> returnType=(TypeInformation<Vertex<K,NV>>)new TupleTypeInfo(Vertex.class,keyType,valueType);
+  DataSet<Vertex<K,NV>> mappedVertices=vertices.map(new MapFunction<Vertex<K,VV>,Vertex<K,NV>>(){
+    public Vertex<K,NV> map(    Vertex<K,VV> value) throws Exception {
+      return new Vertex<K,NV>(value.f0,mapper.map(value));
+    }
+  }
+).returns(returnType);
   return new Graph<K,NV,EV>(mappedVertices,this.getEdges(),this.context);
 }
