@@ -1,0 +1,33 @@
+{
+  StreamPartitioner<OUT> outputPartitioner=null;
+  try {
+    outputPartitioner=configuration.getPartitioner(streamVertex.userClassLoader,outputNumber);
+  }
+ catch (  Exception e) {
+    throw new StreamVertexException("Cannot deserialize partitioner for " + streamVertex.getName() + " with "+ outputNumber+ " outputs",e);
+  }
+  RecordWriter<SerializationDelegate<StreamRecord<OUT>>> output;
+  long bufferTimeout=configuration.getBufferTimeout();
+  if (bufferTimeout >= 0) {
+    output=new StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>>(streamVertex.getEnvironment().getWriter(outputNumber),outputPartitioner,bufferTimeout);
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("StreamRecordWriter initiated with {} bufferTimeout for {}",bufferTimeout,streamVertex.getClass().getSimpleName());
+    }
+  }
+ else {
+    output=new RecordWriter<SerializationDelegate<StreamRecord<OUT>>>(streamVertex.getEnvironment().getWriter(outputNumber),outputPartitioner);
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("RecordWriter initiated for {}",streamVertex.getClass().getSimpleName());
+    }
+  }
+  outputs.add(output);
+  List<String> outputNames=configuration.getOutputNames(outputNumber);
+  boolean isSelectAllOutput=configuration.getSelectAll(outputNumber);
+  if (endCollector != null) {
+    endCollector.addOutput(new StreamOutput<OUT>(output,isSelectAllOutput ? null : outputNames));
+  }
+  if (LOG.isTraceEnabled()) {
+    LOG.trace("Partitioner set: {} with {} outputs for {}",outputPartitioner.getClass().getSimpleName(),outputNumber,streamVertex.getClass().getSimpleName());
+  }
+  return endCollector;
+}
