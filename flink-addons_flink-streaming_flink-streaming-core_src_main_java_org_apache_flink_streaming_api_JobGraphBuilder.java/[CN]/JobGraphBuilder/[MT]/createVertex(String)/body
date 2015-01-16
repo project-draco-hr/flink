@@ -10,10 +10,14 @@
         }
       }
     }
+    List<String> chainedNames=chainedVertices.get(vertexName);
+    boolean isChained=chainedNames != null;
+    int numChained=isChained ? chainedNames.size() : 0;
+    String lastInChain=lastInChains.get(vertexName);
     Class<? extends AbstractInvokable> vertexClass=vertexClasses.get(vertexName);
     StreamInvokable<?,?> invokableObject=invokableObjects.get(vertexName);
     int parallelism=vertexParallelism.get(vertexName);
-    byte[] outputSelector=outputSelectors.get(vertexName);
+    byte[] outputSelector=outputSelectors.get(lastInChain);
     Map<String,OperatorState<?>> state=operatorStates.get(vertexName);
     String cname=chainedVertices.get(vertexName) == null ? "" : " => " + StringUtils.join(chainedVertices.get(vertexName)," => ");
     AbstractJobVertex vertex=new AbstractJobVertex(vertexName + cname);
@@ -24,7 +28,7 @@
       LOG.debug("Parallelism set: {} for {}",parallelism,vertexName);
     }
     StreamConfig config=new StreamConfig(vertex.getConfiguration());
-    config.setBufferTimeout(bufferTimeout.get(vertexName));
+    config.setBufferTimeout(bufferTimeout.get(lastInChain));
     config.setTypeSerializerIn1(typeSerializersIn1.get(vertexName));
     config.setTypeSerializerIn2(typeSerializersIn2.get(vertexName));
     config.setTypeSerializerOut1(typeSerializersOut1.get(vertexName));
@@ -39,13 +43,10 @@
     if (inputFormatList.containsKey(vertexName)) {
       vertex.setInputSplitSource(inputFormatList.get(vertexName));
     }
-    List<ChainableInvokable<?,?>> chainedInvokables=chainedInvokable.get(vertexName);
-    List<StreamRecordSerializer<?>> chainedSerializers=chainedSerializer.get(vertexName);
-    int numChained=chainedInvokables == null ? 0 : chainedInvokables.size();
     config.setNumberofChainedTasks(numChained);
     for (int i=0; i < numChained; i++) {
-      config.setChainedInvokable(chainedInvokables.get(i),i);
-      config.setChainedSerializer(chainedSerializers.get(i),i);
+      config.setChainedInvokable((ChainableInvokable<?,?>)invokableObjects.get(chainedNames.get(i)),i);
+      config.setChainedSerializer(typeSerializersIn1.get(chainedNames.get(i)),i);
     }
     streamVertices.put(vertexName,vertex);
     builtVertices.add(vertexName);
