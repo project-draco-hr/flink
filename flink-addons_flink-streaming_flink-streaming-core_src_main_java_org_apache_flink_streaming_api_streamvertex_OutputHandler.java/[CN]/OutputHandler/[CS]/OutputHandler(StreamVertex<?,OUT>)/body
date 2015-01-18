@@ -1,8 +1,22 @@
 {
   this.vertex=vertex;
-  this.outputs=new LinkedList<RecordWriter<SerializationDelegate<StreamRecord<OUT>>>>();
   this.configuration=new StreamConfig(vertex.getTaskConfiguration());
   this.chainedInvokables=new ArrayList<ChainableInvokable<?,?>>();
-  this.numberOfChainedTasks=configuration.getNumberofChainedTasks();
-  this.outerCollector=createChainedCollector(0);
+  this.outputMap=new HashMap<String,StreamOutput<?>>();
+  this.cl=vertex.getUserCodeClassLoader();
+  this.chainedConfigs=configuration.getTransitiveChainedTaskConfigs(cl);
+  this.recordWriterOrder=configuration.getRecordWriterOrder(cl);
+  for (  String outName : configuration.getOutputs(cl)) {
+    StreamOutput<?> streamOutput=createStreamOutput(outName,configuration);
+    outputMap.put(outName,streamOutput);
+  }
+  if (chainedConfigs != null) {
+    for (    StreamConfig config : chainedConfigs.values()) {
+      for (      String outName : config.getOutputs(cl)) {
+        StreamOutput<?> streamOutput=createStreamOutput(outName,config);
+        outputMap.put(outName,streamOutput);
+      }
+    }
+  }
+  this.outerCollector=createChainedCollector(configuration);
 }

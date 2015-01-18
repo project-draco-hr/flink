@@ -1,0 +1,20 @@
+{
+  StreamRecordSerializer<T> outSerializer=config.getTypeSerializerOut1(vertex.userClassLoader);
+  SerializationDelegate<StreamRecord<T>> outSerializationDelegate=null;
+  if (outSerializer != null) {
+    outSerializationDelegate=new SerializationDelegate<StreamRecord<T>>(outSerializer);
+    outSerializationDelegate.setInstance(outSerializer.createInstance());
+  }
+  StreamOutputWrapper<T> collector;
+  if (vertex.configuration.isDirectedEmit()) {
+    OutputSelector<T> outputSelector=vertex.configuration.getOutputSelector(vertex.userClassLoader);
+    collector=new DirectedOutputWrapper<T>(vertex.getInstanceID(),outSerializationDelegate,outputSelector);
+  }
+ else {
+    collector=new StreamOutputWrapper<T>(vertex.getInstanceID(),outSerializationDelegate);
+  }
+  for (  String output : config.getOutputs(cl)) {
+    collector.addOutput((StreamOutput<T>)outputMap.get(output));
+  }
+  return collector;
+}

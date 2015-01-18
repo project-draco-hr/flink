@@ -1,0 +1,43 @@
+{
+  if (!builtNodes.contains(startNode)) {
+    List<Tuple2<String,String>> transitiveOutEdges=new ArrayList<Tuple2<String,String>>();
+    List<String> chainableOutputs=new ArrayList<String>();
+    List<String> nonChainableOutputs=new ArrayList<String>();
+    for (    String outName : outEdgeList.get(current)) {
+      if (isChainable(current,outName)) {
+        chainableOutputs.add(outName);
+      }
+ else {
+        nonChainableOutputs.add(outName);
+      }
+    }
+    for (    String chainable : chainableOutputs) {
+      transitiveOutEdges.addAll(createChain(startNode,chainable));
+    }
+    for (    String nonChainable : nonChainableOutputs) {
+      transitiveOutEdges.add(new Tuple2<String,String>(current,nonChainable));
+      transitiveOutEdges.addAll(createChain(nonChainable,nonChainable));
+    }
+    StreamConfig config=current.equals(startNode) ? createProcessingVertex(startNode) : new StreamConfig(new Configuration());
+    setVertexConfig(current,config,chainableOutputs,nonChainableOutputs);
+    if (current.equals(startNode)) {
+      config.setChainStart();
+      config.setRecordWriterOrder(transitiveOutEdges);
+      for (      Tuple2<String,String> edge : transitiveOutEdges) {
+        connect(startNode,edge);
+      }
+      vertexConfigs.get(startNode).setTransitiveChainedTaskConfigs(chainedConfigs.get(startNode));
+    }
+ else {
+      Map<String,StreamConfig> chainedConfs=chainedConfigs.get(startNode);
+      if (chainedConfs == null) {
+        chainedConfigs.put(startNode,new HashMap<String,StreamConfig>());
+      }
+      chainedConfigs.get(startNode).put(current,config);
+    }
+    return transitiveOutEdges;
+  }
+ else {
+    return new ArrayList<Tuple2<String,String>>();
+  }
+}

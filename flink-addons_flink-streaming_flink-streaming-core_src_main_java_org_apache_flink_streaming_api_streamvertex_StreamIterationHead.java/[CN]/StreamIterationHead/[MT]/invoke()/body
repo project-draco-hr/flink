@@ -3,6 +3,12 @@
     LOG.debug("SOURCE {} invoked with instance id {}",getName(),getInstanceID());
   }
   StreamRecord<OUT> nextRecord;
+  StreamRecordSerializer<OUT> serializer=configuration.getTypeSerializerOut1(userClassLoader);
+  SerializationDelegate<StreamRecord<OUT>> serializationDelegate=new SerializationDelegate<StreamRecord<OUT>>(serializer);
+  List<StreamOutput<OUT>> outputs=new LinkedList<StreamOutput<OUT>>();
+  for (  StreamOutput<?> output : outputHandler.getOutputs()) {
+    outputs.add((StreamOutput<OUT>)output);
+  }
   while (true) {
     if (shouldWait) {
       nextRecord=dataChannel.poll(iterationWaitTime,TimeUnit.MILLISECONDS);
@@ -13,9 +19,9 @@
     if (nextRecord == null) {
       break;
     }
-    for (    RecordWriter<SerializationDelegate<StreamRecord<OUT>>> output : outputHandler.getOutputs()) {
-      outputHandler.outSerializationDelegate.setInstance(nextRecord);
-      output.emit(outputHandler.outSerializationDelegate);
+    for (    StreamOutput<OUT> output : outputs) {
+      serializationDelegate.setInstance(nextRecord);
+      output.collect(serializationDelegate);
     }
   }
   outputHandler.flushOutputs();
