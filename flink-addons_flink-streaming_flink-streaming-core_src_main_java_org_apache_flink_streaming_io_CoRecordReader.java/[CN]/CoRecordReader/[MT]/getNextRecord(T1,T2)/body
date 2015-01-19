@@ -1,41 +1,60 @@
 {
-  do {
-    if (finishedReader1 && finishedReader2) {
-      return 0;
+  requestPartitionsOnce();
+  while (true) {
+    if (currentReaderIndex == 0) {
+      if ((bufferReader1.isFinished() && bufferReader2.isFinished())) {
+        return 0;
+      }
+      currentReaderIndex=getNextReaderIndexBlocking();
     }
-    if (endOfSuperstepReader1 && endOfSuperstepReader2) {
-      endOfSuperstepReader1=false;
-      endOfSuperstepReader2=false;
-      return 0;
+    if (currentReaderIndex == 1) {
+      while (true) {
+        if (reader1currentRecordDeserializer != null) {
+          RecordDeserializer.DeserializationResult result=reader1currentRecordDeserializer.getNextRecord(target1);
+          if (result.isBufferConsumed()) {
+            reader1currentRecordDeserializer.getCurrentBuffer().recycle();
+            reader1currentRecordDeserializer=null;
+            currentReaderIndex=0;
+          }
+          if (result.isFullRecord()) {
+            return 1;
+          }
+        }
+        final Buffer nextBuffer=bufferReader1.getNextBufferBlocking();
+        final int channelIndex=bufferReader1.getChannelIndexOfLastBuffer();
+        if (nextBuffer == null) {
+          currentReaderIndex=0;
+          break;
+        }
+        reader1currentRecordDeserializer=reader1RecordDeserializers[channelIndex];
+        reader1currentRecordDeserializer.setNextBuffer(nextBuffer);
+      }
     }
-    if (!finishedReader1 && !endOfSuperstepReader1) {
-      if (reader1.next(target1)) {
-        return 1;
+ else     if (currentReaderIndex == 2) {
+      while (true) {
+        if (reader2currentRecordDeserializer != null) {
+          RecordDeserializer.DeserializationResult result=reader2currentRecordDeserializer.getNextRecord(target2);
+          if (result.isBufferConsumed()) {
+            reader2currentRecordDeserializer.getCurrentBuffer().recycle();
+            reader2currentRecordDeserializer=null;
+            currentReaderIndex=0;
+          }
+          if (result.isFullRecord()) {
+            return 2;
+          }
+        }
+        final Buffer nextBuffer=bufferReader2.getNextBufferBlocking();
+        final int channelIndex=bufferReader2.getChannelIndexOfLastBuffer();
+        if (nextBuffer == null) {
+          currentReaderIndex=0;
+          break;
+        }
+        reader2currentRecordDeserializer=reader2RecordDeserializers[channelIndex];
+        reader2currentRecordDeserializer.setNextBuffer(nextBuffer);
       }
- else       if (reader1.isFinished()) {
-        finishedReader1=true;
-      }
- else       if (reader1.hasReachedEndOfSuperstep()) {
-        endOfSuperstepReader1=true;
-      }
+    }
  else {
-        throw new IOException("Unexpected return value from reader.");
-      }
-    }
-    if (!finishedReader2 && !endOfSuperstepReader2) {
-      if (reader2.next(target2)) {
-        return 2;
-      }
- else       if (reader2.isFinished()) {
-        finishedReader2=true;
-      }
- else       if (reader2.hasReachedEndOfSuperstep()) {
-        endOfSuperstepReader2=true;
-      }
- else {
-        throw new IOException("Unexpected return value from reader.");
-      }
+      throw new IllegalStateException("Bug: unexpected current reader index.");
     }
   }
- while (true);
 }
