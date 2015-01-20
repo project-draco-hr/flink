@@ -5,18 +5,11 @@
   this.outputMap=new HashMap<String,StreamOutput<?>>();
   this.cl=vertex.getUserCodeClassLoader();
   this.chainedConfigs=configuration.getTransitiveChainedTaskConfigs(cl);
-  this.recordWriterOrder=configuration.getRecordWriterOrder(cl);
-  for (  String outName : configuration.getOutputs(cl)) {
-    StreamOutput<?> streamOutput=createStreamOutput(outName,configuration);
-    outputMap.put(outName,streamOutput);
-  }
-  if (chainedConfigs != null) {
-    for (    StreamConfig config : chainedConfigs.values()) {
-      for (      String outName : config.getOutputs(cl)) {
-        StreamOutput<?> streamOutput=createStreamOutput(outName,config);
-        outputMap.put(outName,streamOutput);
-      }
-    }
+  this.chainedConfigs.put(configuration.getTaskName(),configuration);
+  this.outEdgesInOrder=configuration.getOutEdgesInOrder(cl);
+  for (  Tuple2<String,String> outEdge : outEdgesInOrder) {
+    StreamOutput<?> streamOutput=createStreamOutput(outEdge.f1,chainedConfigs.get(outEdge.f0),outEdgesInOrder.indexOf(outEdge));
+    outputMap.put(outEdge.f1,streamOutput);
   }
   this.outerCollector=createChainedCollector(configuration);
 }
