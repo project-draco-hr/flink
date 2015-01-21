@@ -1,4 +1,10 @@
 {
+  StreamRecordSerializer<T> outSerializer=configuration.getTypeSerializerOut1(vertex.userClassLoader);
+  SerializationDelegate<StreamRecord<T>> outSerializationDelegate=null;
+  if (outSerializer != null) {
+    outSerializationDelegate=new SerializationDelegate<StreamRecord<T>>(outSerializer);
+    outSerializationDelegate.setInstance(outSerializer.createInstance());
+  }
   StreamPartitioner<T> outputPartitioner=configuration.getPartitioner(cl,outputVertex);
   RecordWriter<SerializationDelegate<StreamRecord<T>>> output;
   if (configuration.getBufferTimeout() >= 0) {
@@ -13,7 +19,7 @@
       LOG.trace("RecordWriter initiated for {}",vertex.getClass().getSimpleName());
     }
   }
-  StreamOutput<T> streamOutput=new StreamOutput<T>(output,configuration.isSelectAll(outputVertex) ? null : configuration.getOutputNames(outputVertex));
+  StreamOutput<T> streamOutput=new StreamOutput<T>(output,vertex.instanceID,outSerializationDelegate);
   if (LOG.isTraceEnabled()) {
     LOG.trace("Partitioner set: {} with {} outputs for {}",outputPartitioner.getClass().getSimpleName(),outputIndex,vertex.getClass().getSimpleName());
   }

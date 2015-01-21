@@ -1,10 +1,23 @@
 {
-  CollectorWrapper<OUT> wrapper=new CollectorWrapper<OUT>();
-  if (chainedTaskConfig.getNumberOfOutputs() > 0) {
-    wrapper.addCollector((Collector<OUT>)createNetworkCollector(chainedTaskConfig));
+  boolean isDirectEmit=chainedTaskConfig.isDirectedEmit();
+  CollectorWrapper<OUT> wrapper=isDirectEmit ? new DirectedCollectorWrapper(chainedTaskConfig.getOutputSelector(cl)) : new CollectorWrapper<OUT>();
+  for (  String output : chainedTaskConfig.getOutputs(cl)) {
+    Collector<?> outCollector=outputMap.get(output);
+    if (isDirectEmit) {
+      ((DirectedCollectorWrapper<OUT>)wrapper).addCollector(outCollector,chainedTaskConfig.getSelectedNames(output));
+    }
+ else {
+      wrapper.addCollector(outCollector);
+    }
   }
   for (  String output : chainedTaskConfig.getChainedOutputs(cl)) {
-    wrapper.addCollector(createChainedCollector(chainedConfigs.get(output)));
+    Collector<?> outCollector=createChainedCollector(chainedConfigs.get(output));
+    if (isDirectEmit) {
+      ((DirectedCollectorWrapper<OUT>)wrapper).addCollector(outCollector,chainedTaskConfig.getSelectedNames(output));
+    }
+ else {
+      wrapper.addCollector(outCollector);
+    }
   }
   if (chainedTaskConfig.isChainStart()) {
     return wrapper;
