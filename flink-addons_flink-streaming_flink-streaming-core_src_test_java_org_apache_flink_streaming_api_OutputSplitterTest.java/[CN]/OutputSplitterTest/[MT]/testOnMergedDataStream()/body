@@ -1,0 +1,58 @@
+{
+  splitterResult1.clear();
+  splitterResult2.clear();
+  StreamExecutionEnvironment env=new TestStreamEnvironment(1,MEMORYSIZE);
+  env.setBufferTimeout(1);
+  DataStream<Integer> d1=env.fromElements(0,2,4,6,8);
+  DataStream<Integer> d2=env.fromElements(1,3,5,7,9);
+  d1=d1.merge(d2);
+  d1.split(new OutputSelector<Integer>(){
+    private static final long serialVersionUID=8354166915727490130L;
+    @Override public Iterable<String> select(    Integer value){
+      List<String> s=new ArrayList<String>();
+      if (value > 4) {
+        s.add(">");
+      }
+ else {
+        s.add("<");
+      }
+      return s;
+    }
+  }
+).select(">").addSink(new SinkFunction<Integer>(){
+    private static final long serialVersionUID=5827187510526388104L;
+    @Override public void invoke(    Integer value){
+      splitterResult1.add(value);
+    }
+  }
+);
+  d1.split(new OutputSelector<Integer>(){
+    private static final long serialVersionUID=-6822487543355994807L;
+    @Override public Iterable<String> select(    Integer value){
+      List<String> s=new ArrayList<String>();
+      if (value % 3 == 0) {
+        s.add("yes");
+      }
+ else {
+        s.add("no");
+      }
+      return s;
+    }
+  }
+).select("yes").addSink(new SinkFunction<Integer>(){
+    private static final long serialVersionUID=-2674335071267854599L;
+    @Override public void invoke(    Integer value){
+      splitterResult2.add(value);
+    }
+  }
+);
+  env.execute();
+  Collections.sort(splitterResult1);
+  Collections.sort(splitterResult2);
+  expectedSplitterResult.clear();
+  expectedSplitterResult.addAll(Arrays.asList(5,6,7,8,9));
+  assertEquals(expectedSplitterResult,splitterResult1);
+  expectedSplitterResult.clear();
+  expectedSplitterResult.addAll(Arrays.asList(0,3,6,9));
+  assertEquals(expectedSplitterResult,splitterResult2);
+}
