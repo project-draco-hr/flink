@@ -5,14 +5,13 @@
     evaluateGeneralOptions(line);
   }
  catch (  MissingOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForInfo();
-    return 1;
+    return handleArgException(e);
+  }
+catch (  MissingArgumentException e) {
+    return handleArgException(e);
   }
 catch (  UnrecognizedOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForInfo();
-    return 2;
+    return handleArgException(e);
   }
 catch (  Exception e) {
     return handleError(e);
@@ -21,22 +20,18 @@ catch (  Exception e) {
     printHelpForInfo();
     return 0;
   }
-  boolean plan=line.hasOption(PLAN_OPTION.getOpt());
-  if (!plan) {
-    System.out.println("ERROR: Specify the information to display.");
-    printHelpForInfo();
-    return 1;
-  }
   PackagedProgram program;
   try {
     program=buildProgram(line);
   }
- catch (  Throwable t) {
-    return handleError(t);
+ catch (  FileNotFoundException e) {
+    return handleError(e);
   }
-  if (program == null) {
-    printHelpForInfo();
-    return 1;
+catch (  ProgramInvocationException e) {
+    return handleError(e);
+  }
+catch (  Throwable t) {
+    return handleError(t);
   }
   int parallelism=-1;
   if (line.hasOption(PARALLELISM_OPTION.getOpt())) {
@@ -46,27 +41,23 @@ catch (  Exception e) {
     }
  catch (    NumberFormatException e) {
       System.out.println("The value " + parString + " is invalid for the degree of parallelism.");
-      printHelpForRun();
       return 1;
     }
     if (parallelism <= 0) {
       System.out.println("Invalid value for the degree-of-parallelism. Parallelism must be greater than zero.");
-      printHelpForRun();
       return 1;
     }
   }
   try {
-    if (plan) {
-      Client client=getClient(line,program.getUserCodeClassLoader(),program.getMainClassName());
-      String jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
-      if (jsonPlan != null) {
-        System.out.println("----------------------- Execution Plan -----------------------");
-        System.out.println(jsonPlan);
-        System.out.println("--------------------------------------------------------------");
-      }
+    Client client=getClient(line,program.getUserCodeClassLoader(),program.getMainClassName());
+    String jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
+    if (jsonPlan != null) {
+      System.out.println("----------------------- Execution Plan -----------------------");
+      System.out.println(jsonPlan);
+      System.out.println("--------------------------------------------------------------");
+    }
  else {
-        System.out.println("JSON plan could not be compiled.");
-      }
+      System.out.println("JSON plan could not be compiled.");
     }
     return 0;
   }

@@ -2,16 +2,16 @@
   CommandLine line;
   try {
     line=parser.parse(CANCEL_OPTIONS,args,false);
+    evaluateGeneralOptions(line);
   }
  catch (  MissingOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForCancel();
-    return 1;
+    return handleArgException(e);
+  }
+catch (  MissingArgumentException e) {
+    return handleArgException(e);
   }
 catch (  UnrecognizedOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForCancel();
-    return 2;
+    return handleArgException(e);
   }
 catch (  Exception e) {
     return handleError(e);
@@ -20,27 +20,25 @@ catch (  Exception e) {
     printHelpForCancel();
     return 0;
   }
+  String[] cleanedArgs=line.getArgs();
   JobID jobId;
-  if (line.hasOption(ID_OPTION.getOpt())) {
-    String jobIdString=line.getOptionValue(ID_OPTION.getOpt());
+  if (cleanedArgs.length > 0) {
+    String jobIdString=cleanedArgs[0];
     try {
       jobId=new JobID(StringUtils.hexStringToByte(jobIdString));
     }
  catch (    Exception e) {
       System.out.println("Error: The value for the Job ID is not a valid ID.");
-      printHelpForCancel();
       return 1;
     }
   }
  else {
     System.out.println("Error: Specify a Job ID to cancel a job.");
-    printHelpForCancel();
     return 1;
   }
   try {
     ActorRef jobManager=getJobManager(line);
     if (jobManager == null) {
-      printHelpForCancel();
       return 1;
     }
     AkkaUtils.ask(jobManager,new CancelJob(jobId),getAkkaTimeout());

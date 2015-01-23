@@ -2,16 +2,16 @@
   CommandLine line;
   try {
     line=parser.parse(LIST_OPTIONS,args,false);
+    evaluateGeneralOptions(line);
   }
  catch (  MissingOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForList();
-    return 1;
+    return handleArgException(e);
+  }
+catch (  MissingArgumentException e) {
+    return handleArgException(e);
   }
 catch (  UnrecognizedOptionException e) {
-    System.out.println(e.getMessage());
-    printHelpForList();
-    return 2;
+    return handleArgException(e);
   }
 catch (  Exception e) {
     return handleError(e);
@@ -23,14 +23,12 @@ catch (  Exception e) {
   boolean running=line.hasOption(RUNNING_OPTION.getOpt());
   boolean scheduled=line.hasOption(SCHEDULED_OPTION.getOpt());
   if (!running && !scheduled) {
-    System.out.println("Error: Specify the status of the jobs to list.");
-    printHelpForList();
-    return 1;
+    running=true;
+    scheduled=true;
   }
   try {
     ActorRef jobManager=getJobManager(line);
     if (jobManager == null) {
-      printHelpForList();
       return 1;
     }
     Iterable<ExecutionGraph> jobs=AkkaUtils.<RunningJobs>ask(jobManager,RequestRunningJobs$.MODULE$,getAkkaTimeout()).asJavaIterable();
