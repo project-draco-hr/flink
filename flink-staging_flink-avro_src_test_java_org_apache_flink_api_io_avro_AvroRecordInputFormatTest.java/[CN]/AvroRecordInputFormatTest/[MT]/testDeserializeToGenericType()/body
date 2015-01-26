@@ -8,7 +8,12 @@
   assertEquals("enum not equal",TEST_ENUM_COLOR.toString(),rec.get("type_enum").toString());
   assertEquals(null,rec.get("type_long_test"));
   TypeInformation<GenericData.Record> te=(TypeInformation<GenericData.Record>)TypeExtractor.createTypeInfo(GenericData.Record.class);
-  TypeSerializer<GenericData.Record> tser=te.createSerializer();
+  ExecutionConfig ec=new ExecutionConfig();
+  Assert.assertEquals(GenericTypeInfo.class,te.getClass());
+  Serializers.recursivelyRegisterType(((GenericTypeInfo)te).getTypeClass(),ec);
+  TypeSerializer<GenericData.Record> tser=te.createSerializer(ec);
+  Assert.assertEquals(1,ec.getDefaultKryoSerializerClasses().size());
+  Assert.assertEquals(new ExecutionConfig.Entry<Class<?>,Class<? extends Serializer<?>>>(Schema.class,Serializers.AvroSchemaSerializer.class),ec.getDefaultKryoSerializerClasses().get(0));
   ComparatorTestBase.TestOutputView target=new ComparatorTestBase.TestOutputView();
   tser.serialize(rec,target);
   GenericData.Record newRec=tser.deserialize(target.getInputView());

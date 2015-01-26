@@ -1,0 +1,32 @@
+{
+  before();
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  Path in=new Path(inFile.getAbsoluteFile().toURI());
+  AvroInputFormat<User> users=new AvroInputFormat<User>(in,User.class);
+  DataSet<User> usersDS=env.createInput(users);
+  DataSet<Object> res=usersDS.groupBy(fieldName).reduceGroup(new GroupReduceFunction<User,Object>(){
+    @Override public void reduce(    Iterable<User> values,    Collector<Object> out) throws Exception {
+      for (      User u : values) {
+        out.collect(u.get(fieldName));
+      }
+    }
+  }
+);
+  res.writeAsText(resultPath);
+  env.execute("Simple Avro read job");
+  ExecutionConfig ec=env.getConfig();
+  Assert.assertTrue(ec.getRegisteredKryoTypes().contains(org.apache.flink.api.io.avro.generated.Fixed16.class));
+  if (fieldName.equals("name")) {
+    expected="Alyssa\nCharlie";
+  }
+ else   if (fieldName.equals("type_enum")) {
+    expected="GREEN\nRED\n";
+  }
+ else   if (fieldName.equals("type_double_test")) {
+    expected="123.45\n1.337\n";
+  }
+ else {
+    Assert.fail("Unknown field");
+  }
+  after();
+}

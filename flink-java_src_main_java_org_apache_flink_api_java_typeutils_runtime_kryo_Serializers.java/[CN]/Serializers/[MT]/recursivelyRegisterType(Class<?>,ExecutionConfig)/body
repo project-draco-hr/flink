@@ -1,0 +1,27 @@
+{
+  alreadySeen.add(type);
+  if (type.isPrimitive()) {
+    return;
+  }
+  config.registerKryoType(type);
+  addSerializerForType(config,type);
+  Field[] fields=type.getDeclaredFields();
+  for (  Field field : fields) {
+    Type fieldType=field.getGenericType();
+    if (fieldType instanceof ParameterizedType) {
+      ParameterizedType parameterizedFieldType=(ParameterizedType)fieldType;
+      for (      Type t : parameterizedFieldType.getActualTypeArguments()) {
+        if (TypeExtractor.isClassType(t)) {
+          Class clazz=TypeExtractor.typeToClass(t);
+          if (!alreadySeen.contains(clazz)) {
+            recursivelyRegisterType(TypeExtractor.typeToClass(t),config);
+          }
+        }
+      }
+    }
+    Class<?> clazz=field.getType();
+    if (!alreadySeen.contains(clazz)) {
+      recursivelyRegisterType(clazz,config);
+    }
+  }
+}

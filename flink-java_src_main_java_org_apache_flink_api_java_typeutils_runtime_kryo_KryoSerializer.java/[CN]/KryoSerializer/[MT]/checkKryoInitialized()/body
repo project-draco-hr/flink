@@ -1,0 +1,28 @@
+{
+  if (this.kryo == null) {
+    this.kryo=new ScalaKryoInstantiator().newKryo();
+    kryo.addDefaultSerializer(Throwable.class,new JavaSerializer());
+    for (    ExecutionConfig.Entry<Class<?>,Serializer<?>> serializer : defaultSerializers) {
+      kryo.addDefaultSerializer(serializer.getKey(),serializer.getValue());
+    }
+    for (    ExecutionConfig.Entry<Class<?>,Class<? extends Serializer<?>>> serializer : defaultSerializerClasses) {
+      kryo.addDefaultSerializer(serializer.getKey(),serializer.getValue());
+    }
+    kryo.register(type);
+    for (    Class<?> type : registeredTypes) {
+      kryo.register(type);
+    }
+    for (    ExecutionConfig.Entry<Class<?>,Class<? extends Serializer<?>>> e : registeredTypesWithSerializerClasses) {
+      Class<?> typeClass=e.getKey();
+      Class<? extends Serializer<?>> serializerClass=e.getValue();
+      Serializer<?> serializer=ReflectionSerializerFactory.makeSerializer(kryo,serializerClass,typeClass);
+      kryo.register(typeClass,serializer);
+    }
+    for (    ExecutionConfig.Entry<Class<?>,Serializer<?>> e : registeredTypesWithSerializers) {
+      kryo.register(e.getKey(),e.getValue());
+    }
+    kryo.register(GenericData.Array.class,new SpecificInstanceCollectionSerializerForArrayList());
+    kryo.setRegistrationRequired(false);
+    kryo.setClassLoader(Thread.currentThread().getContextClassLoader());
+  }
+}

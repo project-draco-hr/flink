@@ -11,6 +11,29 @@
     plan.setDefaultParallelism(getDegreeOfParallelism());
   }
   plan.setExecutionConfig(getConfig());
+  plan.accept(new Visitor<org.apache.flink.api.common.operators.Operator<?>>(){
+    @Override public boolean preVisit(    org.apache.flink.api.common.operators.Operator<?> visitable){
+      OperatorInformation<?> opInfo=visitable.getOperatorInfo();
+      TypeInformation<?> typeInfo=opInfo.getOutputType();
+      if (typeInfo instanceof GenericTypeInfo) {
+        GenericTypeInfo<?> genericTypeInfo=(GenericTypeInfo<?>)typeInfo;
+        if (!config.isDisableAutoTypeRegistration()) {
+          Serializers.recursivelyRegisterType(genericTypeInfo.getTypeClass(),config);
+        }
+      }
+      if (typeInfo instanceof CompositeType) {
+        List<GenericTypeInfo<?>> genericTypesInComposite=new ArrayList<GenericTypeInfo<?>>();
+        Utils.getContainedGenericTypes((CompositeType)typeInfo,genericTypesInComposite);
+        for (        GenericTypeInfo<?> gt : genericTypesInComposite) {
+          Serializers.recursivelyRegisterType(gt.getTypeClass(),config);
+        }
+      }
+      return true;
+    }
+    @Override public void postVisit(    org.apache.flink.api.common.operators.Operator<?> visitable){
+    }
+  }
+);
   try {
     registerCachedFilesWithPlan(plan);
   }
@@ -19,6 +42,17 @@
   }
   if (clearSinks) {
     this.sinks.clear();
+  }
+  int registeredTypes=config.getRegisteredKryoTypes().size() + config.getRegisteredPojoTypes().size() + config.getRegisteredTypesWithKryoSerializerClasses().size()+ config.getRegisteredTypesWithKryoSerializers().size();
+  int defaultKryoSerializers=config.getDefaultKryoSerializers().size() + config.getDefaultKryoSerializerClasses().size();
+  LOG.info("The job has {} registered types and {} default Kryo serializers",registeredTypes,defaultKryoSerializers);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Registered Kryo types: {}",Joiner.on(',').join(config.getRegisteredKryoTypes()));
+    LOG.debug("Registered Kryo with Serializers types: {}",Joiner.on(',').join(config.getRegisteredTypesWithKryoSerializers()));
+    LOG.debug("Registered Kryo with Serializer Classes types: {}",Joiner.on(',').join(config.getRegisteredTypesWithKryoSerializerClasses()));
+    LOG.debug("Registered Kryo default Serializers: {}",Joiner.on(',').join(config.getDefaultKryoSerializers()));
+    LOG.debug("Registered Kryo default Serializers Classes {}",Joiner.on(',').join(config.getDefaultKryoSerializerClasses()));
+    LOG.debug("Registered POJO types: {}",Joiner.on(',').join(config.getRegisteredPojoTypes()));
   }
   return plan;
 }
