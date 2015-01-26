@@ -1,13 +1,24 @@
 {
-synchronized (count) {
-    if (count.get(new ImmutablePair<JobID,String>(jobID,name)) != oldCount) {
-      return;
-    }
-  }
-  Path tmp=getTempDir(jobID,"");
+  Path tmp=getTempDir(jobID,filePath.substring(filePath.lastIndexOf("/") + 1));
   try {
-    if (lfs.exists(tmp)) {
-      lfs.delete(tmp,true);
+synchronized (lock) {
+      Map<String,Integer> count=jobCounts.get(jobID);
+      if (count.containsKey(name)) {
+        count.put(name,count.get(name) - 1);
+        if (count.get(name) == 0) {
+          if (lfs.exists(tmp)) {
+            lfs.delete(tmp,true);
+          }
+          count.remove(name);
+          if (count.isEmpty()) {
+            tmp=getTempDir(jobID,"");
+            if (lfs.exists(tmp)) {
+              lfs.delete(tmp,true);
+            }
+            jobCounts.remove(jobID);
+          }
+        }
+      }
     }
   }
  catch (  IOException e) {
