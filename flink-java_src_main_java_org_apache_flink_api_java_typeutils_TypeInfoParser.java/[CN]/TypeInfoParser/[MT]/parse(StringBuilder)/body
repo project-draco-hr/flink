@@ -5,25 +5,24 @@
   final Matcher enumMatcher=enumPattern.matcher(infoString);
   final Matcher basicTypeMatcher=basicTypePattern.matcher(infoString);
   final Matcher basicTypeDateMatcher=basicTypeDatePattern.matcher(infoString);
-  final Matcher basicType2Matcher=basicType2Pattern.matcher(infoString);
+  final Matcher primitiveTypeMatcher=primitiveTypePattern.matcher(infoString);
   final Matcher valueTypeMatcher=valueTypePattern.matcher(infoString);
-  final Matcher basicArrayTypeMatcher=basicArrayTypePattern.matcher(infoString);
-  final Matcher basicArrayType2Matcher=basicArrayType2Pattern.matcher(infoString);
   final Matcher pojoGenericMatcher=pojoGenericObjectPattern.matcher(infoString);
   if (infoString.length() == 0) {
     return null;
   }
   TypeInformation<?> returnType=null;
+  boolean isPrimitiveType=false;
   if (tupleMatcher.find()) {
     String className=tupleMatcher.group(1);
     sb.delete(0,className.length() + 1);
     int arity=Integer.parseInt(className.replaceAll("\\D",""));
     Class<?> clazz;
     if (className.startsWith(TUPLE_PACKAGE)) {
-      clazz=Class.forName(className);
+      clazz=loadClass(className);
     }
  else {
-      clazz=Class.forName(TUPLE_PACKAGE + "." + className);
+      clazz=loadClass(TUPLE_PACKAGE + "." + className);
     }
     TypeInformation<?>[] types=new TypeInformation<?>[arity];
     for (int i=0; i < arity; i++) {
@@ -36,25 +35,7 @@
       throw new IllegalArgumentException("Tuple arity does not match given parameters.");
     }
     sb.deleteCharAt(0);
-    if (sb.length() > 0) {
-      if (sb.length() >= 2 && sb.charAt(0) == '[' && sb.charAt(1) == ']') {
-        Class<?> arrayClazz;
-        if (className.startsWith(TUPLE_PACKAGE)) {
-          arrayClazz=Class.forName("[L" + className + ";");
-        }
- else {
-          arrayClazz=Class.forName("[L" + TUPLE_PACKAGE + "."+ className+ ";");
-        }
-        sb.delete(0,2);
-        returnType=ObjectArrayTypeInfo.getInfoFor(arrayClazz,new TupleTypeInfo(clazz,types));
-      }
- else       if (sb.length() < 1 || sb.charAt(0) != '[') {
-        returnType=new TupleTypeInfo(clazz,types);
-      }
-    }
- else {
-      returnType=new TupleTypeInfo(clazz,types);
-    }
+    returnType=new TupleTypeInfo(clazz,types);
   }
  else   if (writableMatcher.find()) {
     String className=writableMatcher.group(1);
@@ -75,10 +56,10 @@
     sb.delete(0,className.length());
     Class<?> clazz;
     if (className.startsWith("java.lang")) {
-      clazz=Class.forName(className);
+      clazz=loadClass(className);
     }
  else {
-      clazz=Class.forName("java.lang." + className);
+      clazz=loadClass("java.lang." + className);
     }
     returnType=BasicTypeInfo.getInfoFor(clazz);
   }
@@ -87,99 +68,58 @@
     sb.delete(0,className.length());
     Class<?> clazz;
     if (className.startsWith("java.util")) {
-      clazz=Class.forName(className);
+      clazz=loadClass(className);
     }
  else {
-      clazz=Class.forName("java.util." + className);
+      clazz=loadClass("java.util." + className);
     }
     returnType=BasicTypeInfo.getInfoFor(clazz);
   }
- else   if (basicType2Matcher.find()) {
-    String className=basicType2Matcher.group(1);
-    sb.delete(0,className.length());
+ else   if (primitiveTypeMatcher.find()) {
+    String keyword=primitiveTypeMatcher.group(1);
+    sb.delete(0,keyword.length());
     Class<?> clazz=null;
-    if (className.equals("int")) {
-      clazz=Integer.class;
+    if (keyword.equals("int")) {
+      clazz=int.class;
     }
- else     if (className.equals("byte")) {
-      clazz=Byte.class;
+ else     if (keyword.equals("byte")) {
+      clazz=byte.class;
     }
- else     if (className.equals("short")) {
-      clazz=Short.class;
+ else     if (keyword.equals("short")) {
+      clazz=short.class;
     }
- else     if (className.equals("char")) {
-      clazz=Character.class;
+ else     if (keyword.equals("char")) {
+      clazz=char.class;
     }
- else     if (className.equals("double")) {
-      clazz=Double.class;
+ else     if (keyword.equals("double")) {
+      clazz=double.class;
     }
- else     if (className.equals("float")) {
-      clazz=Float.class;
+ else     if (keyword.equals("float")) {
+      clazz=float.class;
     }
- else     if (className.equals("long")) {
-      clazz=Long.class;
+ else     if (keyword.equals("long")) {
+      clazz=long.class;
     }
- else     if (className.equals("boolean")) {
-      clazz=Boolean.class;
+ else     if (keyword.equals("boolean")) {
+      clazz=boolean.class;
     }
- else     if (className.equals("void")) {
-      clazz=Void.class;
+ else     if (keyword.equals("void")) {
+      clazz=void.class;
     }
     returnType=BasicTypeInfo.getInfoFor(clazz);
+    isPrimitiveType=true;
   }
  else   if (valueTypeMatcher.find()) {
     String className=valueTypeMatcher.group(1);
     sb.delete(0,className.length() + 5);
     Class<?> clazz;
     if (className.startsWith(VALUE_PACKAGE)) {
-      clazz=Class.forName(className + "Value");
+      clazz=loadClass(className + "Value");
     }
  else {
-      clazz=Class.forName(VALUE_PACKAGE + "." + className+ "Value");
+      clazz=loadClass(VALUE_PACKAGE + "." + className+ "Value");
     }
     returnType=ValueTypeInfo.getValueTypeInfo((Class<Value>)clazz);
-  }
- else   if (basicArrayTypeMatcher.find()) {
-    String className=basicArrayTypeMatcher.group(1);
-    sb.delete(0,className.length() + 2);
-    Class<?> clazz;
-    if (className.startsWith("java.lang")) {
-      clazz=Class.forName("[L" + className + ";");
-    }
- else {
-      clazz=Class.forName("[Ljava.lang." + className + ";");
-    }
-    returnType=BasicArrayTypeInfo.getInfoFor(clazz);
-  }
- else   if (basicArrayType2Matcher.find()) {
-    String className=basicArrayType2Matcher.group(1);
-    sb.delete(0,className.length() + 2);
-    Class<?> clazz=null;
-    if (className.equals("int")) {
-      clazz=int[].class;
-    }
- else     if (className.equals("byte")) {
-      clazz=byte[].class;
-    }
- else     if (className.equals("short")) {
-      clazz=short[].class;
-    }
- else     if (className.equals("char")) {
-      clazz=char[].class;
-    }
- else     if (className.equals("double")) {
-      clazz=double[].class;
-    }
- else     if (className.equals("float")) {
-      clazz=float[].class;
-    }
- else     if (className.equals("long")) {
-      clazz=long[].class;
-    }
- else     if (className.equals("boolean")) {
-      clazz=boolean[].class;
-    }
-    returnType=PrimitiveArrayTypeInfo.getInfoFor(clazz);
   }
  else   if (pojoGenericMatcher.find()) {
     String fullyQualifiedName=pojoGenericMatcher.group(1);
@@ -202,25 +142,101 @@
         }
         fields.add(new PojoField(field,parse(sb)));
       }
+      sb.deleteCharAt(0);
       returnType=new PojoTypeInfo(clazz,fields);
     }
  else {
-      if (fullyQualifiedName.endsWith("[]")) {
-        fullyQualifiedName=fullyQualifiedName.substring(0,fullyQualifiedName.length() - 2);
-        returnType=ObjectArrayTypeInfo.getInfoFor(loadClass("[L" + fullyQualifiedName + ";"));
-      }
- else {
-        returnType=new GenericTypeInfo(loadClass(fullyQualifiedName));
-      }
+      returnType=new GenericTypeInfo(loadClass(fullyQualifiedName));
     }
   }
   if (returnType == null) {
     throw new IllegalArgumentException("Error at '" + infoString + "'");
   }
- else {
-    if (sb.length() > 0 && sb.charAt(0) == ',') {
-      sb.deleteCharAt(0);
-    }
-    return returnType;
+  int arrayDimensionCount=0;
+  while (sb.length() > 1 && sb.charAt(0) == '[' && sb.charAt(1) == ']') {
+    arrayDimensionCount++;
+    sb.delete(0,2);
   }
+  if (sb.length() > 0 && sb.charAt(0) == '[') {
+    throw new IllegalArgumentException("Closing square bracket missing.");
+  }
+  if (arrayDimensionCount > 0) {
+    TypeInformation<?> arrayInfo=null;
+    if (isPrimitiveType) {
+      if (returnType == BasicTypeInfo.INT_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.INT_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.BYTE_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.BYTE_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.SHORT_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.SHORT_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.CHAR_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.CHAR_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.DOUBLE_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.FLOAT_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.LONG_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.LONG_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.BOOLEAN_TYPE_INFO) {
+        arrayInfo=PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.VOID_TYPE_INFO) {
+        throw new IllegalArgumentException("Can not create an array of void.");
+      }
+    }
+ else     if (returnType instanceof BasicTypeInfo && returnType != BasicTypeInfo.DATE_TYPE_INFO) {
+      if (returnType == BasicTypeInfo.INT_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.INT_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.BYTE_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.BYTE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.SHORT_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.SHORT_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.CHAR_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.CHAR_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.DOUBLE_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.DOUBLE_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.FLOAT_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.FLOAT_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.LONG_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.LONG_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.BOOLEAN_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.BOOLEAN_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.STRING_TYPE_INFO) {
+        arrayInfo=BasicArrayTypeInfo.STRING_ARRAY_TYPE_INFO;
+      }
+ else       if (returnType == BasicTypeInfo.VOID_TYPE_INFO) {
+        throw new IllegalArgumentException("Can not create an array of void.");
+      }
+    }
+ else {
+      arrayInfo=ObjectArrayTypeInfo.getInfoFor(loadClass("[L" + returnType.getTypeClass().getName() + ";"),returnType);
+    }
+    if (arrayDimensionCount > 1) {
+      String arrayPrefix="[";
+      for (int i=1; i < arrayDimensionCount; i++) {
+        arrayPrefix+="[";
+        arrayInfo=ObjectArrayTypeInfo.getInfoFor(loadClass(arrayPrefix + "L" + returnType.getTypeClass().getName()+ ";"),arrayInfo);
+      }
+    }
+    returnType=arrayInfo;
+  }
+  if (sb.length() > 0 && sb.charAt(0) == ',') {
+    sb.deleteCharAt(0);
+  }
+  return returnType;
 }
