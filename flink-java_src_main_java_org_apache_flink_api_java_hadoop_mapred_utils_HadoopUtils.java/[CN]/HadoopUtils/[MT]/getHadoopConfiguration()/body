@@ -1,0 +1,43 @@
+{
+  Configuration retConf=new org.apache.hadoop.conf.Configuration();
+  final String hdfsDefaultPath=GlobalConfiguration.getString(ConfigConstants.HDFS_DEFAULT_CONFIG,null);
+  if (hdfsDefaultPath != null) {
+    retConf.addResource(new org.apache.hadoop.fs.Path(hdfsDefaultPath));
+  }
+ else {
+    LOG.debug("Cannot find hdfs-default configuration file");
+  }
+  final String hdfsSitePath=GlobalConfiguration.getString(ConfigConstants.HDFS_SITE_CONFIG,null);
+  if (hdfsSitePath != null) {
+    retConf.addResource(new org.apache.hadoop.fs.Path(hdfsSitePath));
+  }
+ else {
+    LOG.debug("Cannot find hdfs-site configuration file");
+  }
+  String[] possibleHadoopConfPaths=new String[4];
+  possibleHadoopConfPaths[0]=GlobalConfiguration.getString(ConfigConstants.PATH_HADOOP_CONFIG,null);
+  possibleHadoopConfPaths[1]=System.getenv("HADOOP_CONF_DIR");
+  if (System.getenv("HADOOP_HOME") != null) {
+    possibleHadoopConfPaths[2]=System.getenv("HADOOP_HOME") + "/conf";
+    possibleHadoopConfPaths[3]=System.getenv("HADOOP_HOME") + "/etc/hadoop";
+  }
+  for (  String possibleHadoopConfPath : possibleHadoopConfPaths) {
+    if (possibleHadoopConfPath != null) {
+      if (new File(possibleHadoopConfPath).exists()) {
+        if (new File(possibleHadoopConfPath + "/core-site.xml").exists()) {
+          retConf.addResource(new org.apache.hadoop.fs.Path(possibleHadoopConfPath + "/core-site.xml"));
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Adding " + possibleHadoopConfPath + "/core-site.xml to hadoop configuration");
+          }
+        }
+        if (new File(possibleHadoopConfPath + "/hdfs-site.xml").exists()) {
+          retConf.addResource(new org.apache.hadoop.fs.Path(possibleHadoopConfPath + "/hdfs-site.xml"));
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Adding " + possibleHadoopConfPath + "/hdfs-site.xml to hadoop configuration");
+          }
+        }
+      }
+    }
+  }
+  return retConf;
+}
