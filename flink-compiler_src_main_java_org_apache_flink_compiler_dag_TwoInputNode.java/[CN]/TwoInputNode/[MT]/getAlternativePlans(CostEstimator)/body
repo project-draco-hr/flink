@@ -2,6 +2,7 @@
   if (this.cachedPlans != null) {
     return this.cachedPlans;
   }
+  boolean childrenSkippedDueToReplicatedInput=false;
   final List<? extends PlanNode> subPlans1=getFirstPredecessorNode().getAlternativePlans(estimator);
   final List<? extends PlanNode> subPlans2=getSecondPredecessorNode().getAlternativePlans(estimator);
   final Set<RequestedGlobalProperties> intGlobal1=this.input1.getInterestingProperties().getGlobalProperties();
@@ -40,7 +41,25 @@
   final boolean dopChange1=dop != inDop1;
   final boolean dopChange2=dop != inDop2;
   for (  PlanNode child1 : subPlans1) {
+    if (child1.getGlobalProperties().isFullyReplicated()) {
+      if (dopChange1) {
+        childrenSkippedDueToReplicatedInput=true;
+        continue;
+      }
+ else {
+        this.input1.setShipStrategy(ShipStrategyType.FORWARD);
+      }
+    }
     for (    PlanNode child2 : subPlans2) {
+      if (child2.getGlobalProperties().isFullyReplicated()) {
+        if (dopChange2) {
+          childrenSkippedDueToReplicatedInput=true;
+          continue;
+        }
+ else {
+          this.input2.setShipStrategy(ShipStrategyType.FORWARD);
+        }
+      }
       if (!areBranchCompatible(child1,child2)) {
         continue;
       }
@@ -103,6 +122,14 @@
           break;
         }
       }
+    }
+  }
+  if (outputPlans.isEmpty()) {
+    if (childrenSkippedDueToReplicatedInput) {
+      throw new CompilerException("No plan meeting the requirements could be created @ " + this + ". Most likely reason: Invalid use of replicated input.");
+    }
+ else {
+      throw new CompilerException("No plan meeting the requirements could be created @ " + this + ". Most likely reason: Too restrictive plan hints.");
     }
   }
   for (  PlanNode node : outputPlans) {

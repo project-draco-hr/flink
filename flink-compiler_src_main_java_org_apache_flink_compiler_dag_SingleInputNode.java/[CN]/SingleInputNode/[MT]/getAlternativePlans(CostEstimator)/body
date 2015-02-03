@@ -2,6 +2,7 @@
   if (this.cachedPlans != null) {
     return this.cachedPlans;
   }
+  boolean childrenSkippedDueToReplicatedInput=false;
   final List<? extends PlanNode> subPlans=getPredecessorNode().getAlternativePlans(estimator);
   final Set<RequestedGlobalProperties> intGlobal=this.inConn.getInterestingProperties().getGlobalProperties();
   final List<Set<? extends NamedChannel>> broadcastPlanChannels=new ArrayList<Set<? extends NamedChannel>>();
@@ -32,6 +33,15 @@
   final int inDop=getPredecessorNode().getDegreeOfParallelism();
   final boolean dopChange=inDop != dop;
   for (  PlanNode child : subPlans) {
+    if (child.getGlobalProperties().isFullyReplicated()) {
+      if (dopChange) {
+        childrenSkippedDueToReplicatedInput=true;
+        continue;
+      }
+ else {
+        this.inConn.setShipStrategy(ShipStrategyType.FORWARD);
+      }
+    }
     if (this.inConn.getShipStrategy() == null) {
       for (      RequestedGlobalProperties igps : intGlobal) {
         final Channel c=new Channel(child,this.inConn.getMaterializationMode());
@@ -65,6 +75,14 @@
           break;
         }
       }
+    }
+  }
+  if (outputPlans.isEmpty()) {
+    if (childrenSkippedDueToReplicatedInput) {
+      throw new CompilerException("No plan meeting the requirements could be created @ " + this + ". Most likely reason: Invalid use of replicated input.");
+    }
+ else {
+      throw new CompilerException("No plan meeting the requirements could be created @ " + this + ". Most likely reason: Too restrictive plan hints.");
     }
   }
   for (  PlanNode node : outputPlans) {

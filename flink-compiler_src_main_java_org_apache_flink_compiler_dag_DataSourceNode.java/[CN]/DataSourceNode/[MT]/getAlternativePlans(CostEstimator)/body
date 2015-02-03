@@ -3,12 +3,23 @@
     return this.cachedPlans;
   }
   SourcePlanNode candidate=new SourcePlanNode(this,"DataSource (" + this.getPactContract().getName() + ")");
-  candidate.updatePropertiesWithUniqueSets(getUniqueFields());
-  final Costs costs=new Costs();
-  if (FileInputFormat.class.isAssignableFrom(getPactContract().getFormatWrapper().getUserCodeClass()) && this.estimatedOutputSize >= 0) {
-    estimator.addFileInputCost(this.estimatedOutputSize,costs);
+  if (!replicatedInput) {
+    candidate.updatePropertiesWithUniqueSets(getUniqueFields());
+    final Costs costs=new Costs();
+    if (FileInputFormat.class.isAssignableFrom(getPactContract().getFormatWrapper().getUserCodeClass()) && this.estimatedOutputSize >= 0) {
+      estimator.addFileInputCost(this.estimatedOutputSize,costs);
+    }
+    candidate.setCosts(costs);
   }
-  candidate.setCosts(costs);
+ else {
+    final Costs costs=new Costs();
+    InputFormat<?,?> inputFormat=((ReplicatingInputFormat<?,?>)getPactContract().getFormatWrapper().getUserCodeObject()).getReplicatedInputFormat();
+    if (FileInputFormat.class.isAssignableFrom(inputFormat.getClass()) && this.estimatedOutputSize >= 0) {
+      estimator.addFileInputCost(this.estimatedOutputSize * this.getDegreeOfParallelism(),costs);
+    }
+    candidate.setCosts(costs);
+    candidate.getGlobalProperties().setFullyReplicated();
+  }
   List<PlanNode> plans=new ArrayList<PlanNode>(1);
   plans.add(candidate);
   this.cachedPlans=plans;

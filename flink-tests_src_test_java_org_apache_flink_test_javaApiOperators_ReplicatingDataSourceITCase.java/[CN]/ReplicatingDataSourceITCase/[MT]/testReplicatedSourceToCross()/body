@@ -1,0 +1,19 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Tuple1<Long>> source1=env.createInput(new ReplicatingInputFormat<Long,GenericInputSplit>(new ParallelIteratorInputFormat<Long>(new NumberSequenceIterator(0l,1000l))),BasicTypeInfo.LONG_TYPE_INFO).map(new ToTuple());
+  DataSet<Tuple1<Long>> source2=env.generateSequence(0l,1000l).map(new ToTuple());
+  DataSet<Tuple1<Long>> pairs=source1.cross(source2).filter(new FilterFunction<Tuple2<Tuple1<Long>,Tuple1<Long>>>(){
+    @Override public boolean filter(    Tuple2<Tuple1<Long>,Tuple1<Long>> value) throws Exception {
+      return value.f0.f0.equals(value.f1.f0);
+    }
+  }
+).map(new MapFunction<Tuple2<Tuple1<Long>,Tuple1<Long>>,Tuple1<Long>>(){
+    @Override public Tuple1<Long> map(    Tuple2<Tuple1<Long>,Tuple1<Long>> value) throws Exception {
+      return value.f0;
+    }
+  }
+).sum(0);
+  pairs.writeAsText(resultPath);
+  env.execute();
+  expectedResult="(500500)";
+}
