@@ -1,0 +1,60 @@
+{
+  List<Integer> inputs=new ArrayList<Integer>();
+  for (Integer i=1; i <= 10; i++) {
+    inputs.add(i);
+  }
+  ReduceFunction<Integer> myReduceFunction=new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      return value1 + value2;
+    }
+  }
+;
+  LinkedList<TriggerPolicy<Integer>> triggers=new LinkedList<TriggerPolicy<Integer>>();
+  triggers.add(new CountTriggerPolicy<Integer>(2,-1));
+  LinkedList<EvictionPolicy<Integer>> evictions=new LinkedList<EvictionPolicy<Integer>>();
+  evictions.add(new CountEvictionPolicy<Integer>(2,2,-1));
+  WindowInvokable<Integer,Integer> invokable=new WindowReducer<Integer>(myReduceFunction,triggers,evictions);
+  List<Integer> expected=new ArrayList<Integer>();
+  expected.add(6);
+  expected.add(12);
+  expected.add(18);
+  expected.add(24);
+  expected.add(19);
+  List<Integer> result=new ArrayList<Integer>();
+  for (  Integer t : MockContext.createAndExecute(invokable,inputs)) {
+    result.add(t);
+  }
+  assertEquals(expected,result);
+  List<Integer> inputs2=new ArrayList<Integer>();
+  inputs2.add(1);
+  inputs2.add(2);
+  inputs2.add(-5);
+  inputs2.add(-3);
+  inputs2.add(-4);
+  myReduceFunction=new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer value1,    Integer value2) throws Exception {
+      if (value1 <= value2) {
+        return value1;
+      }
+ else {
+        return value2;
+      }
+    }
+  }
+;
+  triggers=new LinkedList<TriggerPolicy<Integer>>();
+  triggers.add(new CountTriggerPolicy<Integer>(3,1));
+  evictions=new LinkedList<EvictionPolicy<Integer>>();
+  evictions.add(new CountEvictionPolicy<Integer>(3,3,-1));
+  WindowInvokable<Integer,Integer> invokable2=new WindowReducer<Integer>(myReduceFunction,triggers,evictions);
+  List<Integer> expected2=new ArrayList<Integer>();
+  expected2.add(1);
+  expected2.add(-4);
+  result=new ArrayList<Integer>();
+  for (  Integer t : MockContext.createAndExecute(invokable2,inputs2)) {
+    result.add(t);
+  }
+  assertEquals(expected2,result);
+}
