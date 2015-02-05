@@ -1,0 +1,36 @@
+{
+  try {
+    final byte[] address1={10,0,1,4};
+    final byte[] address2={10,0,1,5};
+    final String hostname1="host1";
+    final String hostname2="host2";
+    Instance instance1=getInstance(address1,6789,hostname1);
+    Instance instance2=getInstance(address2,6789,hostname2);
+    Scheduler scheduler=new Scheduler();
+    scheduler.newInstanceAvailable(instance1);
+    AbstractJobVertex jobVertex=new AbstractJobVertex("test vertex",new JobVertexID());
+    jobVertex.setInvokableClass(DummyInvokable.class);
+    jobVertex.setParallelism(1);
+    JobGraph jg=new JobGraph("test job",jobVertex);
+    ExecutionGraph eg=new ExecutionGraph(jg.getJobID(),jg.getName(),jg.getJobConfiguration(),timeout);
+    eg.attachJobGraph(Collections.singletonList(jobVertex));
+    ExecutionJobVertex ejv=eg.getAllVertices().get(jobVertex.getID());
+    ExecutionVertex[] vertices=ejv.getTaskVertices();
+    vertices[0].setLocationConstraintHosts(Collections.singletonList(instance2));
+    vertices[0].setScheduleLocalOnly(true);
+    try {
+      ejv.scheduleAll(scheduler,false);
+      fail("This should fail with a NoResourceAvailableException");
+    }
+ catch (    NoResourceAvailableException e) {
+      assertTrue(e.getMessage().contains(hostname2));
+    }
+catch (    Exception e) {
+      fail("Wrong exception type");
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

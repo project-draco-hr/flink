@@ -6,6 +6,8 @@
     LOG.debug("Scheduling task " + task);
   }
   final ExecutionVertex vertex=task.getTaskToExecute().getVertex();
+  final Iterable<Instance> preferredLocations=vertex.getPreferredLocations();
+  final boolean forceExternalLocation=vertex.isScheduleLocalOnly() && preferredLocations != null && preferredLocations.iterator().hasNext();
 synchronized (globalLock) {
     SlotSharingGroup sharingUnit=task.getSlotSharingGroup();
     if (sharingUnit != null) {
@@ -14,6 +16,9 @@ synchronized (globalLock) {
       }
       final SlotSharingGroupAssignment assignment=sharingUnit.getTaskAssignment();
       final CoLocationConstraint constraint=task.getLocationConstraint();
+      if (constraint != null && forceExternalLocation) {
+        throw new IllegalArgumentException("The scheduling cannot be contrained simultaneously by a " + "co-location constriaint and an external location constraint.");
+      }
       SimpleSlot slotFromGroup;
       if (constraint == null) {
         slotFromGroup=assignment.getSlotForTask(vertex);
@@ -30,12 +35,18 @@ synchronized (globalLock) {
           }
         }
         final Iterable<Instance> locations=(constraint == null || constraint.isUnassigned()) ? vertex.getPreferredLocations() : Collections.singleton(constraint.getLocation());
-        newSlot=getFreeSubSlotForTask(vertex,locations,assignment,constraint);
+        newSlot=getFreeSubSlotForTask(vertex,locations,assignment,constraint,forceExternalLocation);
         SimpleSlot toUse;
         if (newSlot == null) {
           if (slotFromGroup == null) {
             if (constraint == null || constraint.isUnassigned()) {
-              throw new NoResourceAvailableException(task,getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
+              if (forceExternalLocation) {
+                String hosts=getHostnamesFromInstances(preferredLocations);
+                throw new NoResourceAvailableException("Could not schedule task " + vertex + " to any of the required hosts: "+ hosts);
+              }
+ else {
+                throw new NoResourceAvailableException(task,getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
+              }
             }
  else {
               throw new NoResourceAvailableException("Could not allocate a slot on instance " + constraint.getLocation() + ", as required by the co-location constraint.");
@@ -79,19 +90,25 @@ catch (      Throwable t) {
         ExceptionUtils.rethrow(t,"An error occurred while allocating a slot in a sharing group");
       }
     }
-    SimpleSlot slot=getFreeSlotForTask(vertex,vertex.getPreferredLocations());
-    if (slot != null) {
-      updateLocalityCounters(slot.getLocality());
-      return slot;
-    }
- else {
-      if (queueIfNoResource) {
-        SlotAllocationFuture future=new SlotAllocationFuture();
-        this.taskQueue.add(new QueuedTask(task,future));
-        return future;
+{
+      SimpleSlot slot=getFreeSlotForTask(vertex,preferredLocations,forceExternalLocation);
+      if (slot != null) {
+        updateLocalityCounters(slot.getLocality());
+        return slot;
       }
  else {
-        throw new NoResourceAvailableException(getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
+        if (queueIfNoResource) {
+          SlotAllocationFuture future=new SlotAllocationFuture();
+          this.taskQueue.add(new QueuedTask(task,future));
+          return future;
+        }
+ else         if (forceExternalLocation) {
+          String hosts=getHostnamesFromInstances(preferredLocations);
+          throw new NoResourceAvailableException("Could not schedule task " + vertex + " to any of the required hosts: "+ hosts);
+        }
+ else {
+          throw new NoResourceAvailableException(getNumberOfAvailableInstances(),getTotalNumberOfSlots(),getNumberOfAvailableSlots());
+        }
       }
     }
   }
