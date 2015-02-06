@@ -1,33 +1,52 @@
 {
-  boolean success=true;
   if (consumers.size() != 1) {
-    throw new IllegalStateException("Only one consumer is supported currently.");
+    fail(new IllegalStateException("Only one consumer is supported currently."));
   }
   final List<ExecutionEdge> consumer=consumers.get(0);
   for (  ExecutionEdge edge : consumer) {
     final ExecutionVertex consumerVertex=edge.getTarget();
     final ExecutionState consumerState=consumerVertex.getExecutionState();
     if (consumerState == CREATED) {
-      if (state == RUNNING) {
-        if (!consumerVertex.scheduleForExecution(consumerVertex.getExecutionGraph().getScheduler(),false)) {
-          success=false;
+      consumerVertex.cachePartitionInfo(PartialPartitionInfo.fromEdge(edge));
+      future(new Callable<Boolean>(){
+        @Override public Boolean call() throws Exception {
+          try {
+            consumerVertex.scheduleForExecution(consumerVertex.getExecutionGraph().getScheduler(),false);
+          }
+ catch (          Exception exception) {
+            fail(new IllegalStateException("Could not schedule consumer " + "vertex " + consumerVertex,exception));
+          }
+          return true;
         }
       }
- else {
-        success=false;
+,AkkaUtils.globalExecutionContext());
+      if (consumerVertex.getExecutionState() == RUNNING) {
+        consumerVertex.sendPartitionInfos();
       }
     }
  else     if (consumerState == RUNNING) {
       SimpleSlot consumerSlot=consumerVertex.getCurrentAssignedResource();
       ExecutionAttemptID consumerExecutionId=consumerVertex.getCurrentExecutionAttempt().getAttemptId();
-      PartitionInfo partitionInfo=PartitionInfo.fromEdge(edge,consumerSlot);
-      if (!sendUpdateTaskRpcCall(consumerSlot,consumerExecutionId,edge.getSource().getIntermediateResult().getId(),partitionInfo)) {
-        success=false;
+      IntermediateResultPartitionID partitionID=edge.getSource().getPartitionId();
+      int connectionIndex=edge.getSource().getIntermediateResult().getConnectionIndex();
+      PartitionInfo.PartitionLocation producerLocation;
+      RemoteAddress producerAddress=null;
+      if (consumerSlot.getInstance().getInstanceConnectionInfo().equals(getAssignedResourceLocation())) {
+        producerLocation=PartitionInfo.PartitionLocation.LOCAL;
       }
+ else {
+        producerLocation=PartitionInfo.PartitionLocation.REMOTE;
+        producerAddress=new RemoteAddress(getAssignedResourceLocation(),connectionIndex);
+      }
+      PartitionInfo partitionInfo=new PartitionInfo(partitionID,attemptId,producerLocation,producerAddress);
+      TaskManagerMessages.UpdateTask updateTaskMessage=new TaskManagerMessages.UpdateTaskSinglePartitionInfo(consumerExecutionId,edge.getSource().getIntermediateResult().getId(),partitionInfo);
+      sendUpdateTaskRpcCall(consumerSlot,updateTaskMessage);
     }
  else     if (consumerState == SCHEDULED || consumerState == DEPLOYING) {
-      success=false;
+      consumerVertex.cachePartitionInfo(PartialPartitionInfo.fromEdge(edge));
+      if (consumerVertex.getExecutionState() == RUNNING) {
+        consumerVertex.sendPartitionInfos();
+      }
     }
   }
-  return success;
 }

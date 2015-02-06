@@ -1,20 +1,14 @@
 {
-  while (!isReleased) {
-    final JobManagerMessages.ConsumerNotificationResult result=AkkaUtils.ask(networkEnvironment.getJobManager(),new JobManagerMessages.ScheduleOrUpdateConsumers(jobId,producerExecutionId,partitionIndex),networkEnvironment.getJobManagerTimeout());
-    if (result.success()) {
-      return;
-    }
- else {
-      Option<Throwable> error=result.error();
-      if (error.isDefined()) {
-        throw new IOException(error.get().getMessage(),error.get());
+  if (!isReleased) {
+    ScheduleOrUpdateConsumers msg=new ScheduleOrUpdateConsumers(jobId,producerExecutionId,partitionIndex);
+    Future<Object> futureResponse=Patterns.ask(networkEnvironment.getJobManager(),msg,networkEnvironment.getJobManagerTimeout());
+    futureResponse.onFailure(new OnFailure(){
+      @Override public void onFailure(      Throwable failure) throws Throwable {
+        LOG.error("Could not schedule or update consumers at the JobManager.",failure);
+        FailTask failMsg=new FailTask(producerExecutionId,new RuntimeException("Could not schedule or update consumers at " + "the JobManager.",failure));
+        networkEnvironment.getTaskManager().tell(failMsg,ActorRef.noSender());
       }
     }
-    try {
-      Thread.sleep(10);
-    }
- catch (    InterruptedException e) {
-      throw new IOException("Unexpected interruption during consumer schedule or update.",e);
-    }
+,AkkaUtils.globalExecutionContext());
   }
 }
