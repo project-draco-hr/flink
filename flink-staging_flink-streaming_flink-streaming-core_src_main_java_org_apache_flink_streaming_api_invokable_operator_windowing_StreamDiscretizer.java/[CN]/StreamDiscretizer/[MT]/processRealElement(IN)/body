@@ -1,35 +1,16 @@
 {
-  for (  ActiveTriggerPolicy<IN> trigger : activeTriggerPolicies) {
+  if (isActiveTrigger) {
+    ActiveTriggerPolicy<IN> trigger=(ActiveTriggerPolicy<IN>)triggerPolicy;
     Object[] result=trigger.preNotifyTrigger(input);
     for (    Object in : result) {
-      processFakeElement(in,trigger);
+      triggerOnFakeElement(in);
     }
   }
   boolean isTriggered=false;
-  for (  TriggerPolicy<IN> triggerPolicy : triggerPolicies) {
-    if (triggerPolicy.notifyTrigger(input)) {
-      currentTriggerPolicies.add(triggerPolicy);
-    }
-  }
-  if (!currentTriggerPolicies.isEmpty()) {
+  if (triggerPolicy.notifyTrigger(input)) {
     emitWindow();
-    currentTriggerPolicies.clear();
     isTriggered=true;
   }
-  int currentMaxEviction=0;
-  for (  EvictionPolicy<IN> evictionPolicy : evictionPolicies) {
-    int tmp=evictionPolicy.notifyEviction(input,isTriggered,buffer.size());
-    if (tmp > currentMaxEviction) {
-      currentMaxEviction=tmp;
-    }
-  }
-  for (int i=0; i < currentMaxEviction; i++) {
-    try {
-      buffer.removeFirst();
-    }
- catch (    NoSuchElementException e) {
-      break;
-    }
-  }
+  evict(input,isTriggered);
   buffer.add(input);
 }
