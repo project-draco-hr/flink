@@ -14,14 +14,21 @@ synchronized (this.globalLock) {
     }
     try {
       instance.setSlotAvailabilityListener(this);
+      String instanceHostName=instance.getInstanceConnectionInfo().getHostname();
+      Set<Instance> instanceSet=allInstancesByHost.get(instanceHostName);
+      if (instanceSet == null) {
+        instanceSet=new HashSet<Instance>();
+        allInstancesByHost.put(instanceHostName,instanceSet);
+      }
+      instanceSet.add(instance);
+      this.instancesWithAvailableResources.add(instance);
+      for (int i=0; i < instance.getNumberOfAvailableSlots(); i++) {
+        newSlotAvailable(instance);
+      }
     }
- catch (    IllegalStateException e) {
-      this.allInstances.remove(instance);
-      LOG.error("Scheduler could not attach to the instance as a listener.");
-    }
-    this.instancesWithAvailableResources.add(instance);
-    for (int i=0; i < instance.getNumberOfAvailableSlots(); i++) {
-      newSlotAvailable(instance);
+ catch (    Throwable t) {
+      LOG.error("Scheduler could not add new instance " + instance,t);
+      removeInstance(instance);
     }
   }
 }

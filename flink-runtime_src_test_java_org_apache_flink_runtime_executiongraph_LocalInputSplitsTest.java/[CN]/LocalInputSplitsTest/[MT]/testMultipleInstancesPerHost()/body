@@ -1,0 +1,45 @@
+{
+  TestLocatableInputSplit[] splits=new TestLocatableInputSplit[]{new TestLocatableInputSplit(1,"host1"),new TestLocatableInputSplit(2,"host1"),new TestLocatableInputSplit(3,"host2"),new TestLocatableInputSplit(4,"host2"),new TestLocatableInputSplit(5,"host3"),new TestLocatableInputSplit(6,"host3")};
+  try {
+    AbstractJobVertex vertex=new AbstractJobVertex("test vertex");
+    vertex.setParallelism(6);
+    vertex.setInvokableClass(DummyInvokable.class);
+    vertex.setInputSplitSource(new TestInputSplitSource(splits));
+    JobGraph jobGraph=new JobGraph("test job",vertex);
+    ExecutionGraph eg=new ExecutionGraph(jobGraph.getJobID(),jobGraph.getName(),jobGraph.getJobConfiguration(),TIMEOUT);
+    eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+    eg.setQueuedSchedulingAllowed(false);
+    Scheduler scheduler=new Scheduler();
+    Instance i1=getInstance(new byte[]{10,0,1,1},12345,"host1",1);
+    Instance i2=getInstance(new byte[]{10,0,1,1},12346,"host1",1);
+    Instance i3=getInstance(new byte[]{10,0,1,2},12345,"host2",1);
+    Instance i4=getInstance(new byte[]{10,0,1,2},12346,"host2",1);
+    Instance i5=getInstance(new byte[]{10,0,1,3},12345,"host3",1);
+    Instance i6=getInstance(new byte[]{10,0,1,3},12346,"host4",1);
+    scheduler.newInstanceAvailable(i1);
+    scheduler.newInstanceAvailable(i2);
+    scheduler.newInstanceAvailable(i3);
+    scheduler.newInstanceAvailable(i4);
+    scheduler.newInstanceAvailable(i5);
+    scheduler.newInstanceAvailable(i6);
+    eg.scheduleForExecution(scheduler);
+    ExecutionVertex[] tasks=eg.getVerticesTopologically().iterator().next().getTaskVertices();
+    assertEquals(6,tasks.length);
+    Instance taskInstance1=tasks[0].getCurrentAssignedResource().getInstance();
+    Instance taskInstance2=tasks[1].getCurrentAssignedResource().getInstance();
+    Instance taskInstance3=tasks[2].getCurrentAssignedResource().getInstance();
+    Instance taskInstance4=tasks[3].getCurrentAssignedResource().getInstance();
+    Instance taskInstance5=tasks[4].getCurrentAssignedResource().getInstance();
+    Instance taskInstance6=tasks[5].getCurrentAssignedResource().getInstance();
+    assertTrue(taskInstance1 == i1 || taskInstance1 == i2);
+    assertTrue(taskInstance2 == i1 || taskInstance2 == i2);
+    assertTrue(taskInstance3 == i3 || taskInstance3 == i4);
+    assertTrue(taskInstance4 == i3 || taskInstance4 == i4);
+    assertTrue(taskInstance5 == i5 || taskInstance5 == i6);
+    assertTrue(taskInstance6 == i5 || taskInstance6 == i6);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

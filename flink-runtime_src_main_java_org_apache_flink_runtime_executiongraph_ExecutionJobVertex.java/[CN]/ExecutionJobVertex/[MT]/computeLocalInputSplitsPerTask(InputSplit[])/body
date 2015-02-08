@@ -1,0 +1,60 @@
+{
+  final int numSubTasks=getParallelism();
+  if (numSubTasks > splits.length) {
+    throw new JobException("Strictly local assignment requires at least as many splits as subtasks.");
+  }
+  Map<String,List<LocatableInputSplit>> splitsByHost=new HashMap<String,List<LocatableInputSplit>>();
+  for (  InputSplit split : splits) {
+    if (!(split instanceof LocatableInputSplit)) {
+      new JobException("Invalid InputSplit type " + split.getClass().getCanonicalName() + ". "+ "Strictly local assignment requires LocatableInputSplit");
+    }
+    LocatableInputSplit lis=(LocatableInputSplit)split;
+    if (lis.getHostnames() == null) {
+      throw new JobException("LocatableInputSplit has no host information. " + "Strictly local assignment requires exactly one hostname for each LocatableInputSplit.");
+    }
+ else     if (lis.getHostnames().length != 1) {
+      throw new JobException("Strictly local assignment requires exactly one hostname for each LocatableInputSplit.");
+    }
+    String hostName=lis.getHostnames()[0];
+    List<LocatableInputSplit> hostSplits=splitsByHost.get(hostName);
+    if (hostSplits == null) {
+      hostSplits=new ArrayList<LocatableInputSplit>();
+      splitsByHost.put(hostName,hostSplits);
+    }
+    hostSplits.add(lis);
+  }
+  int numHosts=splitsByHost.size();
+  if (numSubTasks < numHosts) {
+    throw new JobException("Strictly local split assignment requires at least as " + "many parallel subtasks as distinct split hosts. Please increase the parallelism " + "of DataSource " + this.getJobVertex().getName() + " to at least "+ numHosts+ ".");
+  }
+  List<String> hosts=new ArrayList<String>(splitsByHost.keySet());
+  Collections.sort(hosts);
+  @SuppressWarnings("unchecked") List<LocatableInputSplit>[] subTaskSplitAssignment=(List<LocatableInputSplit>[])new List<?>[numSubTasks];
+  final int subtasksPerHost=numSubTasks / numHosts;
+  final int hostsWithOneMore=numSubTasks % numHosts;
+  int subtaskNum=0;
+  for (int hostNum=0; hostNum < numHosts; hostNum++) {
+    String host=hosts.get(hostNum);
+    List<LocatableInputSplit> splitsOnHost=splitsByHost.get(host);
+    int numSplitsOnHost=splitsOnHost.size();
+    int subtasks=Math.min(numSplitsOnHost,hostNum < hostsWithOneMore ? subtasksPerHost + 1 : subtasksPerHost);
+    int splitsPerSubtask=numSplitsOnHost / subtasks;
+    int subtasksWithOneMore=numSplitsOnHost % subtasks;
+    int splitnum=0;
+    for (int i=0; i < subtasks; i++) {
+      int numSplitsForSubtask=(i < subtasksWithOneMore ? splitsPerSubtask + 1 : splitsPerSubtask);
+      List<LocatableInputSplit> splitList;
+      if (numSplitsForSubtask == numSplitsOnHost) {
+        splitList=splitsOnHost;
+      }
+ else {
+        splitList=new ArrayList<LocatableInputSplit>(numSplitsForSubtask);
+        for (int k=0; k < numSplitsForSubtask; k++) {
+          splitList.add(splitsOnHost.get(splitnum++));
+        }
+      }
+      subTaskSplitAssignment[subtaskNum++]=splitList;
+    }
+  }
+  return subTaskSplitAssignment;
+}
