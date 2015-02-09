@@ -1,6 +1,9 @@
 {
+  if (!parseParameters(args)) {
+    return;
+  }
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  DataStream<StockPrice> socketStockStream=env.socketTextStream("localhost",9999).map(new MapFunction<String,StockPrice>(){
+  DataStream<StockPrice> socketStockStream=env.socketTextStream(hostName,port).map(new MapFunction<String,StockPrice>(){
     private String[] tokens;
     @Override public StockPrice map(    String value) throws Exception {
       tokens=value.split(",");
@@ -57,6 +60,11 @@
   }
 );
   DataStream<Double> rollingCorrelation=tweetsAndWarning.window(Time.of(30,TimeUnit.SECONDS)).reduceGroup(new CorrelationReduce()).setParallelism(1);
-  rollingCorrelation.print();
+  if (fileOutput) {
+    rollingCorrelation.writeAsText(outputPath,1);
+  }
+ else {
+    rollingCorrelation.print();
+  }
   env.execute("Stock stream");
 }
