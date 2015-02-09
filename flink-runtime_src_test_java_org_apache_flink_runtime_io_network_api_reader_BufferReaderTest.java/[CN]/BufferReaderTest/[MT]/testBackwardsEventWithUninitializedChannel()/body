@@ -1,0 +1,32 @@
+{
+  final NetworkEnvironment networkEnvironment=mock(NetworkEnvironment.class);
+  final TaskEventDispatcher taskEventDispatcher=mock(TaskEventDispatcher.class);
+  when(taskEventDispatcher.publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class))).thenReturn(true);
+  final IntermediateResultPartitionManager partitionManager=mock(IntermediateResultPartitionManager.class);
+  final IntermediateResultPartitionQueueIterator iterator=mock(IntermediateResultPartitionQueueIterator.class);
+  when(iterator.getNextBuffer()).thenReturn(new Buffer(new MemorySegment(new byte[1024]),mock(BufferRecycler.class)));
+  final BufferPool bufferPool=mock(BufferPool.class);
+  when(bufferPool.getNumberOfRequiredMemorySegments()).thenReturn(2);
+  when(networkEnvironment.getTaskEventDispatcher()).thenReturn(taskEventDispatcher);
+  when(networkEnvironment.getPartitionManager()).thenReturn(partitionManager);
+  when(partitionManager.getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class))).thenReturn(iterator);
+  final IntermediateDataSetID resultId=new IntermediateDataSetID();
+  final BufferReader reader=new BufferReader(mock(RuntimeEnvironment.class),networkEnvironment,resultId,2,0);
+  reader.setBufferPool(bufferPool);
+  ExecutionAttemptID localProducer=new ExecutionAttemptID();
+  IntermediateResultPartitionID localPartitionId=new IntermediateResultPartitionID();
+  InputChannel local=new LocalInputChannel(0,localProducer,localPartitionId,reader);
+  ExecutionAttemptID unknownProducer=new ExecutionAttemptID();
+  IntermediateResultPartitionID unknownPartitionId=new IntermediateResultPartitionID();
+  InputChannel unknown=new UnknownInputChannel(2,unknownProducer,unknownPartitionId,reader);
+  reader.setInputChannel(localPartitionId,local);
+  reader.setInputChannel(unknownPartitionId,unknown);
+  reader.requestPartitionsOnce();
+  verify(partitionManager,times(1)).getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class));
+  final TaskEvent event=new TestTaskEvent();
+  reader.sendTaskEvent(event);
+  verify(taskEventDispatcher,times(1)).publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class));
+  reader.updateInputChannel(new PartitionInfo(unknownPartitionId,unknownProducer,PartitionInfo.PartitionLocation.LOCAL,null));
+  verify(partitionManager,times(2)).getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class));
+  verify(taskEventDispatcher,times(2)).publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class));
+}
