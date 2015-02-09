@@ -1,26 +1,33 @@
 {
-  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
-  final TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.CONSTANT,VAL);
-  final MutableObjectIterator<Record> source=new TestData.GeneratorIterator(generator,NUM_PAIRS);
-  LOG.debug("Initializing sortmerger...");
-  Sorter<Record> merger=new UnilateralSortMerger<Record>(this.memoryManager,this.ioManager,source,this.parentTask,this.pactRecordSerializer,this.pactRecordComparator,(double)64 / 78,10,2,0.9f);
-  LOG.debug("Reading and sorting data...");
-  MutableObjectIterator<Record> iterator=merger.getIterator();
-  LOG.debug("Checking results...");
-  int pairsEmitted=1;
-  Record rec1=new Record();
-  Record rec2=new Record();
-  Assert.assertTrue((rec1=iterator.next(rec1)) != null);
-  while ((rec2=iterator.next(rec2)) != null) {
-    final Key k1=rec1.getField(0,TestData.Key.class);
-    final Key k2=rec2.getField(0,TestData.Key.class);
-    pairsEmitted++;
-    Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
-    Record tmp=rec1;
-    rec1=rec2;
-    k1.setKey(k2.getKey());
-    rec2=tmp;
+  try {
+    final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
+    final TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.CONSTANT,VAL);
+    final MutableObjectIterator<Record> source=new TestData.GeneratorIterator(generator,NUM_PAIRS);
+    LOG.debug("Initializing sortmerger...");
+    Sorter<Record> merger=new UnilateralSortMerger<Record>(this.memoryManager,this.ioManager,source,this.parentTask,this.pactRecordSerializer,this.pactRecordComparator,(double)64 / 78,10,2,0.9f);
+    LOG.debug("Reading and sorting data...");
+    MutableObjectIterator<Record> iterator=merger.getIterator();
+    LOG.debug("Checking results...");
+    int pairsEmitted=1;
+    Record rec1=new Record();
+    Record rec2=new Record();
+    Assert.assertTrue((rec1=iterator.next(rec1)) != null);
+    while ((rec2=iterator.next(rec2)) != null) {
+      final Key k1=rec1.getField(0,TestData.Key.class);
+      final Key k2=rec2.getField(0,TestData.Key.class);
+      pairsEmitted++;
+      Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
+      Record tmp=rec1;
+      rec1=rec2;
+      k1.setKey(k2.getKey());
+      rec2=tmp;
+    }
+    Assert.assertTrue(NUM_PAIRS == pairsEmitted);
+    merger.close();
   }
-  Assert.assertTrue(NUM_PAIRS == pairsEmitted);
-  merger.close();
+ catch (  Exception e) {
+    failed=true;
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
 }
