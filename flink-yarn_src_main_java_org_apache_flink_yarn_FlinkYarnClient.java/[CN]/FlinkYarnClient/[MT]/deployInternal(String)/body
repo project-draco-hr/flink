@@ -6,25 +6,33 @@
   LOG.info("\tTaskManager memory = {}",taskManagerMemoryMb);
   yarnApplication=yarnClient.createApplication();
   GetNewApplicationResponse appResponse=yarnApplication.getNewApplicationResponse();
-  List<QueueInfo> queues=yarnClient.getAllQueues();
-  if (queues.size() > 0 && this.yarnQueue != null) {
-    boolean queueFound=false;
-    for (    QueueInfo queue : queues) {
-      if (queue.getQueueName().equals(this.yarnQueue)) {
-        queueFound=true;
-        break;
+  try {
+    List<QueueInfo> queues=yarnClient.getAllQueues();
+    if (queues.size() > 0 && this.yarnQueue != null) {
+      boolean queueFound=false;
+      for (      QueueInfo queue : queues) {
+        if (queue.getQueueName().equals(this.yarnQueue)) {
+          queueFound=true;
+          break;
+        }
+      }
+      if (!queueFound) {
+        String queueNames="";
+        for (        QueueInfo queue : queues) {
+          queueNames+=queue.getQueueName() + ", ";
+        }
+        LOG.warn("The specified queue '" + this.yarnQueue + "' does not exist. "+ "Available queues: "+ queueNames);
       }
     }
-    if (!queueFound) {
-      String queueNames="";
-      for (      QueueInfo queue : queues) {
-        queueNames+=queue.getQueueName() + ", ";
-      }
-      throw new YarnDeploymentException("The specified queue '" + this.yarnQueue + "' does not exist. "+ "Available queues: "+ queueNames);
+ else {
+      LOG.debug("The YARN cluster does not have any queues configured");
     }
   }
- else {
-    LOG.debug("The YARN cluster does not have any queues configured");
+ catch (  Throwable e) {
+    LOG.warn("Error while getting queue information from YARN: " + e.getMessage());
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Error details",e);
+    }
   }
   final int yarnMinAllocationMB=conf.getInt("yarn.scheduler.minimum-allocation-mb",0);
   if (jobManagerMemoryMb < yarnMinAllocationMB || taskManagerMemoryMb < yarnMinAllocationMB) {
