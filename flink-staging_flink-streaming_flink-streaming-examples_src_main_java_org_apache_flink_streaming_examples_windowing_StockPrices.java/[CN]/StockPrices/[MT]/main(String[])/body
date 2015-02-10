@@ -15,23 +15,23 @@
   DataStream<StockPrice> FTSE_stream=env.addSource(new StockSource("FTSE",20));
   DataStream<StockPrice> DJI_stream=env.addSource(new StockSource("DJI",30));
   DataStream<StockPrice> BUX_stream=env.addSource(new StockSource("BUX",40));
-  DataStream<StockPrice> stockStream=socketStockStream.merge(SPX_stream,FTSE_stream,DJI_stream,BUX_stream);
+  @SuppressWarnings("unchecked") DataStream<StockPrice> stockStream=socketStockStream.merge(SPX_stream,FTSE_stream,DJI_stream,BUX_stream);
   WindowedDataStream<StockPrice> windowedStream=stockStream.window(Time.of(10,TimeUnit.SECONDS)).every(Time.of(5,TimeUnit.SECONDS));
-  DataStream<StockPrice> lowest=windowedStream.minBy("price").setParallelism(1);
-  DataStream<StockPrice> maxByStock=windowedStream.groupBy("symbol").maxBy("price");
-  DataStream<StockPrice> rollingMean=windowedStream.groupBy("symbol").reduceGroup(new MeanReduce());
+  DataStream<StockPrice> lowest=windowedStream.minBy("price").flatten();
+  DataStream<StockPrice> maxByStock=windowedStream.groupBy("symbol").maxBy("price").flatten();
+  DataStream<StockPrice> rollingMean=windowedStream.groupBy("symbol").mapWindow(new MeanReduce()).flatten();
   DataStream<String> priceWarnings=stockStream.groupBy("symbol").window(Delta.of(0.05,new DeltaFunction<StockPrice>(){
     @Override public double getDelta(    StockPrice oldDataPoint,    StockPrice newDataPoint){
       return Math.abs(oldDataPoint.price - newDataPoint.price);
     }
   }
-,DEFAULT_STOCK_PRICE)).reduceGroup(new SendWarning());
+,DEFAULT_STOCK_PRICE)).mapWindow(new SendWarning()).flatten();
   DataStream<Count> warningsPerStock=priceWarnings.map(new MapFunction<String,Count>(){
     @Override public Count map(    String value) throws Exception {
       return new Count(value,1);
     }
   }
-).groupBy("symbol").window(Time.of(30,TimeUnit.SECONDS)).sum("count");
+).groupBy("symbol").window(Time.of(30,TimeUnit.SECONDS)).sum("count").flatten();
   DataStream<String> tweetStream=env.addSource(new TweetSource());
   DataStream<String> mentionedSymbols=tweetStream.flatMap(new FlatMapFunction<String,String>(){
     @Override public void flatMap(    String value,    Collector<String> out) throws Exception {
@@ -52,14 +52,14 @@
       return new Count(value,1);
     }
   }
-).groupBy("symbol").window(Time.of(30,TimeUnit.SECONDS)).sum("count");
+).groupBy("symbol").window(Time.of(30,TimeUnit.SECONDS)).sum("count").flatten();
   DataStream<Tuple2<Integer,Integer>> tweetsAndWarning=warningsPerStock.join(tweetsPerStock).onWindow(30,TimeUnit.SECONDS).where("symbol").equalTo("symbol").with(new JoinFunction<Count,Count,Tuple2<Integer,Integer>>(){
     @Override public Tuple2<Integer,Integer> join(    Count first,    Count second) throws Exception {
       return new Tuple2<Integer,Integer>(first.count,second.count);
     }
   }
 );
-  DataStream<Double> rollingCorrelation=tweetsAndWarning.window(Time.of(30,TimeUnit.SECONDS)).reduceGroup(new CorrelationReduce()).setParallelism(1);
+  DataStream<Double> rollingCorrelation=tweetsAndWarning.window(Time.of(30,TimeUnit.SECONDS)).mapWindow(new CorrelationReduce()).flatten();
   if (fileOutput) {
     rollingCorrelation.writeAsText(outputPath,1);
   }
