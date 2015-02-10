@@ -1,0 +1,21 @@
+{
+  if (releasedResourcesFlag) {
+    throw new IllegalStateException("The input has already been consumed. This indicates misuse of the input gate.");
+  }
+  requestPartitions();
+  final InputChannel currentChannel=inputChannelsWithData.take();
+  final Buffer buffer=currentChannel.getNextBuffer();
+  if (buffer == null) {
+    throw new IllegalStateException("Bug in input gate/channel logic: input gate got" + "notified by channel about available data, but none was available.");
+  }
+  if (buffer.isBuffer()) {
+    return new BufferOrEvent(buffer,currentChannel.getChannelIndex());
+  }
+ else {
+    final AbstractEvent event=EventSerializer.fromBuffer(buffer,getClass().getClassLoader());
+    if (event.getClass() == EndOfPartitionEvent.class) {
+      currentChannel.releaseAllResources();
+    }
+    return new BufferOrEvent(event,currentChannel.getChannelIndex());
+  }
+}

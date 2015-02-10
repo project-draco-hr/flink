@@ -1,9 +1,25 @@
 {
-  final MockBufferReader mockReader=new MockBufferReader().readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().finishSuperstep().readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().finish();
-  final EventListener<TaskEvent> listener=mock(EventListener.class);
-  final BufferReader reader=mockReader.getMock();
+  final MockSingleInputGate inputGate=new MockSingleInputGate(1).readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().readEndOfSuperstepEvent().readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().readEndOfPartitionEvent();
+  final BufferReader reader=new BufferReader(inputGate.getInputGate());
   reader.setIterativeReader();
-  reader.subscribeToTaskEvent(listener,TestTaskEvent.class);
-  consumeAndVerify(reader,10,1);
-  verifyListenerCalled(listener,4);
+  final EventListener<TaskEvent> listener=mock(EventListener.class);
+  reader.registerTaskEventListener(listener,TestTaskEvent.class);
+  int numReadBuffers=0;
+  int numEndOfSuperstepEvents=0;
+  while (true) {
+    Buffer buffer=reader.getNextBuffer();
+    if (buffer != null) {
+      numReadBuffers++;
+    }
+ else     if (reader.hasReachedEndOfSuperstep()) {
+      reader.startNextSuperstep();
+      numEndOfSuperstepEvents++;
+    }
+ else     if (reader.isFinished()) {
+      break;
+    }
+  }
+  assertEquals(10,numReadBuffers);
+  assertEquals(1,numEndOfSuperstepEvents);
+  verify(listener,times(4)).onEvent(any(TaskEvent.class));
 }

@@ -1,0 +1,30 @@
+{
+synchronized (requestLock) {
+    if (releasedResourcesFlag) {
+      return;
+    }
+    final IntermediateResultPartitionID partitionId=partitionInfo.getPartitionId();
+    InputChannel current=inputChannels.get(partitionId);
+    if (current.getClass() == UnknownInputChannel.class) {
+      UnknownInputChannel unknownChannel=(UnknownInputChannel)current;
+      InputChannel newChannel;
+      if (partitionInfo.getProducerLocation() == PartitionInfo.PartitionLocation.REMOTE) {
+        newChannel=unknownChannel.toRemoteInputChannel(partitionInfo.getProducerAddress());
+      }
+ else       if (partitionInfo.getProducerLocation() == PartitionInfo.PartitionLocation.LOCAL) {
+        newChannel=unknownChannel.toLocalInputChannel();
+      }
+ else {
+        throw new IllegalStateException("Tried to update unknown channel with unknown channel.");
+      }
+      inputChannels.put(partitionId,newChannel);
+      newChannel.requestIntermediateResultPartition(consumedSubpartitionIndex);
+      for (      TaskEvent event : pendingEvents) {
+        newChannel.sendTaskEvent(event);
+      }
+      if (--numberOfUninitializedChannels == 0) {
+        pendingEvents.clear();
+      }
+    }
+  }
+}

@@ -1,8 +1,12 @@
 {
-  final MockBufferReader mockReader=new MockBufferReader().readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().finish();
+  final MockSingleInputGate inputGate=new MockSingleInputGate(1).readBuffer().readBuffer().readEvent().readBuffer().readBuffer().readEvent().readBuffer().readEndOfPartitionEvent();
+  final BufferReader reader=new BufferReader(inputGate.getInputGate());
   final EventListener<TaskEvent> listener=mock(EventListener.class);
-  final BufferReader reader=mockReader.getMock();
-  reader.subscribeToTaskEvent(listener,TestTaskEvent.class);
-  consumeAndVerify(reader,5);
-  verifyListenerCalled(listener,2);
+  reader.registerTaskEventListener(listener,TestTaskEvent.class);
+  int numReadBuffers=0;
+  while ((reader.getNextBuffer()) != null) {
+    numReadBuffers++;
+  }
+  assertEquals(5,numReadBuffers);
+  verify(listener,times(2)).onEvent(any(TaskEvent.class));
 }

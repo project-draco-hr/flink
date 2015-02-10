@@ -1,0 +1,29 @@
+{
+  final TaskEventDispatcher taskEventDispatcher=mock(TaskEventDispatcher.class);
+  when(taskEventDispatcher.publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class))).thenReturn(true);
+  final IntermediateResultPartitionQueueIterator iterator=mock(IntermediateResultPartitionQueueIterator.class);
+  when(iterator.getNextBuffer()).thenReturn(new Buffer(new MemorySegment(new byte[1024]),mock(BufferRecycler.class)));
+  final IntermediateResultPartitionManager partitionManager=mock(IntermediateResultPartitionManager.class);
+  when(partitionManager.getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class))).thenReturn(iterator);
+  final IntermediateDataSetID resultId=new IntermediateDataSetID();
+  final SingleInputGate inputGate=new SingleInputGate(resultId,0,2);
+  final BufferPool bufferPool=mock(BufferPool.class);
+  when(bufferPool.getNumberOfRequiredMemorySegments()).thenReturn(2);
+  inputGate.setBufferPool(bufferPool);
+  ExecutionAttemptID localProducer=new ExecutionAttemptID();
+  IntermediateResultPartitionID localPartitionId=new IntermediateResultPartitionID();
+  InputChannel local=new LocalInputChannel(inputGate,0,localProducer,localPartitionId,partitionManager,taskEventDispatcher);
+  ExecutionAttemptID unknownProducer=new ExecutionAttemptID();
+  IntermediateResultPartitionID unknownPartitionId=new IntermediateResultPartitionID();
+  InputChannel unknown=new UnknownInputChannel(inputGate,1,unknownProducer,unknownPartitionId,partitionManager,taskEventDispatcher,mock(ConnectionManager.class));
+  inputGate.setInputChannel(localPartitionId,local);
+  inputGate.setInputChannel(unknownPartitionId,unknown);
+  inputGate.requestPartitions();
+  verify(partitionManager,times(1)).getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class));
+  final TaskEvent event=new TestTaskEvent();
+  inputGate.sendTaskEvent(event);
+  verify(taskEventDispatcher,times(1)).publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class));
+  inputGate.updateInputChannel(new PartitionInfo(unknownPartitionId,unknownProducer,PartitionInfo.PartitionLocation.LOCAL,null));
+  verify(partitionManager,times(2)).getIntermediateResultPartitionIterator(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),anyInt(),any(Optional.class));
+  verify(taskEventDispatcher,times(2)).publish(any(ExecutionAttemptID.class),any(IntermediateResultPartitionID.class),any(TaskEvent.class));
+}

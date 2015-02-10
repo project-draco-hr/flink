@@ -1,0 +1,23 @@
+{
+  inputIterator=iterator;
+  serializer=new SpanningRecordSerializer<T>();
+  final Answer<Buffer> answer=new Answer<Buffer>(){
+    @Override public Buffer answer(    InvocationOnMock invocationOnMock) throws Throwable {
+      if (inputIterator.next(reuse) != null) {
+        final Buffer buffer=new Buffer(new MemorySegment(new byte[bufferSize]),mock(BufferRecycler.class));
+        serializer.setNextBuffer(buffer);
+        serializer.addRecord(reuse);
+        inputGate.onAvailableBuffer(inputChannel.getInputChannel());
+        return serializer.getCurrentBuffer();
+      }
+ else {
+        when(inputChannel.getInputChannel().isReleased()).thenReturn(true);
+        return EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE);
+      }
+    }
+  }
+;
+  when(inputChannel.getInputChannel().getNextBuffer()).thenAnswer(answer);
+  inputGate.setInputChannel(new IntermediateResultPartitionID(),inputChannel.getInputChannel());
+  return this;
+}

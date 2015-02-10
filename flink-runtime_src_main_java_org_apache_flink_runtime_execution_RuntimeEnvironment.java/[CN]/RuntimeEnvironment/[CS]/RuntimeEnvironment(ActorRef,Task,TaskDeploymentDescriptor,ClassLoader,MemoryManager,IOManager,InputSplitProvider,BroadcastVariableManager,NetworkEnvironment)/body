@@ -14,11 +14,13 @@
       writers[i]=new BufferWriter(this.producedPartitions[i]);
     }
     final List<PartitionConsumerDeploymentDescriptor> consumedPartitions=tdd.getConsumedPartitions();
-    this.readers=new BufferReader[consumedPartitions.size()];
-    for (int i=0; i < readers.length; i++) {
-      readers[i]=BufferReader.create(this,networkEnvironment,consumedPartitions.get(i));
-      readersById.put(readers[i].getConsumedResultId(),readers[i]);
+    this.inputGates=new SingleInputGate[consumedPartitions.size()];
+    for (int i=0; i < inputGates.length; i++) {
+      inputGates[i]=SingleInputGate.create(networkEnvironment,consumedPartitions.get(i));
+      inputGatesById.put(inputGates[i].getConsumedResultId(),inputGates[i]);
     }
+    this.jobConfiguration=tdd.getJobConfiguration();
+    this.taskConfiguration=tdd.getTaskConfiguration();
     this.userCodeClassLoader=checkNotNull(userCodeClassLoader);
     Class<? extends AbstractInvokable> invokableClass;
     try {
@@ -34,8 +36,6 @@
  catch (    Throwable t) {
       throw new Exception("Could not instantiate the invokable class.",t);
     }
-    this.jobConfiguration=tdd.getJobConfiguration();
-    this.taskConfiguration=tdd.getTaskConfiguration();
     this.invokable.setEnvironment(this);
     this.invokable.registerInputOutput();
   }

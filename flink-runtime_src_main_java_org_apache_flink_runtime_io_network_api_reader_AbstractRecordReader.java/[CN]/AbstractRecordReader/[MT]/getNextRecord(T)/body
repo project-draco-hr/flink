@@ -13,21 +13,19 @@
         return true;
       }
     }
-    final Buffer nextBuffer=reader.getNextBufferBlocking();
-    final int channelIndex=reader.getChannelIndexOfLastBuffer();
-    if (nextBuffer == null) {
-      if (reader.isFinished()) {
+    final BufferOrEvent bufferOrEvent=inputGate.getNextBufferOrEvent();
+    if (bufferOrEvent.isBuffer()) {
+      currentRecordDeserializer=recordDeserializers[bufferOrEvent.getChannelIndex()];
+      currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+    }
+ else     if (handleEvent(bufferOrEvent.getEvent())) {
+      if (inputGate.isFinished()) {
         isFinished=true;
         return false;
       }
- else       if (reader.hasReachedEndOfSuperstep()) {
+ else       if (hasReachedEndOfSuperstep()) {
         return false;
       }
- else {
-        continue;
-      }
     }
-    currentRecordDeserializer=recordDeserializers[channelIndex];
-    currentRecordDeserializer.setNextBuffer(nextBuffer);
   }
 }
