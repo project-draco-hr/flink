@@ -1,64 +1,87 @@
 {
   try {
-    Iterable<ExecutionGraph> graphs=AkkaUtils.<RunningJobs>ask(jobmanager,JobManagerMessages.getRequestRunningJobs(),timeout).asJavaIterable();
-    wrt.write("{");
-    wrt.write("\"jobid\": \"" + jobId + "\",");
-    wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\",");
-    wrt.write("\"recentjobs\": [");
-    boolean first=true;
-    for (    ExecutionGraph g : graphs) {
-      if (first) {
-        first=false;
-      }
- else {
-        wrt.write(",");
-      }
-      wrt.write("\"" + g.getJobID() + "\"");
+    final Future<Object> responseArchivedJobs=Patterns.ask(jobmanager,JobManagerMessages.getRequestRunningJobs(),new Timeout(timeout));
+    Object resultArchivedJobs=null;
+    try {
+      resultArchivedJobs=Await.result(responseArchivedJobs,timeout);
     }
-    wrt.write("],");
-    JobResponse response=AkkaUtils.ask(jobmanager,new RequestJob(jobId),timeout);
-    if (response instanceof JobFound) {
-      ExecutionGraph graph=((JobFound)response).executionGraph();
-      wrt.write("\"vertexevents\": [");
-      first=true;
-      for (      ExecutionVertex ev : graph.getAllExecutionVertices()) {
+ catch (    Exception ex) {
+      throw new IOException("Could not retrieve archived jobs from the job manager.",ex);
+    }
+    if (!(resultArchivedJobs instanceof RunningJobs)) {
+      throw new RuntimeException("RequestArchivedJobs requires a response of type " + "RunningJobs. Instead the response is of type " + resultArchivedJobs.getClass() + ".");
+    }
+ else {
+      final Iterable<ExecutionGraph> graphs=((RunningJobs)resultArchivedJobs).asJavaIterable();
+      wrt.write("{");
+      wrt.write("\"jobid\": \"" + jobId + "\",");
+      wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\",");
+      wrt.write("\"recentjobs\": [");
+      boolean first=true;
+      for (      ExecutionGraph g : graphs) {
         if (first) {
           first=false;
         }
  else {
           wrt.write(",");
         }
-        wrt.write("{");
-        wrt.write("\"vertexid\": \"" + ev.getCurrentExecutionAttempt().getAttemptId() + "\",");
-        wrt.write("\"newstate\": \"" + ev.getExecutionState() + "\",");
-        wrt.write("\"timestamp\": \"" + ev.getStateTimestamp(ev.getExecutionState()) + "\"");
-        wrt.write("}");
+        wrt.write("\"" + g.getJobID() + "\"");
       }
       wrt.write("],");
-      wrt.write("\"jobevents\": [");
-      wrt.write("{");
-      wrt.write("\"newstate\": \"" + graph.getState() + "\",");
-      wrt.write("\"timestamp\": \"" + graph.getStatusTimestamp(graph.getState()) + "\"");
-      wrt.write("}");
-      wrt.write("]");
-      wrt.write("}");
-    }
+      final Future<Object> responseJob=Patterns.ask(jobmanager,new RequestJob(jobId),new Timeout(timeout));
+      Object resultJob=null;
+      try {
+        resultJob=Await.result(responseJob,timeout);
+      }
+ catch (      Exception ex) {
+        throw new IOException("Could not retrieve the job with jobID " + jobId + "from the job manager.",ex);
+      }
+      if (!(resultJob instanceof JobResponse)) {
+        throw new RuntimeException("RequestJob requires a response of type JobResponse. " + "Instead the response is of type " + resultJob.getClass() + ".");
+      }
  else {
-      wrt.write("\"vertexevents\": [],");
-      wrt.write("\"jobevents\": [");
-      wrt.write("{");
-      wrt.write("\"newstate\": \"" + JobStatus.FINISHED + "\",");
-      wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\"");
-      wrt.write("}");
-      wrt.write("]");
-      wrt.write("}");
-      LOG.warn("WriteJsonUpdatesForJob: Could not find job with job ID " + jobId);
+        final JobResponse response=(JobResponse)resultJob;
+        if (response instanceof JobFound) {
+          ExecutionGraph graph=((JobFound)response).executionGraph();
+          wrt.write("\"vertexevents\": [");
+          first=true;
+          for (          ExecutionVertex ev : graph.getAllExecutionVertices()) {
+            if (first) {
+              first=false;
+            }
+ else {
+              wrt.write(",");
+            }
+            wrt.write("{");
+            wrt.write("\"vertexid\": \"" + ev.getCurrentExecutionAttempt().getAttemptId() + "\",");
+            wrt.write("\"newstate\": \"" + ev.getExecutionState() + "\",");
+            wrt.write("\"timestamp\": \"" + ev.getStateTimestamp(ev.getExecutionState()) + "\"");
+            wrt.write("}");
+          }
+          wrt.write("],");
+          wrt.write("\"jobevents\": [");
+          wrt.write("{");
+          wrt.write("\"newstate\": \"" + graph.getState() + "\",");
+          wrt.write("\"timestamp\": \"" + graph.getStatusTimestamp(graph.getState()) + "\"");
+          wrt.write("}");
+          wrt.write("]");
+          wrt.write("}");
+        }
+ else {
+          wrt.write("\"vertexevents\": [],");
+          wrt.write("\"jobevents\": [");
+          wrt.write("{");
+          wrt.write("\"newstate\": \"" + JobStatus.FINISHED + "\",");
+          wrt.write("\"timestamp\": \"" + System.currentTimeMillis() + "\"");
+          wrt.write("}");
+          wrt.write("]");
+          wrt.write("}");
+          LOG.warn("WriteJsonUpdatesForJob: Could not find job with job ID " + jobId);
+        }
+      }
     }
   }
- catch (  EofException eof) {
-    LOG.info("Info server for jobmanager: Connection closed by client, EofException");
-  }
-catch (  IOException ioe) {
-    LOG.info("Info server for jobmanager: Connection closed by client, IOException");
+ catch (  Exception exception) {
+    LOG.info("Info server for jobmanager: Failed to write json updates for job {}, " + "because {}.",jobId,StringUtils.stringifyException(exception));
   }
 }

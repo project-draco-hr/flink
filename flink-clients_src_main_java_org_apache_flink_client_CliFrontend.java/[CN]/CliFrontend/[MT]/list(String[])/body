@@ -31,57 +31,70 @@ catch (  Exception e) {
     if (jobManager == null) {
       return 1;
     }
-    Iterable<ExecutionGraph> jobs=AkkaUtils.<RunningJobs>ask(jobManager,RequestRunningJobs$.MODULE$,getAkkaTimeout()).asJavaIterable();
-    ArrayList<ExecutionGraph> runningJobs=null;
-    ArrayList<ExecutionGraph> scheduledJobs=null;
-    if (running) {
-      runningJobs=new ArrayList<ExecutionGraph>();
+    final Future<Object> response=Patterns.ask(jobManager,JobManagerMessages.getRequestRunningJobs(),new Timeout(getAkkaTimeout()));
+    Object result=null;
+    try {
+      result=Await.result(response,getAkkaTimeout());
     }
-    if (scheduled) {
-      scheduledJobs=new ArrayList<ExecutionGraph>();
+ catch (    Exception exception) {
+      throw new IOException("Could not retrieve running jobs from job manager.",exception);
     }
-    for (    ExecutionGraph rj : jobs) {
-      if (running && rj.getState().equals(JobStatus.RUNNING)) {
-        runningJobs.add(rj);
+    if (!(result instanceof RunningJobs)) {
+      throw new RuntimeException("ReqeustRunningJobs requires a response of type " + "RunningJobs. Instead the response is of type " + result.getClass() + ".");
+    }
+ else {
+      Iterable<ExecutionGraph> jobs=((RunningJobs)result).asJavaIterable();
+      ArrayList<ExecutionGraph> runningJobs=null;
+      ArrayList<ExecutionGraph> scheduledJobs=null;
+      if (running) {
+        runningJobs=new ArrayList<ExecutionGraph>();
       }
-      if (scheduled && rj.getState().equals(JobStatus.CREATED)) {
-        scheduledJobs.add(rj);
+      if (scheduled) {
+        scheduledJobs=new ArrayList<ExecutionGraph>();
       }
-    }
-    SimpleDateFormat df=new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
-    Comparator<ExecutionGraph> njec=new Comparator<ExecutionGraph>(){
-      @Override public int compare(      ExecutionGraph o1,      ExecutionGraph o2){
-        return (int)(o1.getStatusTimestamp(o1.getState()) - o2.getStatusTimestamp(o2.getState()));
+      for (      ExecutionGraph rj : jobs) {
+        if (running && rj.getState().equals(JobStatus.RUNNING)) {
+          runningJobs.add(rj);
+        }
+        if (scheduled && rj.getState().equals(JobStatus.CREATED)) {
+          scheduledJobs.add(rj);
+        }
       }
-    }
+      SimpleDateFormat df=new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
+      Comparator<ExecutionGraph> njec=new Comparator<ExecutionGraph>(){
+        @Override public int compare(        ExecutionGraph o1,        ExecutionGraph o2){
+          return (int)(o1.getStatusTimestamp(o1.getState()) - o2.getStatusTimestamp(o2.getState()));
+        }
+      }
 ;
-    if (running) {
-      if (runningJobs.size() == 0) {
-        System.out.println("No running jobs.");
-      }
- else {
-        Collections.sort(runningJobs,njec);
-        System.out.println("------------------------ Running Jobs ------------------------");
-        for (        ExecutionGraph rj : runningJobs) {
-          System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+      if (running) {
+        if (runningJobs.size() == 0) {
+          System.out.println("No running jobs.");
         }
-        System.out.println("--------------------------------------------------------------");
-      }
-    }
-    if (scheduled) {
-      if (scheduledJobs.size() == 0) {
-        System.out.println("No scheduled jobs.");
-      }
  else {
-        Collections.sort(scheduledJobs,njec);
-        System.out.println("----------------------- Scheduled Jobs -----------------------");
-        for (        ExecutionGraph rj : scheduledJobs) {
-          System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+          Collections.sort(runningJobs,njec);
+          System.out.println("------------------------ Running Jobs ------------------------");
+          for (          ExecutionGraph rj : runningJobs) {
+            System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+          }
+          System.out.println("--------------------------------------------------------------");
         }
-        System.out.println("--------------------------------------------------------------");
       }
+      if (scheduled) {
+        if (scheduledJobs.size() == 0) {
+          System.out.println("No scheduled jobs.");
+        }
+ else {
+          Collections.sort(scheduledJobs,njec);
+          System.out.println("----------------------- Scheduled Jobs -----------------------");
+          for (          ExecutionGraph rj : scheduledJobs) {
+            System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+          }
+          System.out.println("--------------------------------------------------------------");
+        }
+      }
+      return 0;
     }
-    return 0;
   }
  catch (  Throwable t) {
     return handleError(t);

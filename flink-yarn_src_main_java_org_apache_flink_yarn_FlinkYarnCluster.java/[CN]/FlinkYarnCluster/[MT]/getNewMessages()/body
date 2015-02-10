@@ -4,22 +4,32 @@
   }
   List<String> ret=new ArrayList<String>();
   while (true) {
-    Object messageOption=null;
+    Object result=null;
     try {
-      messageOption=AkkaUtils$.MODULE$.ask(applicationClient,Messages.LocalGetYarnMessage$.MODULE$,akkaDuration);
+      Future<Object> response=Patterns.ask(applicationClient,Messages.getLocalGetYarnMessage(),new Timeout(akkaDuration));
+      result=Await.result(response,akkaDuration);
     }
- catch (    IOException ioe) {
-      LOG.warn("Error getting the yarn messages locally",ioe);
+ catch (    Exception ioe) {
+      LOG.warn("Error retrieving the yarn messages locally",ioe);
     }
-    if (messageOption instanceof None$) {
-      break;
-    }
- else     if (messageOption instanceof org.apache.flink.yarn.Messages.YarnMessage) {
-      Messages.YarnMessage msg=(Messages.YarnMessage)messageOption;
-      ret.add("[" + msg.date() + "] "+ msg.message());
+    if (!(result instanceof Option)) {
+      throw new RuntimeException("LocalGetYarnMessage requires a response of type " + "Option. Instead the response is of type " + result.getClass() + ".");
     }
  else {
-      LOG.warn("LocalGetYarnMessage returned unexpected type: " + messageOption);
+      Option messageOption=(Option)result;
+      if (messageOption.isEmpty()) {
+        break;
+      }
+ else {
+        Object obj=messageOption.get();
+        if (obj instanceof Messages.YarnMessage) {
+          Messages.YarnMessage msg=(Messages.YarnMessage)obj;
+          ret.add("[" + msg.date() + "] "+ msg.message());
+        }
+ else {
+          LOG.warn("LocalGetYarnMessage returned unexpected type: " + messageOption);
+        }
+      }
     }
   }
   return ret;

@@ -1,34 +1,47 @@
 {
-  List<Instance> instances=new ArrayList<Instance>(AkkaUtils.<RegisteredTaskManagers>ask(jobmanager,RequestRegisteredTaskManagers$.MODULE$,timeout).asJavaCollection());
-  Collections.sort(instances,INSTANCE_SORTER);
-  JSONObject obj=new JSONObject();
-  JSONArray array=new JSONArray();
-  for (  Instance instance : instances) {
-    JSONObject objInner=new JSONObject();
-    long time=new Date().getTime() - instance.getLastHeartBeat();
+  final Future<Object> response=Patterns.ask(jobmanager,JobManagerMessages.getRequestRegisteredTaskManagers(),new Timeout(timeout));
+  Object obj=null;
+  try {
+    obj=Await.result(response,timeout);
+  }
+ catch (  Exception ex) {
+    throw new IOException("Could not retrieve all registered task managers from the " + "job manager.",ex);
+  }
+  if (!(obj instanceof RegisteredTaskManagers)) {
+    throw new RuntimeException("RequestRegisteredTaskManagers should return a response of " + "type RegisteredTaskManagers. Instead the respone is of type " + obj.getClass() + ".");
+  }
+ else {
+    final List<Instance> instances=new ArrayList<Instance>(((RegisteredTaskManagers)obj).asJavaCollection());
+    Collections.sort(instances,INSTANCE_SORTER);
+    JSONObject jsonObj=new JSONObject();
+    JSONArray array=new JSONArray();
+    for (    Instance instance : instances) {
+      JSONObject objInner=new JSONObject();
+      long time=new Date().getTime() - instance.getLastHeartBeat();
+      try {
+        objInner.put("inetAdress",instance.getInstanceConnectionInfo().getInetAdress());
+        objInner.put("ipcPort",instance.getTaskManager().path().address().hostPort());
+        objInner.put("dataPort",instance.getInstanceConnectionInfo().dataPort());
+        objInner.put("timeSinceLastHeartbeat",time / 1000);
+        objInner.put("slotsNumber",instance.getTotalNumberOfSlots());
+        objInner.put("freeSlots",instance.getNumberOfAvailableSlots());
+        objInner.put("cpuCores",instance.getResources().getNumberOfCPUCores());
+        objInner.put("physicalMemory",instance.getResources().getSizeOfPhysicalMemory() >>> 20);
+        objInner.put("freeMemory",instance.getResources().getSizeOfJvmHeap() >>> 20);
+        objInner.put("managedMemory",instance.getResources().getSizeOfManagedMemory() >>> 20);
+        array.put(objInner);
+      }
+ catch (      JSONException e) {
+        LOG.warn("Json object creation failed",e);
+      }
+    }
     try {
-      objInner.put("inetAdress",instance.getInstanceConnectionInfo().getInetAdress());
-      objInner.put("ipcPort",instance.getTaskManager().path().address().hostPort());
-      objInner.put("dataPort",instance.getInstanceConnectionInfo().dataPort());
-      objInner.put("timeSinceLastHeartbeat",time / 1000);
-      objInner.put("slotsNumber",instance.getTotalNumberOfSlots());
-      objInner.put("freeSlots",instance.getNumberOfAvailableSlots());
-      objInner.put("cpuCores",instance.getResources().getNumberOfCPUCores());
-      objInner.put("physicalMemory",instance.getResources().getSizeOfPhysicalMemory() >>> 20);
-      objInner.put("freeMemory",instance.getResources().getSizeOfJvmHeap() >>> 20);
-      objInner.put("managedMemory",instance.getResources().getSizeOfManagedMemory() >>> 20);
-      array.put(objInner);
+      jsonObj.put("taskmanagers",array);
     }
  catch (    JSONException e) {
       LOG.warn("Json object creation failed",e);
     }
+    PrintWriter w=resp.getWriter();
+    w.write(jsonObj.toString());
   }
-  try {
-    obj.put("taskmanagers",array);
-  }
- catch (  JSONException e) {
-    LOG.warn("Json object creation failed",e);
-  }
-  PrintWriter w=resp.getWriter();
-  w.write(obj.toString());
 }

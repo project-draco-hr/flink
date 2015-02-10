@@ -45,66 +45,76 @@
       wrt.write(JsonFactory.toJson(groupVertex));
     }
     wrt.write("],");
-    AccumulatorResultsResponse response=AkkaUtils.ask(jobmanager,new RequestAccumulatorResults(graph.getJobID()),timeout);
-    if (response instanceof AccumulatorResultsFound) {
-      Map<String,Object> accMap=((AccumulatorResultsFound)response).asJavaMap();
-      wrt.write("\n\"accumulators\": [");
-      int i=0;
-      for (      Entry<String,Object> accumulator : accMap.entrySet()) {
-        wrt.write("{ \"name\": \"" + accumulator.getKey() + " ("+ accumulator.getValue().getClass().getName()+ ")\","+ " \"value\": \""+ accumulator.getValue().toString()+ "\"}\n");
-        if (++i < accMap.size()) {
-          wrt.write(",");
-        }
-      }
-      wrt.write("],\n");
-      wrt.write("\"groupverticetimes\": {");
-      first=true;
-      for (      ExecutionJobVertex groupVertex : graph.getVerticesTopologically()) {
-        if (first) {
-          first=false;
-        }
- else {
-          wrt.write(",");
-        }
-        long started=Long.MAX_VALUE;
-        long ended=0;
-        for (        ExecutionVertex vertex : groupVertex.getTaskVertices()) {
-          long running=vertex.getStateTimestamp(ExecutionState.RUNNING);
-          if (running != 0 && running < started) {
-            started=running;
-          }
-          long finished=vertex.getStateTimestamp(ExecutionState.FINISHED);
-          long canceled=vertex.getStateTimestamp(ExecutionState.CANCELED);
-          long failed=vertex.getStateTimestamp(ExecutionState.FAILED);
-          if (finished != 0 && finished > ended) {
-            ended=finished;
-          }
-          if (canceled != 0 && canceled > ended) {
-            ended=canceled;
-          }
-          if (failed != 0 && failed > ended) {
-            ended=failed;
-          }
-        }
-        wrt.write("\"" + groupVertex.getJobVertexId() + "\": {");
-        wrt.write("\"groupvertexid\": \"" + groupVertex.getJobVertexId() + "\",");
-        wrt.write("\"groupvertexname\": \"" + groupVertex + "\",");
-        wrt.write("\"STARTED\": " + started + ",");
-        wrt.write("\"ENDED\": " + ended);
-        wrt.write("}");
-      }
+    final Future<Object> response=Patterns.ask(jobmanager,new RequestAccumulatorResults(graph.getJobID()),new Timeout(timeout));
+    Object result=null;
+    try {
+      result=Await.result(response,timeout);
+    }
+ catch (    Exception ex) {
+      throw new IOException("Could not retrieve the accumulator results from the " + "job manager.",ex);
+    }
+    if (!(result instanceof AccumulatorResultsResponse)) {
+      throw new RuntimeException("RequestAccumulatorResults requires a response of type " + "AccumulatorResultsReponse. Instead the response is of type " + result.getClass() + ".");
     }
  else {
-      LOG.warn("Could not find accumulator results for job ID " + graph.getJobID());
+      final AccumulatorResultsResponse accumulatorResponse=(AccumulatorResultsResponse)result;
+      if (accumulatorResponse instanceof AccumulatorResultsFound) {
+        Map<String,Object> accMap=((AccumulatorResultsFound)accumulatorResponse).asJavaMap();
+        wrt.write("\n\"accumulators\": [");
+        int i=0;
+        for (        Entry<String,Object> accumulator : accMap.entrySet()) {
+          wrt.write("{ \"name\": \"" + accumulator.getKey() + " ("+ accumulator.getValue().getClass().getName()+ ")\","+ " \"value\": \""+ accumulator.getValue().toString()+ "\"}\n");
+          if (++i < accMap.size()) {
+            wrt.write(",");
+          }
+        }
+        wrt.write("],\n");
+        wrt.write("\"groupverticetimes\": {");
+        first=true;
+        for (        ExecutionJobVertex groupVertex : graph.getVerticesTopologically()) {
+          if (first) {
+            first=false;
+          }
+ else {
+            wrt.write(",");
+          }
+          long started=Long.MAX_VALUE;
+          long ended=0;
+          for (          ExecutionVertex vertex : groupVertex.getTaskVertices()) {
+            long running=vertex.getStateTimestamp(ExecutionState.RUNNING);
+            if (running != 0 && running < started) {
+              started=running;
+            }
+            long finished=vertex.getStateTimestamp(ExecutionState.FINISHED);
+            long canceled=vertex.getStateTimestamp(ExecutionState.CANCELED);
+            long failed=vertex.getStateTimestamp(ExecutionState.FAILED);
+            if (finished != 0 && finished > ended) {
+              ended=finished;
+            }
+            if (canceled != 0 && canceled > ended) {
+              ended=canceled;
+            }
+            if (failed != 0 && failed > ended) {
+              ended=failed;
+            }
+          }
+          wrt.write("\"" + groupVertex.getJobVertexId() + "\": {");
+          wrt.write("\"groupvertexid\": \"" + groupVertex.getJobVertexId() + "\",");
+          wrt.write("\"groupvertexname\": \"" + groupVertex + "\",");
+          wrt.write("\"STARTED\": " + started + ",");
+          wrt.write("\"ENDED\": " + ended);
+          wrt.write("}");
+        }
+      }
+ else {
+        LOG.warn("Could not find accumulator results for job ID " + graph.getJobID());
+      }
+      wrt.write("}");
+      wrt.write("}");
+      wrt.write("]");
     }
-    wrt.write("}");
-    wrt.write("}");
-    wrt.write("]");
   }
- catch (  EofException eof) {
-    LOG.info("Info server for jobmanager: Connection closed by client, EofException");
-  }
-catch (  IOException ioe) {
-    LOG.info("Info server for jobmanager: Connection closed by client, IOException");
+ catch (  Exception ex) {
+    LOG.info("Info server for jobmanager: Failed to write json for archived jobs, " + "because {}.",StringUtils.stringifyException(ex));
   }
 }
