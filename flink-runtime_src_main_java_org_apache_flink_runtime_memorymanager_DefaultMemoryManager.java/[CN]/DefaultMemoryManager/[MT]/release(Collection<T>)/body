@@ -6,36 +6,45 @@ synchronized (this.lock) {
     if (this.isShutDown) {
       throw new IllegalStateException("Memory manager has been shut down.");
     }
-    final Iterator<T> segmentsIterator=segments.iterator();
-    AbstractInvokable lastOwner=null;
-    Set<DefaultMemorySegment> segsForOwner=null;
-    while (segmentsIterator.hasNext()) {
-      final MemorySegment seg=segmentsIterator.next();
-      if (seg.isFreed()) {
-        continue;
-      }
-      final DefaultMemorySegment defSeg=(DefaultMemorySegment)seg;
-      final AbstractInvokable owner=defSeg.owner;
+    boolean successfullyReleased=false;
+    do {
+      final Iterator<T> segmentsIterator=segments.iterator();
+      AbstractInvokable lastOwner=null;
+      Set<DefaultMemorySegment> segsForOwner=null;
       try {
-        if (lastOwner != owner) {
-          lastOwner=owner;
-          segsForOwner=this.allocatedSegments.get(owner);
-        }
-        if (segsForOwner != null) {
-          segsForOwner.remove(defSeg);
-          if (segsForOwner.isEmpty()) {
-            this.allocatedSegments.remove(owner);
+        while (segmentsIterator.hasNext()) {
+          final MemorySegment seg=segmentsIterator.next();
+          if (seg == null || seg.isFreed()) {
+            continue;
+          }
+          final DefaultMemorySegment defSeg=(DefaultMemorySegment)seg;
+          final AbstractInvokable owner=defSeg.owner;
+          try {
+            if (lastOwner != owner) {
+              lastOwner=owner;
+              segsForOwner=this.allocatedSegments.get(owner);
+            }
+            if (segsForOwner != null) {
+              segsForOwner.remove(defSeg);
+              if (segsForOwner.isEmpty()) {
+                this.allocatedSegments.remove(owner);
+              }
+            }
+          }
+ catch (          Throwable t) {
+            LOG.error("Error removing book-keeping reference to allocated memory segment.",t);
+          }
+ finally {
+            byte[] buffer=defSeg.destroy();
+            this.freeSegments.add(buffer);
           }
         }
+        segments.clear();
+        successfullyReleased=true;
       }
- catch (      Throwable t) {
-        LOG.error("Error removing book-keeping reference to allocated memory segment.",t);
-      }
- finally {
-        byte[] buffer=defSeg.destroy();
-        this.freeSegments.add(buffer);
+ catch (      ConcurrentModificationException e) {
       }
     }
-    segments.clear();
+ while (!successfullyReleased);
   }
 }
