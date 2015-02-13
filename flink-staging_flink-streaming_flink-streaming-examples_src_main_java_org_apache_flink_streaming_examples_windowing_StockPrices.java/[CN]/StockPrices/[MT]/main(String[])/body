@@ -19,7 +19,7 @@
   WindowedDataStream<StockPrice> windowedStream=stockStream.window(Time.of(10,TimeUnit.SECONDS)).every(Time.of(5,TimeUnit.SECONDS));
   DataStream<StockPrice> lowest=windowedStream.minBy("price").flatten();
   DataStream<StockPrice> maxByStock=windowedStream.groupBy("symbol").maxBy("price").flatten();
-  DataStream<StockPrice> rollingMean=windowedStream.groupBy("symbol").mapWindow(new MeanReduce()).flatten();
+  DataStream<StockPrice> rollingMean=windowedStream.groupBy("symbol").mapWindow(new WindowMean()).flatten();
   DataStream<String> priceWarnings=stockStream.groupBy("symbol").window(Delta.of(0.05,new DeltaFunction<StockPrice>(){
     @Override public double getDelta(    StockPrice oldDataPoint,    StockPrice newDataPoint){
       return Math.abs(oldDataPoint.price - newDataPoint.price);
@@ -59,7 +59,7 @@
     }
   }
 );
-  DataStream<Double> rollingCorrelation=tweetsAndWarning.window(Time.of(30,TimeUnit.SECONDS)).mapWindow(new CorrelationReduce()).flatten();
+  DataStream<Double> rollingCorrelation=tweetsAndWarning.window(Time.of(30,TimeUnit.SECONDS)).mapWindow(new WindowCorrelation()).flatten();
   if (fileOutput) {
     rollingCorrelation.writeAsText(outputPath,1);
   }
