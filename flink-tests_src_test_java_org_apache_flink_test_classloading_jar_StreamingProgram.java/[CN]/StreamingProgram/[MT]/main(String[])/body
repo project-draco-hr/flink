@@ -4,19 +4,7 @@
   final int port=Integer.parseInt(args[2]);
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment(host,port,jarFile);
   DataStream<String> text=env.fromElements(WordCountData.TEXT);
-  DataStream<Tuple2<String,Integer>> counts=text.flatMap(new FlatMapFunction<String,Tuple2<String,Integer>>(){
-    @Override public void flatMap(    String value,    Collector<Tuple2<String,Integer>> out) throws Exception {
-      StringTokenizer tokenizer=new StringTokenizer(value);
-      while (tokenizer.hasMoreTokens()) {
-        out.collect(new Tuple2<String,Integer>(tokenizer.nextToken(),1));
-      }
-    }
-  }
-).groupBy(0).sum(1);
-  counts.addSink(new SinkFunction<Tuple2<String,Integer>>(){
-    @Override public void invoke(    Tuple2<String,Integer> value) throws Exception {
-    }
-  }
-);
+  DataStream<Word> counts=text.flatMap(new Tokenizer()).groupBy("word").sum("frequency");
+  counts.addSink(new NoOpSink());
   env.execute();
 }
