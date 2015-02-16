@@ -1,0 +1,19 @@
+{
+  if (vertexDataSet == null) {
+    throw new IllegalStateException("The input data set has not been set.");
+  }
+  TypeInformation<K> keyType=((TupleTypeInfo<?>)vertexDataSet.getType()).getTypeAt(0);
+  TypeInformation<M> messageType=TypeExtractor.createTypeInfo(GatherFunction.class,gather.getClass(),2,null,null);
+  TypeInformation<Tuple2<K,M>> innerType=new TupleTypeInfo<Tuple2<K,M>>(keyType,messageType);
+  TypeInformation<Vertex<K,VV>> outputType=vertexDataSet.getType();
+  GatherUdf<K,VV,EV,M> gatherUdf=new GatherUdf<K,VV,EV,M>(gather,innerType);
+  SumUdf<K,VV,EV,M> sumUdf=new SumUdf<K,VV,EV,M>(sum,innerType);
+  ApplyUdf<K,VV,EV,M> applyUdf=new ApplyUdf<K,VV,EV,M>(apply,outputType);
+  final int[] zeroKeyPos=new int[]{0};
+  final DeltaIteration<Vertex<K,VV>,Vertex<K,VV>> iteration=vertexDataSet.iterateDelta(vertexDataSet,maximumNumberOfIterations,zeroKeyPos);
+  DataSet<Tuple2<Vertex<K,VV>,Edge<K,EV>>> richEdges=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(0);
+  DataSet<Tuple2<K,M>> gatheredSet=richEdges.map(gatherUdf);
+  DataSet<Tuple2<K,M>> summedSet=gatheredSet.groupBy(0).reduce(sumUdf);
+  DataSet<Vertex<K,VV>> appliedSet=summedSet.join(iteration.getSolutionSet()).where(0).equalTo(0).with(applyUdf);
+  return iteration.closeWith(appliedSet,appliedSet);
+}
