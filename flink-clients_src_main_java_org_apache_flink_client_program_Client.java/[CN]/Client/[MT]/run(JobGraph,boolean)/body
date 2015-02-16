@@ -1,18 +1,21 @@
 {
-  Tuple2<ActorSystem,ActorRef> pair=JobClient.startActorSystemAndActor(configuration,false);
-  ActorRef client=pair._2();
-  String hostname=configuration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
-  FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
+  final String hostname=configuration.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
   if (hostname == null) {
     throw new ProgramInvocationException("Could not find hostname of job manager.");
   }
+  FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
+  final ActorSystem actorSystem;
+  final ActorRef client;
+  try {
+    Tuple2<ActorSystem,ActorRef> pair=JobClient.startActorSystemAndActor(configuration,false);
+    actorSystem=pair._1();
+    client=pair._2();
+  }
+ catch (  Exception e) {
+    throw new ProgramInvocationException("Could not build up connection to JobManager.",e);
+  }
   try {
     JobClient.uploadJarFiles(jobGraph,hostname,client,timeout);
-  }
- catch (  IOException e) {
-    throw new ProgramInvocationException("Could not upload blobs.",e);
-  }
-  try {
     if (wait) {
       return JobClient.submitJobAndWait(jobGraph,printStatusDuringExecution,client,timeout);
     }
@@ -20,21 +23,34 @@
       SubmissionResponse response=JobClient.submitJobDetached(jobGraph,client,timeout);
       if (response instanceof SubmissionFailure) {
         SubmissionFailure failure=(SubmissionFailure)response;
-        throw new ProgramInvocationException("The job was not successfully submitted " + "to the flink job manager",failure.cause());
+        throw new ProgramInvocationException("Failed to submit the job to the flink JobManager",failure.cause());
       }
     }
   }
- catch (  JobExecutionException jex) {
-    if (jex.isJobCanceledByUser()) {
-      throw new ProgramInvocationException("The program has been canceled");
+ catch (  IOException e) {
+    throw new ProgramInvocationException("Could not upload the programs JAR files to the JobManager.",e);
+  }
+catch (  JobExecutionException e) {
+    if (e.isJobCanceledByUser()) {
+      throw new ProgramInvocationException("The program has been canceled.");
+    }
+ else     if (e.isConnectionTimedOut()) {
+      Throwable ae=null;
+      String message=ae == null ? "." : ": " + ae.getMessage();
+      throw new ProgramInvocationException("Lost connection to the JobManager" + message);
     }
  else {
-      throw new ProgramInvocationException("The program execution failed: " + jex.getMessage());
+      throw new ProgramInvocationException("The program execution failed: " + e.getMessage());
     }
   }
+catch (  Exception e) {
+    Throwable ae=null;
+    String message=ae == null ? "." : ": " + ae.getMessage();
+    throw new ProgramInvocationException("Connection to JobManager failed" + message);
+  }
  finally {
-    pair._1().shutdown();
-    pair._1().awaitTermination();
+    actorSystem.shutdown();
+    actorSystem.awaitTermination();
   }
   return new JobExecutionResult(-1,null);
 }

@@ -1,0 +1,55 @@
+{
+  final Configuration config=new Configuration();
+  config.setString(ConfigConstants.AKKA_LOOKUP_TIMEOUT,(CONNECT_TIMEOUT / 1000) + " s");
+  try {
+    AbstractJobVertex vertex=new AbstractJobVertex("Test Vertex");
+    vertex.setInvokableClass(TestInvokable.class);
+    final JobGraph jg=new JobGraph("Test Job",vertex);
+    final Client client=new Client(unreachableEndpoint,config,getClass().getClassLoader());
+    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+    Thread invoker=new Thread("test invoker"){
+      @Override public void run(){
+        try {
+          client.run(jg,true);
+          fail("This should fail with an exception since the JobManager is unreachable.");
+        }
+ catch (        Throwable t) {
+synchronized (error) {
+            error.set(t);
+            error.notifyAll();
+          }
+        }
+      }
+    }
+;
+    invoker.setDaemon(true);
+    invoker.start();
+    try {
+      long now=System.currentTimeMillis();
+      long deadline=now + MAX_DELAY;
+synchronized (error) {
+        while (invoker.isAlive() && error.get() == null && now < deadline) {
+          error.wait(1000);
+          now=System.currentTimeMillis();
+        }
+      }
+      Throwable t=error.get();
+      if (t == null) {
+        fail("Job invocation did not fail in expected time interval.");
+      }
+ else {
+        assertNotNull(t.getMessage());
+        assertTrue(t.getMessage(),t.getMessage().contains("JobManager"));
+      }
+    }
+  finally {
+      if (invoker.isAlive()) {
+        invoker.interrupt();
+      }
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

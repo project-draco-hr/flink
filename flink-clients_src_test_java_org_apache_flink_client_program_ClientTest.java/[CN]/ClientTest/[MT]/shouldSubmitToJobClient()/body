@@ -1,8 +1,17 @@
 {
-  when(mockJobClient.submitJobDetached(any(JobGraph.class),any(ActorRef.class),any(FiniteDuration.class))).thenReturn(mockSubmissionSuccess);
-  Client out=new Client(configMock,getClass().getClassLoader());
-  out.run(program.getPlanWithJars(),-1,false);
-  program.deleteExtractedLibraries();
-  verify(this.compilerMock,times(1)).compile(planMock);
-  verify(this.generatorMock,times(1)).compileJobGraph(optimizedPlanMock);
+  try {
+    jobManagerSystem.actorOf(Props.create(SuccessReturningActor.class),JobManager.JOB_MANAGER_NAME());
+    Client out=new Client(config,getClass().getClassLoader());
+    JobExecutionResult result=out.run(program.getPlanWithJars(),-1,false);
+    assertNotNull(result);
+    assertEquals(-1,result.getNetRuntime());
+    assertNull(result.getAllAccumulatorResults());
+    program.deleteExtractedLibraries();
+    verify(this.compilerMock,times(1)).compile(any(Plan.class));
+    verify(this.generatorMock,times(1)).compileJobGraph(any(OptimizedPlan.class));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
 }
