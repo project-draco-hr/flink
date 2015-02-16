@@ -1,0 +1,31 @@
+{
+  LocalFlinkMiniCluster miniCluster=null;
+  final int numTMs=3;
+  final int numSlots=14;
+  try {
+    Configuration config=new Configuration();
+    config.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,numTMs);
+    config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,numSlots);
+    miniCluster=new LocalFlinkMiniCluster(config,true);
+    final ActorRef jm=miniCluster.getJobManager();
+    new JavaTestKit(system){
+{
+        new Within(TestingUtils.TESTING_DURATION()){
+          @Override protected void run(){
+            jm.tell(JobManagerMessages.getRequestNumberRegisteredTaskManager(),getRef());
+            expectMsgEquals(TestingUtils.TESTING_DURATION(),numTMs);
+            jm.tell(JobManagerMessages.getRequestTotalNumberOfSlots(),getRef());
+            expectMsgEquals(TestingUtils.TESTING_DURATION(),numTMs * numSlots);
+          }
+        }
+;
+      }
+    }
+;
+  }
+  finally {
+    if (miniCluster != null) {
+      miniCluster.stop();
+    }
+  }
+}
