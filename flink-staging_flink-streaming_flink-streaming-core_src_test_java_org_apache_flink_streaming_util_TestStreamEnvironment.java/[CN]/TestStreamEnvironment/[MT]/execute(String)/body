@@ -1,12 +1,14 @@
 {
   JobGraph jobGraph=streamGraph.getJobGraph(jobName);
-  Configuration configuration=jobGraph.getJobConfiguration();
-  configuration.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,getDegreeOfParallelism());
-  configuration.setLong(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,memorySize);
-  ForkableFlinkMiniCluster cluster=new ForkableFlinkMiniCluster(configuration);
+  if (internalExecutor) {
+    Configuration configuration=jobGraph.getJobConfiguration();
+    configuration.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,getDegreeOfParallelism());
+    configuration.setLong(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,memorySize);
+    executor=new ForkableFlinkMiniCluster(configuration);
+  }
   try {
-    ActorRef client=cluster.getJobClient();
-    JobClient.submitJobAndWait(jobGraph,false,client,cluster.timeout());
+    ActorRef client=executor.getJobClient();
+    latestResult=JobClient.submitJobAndWait(jobGraph,false,client,executor.timeout());
   }
  catch (  JobExecutionException e) {
     if (e.getMessage().contains("GraphConversionException")) {
@@ -17,6 +19,8 @@
     }
   }
  finally {
-    cluster.stop();
+    if (internalExecutor) {
+      executor.shutdown();
+    }
   }
 }
