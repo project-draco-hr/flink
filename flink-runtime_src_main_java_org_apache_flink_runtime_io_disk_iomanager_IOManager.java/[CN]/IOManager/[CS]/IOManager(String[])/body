@@ -1,5 +1,25 @@
 {
-  this.paths=paths;
+  if (tempDirs == null || tempDirs.length == 0) {
+    throw new IllegalArgumentException("The temporary directories must not be null or empty.");
+  }
   this.random=new Random();
   this.nextPath=0;
+  this.paths=new File[tempDirs.length];
+  for (int i=0; i < tempDirs.length; i++) {
+    File baseDir=new File(tempDirs[i]);
+    String subfolder=String.format("flink-io-%s",UUID.randomUUID().toString());
+    File storageDir=new File(baseDir,subfolder);
+    if (!storageDir.exists() && !storageDir.mkdirs()) {
+      throw new RuntimeException("Could not create storage directory for IOManager: " + storageDir.getAbsolutePath());
+    }
+    paths[i]=storageDir;
+    LOG.info("I/O manager uses directory {} for spill files.",storageDir.getAbsolutePath());
+  }
+  this.shutdownHook=new Thread("I/O manager shutdown hook"){
+    @Override public void run(){
+      shutdown();
+    }
+  }
+;
+  Runtime.getRuntime().addShutdownHook(this.shutdownHook);
 }
