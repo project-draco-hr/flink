@@ -1,0 +1,44 @@
+{
+  try {
+    int type=inputStream.read();
+    if (type < 0) {
+      throw new EOFException("Premature end of DELETE request");
+    }
+    if (type == CONTENT_ADDRESSABLE) {
+      BlobKey key=BlobKey.readFromInputStream(inputStream);
+      File blobFile=this.blobServer.getStorageLocation(key);
+      if (blobFile.exists() && !blobFile.delete()) {
+        throw new IOException("Cannot delete BLOB file " + blobFile.getAbsolutePath());
+      }
+    }
+ else     if (type == NAME_ADDRESSABLE) {
+      byte[] jidBytes=new byte[JobID.SIZE];
+      readFully(inputStream,jidBytes,0,JobID.SIZE,"JobID");
+      JobID jobID=JobID.fromByteArray(jidBytes);
+      String key=readKey(buf,inputStream);
+      File blobFile=this.blobServer.getStorageLocation(jobID,key);
+      if (blobFile.exists() && !blobFile.delete()) {
+        throw new IOException("Cannot delete BLOB file " + blobFile.getAbsolutePath());
+      }
+    }
+ else     if (type == JOB_ID_SCOPE) {
+      byte[] jidBytes=new byte[JobID.SIZE];
+      readFully(inputStream,jidBytes,0,JobID.SIZE,"JobID");
+      JobID jobID=JobID.fromByteArray(jidBytes);
+      blobServer.deleteJobDirectory(jobID);
+    }
+ else {
+      throw new IOException("Unrecognized addressing type: " + type);
+    }
+    outputStream.write(RETURN_OKAY);
+  }
+ catch (  Throwable t) {
+    LOG.error("DELETE operation failed",t);
+    try {
+      writeErrorToStream(outputStream,t);
+    }
+ catch (    IOException e) {
+    }
+    clientSocket.close();
+  }
+}

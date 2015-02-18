@@ -2,15 +2,30 @@
   String storageDirectory=config.getString(ConfigConstants.BLOB_STORAGE_DIRECTORY_KEY,null);
   this.storageDir=BlobUtils.initStorageDirectory(storageDirectory);
   LOG.info("Created BLOB server storage directory {}",storageDir);
+  final int maxConnections=config.getInteger(ConfigConstants.BLOB_FETCH_CONCURRENT_KEY,ConfigConstants.DEFAULT_BLOB_FETCH_CONCURRENT);
+  if (maxConnections >= 1) {
+    this.maxConnections=maxConnections;
+  }
+ else {
+    LOG.warn("Invalid value for maximum connections in BLOB server: {}. Using default value of {}",maxConnections,ConfigConstants.DEFAULT_BLOB_FETCH_CONCURRENT);
+    this.maxConnections=ConfigConstants.DEFAULT_BLOB_FETCH_CONCURRENT;
+  }
+  int backlog=config.getInteger(ConfigConstants.BLOB_FETCH_BACKLOG_KEY,ConfigConstants.DEFAULT_BLOB_FETCH_BACKLOG);
+  if (backlog < 1) {
+    LOG.warn("Invalid value for BLOB connection backlog: {}. Using default value of {}",backlog,ConfigConstants.DEFAULT_BLOB_FETCH_BACKLOG);
+    backlog=ConfigConstants.DEFAULT_BLOB_FETCH_BACKLOG;
+  }
   this.shutdownHook=BlobUtils.addShutdownHook(this,LOG);
   try {
-    this.serverSocket=new ServerSocket(0);
-    start();
-    if (LOG.isInfoEnabled()) {
-      LOG.info(String.format("Started BLOB server on port %d",this.serverSocket.getLocalPort()));
-    }
+    this.serverSocket=new ServerSocket(0,backlog);
   }
  catch (  IOException e) {
-    throw new IOException("Could not create BlobServer with random port.",e);
+    throw new IOException("Could not create BlobServer with automatic port choice.",e);
+  }
+  setName("BLOB Server listener at " + getPort());
+  setDaemon(true);
+  start();
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Started BLOB server at {}:{} - max concurrent requests: {} - max backlog: {}",serverSocket.getInetAddress().getHostAddress(),getPort(),maxConnections,backlog);
   }
 }

@@ -1,6 +1,19 @@
 {
-  final OutputStream os=this.socket.getOutputStream();
-  final byte[] buf=new byte[AbstractID.SIZE];
-  sendGetHeader(os,null,null,blobKey,buf);
-  return new BlobInputStream(this.socket.getInputStream(),blobKey,buf);
+  if (this.socket.isClosed()) {
+    throw new IllegalStateException("BLOB Client is not connected. " + "Client has been shut down or encountered an error before.");
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(String.format("GET content addressable BLOB %s from %s",blobKey,socket.getLocalSocketAddress()));
+  }
+  try {
+    OutputStream os=this.socket.getOutputStream();
+    InputStream is=this.socket.getInputStream();
+    sendGetHeader(os,null,null,blobKey);
+    receiveAndCheckResponse(is);
+    return new BlobInputStream(is,blobKey);
+  }
+ catch (  Throwable t) {
+    BlobUtils.closeSilently(socket,LOG);
+    throw new IOException("GET operation failed: " + t.getMessage(),t);
+  }
 }

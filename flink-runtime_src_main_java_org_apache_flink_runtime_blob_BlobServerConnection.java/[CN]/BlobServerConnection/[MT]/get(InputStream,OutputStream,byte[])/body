@@ -1,0 +1,66 @@
+{
+  File blobFile;
+  try {
+    final int contentAdressable=inputStream.read();
+    if (contentAdressable < 0) {
+      throw new EOFException("Premature end of GET request");
+    }
+    if (contentAdressable == NAME_ADDRESSABLE) {
+      byte[] jidBytes=new byte[JobID.SIZE];
+      readFully(inputStream,jidBytes,0,JobID.SIZE,"JobID");
+      JobID jobID=JobID.fromByteArray(jidBytes);
+      String key=readKey(buf,inputStream);
+      blobFile=this.blobServer.getStorageLocation(jobID,key);
+    }
+ else     if (contentAdressable == CONTENT_ADDRESSABLE) {
+      final BlobKey key=BlobKey.readFromInputStream(inputStream);
+      blobFile=blobServer.getStorageLocation(key);
+    }
+ else {
+      throw new IOException("Unknown type of BLOB addressing.");
+    }
+    if (!blobFile.exists()) {
+      throw new IOException("Cannot find required BLOB at " + blobFile.getAbsolutePath());
+    }
+    if (blobFile.length() > Integer.MAX_VALUE) {
+      throw new IOException("BLOB size exceeds the maximum size (2 GB).");
+    }
+    outputStream.write(RETURN_OKAY);
+  }
+ catch (  Throwable t) {
+    LOG.error("GET operation failed",t);
+    try {
+      writeErrorToStream(outputStream,t);
+    }
+ catch (    IOException e) {
+    }
+    clientSocket.close();
+    return;
+  }
+  try {
+    int blobLen=(int)blobFile.length();
+    writeLength(blobLen,outputStream);
+    FileInputStream fis=new FileInputStream(blobFile);
+    try {
+      int bytesRemaining=blobLen;
+      while (bytesRemaining > 0) {
+        int read=fis.read(buf);
+        if (read < 0) {
+          throw new IOException("Premature end of BLOB file stream for " + blobFile.getAbsolutePath());
+        }
+        outputStream.write(buf,0,read);
+        bytesRemaining-=read;
+      }
+    }
+  finally {
+      fis.close();
+    }
+  }
+ catch (  SocketException e) {
+    LOG.debug("Socket connection closed",e);
+  }
+catch (  Throwable t) {
+    LOG.error("GET operation failed",t);
+    clientSocket.close();
+  }
+}

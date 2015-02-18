@@ -1,0 +1,46 @@
+{
+  BlobServer server=null;
+  BlobClient client=null;
+  try {
+    Configuration config=new Configuration();
+    server=new BlobServer(config);
+    InetSocketAddress serverAddress=new InetSocketAddress("localhost",server.getPort());
+    client=new BlobClient(serverAddress);
+    byte[] data=new byte[2000000];
+    rnd.nextBytes(data);
+    BlobKey key=client.put(data);
+    assertNotNull(key);
+    client.delete(key);
+    client.close();
+    client=new BlobClient(serverAddress);
+    try {
+      client.get(key);
+      fail("BLOB should have been deleted");
+    }
+ catch (    IOException e) {
+    }
+    try {
+      client.put(new byte[1]);
+      fail("client should be closed after erroneous operation");
+    }
+ catch (    IllegalStateException e) {
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (client != null) {
+      try {
+        client.close();
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+  }
+}

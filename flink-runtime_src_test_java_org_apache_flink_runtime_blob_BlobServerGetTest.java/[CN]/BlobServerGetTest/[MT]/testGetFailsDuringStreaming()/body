@@ -1,0 +1,45 @@
+{
+  BlobServer server=null;
+  BlobClient client=null;
+  try {
+    Configuration config=new Configuration();
+    server=new BlobServer(config);
+    InetSocketAddress serverAddress=new InetSocketAddress("localhost",server.getPort());
+    client=new BlobClient(serverAddress);
+    byte[] data=new byte[5000000];
+    rnd.nextBytes(data);
+    BlobKey key=client.put(data);
+    assertNotNull(key);
+    InputStream is=client.get(key);
+    byte[] receiveBuffer=new byte[50000];
+    BlobUtils.readFully(is,receiveBuffer,0,receiveBuffer.length,null);
+    BlobUtils.readFully(is,receiveBuffer,0,receiveBuffer.length,null);
+    for (    BlobServerConnection conn : server.getCurrentyActiveConnections()) {
+      conn.close();
+    }
+    try {
+      byte[] remainder=new byte[data.length - 2 * receiveBuffer.length];
+      BlobUtils.readFully(is,remainder,0,remainder.length,null);
+      fail();
+    }
+ catch (    IOException e) {
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (client != null) {
+      try {
+        client.close();
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+  }
+}

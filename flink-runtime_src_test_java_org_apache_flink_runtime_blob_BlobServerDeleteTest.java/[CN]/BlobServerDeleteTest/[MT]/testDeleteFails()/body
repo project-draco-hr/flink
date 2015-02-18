@@ -1,0 +1,45 @@
+{
+  BlobServer server=null;
+  BlobClient client=null;
+  try {
+    Configuration config=new Configuration();
+    server=new BlobServer(config);
+    InetSocketAddress serverAddress=new InetSocketAddress("localhost",server.getPort());
+    client=new BlobClient(serverAddress);
+    byte[] data=new byte[2000000];
+    rnd.nextBytes(data);
+    BlobKey key=client.put(data);
+    assertNotNull(key);
+    File blobFile=server.getStorageLocation(key);
+    File directory=blobFile.getParentFile();
+    assertTrue(blobFile.setWritable(false,false));
+    assertTrue(directory.setWritable(false,false));
+    try {
+      client.delete(key);
+      fail("DELETE operation should fail if file cannot be deleted");
+    }
+ catch (    IOException e) {
+    }
+ finally {
+      blobFile.setWritable(true,false);
+      directory.setWritable(true,false);
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (client != null) {
+      try {
+        client.close();
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+  }
+}

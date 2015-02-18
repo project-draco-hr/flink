@@ -1,30 +1,39 @@
 {
-  final OutputStream os=this.socket.getOutputStream();
-  final MessageDigest md=(jobId == null || key == null) ? BlobUtils.createMessageDigest() : null;
-  final byte[] buf=new byte[AbstractID.SIZE];
-  final byte[] xferBuf=new byte[BlobServer.BUFFER_SIZE];
-  sendPutHeader(os,jobId,key,buf);
-  while (true) {
-    final int read=inputStream.read(xferBuf);
-    if (read < 0) {
-      break;
+  if (this.socket.isClosed()) {
+    throw new IllegalStateException("BLOB Client is not connected. " + "Client has been shut down or encountered an error before.");
+  }
+  if (LOG.isDebugEnabled()) {
+    if (jobId == null) {
+      LOG.debug(String.format("PUT content addressable BLOB stream to %s",socket.getLocalSocketAddress()));
     }
-    if (read > 0) {
-      BlobServer.writeLength(read,buf,os);
-      os.write(xferBuf,0,read);
-      if (md != null) {
-        md.update(xferBuf,0,read);
+ else {
+      LOG.debug(String.format("PUT BLOB stream under %s / \"%s\" to %s",jobId,key,socket.getLocalSocketAddress()));
+    }
+  }
+  try {
+    final OutputStream os=this.socket.getOutputStream();
+    final MessageDigest md=jobId == null ? BlobUtils.createMessageDigest() : null;
+    final byte[] xferBuf=new byte[BUFFER_SIZE];
+    sendPutHeader(os,jobId,key);
+    while (true) {
+      final int read=inputStream.read(xferBuf);
+      if (read < 0) {
+        writeLength(-1,os);
+        break;
+      }
+      if (read > 0) {
+        writeLength(read,os);
+        os.write(xferBuf,0,read);
+        if (md != null) {
+          md.update(xferBuf,0,read);
+        }
       }
     }
+    final InputStream is=this.socket.getInputStream();
+    return receivePutResponseAndCompare(is,md);
   }
-  if (md == null) {
-    return null;
+ catch (  Throwable t) {
+    BlobUtils.closeSilently(socket,LOG);
+    throw new IOException("PUT operation failed: " + t.getMessage(),t);
   }
-  final InputStream is=this.socket.getInputStream();
-  final BlobKey localKey=new BlobKey(md.digest());
-  final BlobKey remoteKey=BlobKey.readFromInputStream(is);
-  if (!localKey.equals(remoteKey)) {
-    throw new IOException("Detected data corruption during transfer");
-  }
-  return localKey;
 }

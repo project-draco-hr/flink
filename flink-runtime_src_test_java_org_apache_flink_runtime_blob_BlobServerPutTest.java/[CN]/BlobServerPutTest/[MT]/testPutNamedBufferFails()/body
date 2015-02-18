@@ -1,0 +1,54 @@
+{
+  BlobServer server=null;
+  BlobClient client=null;
+  File tempFileDir=null;
+  try {
+    Configuration config=new Configuration();
+    server=new BlobServer(config);
+    tempFileDir=server.createTemporaryFilename().getParentFile().getParentFile();
+    assertTrue(tempFileDir.setExecutable(true,false));
+    assertTrue(tempFileDir.setReadable(true,false));
+    assertTrue(tempFileDir.setWritable(false,false));
+    InetSocketAddress serverAddress=new InetSocketAddress("localhost",server.getPort());
+    client=new BlobClient(serverAddress);
+    byte[] data=new byte[2000000];
+    rnd.nextBytes(data);
+    try {
+      JobID jid=new JobID();
+      String stringKey="my test key";
+      client.put(jid,stringKey,data);
+      fail("This should fail.");
+    }
+ catch (    IOException e) {
+      assertTrue(e.getMessage(),e.getMessage().contains("Server side error"));
+    }
+    try {
+      JobID jid=new JobID();
+      String stringKey="another key";
+      client.put(jid,stringKey,data);
+      fail("Client should be closed");
+    }
+ catch (    IllegalStateException e) {
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (tempFileDir != null) {
+      tempFileDir.setWritable(true,false);
+    }
+    if (client != null) {
+      try {
+        client.close();
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+  }
+}

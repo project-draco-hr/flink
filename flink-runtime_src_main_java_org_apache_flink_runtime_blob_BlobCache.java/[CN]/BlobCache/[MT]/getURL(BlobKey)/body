@@ -1,46 +1,70 @@
 {
   if (requiredBlob == null) {
-    throw new IllegalArgumentException("Required BLOB cannot be null.");
+    throw new IllegalArgumentException("BLOB key cannot be null.");
   }
-  BlobClient bc=null;
-  byte[] buf=null;
-  URL url=null;
-  try {
-    final File localJarFile=BlobUtils.getStorageLocation(storageDir,requiredBlob);
-    if (!localJarFile.exists()) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Trying to download " + requiredBlob + " from "+ serverAddress);
+  final File localJarFile=BlobUtils.getStorageLocation(storageDir,requiredBlob);
+  if (!localJarFile.exists()) {
+    final byte[] buf=new byte[BlobServerProtocol.BUFFER_SIZE];
+    int attempt=0;
+    while (true) {
+      if (attempt == 0) {
+        LOG.info("Downloading {} from {}",requiredBlob,serverAddress);
       }
-      bc=new BlobClient(serverAddress);
-      buf=new byte[BlobServer.BUFFER_SIZE];
-      InputStream is=null;
-      OutputStream os=null;
+ else {
+        LOG.info("Downloading {} from {} (retry {})",requiredBlob,serverAddress,attempt);
+      }
       try {
-        is=bc.get(requiredBlob);
-        os=new FileOutputStream(localJarFile);
-        while (true) {
-          final int read=is.read(buf);
-          if (read < 0) {
-            break;
+        BlobClient bc=null;
+        InputStream is=null;
+        OutputStream os=null;
+        try {
+          bc=new BlobClient(serverAddress);
+          is=bc.get(requiredBlob);
+          os=new FileOutputStream(localJarFile);
+          while (true) {
+            final int read=is.read(buf);
+            if (read < 0) {
+              break;
+            }
+            os.write(buf,0,read);
           }
-          os.write(buf,0,read);
-        }
-      }
-  finally {
-        if (is != null) {
-          is.close();
-        }
-        if (os != null) {
           os.close();
+          os=null;
+          is.close();
+          is=null;
+          bc.close();
+          bc=null;
+          break;
+        }
+ catch (        Throwable t) {
+          closeSilently(os);
+          closeSilently(is);
+          closeSilently(bc);
+          if (t instanceof IOException) {
+            throw (IOException)t;
+          }
+ else {
+            throw new IOException(t.getMessage(),t);
+          }
+        }
+      }
+ catch (      IOException e) {
+        String message="Failed to fetch BLOB " + requiredBlob + "  from "+ serverAddress+ '.';
+        if (attempt < numFetchRetries) {
+          attempt++;
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(message + " Retrying...",e);
+          }
+ else {
+            LOG.error(message + " Retrying...");
+          }
+        }
+ else {
+          LOG.error(message + " No retries left.",e);
+          throw new IOException(message,e);
         }
       }
     }
-    url=localJarFile.toURI().toURL();
   }
-  finally {
-    if (bc != null) {
-      bc.close();
-    }
-  }
-  return url;
+  return localJarFile.toURI().toURL();
 }

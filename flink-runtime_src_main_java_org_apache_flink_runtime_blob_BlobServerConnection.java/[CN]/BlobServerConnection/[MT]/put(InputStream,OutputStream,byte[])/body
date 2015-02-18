@@ -1,0 +1,96 @@
+{
+  JobID jobID=null;
+  String key=null;
+  MessageDigest md=null;
+  File incomingFile=null;
+  FileOutputStream fos=null;
+  try {
+    final int contentAdressable=inputStream.read();
+    if (contentAdressable < 0) {
+      throw new EOFException("Premature end of PUT request");
+    }
+    if (contentAdressable == NAME_ADDRESSABLE) {
+      byte[] jidBytes=new byte[JobID.SIZE];
+      readFully(inputStream,jidBytes,0,JobID.SIZE,"JobID");
+      jobID=JobID.fromByteArray(jidBytes);
+      key=readKey(buf,inputStream);
+    }
+ else     if (contentAdressable == CONTENT_ADDRESSABLE) {
+      md=BlobUtils.createMessageDigest();
+    }
+ else {
+      throw new IOException("Unknown type of BLOB addressing.");
+    }
+    if (LOG.isDebugEnabled()) {
+      if (contentAdressable == NAME_ADDRESSABLE) {
+        LOG.debug(String.format("Received PUT request for BLOB under %s / \"%s\"",jobID,key));
+      }
+ else {
+        LOG.debug("Received PUT request for content addressable BLOB");
+      }
+    }
+    incomingFile=blobServer.createTemporaryFilename();
+    fos=new FileOutputStream(incomingFile);
+    while (true) {
+      final int bytesExpected=readLength(inputStream);
+      if (bytesExpected == -1) {
+        break;
+      }
+      if (bytesExpected > BUFFER_SIZE) {
+        throw new IOException("Unexpected number of incoming bytes: " + bytesExpected);
+      }
+      readFully(inputStream,buf,0,bytesExpected,"buffer");
+      fos.write(buf,0,bytesExpected);
+      if (md != null) {
+        md.update(buf,0,bytesExpected);
+      }
+    }
+    fos.close();
+    fos=null;
+    if (contentAdressable == NAME_ADDRESSABLE) {
+      File storageFile=this.blobServer.getStorageLocation(jobID,key);
+      if (!incomingFile.renameTo(storageFile)) {
+        throw new IOException(String.format("Cannot move staging file %s to BLOB file %s",incomingFile.getAbsolutePath(),storageFile.getAbsolutePath()));
+      }
+      incomingFile=null;
+      outputStream.write(RETURN_OKAY);
+    }
+ else {
+      BlobKey blobKey=new BlobKey(md.digest());
+      File storageFile=blobServer.getStorageLocation(blobKey);
+      if (!incomingFile.renameTo(storageFile)) {
+        throw new IOException(String.format("Cannot move staging file %s to BLOB file %s",incomingFile.getAbsolutePath(),storageFile.getAbsolutePath()));
+      }
+      incomingFile=null;
+      outputStream.write(RETURN_OKAY);
+      blobKey.writeToOutputStream(outputStream);
+    }
+  }
+ catch (  SocketException e) {
+    LOG.debug("Socket connection closed",e);
+  }
+catch (  Throwable t) {
+    LOG.error("PUT operation failed",t);
+    try {
+      writeErrorToStream(outputStream,t);
+    }
+ catch (    IOException e) {
+    }
+    clientSocket.close();
+  }
+ finally {
+    if (fos != null) {
+      try {
+        fos.close();
+      }
+ catch (      Throwable t) {
+        LOG.warn("Cannot close stream to BLOB staging file",t);
+      }
+    }
+    if (incomingFile != null) {
+      if (!incomingFile.delete()) {
+        LOG.warn("Cannot delete BLOB server staging file " + incomingFile.getAbsolutePath());
+      }
+    }
+  }
+}

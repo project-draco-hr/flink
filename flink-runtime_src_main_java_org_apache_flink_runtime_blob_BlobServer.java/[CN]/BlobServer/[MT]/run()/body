@@ -1,7 +1,25 @@
 {
   try {
     while (!this.shutdownRequested.get()) {
-      new BlobConnection(this.serverSocket.accept(),this).start();
+      BlobServerConnection conn=new BlobServerConnection(serverSocket.accept(),this);
+      try {
+synchronized (activeConnections) {
+          while (activeConnections.size() >= maxConnections) {
+            activeConnections.wait(2000);
+          }
+          activeConnections.add(conn);
+        }
+        conn.start();
+        conn=null;
+      }
+  finally {
+        if (conn != null) {
+          conn.close();
+synchronized (activeConnections) {
+            activeConnections.remove(conn);
+          }
+        }
+      }
     }
   }
  catch (  Throwable t) {

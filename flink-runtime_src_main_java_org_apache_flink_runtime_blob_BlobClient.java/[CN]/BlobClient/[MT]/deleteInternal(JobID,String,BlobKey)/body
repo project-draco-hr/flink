@@ -1,0 +1,42 @@
+{
+  if ((jobId != null && bKey != null) || (jobId == null && bKey == null)) {
+    throw new IllegalArgumentException();
+  }
+  try {
+    final OutputStream outputStream=this.socket.getOutputStream();
+    final InputStream inputStream=this.socket.getInputStream();
+    outputStream.write(DELETE_OPERATION);
+    if (jobId == null) {
+      outputStream.write(CONTENT_ADDRESSABLE);
+      bKey.writeToOutputStream(outputStream);
+    }
+ else     if (key != null) {
+      outputStream.write(NAME_ADDRESSABLE);
+      byte[] idBytes=jobId.getBytes();
+      byte[] keyBytes=key.getBytes(BlobUtils.DEFAULT_CHARSET);
+      outputStream.write(idBytes);
+      writeLength(keyBytes.length,outputStream);
+      outputStream.write(keyBytes);
+    }
+ else {
+      outputStream.write(JOB_ID_SCOPE);
+      byte[] idBytes=jobId.getBytes();
+      outputStream.write(idBytes);
+    }
+    int response=inputStream.read();
+    if (response < 0) {
+      throw new EOFException("Premature end of response");
+    }
+    if (response == RETURN_ERROR) {
+      Throwable cause=readExceptionFromStream(inputStream);
+      throw new IOException("Server side error: " + cause.getMessage(),cause);
+    }
+ else     if (response != RETURN_OKAY) {
+      throw new IOException("Unrecognized response");
+    }
+  }
+ catch (  Throwable t) {
+    BlobUtils.closeSilently(socket,LOG);
+    throw new IOException("DELETE operation failed: " + t.getMessage(),t);
+  }
+}
