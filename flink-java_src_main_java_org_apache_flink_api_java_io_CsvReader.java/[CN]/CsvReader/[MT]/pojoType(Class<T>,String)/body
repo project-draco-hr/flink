@@ -1,0 +1,17 @@
+{
+  Preconditions.checkNotNull(pojoType,"The POJO type class must not be null.");
+  Preconditions.checkNotNull(pojoFields,"POJO fields must be specified (not null) if output type is a POJO.");
+  @SuppressWarnings("unchecked") PojoTypeInfo<T> typeInfo=(PojoTypeInfo<T>)TypeExtractor.createTypeInfo(pojoType);
+  CsvInputFormat<T> inputFormat=new CsvInputFormat<T>(path,typeInfo);
+  Class<?>[] classes=new Class<?>[pojoFields.length];
+  for (int i=0; i < pojoFields.length; i++) {
+    int pos=typeInfo.getFieldIndex(pojoFields[i]);
+    if (pos < 0) {
+      throw new IllegalArgumentException("Field \"" + pojoFields[i] + "\" not part of POJO type "+ pojoType.getCanonicalName());
+    }
+    classes[i]=typeInfo.getPojoFieldAt(pos).type.getTypeClass();
+  }
+  configureInputFormat(inputFormat,classes);
+  inputFormat.setOrderOfPOJOFields(pojoFields);
+  return new DataSource<T>(executionContext,inputFormat,typeInfo,Utils.getCallLocationName());
+}

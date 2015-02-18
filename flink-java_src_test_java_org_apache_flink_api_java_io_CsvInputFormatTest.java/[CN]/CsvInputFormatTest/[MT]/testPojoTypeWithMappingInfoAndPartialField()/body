@@ -1,0 +1,20 @@
+{
+  File tempFile=File.createTempFile("CsvReaderPojoType","tmp");
+  tempFile.deleteOnExit();
+  tempFile.setWritable(true);
+  OutputStreamWriter wrt=new OutputStreamWriter(new FileOutputStream(tempFile));
+  wrt.write("123,3.123,AAA,BBB\n");
+  wrt.write("456,1.123,BBB,AAA\n");
+  wrt.close();
+  @SuppressWarnings("unchecked") TypeInformation<PojoItem> typeInfo=(TypeInformation<PojoItem>)TypeExtractor.createTypeInfo(PojoItem.class);
+  CsvInputFormat<PojoItem> inputFormat=new CsvInputFormat<PojoItem>(new Path(tempFile.toURI().toString()),typeInfo);
+  inputFormat.setFields(new boolean[]{true,false,false,true},new Class[]{Integer.class,String.class});
+  inputFormat.setOrderOfPOJOFields(new String[]{"field1","field4"});
+  inputFormat.configure(new Configuration());
+  FileInputSplit[] splits=inputFormat.createInputSplits(1);
+  inputFormat.open(splits[0]);
+  PojoItem item=new PojoItem();
+  inputFormat.nextRecord(item);
+  assertEquals(123,item.field1);
+  assertEquals("BBB",item.field4);
+}
