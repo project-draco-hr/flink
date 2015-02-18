@@ -1,5 +1,7 @@
 {
-  StreamInvokable<OUT,StreamWindow<OUT>> discretizer=getDiscretizer(transformation,windowBuffer,getTrigger(),getEviction(),discretizerKey);
+  StreamInvokable<OUT,WindowEvent<OUT>> discretizer=getDiscretizer(getTrigger(),getEviction(),discretizerKey);
+  StreamInvokable<WindowEvent<OUT>,StreamWindow<OUT>> bufferInvokable=getBufferInvokable(windowBuffer,discretizerKey);
+  @SuppressWarnings({"unchecked","rawtypes"}) TypeInformation<WindowEvent<OUT>> bufferEventType=new TupleTypeInfo(WindowEvent.class,getType(),BasicTypeInfo.INT_TYPE_INFO);
   int parallelism=getDiscretizerParallelism();
-  return new DiscretizedStream<OUT>(dataStream.transform("Stream Discretizer",new StreamWindowTypeInfo<OUT>(getType()),discretizer).setParallelism(parallelism),groupByKey,transformation);
+  return new DiscretizedStream<OUT>(dataStream.transform("Stream Discretizer",bufferEventType,discretizer).setParallelism(parallelism).transform("WindowBuffer",new StreamWindowTypeInfo<OUT>(getType()),bufferInvokable).setParallelism(parallelism),groupByKey,transformation);
 }
