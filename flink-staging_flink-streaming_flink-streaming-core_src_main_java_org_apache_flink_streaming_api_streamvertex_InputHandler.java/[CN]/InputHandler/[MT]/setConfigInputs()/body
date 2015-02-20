@@ -2,12 +2,9 @@
   inputSerializer=configuration.getTypeSerializerIn1(streamVertex.userClassLoader);
   int numberOfInputs=configuration.getNumberOfInputs();
   if (numberOfInputs > 0) {
-    if (numberOfInputs < 2) {
-      inputs=new IndexedMutableReader<DeserializationDelegate<StreamRecord<IN>>>(streamVertex.getEnvironment().getInputGate(0));
-    }
- else {
-      inputs=new IndexedMutableReader<DeserializationDelegate<StreamRecord<IN>>>(new UnionInputGate(streamVertex.getEnvironment().getAllInputGates()));
-    }
-    inputIter=createInputIterator();
+    InputGate inputGate=numberOfInputs < 2 ? streamVertex.getEnvironment().getInputGate(0) : new UnionInputGate(streamVertex.getEnvironment().getAllInputGates());
+    inputs=new IndexedMutableReader<DeserializationDelegate<StreamRecord<IN>>>(inputGate);
+    inputs.registerTaskEventListener(streamVertex.getSuperstepListener(),StreamingSuperstep.class);
+    inputIter=new IndexedReaderIterator<StreamRecord<IN>>(inputs,inputSerializer);
   }
 }

@@ -13,18 +13,26 @@
         return true;
       }
     }
-    final BufferOrEvent bufferOrEvent=inputGate.getNextBufferOrEvent();
+    final BufferOrEvent bufferOrEvent=barrierBuffer.getNextNonBlocked();
     if (bufferOrEvent.isBuffer()) {
       currentRecordDeserializer=recordDeserializers[bufferOrEvent.getChannelIndex()];
       currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
     }
- else     if (handleEvent(bufferOrEvent.getEvent())) {
-      if (inputGate.isFinished()) {
-        isFinished=true;
-        return false;
+ else {
+      final AbstractEvent event=bufferOrEvent.getEvent();
+      if (event instanceof StreamingSuperstep) {
+        barrierBuffer.processSuperstep(bufferOrEvent);
       }
- else       if (hasReachedEndOfSuperstep()) {
-        return false;
+ else {
+        if (handleEvent(event)) {
+          if (inputGate.isFinished()) {
+            isFinished=true;
+            return false;
+          }
+ else           if (hasReachedEndOfSuperstep()) {
+            return false;
+          }
+        }
       }
     }
   }
