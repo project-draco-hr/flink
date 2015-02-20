@@ -1,0 +1,16 @@
+{
+  Configuration conf=new Configuration();
+  conf.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,PARALLELISM);
+  final ExecutionEnvironment env=ExecutionEnvironment.createLocalEnvironment(conf);
+  env.setParallelism(ExecutionConfig.PARALLELISM_AUTO_MAX);
+  DataSet<Integer> result=env.createInput(new ParallelismDependentInputFormat()).rebalance().mapPartition(new RichMapPartitionFunction<Integer,Integer>(){
+    @Override public void mapPartition(    Iterable<Integer> values,    Collector<Integer> out) throws Exception {
+      out.collect(getRuntimeContext().getIndexOfThisSubtask());
+    }
+  }
+);
+  List<Integer> resultCollection=new ArrayList<Integer>();
+  result.output(new LocalCollectionOutputFormat<Integer>(resultCollection));
+  env.execute();
+  assertEquals(PARALLELISM,resultCollection.size());
+}
