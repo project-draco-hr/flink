@@ -1,0 +1,24 @@
+{
+  Integer upStreamvertexID=edge.f0;
+  Integer downStreamvertexID=edge.f1;
+  int outputIndex=streamGraph.getOutEdges(upStreamvertexID).indexOf(downStreamvertexID);
+  AbstractJobVertex headVertex=streamVertices.get(headOfChain);
+  AbstractJobVertex downStreamVertex=streamVertices.get(downStreamvertexID);
+  StreamConfig downStreamConfig=new StreamConfig(downStreamVertex.getConfiguration());
+  StreamConfig upStreamConfig=headOfChain == upStreamvertexID ? new StreamConfig(headVertex.getConfiguration()) : chainedConfigs.get(headOfChain).get(upStreamvertexID);
+  List<Integer> outEdgeIndexList=streamGraph.getOutEdgeTypes(upStreamvertexID);
+  int numOfInputs=downStreamConfig.getNumberOfInputs();
+  downStreamConfig.setInputIndex(numOfInputs++,outEdgeIndexList.get(outputIndex));
+  downStreamConfig.setNumberOfInputs(numOfInputs);
+  StreamPartitioner<?> partitioner=streamGraph.getOutPartitioner(upStreamvertexID,downStreamvertexID);
+  upStreamConfig.setPartitioner(downStreamvertexID,partitioner);
+  if (partitioner.getStrategy() == PartitioningStrategy.FORWARD) {
+    downStreamVertex.connectNewDataSetAsInput(headVertex,DistributionPattern.POINTWISE);
+  }
+ else {
+    downStreamVertex.connectNewDataSetAsInput(headVertex,DistributionPattern.ALL_TO_ALL);
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("CONNECTED: {} - {} -> {}",partitioner.getClass().getSimpleName(),headOfChain,downStreamvertexID);
+  }
+}
