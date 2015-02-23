@@ -1,38 +1,38 @@
 {
-  final Object entry=clients.get(remoteAddress);
-  final PartitionRequestClient client;
-  if (entry != null) {
-    if (entry instanceof PartitionRequestClient) {
-      client=(PartitionRequestClient)entry;
-    }
+  Object entry;
+  PartitionRequestClient client=null;
+  while (client == null) {
+    entry=clients.get(remoteAddress);
+    if (entry != null) {
+      if (entry instanceof PartitionRequestClient) {
+        client=(PartitionRequestClient)entry;
+      }
  else {
-      ConnectingChannel future=(ConnectingChannel)entry;
-      client=future.waitForChannel();
-    }
-  }
- else {
-    ConnectingChannel connectingChannel=new ConnectingChannel(remoteAddress,this);
-    Object old=clients.putIfAbsent(remoteAddress,connectingChannel);
-    if (old == null) {
-      nettyClient.connect(remoteAddress.getAddress()).addListener(connectingChannel);
-      client=connectingChannel.waitForChannel();
-      Object previous=clients.put(remoteAddress,client);
-      if (connectingChannel != previous) {
-        throw new IOException("Race condition while establishing channel connection.");
+        ConnectingChannel future=(ConnectingChannel)entry;
+        client=future.waitForChannel();
+        clients.replace(remoteAddress,future,client);
       }
     }
- else     if (old instanceof ConnectingChannel) {
-      client=((ConnectingChannel)old).waitForChannel();
-    }
  else {
-      client=(PartitionRequestClient)old;
+      ConnectingChannel connectingChannel=new ConnectingChannel(remoteAddress,this);
+      Object old=clients.putIfAbsent(remoteAddress,connectingChannel);
+      if (old == null) {
+        nettyClient.connect(remoteAddress.getAddress()).addListener(connectingChannel);
+        client=connectingChannel.waitForChannel();
+        clients.replace(remoteAddress,connectingChannel,client);
+      }
+ else       if (old instanceof ConnectingChannel) {
+        client=((ConnectingChannel)old).waitForChannel();
+        clients.replace(remoteAddress,old,client);
+      }
+ else {
+        client=(PartitionRequestClient)old;
+      }
+    }
+    if (!client.incrementReferenceCounter()) {
+      destroyPartitionRequestClient(remoteAddress,client);
+      client=null;
     }
   }
-  if (client.incrementReferenceCounter()) {
-    return client;
-  }
- else {
-    destroyPartitionRequestClient(remoteAddress,client);
-    return createPartitionRequestClient(remoteAddress);
-  }
+  return client;
 }

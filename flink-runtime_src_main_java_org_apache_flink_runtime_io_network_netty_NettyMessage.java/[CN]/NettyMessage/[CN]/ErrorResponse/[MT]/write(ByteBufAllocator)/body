@@ -1,10 +1,11 @@
 {
   ByteBuf result=null;
+  ObjectOutputStream oos=null;
   try {
     result=allocateBuffer(allocator,ID);
     DataOutputView outputView=new ByteBufDataOutputView(result);
-    StringUtils.writeNullableString(error.getClass().getName(),outputView);
-    StringUtils.writeNullableString(error.getMessage(),outputView);
+    oos=new ObjectOutputStream(new DataOutputViewStream(outputView));
+    oos.writeObject(error);
     if (receiverId != null) {
       result.writeBoolean(true);
       receiverId.writeTo(result);
@@ -13,7 +14,6 @@
       result.writeBoolean(false);
     }
     result.setInt(0,result.readableBytes());
-    return result;
   }
  catch (  Throwable t) {
     if (result != null) {
@@ -21,4 +21,10 @@
     }
     throw new IOException(t);
   }
+ finally {
+    if (oos != null) {
+      oos.close();
+    }
+  }
+  return result;
 }

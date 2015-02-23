@@ -1,15 +1,22 @@
 {
   DataInputView inputView=new ByteBufDataInputView(buffer);
-  String errorClassName=StringUtils.readNullableString(inputView);
-  Class<Throwable> errorClazz=(Class<Throwable>)getClass().getClassLoader().loadClass(errorClassName);
-  String errorMsg=StringUtils.readNullableString(inputView);
-  if (errorMsg != null) {
-    error=errorClazz.getConstructor(String.class).newInstance(errorMsg);
-  }
+  ObjectInputStream ois=null;
+  try {
+    ois=new ObjectInputStream(new DataInputViewStream(inputView));
+    Object obj=ois.readObject();
+    if (!(obj instanceof Throwable)) {
+      throw new ClassCastException("Read object expected to be of type Throwable, " + "actual type is " + obj.getClass() + ".");
+    }
  else {
-    error=InstantiationUtil.instantiate(errorClazz);
+      error=(Throwable)obj;
+      if (buffer.readBoolean()) {
+        receiverId=InputChannelID.fromByteBuf(buffer);
+      }
+    }
   }
-  if (buffer.readBoolean()) {
-    receiverId=InputChannelID.fromByteBuf(buffer);
+  finally {
+    if (ois != null) {
+      ois.close();
+    }
   }
 }
