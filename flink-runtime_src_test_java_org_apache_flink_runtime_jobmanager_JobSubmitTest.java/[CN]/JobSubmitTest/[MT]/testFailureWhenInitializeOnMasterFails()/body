@@ -1,0 +1,27 @@
+{
+  try {
+    AbstractJobVertex jobVertex=new AbstractJobVertex("Vertex that fails in initializeOnMaster"){
+      @Override public void initializeOnMaster(      ClassLoader loader) throws Exception {
+        throw new RuntimeException("test exception");
+      }
+    }
+;
+    TaskConfig config=new TaskConfig(jobVertex.getConfiguration());
+    jobVertex.setInvokableClass(Tasks.NoOpInvokable.class);
+    JobGraph jg=new JobGraph("test job",jobVertex);
+    Future<Object> submitFuture=Patterns.ask(jobManager,new JobManagerMessages.SubmitJob(jg,false),TIMEOUT);
+    try {
+      Await.result(submitFuture,new FiniteDuration(TIMEOUT,TimeUnit.MILLISECONDS));
+    }
+ catch (    JobExecutionException e) {
+      assertTrue(e.getCause() instanceof RuntimeException);
+    }
+catch (    Exception e) {
+      fail("Wrong exception type");
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

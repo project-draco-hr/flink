@@ -1,0 +1,35 @@
+{
+  try {
+    AbstractJobVertex jobVertex=new AbstractJobVertex("Test Vertex");
+    jobVertex.setInvokableClass(Tasks.NoOpInvokable.class);
+    JobGraph jg=new JobGraph("test job",jobVertex);
+    Future<Object> future=Patterns.ask(jobManager,JobManagerMessages.getRequestBlobManagerPort(),TIMEOUT);
+    int blobPort=(Integer)Await.result(future,new FiniteDuration(TIMEOUT,TimeUnit.MILLISECONDS));
+    BlobKey key1, key2;
+    BlobClient bc=new BlobClient(new InetSocketAddress("localhost",blobPort));
+    try {
+      key1=bc.put(new byte[10]);
+      key2=bc.put(new byte[10]);
+      bc.delete(key2);
+    }
+  finally {
+      bc.close();
+    }
+    jg.addBlob(key1);
+    jg.addBlob(key2);
+    Future<Object> submitFuture=Patterns.ask(jobManager,new JobManagerMessages.SubmitJob(jg,false),TIMEOUT);
+    try {
+      Await.result(submitFuture,new FiniteDuration(TIMEOUT,TimeUnit.MILLISECONDS));
+    }
+ catch (    JobExecutionException e) {
+      assertTrue(e.getCause() instanceof IOException);
+    }
+catch (    Exception e) {
+      fail("Wrong exception type");
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

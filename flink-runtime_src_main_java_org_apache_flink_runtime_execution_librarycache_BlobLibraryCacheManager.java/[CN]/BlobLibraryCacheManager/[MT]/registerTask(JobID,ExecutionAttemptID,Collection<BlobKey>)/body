@@ -7,10 +7,26 @@
 synchronized (lockObject) {
     LibraryCacheEntry entry=cacheEntries.get(jobId);
     if (entry == null) {
-      URL[] urls=new URL[requiredJarFiles.size()];
+      BlobKey[] keys=requiredJarFiles.toArray(new BlobKey[requiredJarFiles.size()]);
+      URL[] urls=new URL[keys.length];
       int count=0;
-      for (      BlobKey blobKey : requiredJarFiles) {
-        urls[count++]=registerReferenceToBlobKeyAndGetURL(blobKey);
+      try {
+        for (; count < keys.length; count++) {
+          BlobKey blobKey=keys[count];
+          urls[count]=registerReferenceToBlobKeyAndGetURL(blobKey);
+        }
+      }
+ catch (      Throwable t) {
+        try {
+          for (int i=0; i < count; i++) {
+            unregisterReferenceToBlobKey(keys[i]);
+          }
+        }
+ catch (        Throwable tt) {
+          LOG.error("Error while updating library reference counters.",tt);
+        }
+        ExceptionUtils.tryRethrowIOException(t);
+        throw new IOException("Library cache could not register the user code libraries.",t);
       }
       URLClassLoader classLoader=new URLClassLoader(urls);
       cacheEntries.put(jobId,new LibraryCacheEntry(requiredJarFiles,classLoader,task));
