@@ -1,0 +1,51 @@
+{
+  Process jmProcess=null;
+  ActorSystem localSystem=null;
+  try {
+    String javaCommand=getJavaCommandPath();
+    if (javaCommand == null) {
+      return;
+    }
+    String[] command=new String[]{javaCommand,"-Dlog.level=OFF","-Xms256m","-Xmx256m","-classpath",getCurrentClasspath(),JobManagerTestEntryPoint.class.getName()};
+    ProcessBuilder bld=new ProcessBuilder(command);
+    jmProcess=bld.start();
+    Tuple2<String,Object> localAddress=new Tuple2<String,Object>("localhost",0);
+    localSystem=AkkaUtils.createActorSystem(new Configuration(),new Some<Tuple2<String,Object>>(localAddress));
+    ActorRef jobManagerRef=null;
+    for (int i=0; i < 20; i++) {
+      try {
+        jobManagerRef=JobManager.getJobManagerRemoteReference(new InetSocketAddress("localhost",JOB_MANAGER_PORT),localSystem,new FiniteDuration(20,TimeUnit.SECONDS));
+        break;
+      }
+ catch (      Throwable t) {
+      }
+      Thread.sleep(500);
+    }
+    assertTrue("JobManager process died",isProcessAlive(jmProcess));
+    assertTrue("JobManager process did not launch the JobManager properly",jobManagerRef != null);
+    jobManagerRef.tell(PoisonPill.getInstance(),ActorRef.noSender());
+{
+      long now=System.currentTimeMillis();
+      long deadline=now + 5000;
+      while (now < deadline && isProcessAlive(jmProcess)) {
+        Thread.sleep(100);
+        now=System.currentTimeMillis();
+      }
+    }
+    assertFalse("JobManager process did not terminate upon actor death",isProcessAlive(jmProcess));
+    int returnCode=jmProcess.exitValue();
+    assertEquals("JobManager died, but not because of the process reaper",JobManager.RUNTIME_FAILURE_RETURN_CODE(),returnCode);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (jmProcess != null) {
+      jmProcess.destroy();
+    }
+    if (localSystem != null) {
+      localSystem.shutdown();
+    }
+  }
+}
