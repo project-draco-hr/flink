@@ -1,0 +1,52 @@
+{
+  final CountDownLatch syncOnConnect=new CountDownLatch(1);
+  final Tuple2<NettyServer,NettyClient> netty=createNettyServerAndClient(new NettyProtocol(){
+    @Override public void setServerChannelPipeline(    ChannelPipeline channelPipeline){
+    }
+    @Override public void setClientChannelPipeline(    ChannelPipeline channelPipeline){
+      channelPipeline.addLast(new CountDownLatchOnConnectHandler(syncOnConnect));
+    }
+  }
+);
+  final NettyServer server=netty.f0;
+  final NettyClient client=netty.f1;
+  final UncaughtTestExceptionHandler exceptionHandler=new UncaughtTestExceptionHandler();
+  try {
+    final PartitionRequestClientFactory factory=new PartitionRequestClientFactory(client);
+    final Thread connect=new Thread(new Runnable(){
+      @Override public void run(){
+        RemoteAddress serverAddress=null;
+        try {
+          serverAddress=createServerRemoteAddress(0);
+          factory.createPartitionRequestClient(serverAddress);
+        }
+ catch (        Throwable t) {
+          if (serverAddress != null) {
+            factory.closeOpenChannelConnections(serverAddress);
+            Thread.getDefaultUncaughtExceptionHandler().uncaughtException(Thread.currentThread(),t);
+          }
+ else {
+            t.printStackTrace();
+            fail("Could not create RemoteAddress for server.");
+          }
+        }
+      }
+    }
+);
+    connect.setUncaughtExceptionHandler(exceptionHandler);
+    connect.start();
+    syncOnConnect.await();
+    connect.interrupt();
+    connect.join();
+    assertEquals(0,factory.getNumberOfActiveClients());
+    assertTrue(exceptionHandler.getErrors().size() > 0);
+  }
+  finally {
+    if (server != null) {
+      server.shutdown();
+    }
+    if (client != null) {
+      client.shutdown();
+    }
+  }
+}
