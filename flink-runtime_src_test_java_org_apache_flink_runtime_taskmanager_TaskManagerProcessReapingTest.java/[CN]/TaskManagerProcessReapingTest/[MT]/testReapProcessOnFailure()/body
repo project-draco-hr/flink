@@ -1,0 +1,67 @@
+{
+  Process taskManagerProcess=null;
+  ActorSystem jmActorSystem=null;
+  final StringWriter processOutput=new StringWriter();
+  try {
+    String javaCommand=getJavaCommandPath();
+    if (javaCommand == null) {
+      System.out.println("---- Skipping TaskManagerProcessReapingTest : Could not find java executable ----");
+      return;
+    }
+    File tempLogFile=File.createTempFile("testlogconfig","properties");
+    tempLogFile.deleteOnExit();
+    CommonTestUtils.printLog4jDebugConfig(tempLogFile);
+    final int jobManagerPort=NetUtils.getAvailablePort();
+    Tuple2<String,Object> localAddress=new Tuple2<String,Object>("localhost",jobManagerPort);
+    jmActorSystem=AkkaUtils.createActorSystem(new Configuration(),new Some<Tuple2<String,Object>>(localAddress));
+    JobManager.startJobManagerActors(new Configuration(),jmActorSystem);
+    final int taskManagerPort=NetUtils.getAvailablePort();
+    String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms256m","-Xmx256m","-classpath",getCurrentClasspath(),TaskManagerTestEntryPoint.class.getName(),String.valueOf(jobManagerPort),String.valueOf(taskManagerPort)};
+    ProcessBuilder bld=new ProcessBuilder(command);
+    taskManagerProcess=bld.start();
+    new PipeForwarder(taskManagerProcess.getErrorStream(),processOutput);
+    String taskManagerActorName=String.format("akka.tcp://flink@%s:%d/user/%s","127.0.0.1",taskManagerPort,TASK_MANAGER_ACTOR_NAME);
+    ActorRef taskManagerRef=null;
+    for (int i=0; i < 20; i++) {
+      try {
+        taskManagerRef=TaskManager.getTaskManagerRemoteReference(taskManagerActorName,jmActorSystem,new FiniteDuration(5,TimeUnit.SECONDS));
+        break;
+      }
+ catch (      Throwable t) {
+      }
+      Thread.sleep(500);
+    }
+    assertTrue("TaskManager process died",isProcessAlive(taskManagerProcess));
+    assertTrue("TaskManager process did not launch the TaskManager properly",taskManagerRef != null);
+    taskManagerRef.tell(PoisonPill.getInstance(),ActorRef.noSender());
+{
+      long now=System.currentTimeMillis();
+      long deadline=now + 5000;
+      while (now < deadline && isProcessAlive(taskManagerProcess)) {
+        Thread.sleep(100);
+        now=System.currentTimeMillis();
+      }
+    }
+    assertFalse("TaskManager process did not terminate upon actor death",isProcessAlive(taskManagerProcess));
+    int returnCode=taskManagerProcess.exitValue();
+    assertEquals("TaskManager died, but not because of the process reaper",TaskManager.RUNTIME_FAILURE_RETURN_CODE(),returnCode);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    printProcessLog(processOutput.toString());
+    fail(e.getMessage());
+  }
+catch (  Error e) {
+    e.printStackTrace();
+    printProcessLog(processOutput.toString());
+    throw e;
+  }
+ finally {
+    if (taskManagerProcess != null) {
+      taskManagerProcess.destroy();
+    }
+    if (jmActorSystem != null) {
+      jmActorSystem.shutdown();
+    }
+  }
+}
