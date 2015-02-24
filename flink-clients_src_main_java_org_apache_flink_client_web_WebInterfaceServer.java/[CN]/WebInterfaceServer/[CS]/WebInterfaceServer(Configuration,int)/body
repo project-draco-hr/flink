@@ -1,9 +1,8 @@
 {
-  Configuration config=GlobalConfiguration.getConfiguration();
-  if (nepheleConfig == null) {
-    nepheleConfig=config;
+  if (config == null) {
+    config=GlobalConfiguration.getConfiguration();
   }
-  String basePath=nepheleConfig.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
+  String basePath=config.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,"");
   File tmpDir;
   File uploadDir;
   File planDumpDir;
@@ -13,29 +12,23 @@
   }
   String tmpDirPath=config.getString(ConfigConstants.WEB_TMP_DIR_KEY,ConfigConstants.DEFAULT_WEB_TMP_DIR);
   tmpDir=new File(tmpDirPath);
-  if (tmpDir.isAbsolute()) {
-  }
- else {
+  if (!tmpDir.isAbsolute()) {
     tmpDir=new File(basePath + "/" + tmpDirPath);
   }
   String uploadDirPath=config.getString(ConfigConstants.WEB_JOB_UPLOAD_DIR_KEY,ConfigConstants.DEFAULT_WEB_JOB_STORAGE_DIR);
   uploadDir=new File(uploadDirPath);
-  if (uploadDir.isAbsolute()) {
-  }
- else {
+  if (!uploadDir.isAbsolute()) {
     uploadDir=new File(basePath + "/" + uploadDirPath);
   }
   String planDumpDirPath=config.getString(ConfigConstants.WEB_PLAN_DUMP_DIR_KEY,ConfigConstants.DEFAULT_WEB_PLAN_DUMP_DIR);
   planDumpDir=new File(planDumpDirPath);
-  if (planDumpDir.isAbsolute()) {
-  }
- else {
+  if (!planDumpDir.isAbsolute()) {
     planDumpDir=new File(basePath + "/" + planDumpDirPath);
   }
   if (LOG.isInfoEnabled()) {
-    LOG.info("Setting up web frontend server, using web-root directory '" + webRootDir.toExternalForm() + "'.");
+    LOG.info("Setting up web client server, using web-root directory '" + webRootDir.toExternalForm() + "'.");
     LOG.info("Web frontend server will store temporary files in '" + tmpDir.getAbsolutePath() + "', uploaded jobs in '"+ uploadDir.getAbsolutePath()+ "', plan-json-dumps in '"+ planDumpDir.getAbsolutePath()+ "'.");
-    LOG.info("Web-frontend will submit jobs to nephele job-manager on " + config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT)+ ".");
+    LOG.info("Web client will submit jobs to JobManager at " + config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) + ", port "+ config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT)+ ".");
   }
   server=new Server(port);
   checkAndCreateDirectories(tmpDir,true);
@@ -45,10 +38,9 @@
   ServletContextHandler servletContext=new ServletContextHandler(ServletContextHandler.SESSIONS);
   servletContext.setContextPath("/");
   servletContext.addServlet(new ServletHolder(new PactJobJSONServlet(uploadDir)),"/pactPlan");
-  servletContext.addServlet(new ServletHolder(new JobsInfoServlet(nepheleConfig)),"/jobsInfo");
   servletContext.addServlet(new ServletHolder(new PlanDisplayServlet(jobManagerWebPort)),"/showPlan");
   servletContext.addServlet(new ServletHolder(new JobsServlet(uploadDir,tmpDir,"launch.html")),"/jobs");
-  servletContext.addServlet(new ServletHolder(new JobSubmissionServlet(nepheleConfig,uploadDir,planDumpDir)),"/runJob");
+  servletContext.addServlet(new ServletHolder(new JobSubmissionServlet(config,uploadDir,planDumpDir)),"/runJob");
   ResourceHandler pactPlanHandler=new ResourceHandler();
   pactPlanHandler.setDirectoriesListed(false);
   pactPlanHandler.setResourceBase(planDumpDir.getAbsolutePath());

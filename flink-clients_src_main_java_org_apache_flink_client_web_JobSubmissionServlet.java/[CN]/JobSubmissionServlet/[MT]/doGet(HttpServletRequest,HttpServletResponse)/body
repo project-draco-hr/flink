@@ -19,7 +19,7 @@
       showErrorPage(resp,"The jar file + '" + jarFile.getPath() + "' does not exist.");
       return;
     }
-    List<String> params=null;
+    List<String> params;
     try {
       params=tokenizeArguments(args);
     }
@@ -44,7 +44,7 @@
         break;
       }
     }
-    String[] options=params.isEmpty() ? new String[0] : (String[])params.toArray(new String[params.size()]);
+    String[] options=params.isEmpty() ? new String[0] : params.toArray(new String[params.size()]);
     PackagedProgram program;
     FlinkPlan optPlan;
     Client client;
@@ -55,7 +55,7 @@
  else {
         program=new PackagedProgram(jarFile,assemblerClass,options);
       }
-      client=new Client(nepheleConfig,program.getUserCodeClassLoader());
+      client=new Client(config,program.getUserCodeClassLoader());
       optPlan=client.getOptimizedPlan(program,parallelism);
       if (optPlan == null) {
         throw new Exception("The optimized plan could not be produced.");
@@ -94,7 +94,7 @@ catch (    Throwable t) {
       return;
     }
     if (show) {
-      Long uid=null;
+      Long uid;
       do {
         uid=Math.abs(this.rand.nextLong());
       }
@@ -110,16 +110,21 @@ catch (    Throwable t) {
         jsonGen.dumpOptimizerPlanAsJSON((OptimizedPlan)optPlan,jsonFile);
       }
       if (!suspend) {
-        try {
-          client.run(program,(OptimizedPlan)optPlan,false);
-        }
- catch (        Throwable t) {
-          LOG.error("Error submitting job to the job-manager.",t);
-          showErrorPage(resp,t.getMessage());
-          return;
-        }
+        if (optPlan instanceof OptimizedPlan) {
+          try {
+            client.run(program,(OptimizedPlan)optPlan,false);
+          }
+ catch (          Throwable t) {
+            LOG.error("Error submitting job to the job-manager.",t);
+            showErrorPage(resp,t.getMessage());
+            return;
+          }
  finally {
-          program.deleteExtractedLibraries();
+            program.deleteExtractedLibraries();
+          }
+        }
+ else {
+          throw new RuntimeException("Not implemented for Streaming Job plans");
         }
       }
  else {
@@ -174,7 +179,7 @@ catch (        Throwable t) {
       return;
     }
     try {
-      Client client=new Client(nepheleConfig,getClass().getClassLoader());
+      Client client=new Client(config,getClass().getClassLoader());
       client.run(job,false);
     }
  catch (    Exception ex) {
