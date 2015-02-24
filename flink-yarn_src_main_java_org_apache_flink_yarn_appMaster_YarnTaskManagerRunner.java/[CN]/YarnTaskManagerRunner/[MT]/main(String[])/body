@@ -1,12 +1,27 @@
 {
-  Map<String,String> envs=System.getenv();
+  EnvironmentInformation.logEnvironmentInfo(LOG,"YARN TaskManager");
+  EnvironmentInformation.checkJavaVersion();
+  final Configuration configuration;
+  try {
+    configuration=TaskManager.parseArgsAndLoadConfig(args);
+  }
+ catch (  Throwable t) {
+    LOG.error(t.getMessage(),t);
+    System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
+    return;
+  }
+  final Map<String,String> envs=System.getenv();
   final String yarnClientUsername=envs.get(FlinkYarnClient.ENV_CLIENT_USERNAME);
   final String localDirs=envs.get(Environment.LOCAL_DIRS.key());
-  final String[] newArgs=Arrays.copyOf(args,args.length + 2);
-  newArgs[newArgs.length - 2]="--tempDir";
-  newArgs[newArgs.length - 1]=localDirs;
-  LOG.info("Setting log path " + localDirs);
-  LOG.info("YARN daemon runs as '" + UserGroupInformation.getCurrentUser().getShortUserName() + "' setting"+ " user to execute Flink TaskManager to '"+ yarnClientUsername+ "'");
+  String flinkTempDirs=configuration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,null);
+  if (flinkTempDirs == null) {
+    LOG.info("Setting directories for temporary file " + localDirs);
+    configuration.setString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,localDirs);
+  }
+ else {
+    LOG.info("Overriding YARN's temporary file directories with those " + "specified in the Flink config: " + flinkTempDirs);
+  }
+  LOG.info("YARN daemon runs as '" + UserGroupInformation.getCurrentUser().getShortUserName() + "' setting user to execute Flink TaskManager to '"+ yarnClientUsername+ "'");
   UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
   for (  Token<? extends TokenIdentifier> toks : UserGroupInformation.getCurrentUser().getTokens()) {
     ugi.addToken(toks);
@@ -14,11 +29,11 @@
   ugi.doAs(new PrivilegedAction<Object>(){
     @Override public Object run(){
       try {
-        Tuple2<ActorSystem,ActorRef> tuple=YarnUtils.startActorSystemAndTaskManager(newArgs);
-        tuple._1().awaitTermination();
+        TaskManager.runTaskManager(configuration,YarnTaskManager.class);
       }
- catch (      Exception e) {
-        LOG.error("Error while running the TaskManager",e);
+ catch (      Throwable t) {
+        LOG.error("Error while starting the TaskManager",t);
+        System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
       }
       return null;
     }
