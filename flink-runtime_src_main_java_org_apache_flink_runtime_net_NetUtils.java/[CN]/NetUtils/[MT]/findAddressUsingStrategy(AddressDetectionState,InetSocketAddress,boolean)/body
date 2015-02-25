@@ -1,0 +1,39 @@
+{
+  final byte[] targetAddressBytes=targetAddress.getAddress().getAddress();
+  Enumeration<NetworkInterface> e=NetworkInterface.getNetworkInterfaces();
+  while (e.hasMoreElements()) {
+    NetworkInterface netInterface=e.nextElement();
+    Enumeration<InetAddress> ee=netInterface.getInetAddresses();
+    while (ee.hasMoreElements()) {
+      InetAddress interfaceAddress=ee.nextElement();
+switch (strategy) {
+case ADDRESS:
+        if (hasCommonPrefix(targetAddressBytes,interfaceAddress.getAddress())) {
+          LOG.debug("Target address {} and local address {} share prefix - trying to connect.",targetAddress,interfaceAddress);
+          if (tryToConnect(interfaceAddress,targetAddress,strategy.getTimeout(),logging)) {
+            return interfaceAddress;
+          }
+        }
+      break;
+case FAST_CONNECT:
+case SLOW_CONNECT:
+    LOG.debug("Trying to connect to {} from local address {} with timeout {}",targetAddress,interfaceAddress,strategy.getTimeout());
+  if (tryToConnect(interfaceAddress,targetAddress,strategy.getTimeout(),logging)) {
+    return interfaceAddress;
+  }
+break;
+case HEURISTIC:
+if (LOG.isDebugEnabled()) {
+LOG.debug("Checking address {} using heuristics: linkLocal: {} loopback: {}",interfaceAddress,interfaceAddress.isLinkLocalAddress(),interfaceAddress.isLoopbackAddress());
+}
+if (interfaceAddress instanceof Inet4Address && !interfaceAddress.isLinkLocalAddress() && !interfaceAddress.isLoopbackAddress()) {
+return interfaceAddress;
+}
+break;
+default :
+throw new RuntimeException("Unsupported strategy: " + strategy);
+}
+}
+}
+return null;
+}
