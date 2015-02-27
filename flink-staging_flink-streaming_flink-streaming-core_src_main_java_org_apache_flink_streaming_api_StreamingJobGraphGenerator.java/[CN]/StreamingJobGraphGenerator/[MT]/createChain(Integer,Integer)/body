@@ -1,23 +1,22 @@
 {
   if (!builtVertices.contains(startNode)) {
     List<Tuple2<Integer,Integer>> transitiveOutEdges=new ArrayList<Tuple2<Integer,Integer>>();
-    List<Integer> chainableOutputs=new ArrayList<Integer>();
-    List<Integer> nonChainableOutputs=new ArrayList<Integer>();
+    List<StreamEdge> chainableOutputs=new ArrayList<StreamEdge>();
+    List<StreamEdge> nonChainableOutputs=new ArrayList<StreamEdge>();
     for (    StreamEdge outEdge : streamGraph.getOutEdges(current)) {
-      Integer outID=outEdge.getTargetVertex();
-      if (isChainable(current,outID)) {
-        chainableOutputs.add(outID);
+      if (isChainable(outEdge)) {
+        chainableOutputs.add(outEdge);
       }
  else {
-        nonChainableOutputs.add(outID);
+        nonChainableOutputs.add(outEdge);
       }
     }
-    for (    Integer chainable : chainableOutputs) {
-      transitiveOutEdges.addAll(createChain(startNode,chainable));
+    for (    StreamEdge chainable : chainableOutputs) {
+      transitiveOutEdges.addAll(createChain(startNode,chainable.getTargetVertex()));
     }
-    for (    Integer nonChainable : nonChainableOutputs) {
-      transitiveOutEdges.add(new Tuple2<Integer,Integer>(current,nonChainable));
-      createChain(nonChainable,nonChainable);
+    for (    StreamEdge nonChainable : nonChainableOutputs) {
+      transitiveOutEdges.add(new Tuple2<Integer,Integer>(current,nonChainable.getTargetVertex()));
+      createChain(nonChainable.getTargetVertex(),nonChainable.getTargetVertex());
     }
     chainedNames.put(current,createChainedName(current,chainableOutputs));
     StreamConfig config=current.equals(startNode) ? createProcessingVertex(startNode) : new StreamConfig(new Configuration());
@@ -25,6 +24,8 @@
     if (current.equals(startNode)) {
       config.setChainStart();
       config.setOutEdgesInOrder(transitiveOutEdges);
+      config.setOutEdges(streamGraph.getOutEdges(current));
+      config.setInEdges(streamGraph.getInEdges(current));
       for (      Tuple2<Integer,Integer> edge : transitiveOutEdges) {
         connect(startNode,edge);
       }
