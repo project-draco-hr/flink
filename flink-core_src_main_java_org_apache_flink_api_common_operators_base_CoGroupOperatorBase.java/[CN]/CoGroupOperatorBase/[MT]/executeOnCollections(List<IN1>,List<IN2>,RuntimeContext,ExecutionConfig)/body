@@ -3,7 +3,6 @@
   TypeInformation<IN2> inputType2=getOperatorInfo().getSecondInputType();
   int[] inputKeys1=getKeyColumns(0);
   int[] inputKeys2=getKeyColumns(1);
-  boolean objectReuseDisabled=!executionConfig.isObjectReuseEnabled();
   boolean[] inputDirections1=new boolean[inputKeys1.length];
   boolean[] inputDirections2=new boolean[inputKeys2.length];
   Arrays.fill(inputDirections1,true);
@@ -42,12 +41,12 @@
     System.arraycopy(groupSortDirections,0,allSortDirections,inputKeys2.length,groupSortDirections.length);
     inputSortComparator2=getTypeComparator(executionConfig,inputType2,allSortKeys,allSortDirections);
   }
-  CoGroupSortListIterator<IN1,IN2> coGroupIterator=new CoGroupSortListIterator<IN1,IN2>(input1,inputSortComparator1,inputComparator1,inputSerializer1,input2,inputSortComparator2,inputComparator2,inputSerializer2,objectReuseDisabled);
+  CoGroupSortListIterator<IN1,IN2> coGroupIterator=new CoGroupSortListIterator<IN1,IN2>(input1,inputSortComparator1,inputComparator1,inputSerializer1,input2,inputSortComparator2,inputComparator2,inputSerializer2);
   CoGroupFunction<IN1,IN2,OUT> function=userFunction.getUserCodeObject();
   FunctionUtils.setFunctionRuntimeContext(function,ctx);
   FunctionUtils.openFunction(function,parameters);
   List<OUT> result=new ArrayList<OUT>();
-  Collector<OUT> resultCollector=objectReuseDisabled ? new CopyingListCollector<OUT>(result,getOperatorInfo().getOutputType().createSerializer(executionConfig)) : new ListCollector<OUT>(result);
+  Collector<OUT> resultCollector=new CopyingListCollector<OUT>(result,getOperatorInfo().getOutputType().createSerializer(executionConfig));
   while (coGroupIterator.next()) {
     function.coGroup(coGroupIterator.getValues1(),coGroupIterator.getValues2(),resultCollector);
   }
