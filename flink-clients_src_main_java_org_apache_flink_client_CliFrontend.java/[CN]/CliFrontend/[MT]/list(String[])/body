@@ -1,69 +1,59 @@
 {
-  CommandLine line;
+  LOG.info("Running 'list' command.");
+  ListOptions options;
   try {
-    line=parser.parse(LIST_OPTIONS,args,false);
-    evaluateGeneralOptions(line);
+    options=CliFrontendParser.parseListCommand(args);
   }
- catch (  MissingOptionException e) {
+ catch (  CliArgsException e) {
     return handleArgException(e);
   }
-catch (  MissingArgumentException e) {
-    return handleArgException(e);
+catch (  Throwable t) {
+    return handleError(t);
   }
-catch (  UnrecognizedOptionException e) {
-    return handleArgException(e);
-  }
-catch (  Exception e) {
-    return handleError(e);
-  }
-  if (printHelp) {
-    printHelpForList();
+  if (options.isPrintHelp()) {
+    CliFrontendParser.printHelpForList();
     return 0;
   }
-  boolean running=line.hasOption(RUNNING_OPTION.getOpt());
-  boolean scheduled=line.hasOption(SCHEDULED_OPTION.getOpt());
+  boolean running=options.getRunning();
+  boolean scheduled=options.getScheduled();
   if (!running && !scheduled) {
     running=true;
     scheduled=true;
   }
   try {
-    ActorRef jobManager=getJobManager(line,getGlobalConfiguration());
-    if (jobManager == null) {
-      return 1;
-    }
-    final Future<Object> response=Patterns.ask(jobManager,JobManagerMessages.getRequestRunningJobs(),new Timeout(getAkkaTimeout()));
+    ActorRef jobManager=getJobManager(options);
+    LOG.info("Connecting to JobManager to retrieve list of jobs");
+    Future<Object> response=Patterns.ask(jobManager,JobManagerMessages.getRequestRunningJobsStatus(),new Timeout(askTimeout));
     Object result;
     try {
-      result=Await.result(response,getAkkaTimeout());
+      result=Await.result(response,askTimeout);
     }
- catch (    Exception exception) {
-      throw new IOException("Could not retrieve running jobs from job manager.",exception);
+ catch (    Exception e) {
+      throw new Exception("Could not retrieve running jobs from the JobManager.",e);
     }
-    if (!(result instanceof RunningJobs)) {
-      throw new RuntimeException("ReqeustRunningJobs requires a response of type " + "RunningJobs. Instead the response is of type " + result.getClass() + ".");
-    }
- else {
-      Iterable<ExecutionGraph> jobs=((RunningJobs)result).asJavaIterable();
-      ArrayList<ExecutionGraph> runningJobs=null;
-      ArrayList<ExecutionGraph> scheduledJobs=null;
+    if (result instanceof RunningJobsStatus) {
+      LOG.info("Successfully retrieved list of jobs");
+      List<JobStatusMessage> jobs=((RunningJobsStatus)result).getStatusMessages();
+      ArrayList<JobStatusMessage> runningJobs=null;
+      ArrayList<JobStatusMessage> scheduledJobs=null;
       if (running) {
-        runningJobs=new ArrayList<ExecutionGraph>();
+        runningJobs=new ArrayList<JobStatusMessage>();
       }
       if (scheduled) {
-        scheduledJobs=new ArrayList<ExecutionGraph>();
+        scheduledJobs=new ArrayList<JobStatusMessage>();
       }
-      for (      ExecutionGraph rj : jobs) {
-        if (running && rj.getState().equals(JobStatus.RUNNING)) {
+      for (      JobStatusMessage rj : jobs) {
+        if (running && rj.getJobState().equals(JobStatus.RUNNING)) {
           runningJobs.add(rj);
         }
-        if (scheduled && rj.getState().equals(JobStatus.CREATED)) {
+        if (scheduled && rj.getJobState().equals(JobStatus.CREATED)) {
           scheduledJobs.add(rj);
         }
       }
       SimpleDateFormat df=new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
-      Comparator<ExecutionGraph> njec=new Comparator<ExecutionGraph>(){
-        @Override public int compare(        ExecutionGraph o1,        ExecutionGraph o2){
-          return (int)(o1.getStatusTimestamp(o1.getState()) - o2.getStatusTimestamp(o2.getState()));
+      Comparator<JobStatusMessage> njec=new Comparator<JobStatusMessage>(){
+        @Override public int compare(        JobStatusMessage o1,        JobStatusMessage o2){
+          return (int)(o1.getStartTime() - o2.getStartTime());
         }
       }
 ;
@@ -74,8 +64,8 @@ catch (  Exception e) {
  else {
           Collections.sort(runningJobs,njec);
           System.out.println("------------------------ Running Jobs ------------------------");
-          for (          ExecutionGraph rj : runningJobs) {
-            System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+          for (          JobStatusMessage rj : runningJobs) {
+            System.out.println(df.format(new Date(rj.getStartTime())) + " : " + rj.getJobId()+ " : "+ rj.getJobName());
           }
           System.out.println("--------------------------------------------------------------");
         }
@@ -87,13 +77,16 @@ catch (  Exception e) {
  else {
           Collections.sort(scheduledJobs,njec);
           System.out.println("----------------------- Scheduled Jobs -----------------------");
-          for (          ExecutionGraph rj : scheduledJobs) {
-            System.out.println(df.format(new Date(rj.getStatusTimestamp(rj.getState()))) + " : " + rj.getJobID().toString()+ " : "+ rj.getJobName());
+          for (          JobStatusMessage rj : scheduledJobs) {
+            System.out.println(df.format(new Date(rj.getStartTime())) + " : " + rj.getJobId()+ " : "+ rj.getJobName());
           }
           System.out.println("--------------------------------------------------------------");
         }
       }
       return 0;
+    }
+ else {
+      throw new Exception("ReqeustRunningJobs requires a response of type " + "RunningJobs. Instead the response is of type " + result.getClass() + ".");
     }
   }
  catch (  Throwable t) {

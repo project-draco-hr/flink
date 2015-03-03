@@ -1,55 +1,34 @@
 {
-  CommandLine line;
+  LOG.info("Running 'info' command.");
+  InfoOptions options;
   try {
-    line=parser.parse(INFO_OPTIONS,args,false);
-    evaluateGeneralOptions(line);
+    options=CliFrontendParser.parseInfoCommand(args);
   }
- catch (  MissingOptionException e) {
+ catch (  CliArgsException e) {
     return handleArgException(e);
-  }
-catch (  MissingArgumentException e) {
-    return handleArgException(e);
-  }
-catch (  UnrecognizedOptionException e) {
-    return handleArgException(e);
-  }
-catch (  Exception e) {
-    return handleError(e);
-  }
-  if (printHelp) {
-    printHelpForInfo();
-    return 0;
-  }
-  PackagedProgram program;
-  try {
-    program=buildProgram(line);
-  }
- catch (  FileNotFoundException e) {
-    return handleError(e);
-  }
-catch (  ProgramInvocationException e) {
-    return handleError(e);
   }
 catch (  Throwable t) {
     return handleError(t);
   }
-  int parallelism=-1;
-  if (line.hasOption(PARALLELISM_OPTION.getOpt())) {
-    String parString=line.getOptionValue(PARALLELISM_OPTION.getOpt());
-    try {
-      parallelism=Integer.parseInt(parString);
-    }
- catch (    NumberFormatException e) {
-      System.out.println("The value " + parString + " is invalid for the degree of parallelism.");
-      return 1;
-    }
-    if (parallelism <= 0) {
-      System.out.println("Invalid value for the degree-of-parallelism. Parallelism must be greater than zero.");
-      return 1;
-    }
+  if (options.isPrintHelp()) {
+    CliFrontendParser.printHelpForInfo();
+    return 0;
+  }
+  if (options.getJarFilePath() == null) {
+    return handleArgException(new CliArgsException("The program JAR file was not specified."));
+  }
+  PackagedProgram program;
+  try {
+    LOG.info("Building program from JAR file");
+    program=buildProgram(options);
+  }
+ catch (  Throwable t) {
+    return handleError(t);
   }
   try {
-    Client client=getClient(line,program.getUserCodeClassLoader(),program.getMainClassName());
+    int parallelism=options.getParallelism();
+    LOG.info("Creating program plan dump");
+    Client client=getClient(options,program.getUserCodeClassLoader(),program.getMainClassName());
     String jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
     if (jsonPlan != null) {
       System.out.println("----------------------- Execution Plan -----------------------");
@@ -57,7 +36,7 @@ catch (  Throwable t) {
       System.out.println("--------------------------------------------------------------");
     }
  else {
-      System.out.println("JSON plan could not be compiled.");
+      System.out.println("JSON plan could not be generated.");
     }
     return 0;
   }

@@ -1,0 +1,52 @@
+{
+  this.configDirectory=new File(configDir);
+  LOG.info("Using configuration directory " + this.configDirectory.getAbsolutePath());
+  LOG.info("Trying to load configuration file");
+  GlobalConfiguration.loadConfiguration(this.configDirectory.getAbsolutePath());
+  this.config=GlobalConfiguration.getConfiguration();
+  File propertiesFile=new File(configDirectory,YARN_PROPERTIES_FILE);
+  if (propertiesFile.exists()) {
+    logAndSysout("Found YARN properties file " + propertiesFile.getAbsolutePath());
+    Properties yarnProperties=new Properties();
+    try {
+      InputStream is=new FileInputStream(propertiesFile);
+      try {
+        yarnProperties.load(is);
+      }
+  finally {
+        is.close();
+      }
+    }
+ catch (    IOException e) {
+      throw new Exception("Cannot read the YARN properties file",e);
+    }
+    String propDegree=yarnProperties.getProperty(YARN_PROPERTIES_DOP);
+    if (propDegree != null) {
+      try {
+        int paraDegree=Integer.parseInt(propDegree);
+        this.config.setInteger(ConfigConstants.DEFAULT_PARALLELIZATION_DEGREE_KEY,paraDegree);
+        logAndSysout("YARN properties set default parallelism to " + paraDegree);
+      }
+ catch (      NumberFormatException e) {
+        throw new Exception("Error while parsing the YARN properties: " + "Property " + YARN_PROPERTIES_DOP + " is not an integer.");
+      }
+    }
+    String address=yarnProperties.getProperty(YARN_PROPERTIES_JOBMANAGER_KEY);
+    if (address != null) {
+      try {
+        jobManagerAddress=parseJobManagerAddress(address);
+      }
+ catch (      Exception e) {
+        throw new Exception("YARN properties contain an invalid entry for JobManager address.",e);
+      }
+      logAndSysout("Using JobManager address from YARN properties " + jobManagerAddress);
+    }
+    String dynamicPropertiesEncoded=yarnProperties.getProperty(YARN_PROPERTIES_DYNAMIC_PROPERTIES_STRING);
+    List<Tuple2<String,String>> dynamicProperties=getDynamicProperties(dynamicPropertiesEncoded);
+    for (    Tuple2<String,String> dynamicProperty : dynamicProperties) {
+      this.config.setString(dynamicProperty.f0,dynamicProperty.f1);
+    }
+  }
+  this.askTimeout=AkkaUtils.getTimeout(config);
+  this.lookupTimeout=AkkaUtils.getLookupTimeout(config);
+}

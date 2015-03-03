@@ -1,12 +1,14 @@
 {
   final boolean[] callme={false};
   try {
-    String[] arguments={"-j",getTestJarPath(),"-c",TEST_JAR_CLASSLOADERTEST_CLASS,"--verbose","true","arg1","arg2"};
-    CommandLine line=new PosixParser().parse(CliFrontend.getProgramSpecificOptions(new Options()),arguments,true);
-    CliFrontend frontend=new CliFrontend();
-    Object result=frontend.buildProgram(line);
-    assertTrue(result instanceof PackagedProgram);
-    PackagedProgram prog=spy((PackagedProgram)result);
+    String[] arguments={"-c",TEST_JAR_CLASSLOADERTEST_CLASS,getTestJarPath(),"true","arg1","arg2"};
+    String[] progArgs={"true","arg1","arg2"};
+    InfoOptions options=CliFrontendParser.parseInfoCommand(arguments);
+    assertEquals(getTestJarPath(),options.getJarFilePath());
+    assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,options.getEntryPointClassName());
+    assertArrayEquals(progArgs,options.getProgramArgs());
+    CliFrontend frontend=new CliFrontend(CliFrontendTestUtils.getConfigDir());
+    PackagedProgram prog=spy(frontend.buildProgram(options));
     ClassLoader testClassLoader=new ClassLoader(prog.getUserCodeClassLoader()){
       @Override public Class<?> loadClass(      String name) throws ClassNotFoundException {
         if ("org.apache.hadoop.hive.ql.io.RCFileInputFormat".equals(name)) {
@@ -20,8 +22,8 @@
     }
 ;
     when(prog.getUserCodeClassLoader()).thenReturn(testClassLoader);
-    Assert.assertArrayEquals(new String[]{"--verbose","true","arg1","arg2"},prog.getArguments());
-    Assert.assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,prog.getMainClassName());
+    assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,prog.getMainClassName());
+    assertArrayEquals(progArgs,prog.getArguments());
     Configuration c=new Configuration();
     c.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,"devil");
     Client cli=new Client(c,getClass().getClassLoader());

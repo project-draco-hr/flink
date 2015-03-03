@@ -1,30 +1,26 @@
 {
-  CommandLine line;
+  LOG.info("Running 'run' command.");
+  RunOptions options;
   try {
-    line=parser.parse(RUN_OPTIONS,args,true);
-    evaluateGeneralOptions(line);
+    options=CliFrontendParser.parseRunCommand(args);
   }
- catch (  MissingOptionException e) {
+ catch (  CliArgsException e) {
     return handleArgException(e);
   }
-catch (  MissingArgumentException e) {
-    return handleArgException(e);
+catch (  Throwable t) {
+    return handleError(t);
   }
-catch (  UnrecognizedOptionException e) {
-    return handleArgException(e);
-  }
-catch (  Exception e) {
-    return handleError(e);
-  }
-  if (printHelp) {
-    printHelpForRun();
+  if (options.isPrintHelp()) {
+    CliFrontendParser.printHelpForRun();
     return 0;
   }
+  if (options.getJarFilePath() == null) {
+    return handleArgException(new CliArgsException("The program JAR file was not specified."));
+  }
   PackagedProgram program;
-  Client client;
   try {
-    program=buildProgram(line);
-    client=getClient(line,program.getUserCodeClassLoader(),program.getMainClassName());
+    LOG.info("Building program from JAR file");
+    program=buildProgram(options);
   }
  catch (  FileNotFoundException e) {
     return handleArgException(e);
@@ -35,36 +31,35 @@ catch (  ProgramInvocationException e) {
 catch (  Throwable t) {
     return handleError(t);
   }
-  int parallelism=-1;
-  if (line.hasOption(PARALLELISM_OPTION.getOpt())) {
-    String parString=line.getOptionValue(PARALLELISM_OPTION.getOpt());
-    try {
-      parallelism=Integer.parseInt(parString);
-    }
- catch (    NumberFormatException e) {
-      System.out.println("The value " + parString + " is invalid for the degree of parallelism.");
-      return 1;
-    }
-    if (parallelism <= 0) {
-      System.out.println("Invalid value for the degree-of-parallelism. Parallelism must be greater than zero.");
-      return 1;
-    }
-  }
-  int exitCode=executeProgram(program,client,parallelism);
-  if (runInYarnCluster) {
-    List<String> msgs=yarnCluster.getNewMessages();
-    if (msgs != null && msgs.size() > 1) {
-      System.out.println("The following messages were created by the YARN cluster while running the Job:");
-      for (      String msg : msgs) {
-        System.out.println(msg);
+  try {
+    Client client=getClient(options,program.getUserCodeClassLoader(),program.getMainClassName());
+    int parallelism=options.getParallelism();
+    int exitCode=executeProgram(program,client,parallelism);
+    if (yarnCluster != null) {
+      List<String> msgs=yarnCluster.getNewMessages();
+      if (msgs != null && msgs.size() > 1) {
+        logAndSysout("The following messages were created by the YARN cluster while running the Job:");
+        for (        String msg : msgs) {
+          logAndSysout(msg);
+        }
+      }
+      if (yarnCluster.hasFailed()) {
+        logAndSysout("YARN cluster is in failed state!");
+        logAndSysout("YARN Diagnostics: " + yarnCluster.getDiagnostics());
       }
     }
-    if (yarnCluster.hasFailed()) {
-      System.out.println("YARN cluster is in failed state!");
-      System.out.println("YARN Diagnostics: " + yarnCluster.getDiagnostics());
-    }
-    System.out.println("Shutting down YARN cluster");
-    yarnCluster.shutdown();
+    return exitCode;
   }
-  return exitCode;
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+ finally {
+    if (yarnCluster != null) {
+      logAndSysout("Shutting down YARN cluster");
+      yarnCluster.shutdown();
+    }
+    if (program != null) {
+      program.deleteExtractedLibraries();
+    }
+  }
 }

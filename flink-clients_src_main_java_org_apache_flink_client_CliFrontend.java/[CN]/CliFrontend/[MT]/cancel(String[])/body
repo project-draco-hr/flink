@@ -1,26 +1,20 @@
 {
-  CommandLine line;
+  LOG.info("Running 'cancel' command.");
+  CancelOptions options;
   try {
-    line=parser.parse(CANCEL_OPTIONS,args,false);
-    evaluateGeneralOptions(line);
+    options=CliFrontendParser.parseCancelCommand(args);
   }
- catch (  MissingOptionException e) {
+ catch (  CliArgsException e) {
     return handleArgException(e);
   }
-catch (  MissingArgumentException e) {
-    return handleArgException(e);
+catch (  Throwable t) {
+    return handleError(t);
   }
-catch (  UnrecognizedOptionException e) {
-    return handleArgException(e);
-  }
-catch (  Exception e) {
-    return handleError(e);
-  }
-  if (printHelp) {
-    printHelpForCancel();
+  if (options.isPrintHelp()) {
+    CliFrontendParser.printHelpForCancel();
     return 0;
   }
-  String[] cleanedArgs=line.getArgs();
+  String[] cleanedArgs=options.getArgs();
   JobID jobId;
   if (cleanedArgs.length > 0) {
     String jobIdString=cleanedArgs[0];
@@ -28,27 +22,26 @@ catch (  Exception e) {
       jobId=new JobID(StringUtils.hexStringToByte(jobIdString));
     }
  catch (    Exception e) {
+      LOG.error("Error: The value for the Job ID is not a valid ID.");
       System.out.println("Error: The value for the Job ID is not a valid ID.");
       return 1;
     }
   }
  else {
+    LOG.error("Missing JobID in the command line arguments.");
     System.out.println("Error: Specify a Job ID to cancel a job.");
     return 1;
   }
   try {
-    ActorRef jobManager=getJobManager(line,getGlobalConfiguration());
-    if (jobManager == null) {
-      return 1;
-    }
-    final Future<Object> response=Patterns.ask(jobManager,new CancelJob(jobId),new Timeout(getAkkaTimeout()));
+    ActorRef jobManager=getJobManager(options);
+    Future<Object> response=Patterns.ask(jobManager,new CancelJob(jobId),new Timeout(askTimeout));
     try {
-      Await.ready(response,getAkkaTimeout());
+      Await.result(response,askTimeout);
+      return 0;
     }
- catch (    Exception exception) {
-      throw new IOException("Canceling the job with job ID " + jobId + " failed.",exception);
+ catch (    Exception e) {
+      throw new Exception("Canceling the job with ID " + jobId + " failed.",e);
     }
-    return 0;
   }
  catch (  Throwable t) {
     return handleError(t);
