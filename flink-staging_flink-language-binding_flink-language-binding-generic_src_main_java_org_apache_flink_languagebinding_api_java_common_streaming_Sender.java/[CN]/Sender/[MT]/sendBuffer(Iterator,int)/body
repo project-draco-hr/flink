@@ -1,0 +1,33 @@
+{
+  fileBuffer.clear();
+  Object value;
+  ByteBuffer bb;
+  if (serializer[group] == null) {
+    value=i.next();
+    serializer[group]=getSerializer(value);
+    bb=serializer[group].serialize(value);
+    if (bb.remaining() > MAPPED_FILE_SIZE) {
+      throw new RuntimeException("Serialized object does not fit into a single buffer.");
+    }
+    fileBuffer.put(bb);
+  }
+  if (saved[group] != null) {
+    fileBuffer.put(saved[group]);
+    saved[group]=null;
+  }
+  while (i.hasNext() && saved[group] == null) {
+    value=i.next();
+    bb=serializer[group].serialize(value);
+    if (bb.remaining() > MAPPED_FILE_SIZE) {
+      throw new RuntimeException("Serialized object does not fit into a single buffer.");
+    }
+    if (bb.remaining() <= fileBuffer.remaining()) {
+      fileBuffer.put(bb);
+    }
+ else {
+      saved[group]=bb;
+    }
+  }
+  int size=fileBuffer.position();
+  return size;
+}

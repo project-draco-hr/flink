@@ -1,0 +1,24 @@
+{
+  TypeInformation<IN1> inputType1=getOperatorInfo().getFirstInputType();
+  TypeInformation<IN2> inputType2=getOperatorInfo().getSecondInputType();
+  int[] inputKeys1=getKeyColumns(0);
+  int[] inputKeys2=getKeyColumns(1);
+  boolean[] inputSortDirections1=new boolean[inputKeys1.length];
+  boolean[] inputSortDirections2=new boolean[inputKeys2.length];
+  Arrays.fill(inputSortDirections1,true);
+  Arrays.fill(inputSortDirections2,true);
+  final TypeSerializer<IN1> inputSerializer1=inputType1.createSerializer(executionConfig);
+  final TypeSerializer<IN2> inputSerializer2=inputType2.createSerializer(executionConfig);
+  final TypeComparator<IN1> inputComparator1=getTypeComparator(executionConfig,inputType1,inputKeys1,inputSortDirections1);
+  final TypeComparator<IN2> inputComparator2=getTypeComparator(executionConfig,inputType2,inputKeys2,inputSortDirections2);
+  SimpleListIterable<IN1> iterator1=new SimpleListIterable<IN1>(input1,inputComparator1,inputSerializer1);
+  SimpleListIterable<IN2> iterator2=new SimpleListIterable<IN2>(input2,inputComparator2,inputSerializer2);
+  CoGroupFunction<IN1,IN2,OUT> function=userFunction.getUserCodeObject();
+  FunctionUtils.setFunctionRuntimeContext(function,ctx);
+  FunctionUtils.openFunction(function,parameters);
+  List<OUT> result=new ArrayList<OUT>();
+  Collector<OUT> resultCollector=new CopyingListCollector<OUT>(result,getOperatorInfo().getOutputType().createSerializer(executionConfig));
+  function.coGroup(iterator1,iterator2,resultCollector);
+  FunctionUtils.closeFunction(function);
+  return result;
+}

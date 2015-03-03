@@ -1,0 +1,30 @@
+{
+  try {
+    int broadcastCount=config.getInteger(PLANBINDER_CONFIG_BCVAR_COUNT,0);
+    String[] names=new String[broadcastCount];
+    for (int x=0; x < names.length; x++) {
+      names[x]=config.getString(PLANBINDER_CONFIG_BCVAR_NAME_PREFIX + x,null);
+    }
+    socket.receive(packet);
+    checkForError();
+    int size=sender.sendRecord(broadcastCount);
+    sendWriteNotification(size,false);
+    for (    String name : names) {
+      Iterator bcv=function.getRuntimeContext().getBroadcastVariable(name).iterator();
+      socket.receive(packet);
+      checkForError();
+      size=sender.sendRecord(name);
+      sendWriteNotification(size,false);
+      while (bcv.hasNext() || sender.hasRemaining(0)) {
+        socket.receive(packet);
+        checkForError();
+        size=sender.sendBuffer(bcv,0);
+        sendWriteNotification(size,bcv.hasNext() || sender.hasRemaining(0));
+      }
+      sender.reset();
+    }
+  }
+ catch (  SocketTimeoutException ste) {
+    throw new RuntimeException("External process for task " + function.getRuntimeContext().getTaskName() + " stopped responding."+ msg);
+  }
+}
