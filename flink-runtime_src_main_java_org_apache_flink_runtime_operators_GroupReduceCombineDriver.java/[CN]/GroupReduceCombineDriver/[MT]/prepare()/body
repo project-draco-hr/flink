@@ -1,10 +1,11 @@
 {
-  if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_GROUP_COMBINE) {
-    throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for "+ "group reduce combinder.");
+  final DriverStrategy driverStrategy=this.taskContext.getTaskConfig().getDriverStrategy();
+  if (driverStrategy != DriverStrategy.SORTED_GROUP_COMBINE) {
+    throw new Exception("Invalid strategy " + driverStrategy + " for "+ "group reduce combinder.");
   }
   this.memManager=this.taskContext.getMemoryManager();
   final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
-  final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
+  final TypeSerializerFactory<IN> serializerFactory=this.taskContext.getInputSerializer(0);
   this.serializer=serializerFactory.getSerializer();
   this.sortingComparator=this.taskContext.getDriverComparator(0);
   this.groupingComparator=this.taskContext.getDriverComparator(1);
@@ -12,10 +13,10 @@
   this.output=this.taskContext.getOutputCollector();
   final List<MemorySegment> memory=this.memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
   if (this.sortingComparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
-    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.sortingComparator,memory);
+    this.sorter=new FixedLengthRecordSorter<IN>(this.serializer,this.sortingComparator,memory);
   }
  else {
-    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.sortingComparator.duplicate(),memory);
+    this.sorter=new NormalizedKeySorter<IN>(this.serializer,this.sortingComparator.duplicate(),memory);
   }
   ExecutionConfig executionConfig=taskContext.getExecutionConfig();
   this.objectReuseEnabled=executionConfig.isObjectReuseEnabled();

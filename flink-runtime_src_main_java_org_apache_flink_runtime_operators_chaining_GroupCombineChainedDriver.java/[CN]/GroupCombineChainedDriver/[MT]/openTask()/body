@@ -1,0 +1,22 @@
+{
+  final Configuration stubConfig=this.config.getStubParameters();
+  RegularPactTask.openUserCode(this.reducer,stubConfig);
+  this.memManager=this.parent.getEnvironment().getMemoryManager();
+  final int numMemoryPages=memManager.computeNumberOfPages(this.config.getRelativeMemoryDriver());
+  final TypeSerializerFactory<IN> serializerFactory=this.config.getInputSerializer(0,this.userCodeClassLoader);
+  final TypeComparatorFactory<IN> sortingComparatorFactory=this.config.getDriverComparator(0,this.userCodeClassLoader);
+  final TypeComparatorFactory<IN> groupingComparatorFactory=this.config.getDriverComparator(1,this.userCodeClassLoader);
+  this.serializer=serializerFactory.getSerializer();
+  this.sortingComparator=sortingComparatorFactory.createComparator();
+  this.groupingComparator=groupingComparatorFactory.createComparator();
+  final List<MemorySegment> memory=this.memManager.allocatePages(this.parent,numMemoryPages);
+  if (this.sortingComparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+    this.sorter=new FixedLengthRecordSorter<IN>(this.serializer,this.sortingComparator,memory);
+  }
+ else {
+    this.sorter=new NormalizedKeySorter<IN>(this.serializer,this.sortingComparator.duplicate(),memory);
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("SynchronousChainedCombineDriver object reuse: " + (this.objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+  }
+}
