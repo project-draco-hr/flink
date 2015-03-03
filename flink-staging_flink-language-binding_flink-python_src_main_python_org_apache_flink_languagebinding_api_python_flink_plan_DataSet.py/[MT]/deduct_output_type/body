@@ -1,0 +1,41 @@
+def deduct_output_type(dataset):
+    skip = set([_Identifier.GROUP, _Identifier.SORT, _Identifier.UNION])
+    source = set([_Identifier.SOURCE_CSV, _Identifier.SOURCE_TEXT, _Identifier.SOURCE_VALUE])
+    default = set([_Identifier.CROSS, _Identifier.CROSSH, _Identifier.CROSST, _Identifier.JOINT, _Identifier.JOINH, _Identifier.JOIN])
+    while True:
+        dataset_type = dataset[_Fields.IDENTIFIER]
+        if (dataset_type in skip):
+            dataset = dataset[_Fields.PARENT]
+            continue
+        if (dataset_type in source):
+            if (dataset_type == _Identifier.SOURCE_TEXT):
+                return STRING
+            if (dataset_type == _Identifier.SOURCE_VALUE):
+                return dataset[_Fields.VALUES][0]
+            if (dataset_type == _Identifier.SOURCE_CSV):
+                return dataset[_Fields.TYPES]
+        if (dataset_type == _Identifier.PROJECTION):
+            return tuple([deduct_output_type(dataset[_Fields.PARENT])[k] for k in dataset[_Fields.KEYS]])
+        if (dataset_type in default):
+            if (dataset[_Fields.OPERATOR] is not None):
+                return dataset[_Fields.TYPES]
+            if (len(dataset[_Fields.PROJECTIONS]) == 0):
+                return (deduct_output_type(dataset[_Fields.PARENT]), deduct_output_type(dataset[_Fields.OTHER]))
+            else:
+                t1 = deduct_output_type(dataset[_Fields.PARENT])
+                t2 = deduct_output_type(dataset[_Fields.OTHER])
+                out_type = []
+                for prj in dataset[_Fields.PROJECTIONS]:
+                    if (len(prj[1]) == 0):
+                        if (prj[0] == 'first'):
+                            out_type.append(t1)
+                        else:
+                            out_type.append(t2)
+                    else:
+                        for key in prj[1]:
+                            if (prj[0] == 'first'):
+                                out_type.append(t1[key])
+                            else:
+                                out_type.append(t2[key])
+                return tuple(out_type)
+        return dataset[_Fields.TYPES]

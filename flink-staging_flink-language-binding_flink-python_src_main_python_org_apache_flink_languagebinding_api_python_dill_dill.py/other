@@ -1,0 +1,205 @@
+'\ndill: a utility for serialization of python objects\n\nBased on code written by Oren Tirosh and Armin Ronacher.\nExtended to a (near) full set of the builtin types (in types module),\nand coded to the pickle interface, by <mmckerns@caltech.edu>.\nInitial port to python3 by Jonathan Dobson, continued by mmckerns.\nTest against "all" python types (Std. Lib. CH 1-15 @ 2.7) by mmckerns.\nTest against CH16+ Std. Lib. ... TBD.\n'
+__all__ = ['dump', 'dumps', 'load', 'loads', 'dump_session', 'load_session', 'Pickler', 'Unpickler', 'register', 'copy', 'pickle', 'pickles', 'HIGHEST_PROTOCOL', 'DEFAULT_PROTOCOL', 'PicklingError', 'UnpicklingError', 'HANDLE_FMODE', 'CONTENTS_FMODE', 'FILE_FMODE']
+import logging
+log = logging.getLogger('dill')
+log.addHandler(logging.StreamHandler())
+import os
+import sys
+diff = None
+_use_diff = False
+PY3 = (sys.version_info[0] == 3)
+if PY3:
+    import builtins as __builtin__
+    from pickle import _Pickler as StockPickler, _Unpickler as StockUnpickler
+    from _thread import LockType
+    from types import CodeType, FunctionType, MethodType, GeneratorType, TracebackType, FrameType, ModuleType, BuiltinMethodType
+    BufferType = memoryview
+    ClassType = type
+    EllipsisType = type(Ellipsis)
+    NotImplementedType = type(NotImplemented)
+    SliceType = slice
+    TypeType = type
+    XRangeType = range
+    DictProxyType = type(object.__dict__)
+else:
+    import __builtin__
+    from pickle import Pickler as StockPickler, Unpickler as StockUnpickler
+    from thread import LockType
+    from types import CodeType, FunctionType, ClassType, MethodType, GeneratorType, DictProxyType, XRangeType, SliceType, TracebackType, NotImplementedType, EllipsisType, FrameType, ModuleType, BufferType, BuiltinMethodType, TypeType
+from pickle import HIGHEST_PROTOCOL, PicklingError, UnpicklingError
+try:
+    from pickle import DEFAULT_PROTOCOL
+except ImportError:
+    DEFAULT_PROTOCOL = HIGHEST_PROTOCOL
+import __main__ as _main_module
+import marshal
+import gc
+from weakref import ReferenceType, ProxyType, CallableProxyType
+from functools import partial
+from operator import itemgetter, attrgetter
+if (sys.hexversion >= 33882352):
+    from types import MemberDescriptorType, GetSetDescriptorType
+if (sys.hexversion < 50528256):
+    FileNotFoundError = IOError
+try:
+    import ctypes
+    HAS_CTYPES = True
+except ImportError:
+    HAS_CTYPES = False
+try:
+    from numpy import ufunc as NumpyUfuncType
+    from numpy import ndarray as NumpyArrayType
+
+    def ndarrayinstance(obj):
+        try:
+            if (not isinstance(obj, NumpyArrayType)):
+                return False
+        except ReferenceError:
+            return False
+        NumpyInstance = NumpyArrayType((0,), 'int8')
+        if ((id(obj.__reduce_ex__) == id(NumpyInstance.__reduce_ex__)) and (id(obj.__reduce__) == id(NumpyInstance.__reduce__))):
+            return True
+        return False
+except ImportError:
+    NumpyUfuncType = None
+    NumpyArrayType = None
+
+    def ndarrayinstance(obj):
+        return False
+if PY3:
+    CellType = type((lambda x: (lambda y: x))(0).__closure__[0])
+else:
+    CellType = type((lambda x: (lambda y: x))(0).func_closure[0])
+WrapperDescriptorType = type(type.__repr__)
+MethodDescriptorType = type(type.__dict__['mro'])
+MethodWrapperType = type([].__repr__)
+PartialType = type(partial(int, base=2))
+SuperType = type(super(Exception, TypeError()))
+ItemGetterType = type(itemgetter(0))
+AttrGetterType = type(attrgetter('__repr__'))
+FileType = type(open(os.devnull, 'rb', buffering=0))
+TextWrapperType = type(open(os.devnull, 'r', buffering=(-1)))
+BufferedRandomType = type(open(os.devnull, 'r+b', buffering=(-1)))
+BufferedReaderType = type(open(os.devnull, 'rb', buffering=(-1)))
+BufferedWriterType = type(open(os.devnull, 'wb', buffering=(-1)))
+try:
+    from _pyio import open as _open
+    PyTextWrapperType = type(_open(os.devnull, 'r', buffering=(-1)))
+    PyBufferedRandomType = type(_open(os.devnull, 'r+b', buffering=(-1)))
+    PyBufferedReaderType = type(_open(os.devnull, 'rb', buffering=(-1)))
+    PyBufferedWriterType = type(_open(os.devnull, 'wb', buffering=(-1)))
+except ImportError:
+    PyTextWrapperType = PyBufferedRandomType = PyBufferedReaderType = PyBufferedWriterType = None
+try:
+    from cStringIO import StringIO, InputType, OutputType
+except ImportError:
+    if PY3:
+        from io import BytesIO as StringIO
+    else:
+        from StringIO import StringIO
+    InputType = OutputType = None
+try:
+    (__IPYTHON__ is True)
+    ExitType = None
+    singletontypes = ['exit', 'quit', 'get_ipython']
+except NameError:
+    try:
+        ExitType = type(exit)
+    except NameError:
+        ExitType = None
+    singletontypes = []
+HANDLE_FMODE = 0
+CONTENTS_FMODE = 1
+FILE_FMODE = 2
+'\ndef dispatch_table():\n    """get the dispatch table of registered types"""\n    return Pickler.dispatch\n'
+pickle_dispatch_copy = StockPickler.dispatch.copy()
+_reverse_typemap = dict(_create_typemap())
+_reverse_typemap.update({'CellType': CellType, 'WrapperDescriptorType': WrapperDescriptorType, 'MethodDescriptorType': MethodDescriptorType, 'MethodWrapperType': MethodWrapperType, 'PartialType': PartialType, 'SuperType': SuperType, 'ItemGetterType': ItemGetterType, 'AttrGetterType': AttrGetterType, 'FileType': FileType, 'BufferedRandomType': BufferedRandomType, 'BufferedReaderType': BufferedReaderType, 'BufferedWriterType': BufferedWriterType, 'TextWrapperType': TextWrapperType, 'PyBufferedRandomType': PyBufferedRandomType, 'PyBufferedReaderType': PyBufferedReaderType, 'PyBufferedWriterType': PyBufferedWriterType, 'PyTextWrapperType': PyTextWrapperType, })
+if ExitType:
+    _reverse_typemap['ExitType'] = ExitType
+if InputType:
+    _reverse_typemap['InputType'] = InputType
+    _reverse_typemap['OutputType'] = OutputType
+if PY3:
+    _typemap = dict(((v, k) for (k, v) in _reverse_typemap.items()))
+else:
+    _typemap = dict(((v, k) for (k, v) in _reverse_typemap.iteritems()))
+if HAS_CTYPES:
+    ctypes.pythonapi.PyCell_New.restype = ctypes.py_object
+    ctypes.pythonapi.PyCell_New.argtypes = [ctypes.py_object]
+
+    def _create_cell(contents):
+        return ctypes.pythonapi.PyCell_New(contents)
+if PyTextWrapperType:
+
+    @register(PyBufferedRandomType)
+    @register(PyBufferedReaderType)
+    @register(PyBufferedWriterType)
+    @register(PyTextWrapperType)
+    def save_file(pickler, obj):
+        log.info(('Fi: %s' % obj))
+        return _save_file(pickler, obj, _open)
+if InputType:
+
+    @register(InputType)
+    def save_stringi(pickler, obj):
+        log.info(('Io: %s' % obj))
+        if obj.closed:
+            value = ''
+            position = None
+        else:
+            value = obj.getvalue()
+            position = obj.tell()
+        pickler.save_reduce(_create_stringi, (value, position, obj.closed), obj=obj)
+        return
+
+    @register(OutputType)
+    def save_stringo(pickler, obj):
+        log.info(('Io: %s' % obj))
+        if obj.closed:
+            value = ''
+            position = None
+        else:
+            value = obj.getvalue()
+            position = obj.tell()
+        pickler.save_reduce(_create_stringo, (value, position, obj.closed), obj=obj)
+        return
+if (sys.hexversion >= 33882352):
+
+    @register(MemberDescriptorType)
+    @register(GetSetDescriptorType)
+    @register(MethodDescriptorType)
+    @register(WrapperDescriptorType)
+    def save_wrapper_descriptor(pickler, obj):
+        log.info(('Wr: %s' % obj))
+        pickler.save_reduce(_getattr, (obj.__objclass__, obj.__name__, obj.__repr__()), obj=obj)
+        return
+
+    @register(MethodWrapperType)
+    def save_instancemethod(pickler, obj):
+        log.info(('Mw: %s' % obj))
+        pickler.save_reduce(getattr, (obj.__self__, obj.__name__), obj=obj)
+        return
+else:
+
+    @register(MethodDescriptorType)
+    @register(WrapperDescriptorType)
+    def save_wrapper_descriptor(pickler, obj):
+        log.info(('Wr: %s' % obj))
+        pickler.save_reduce(_getattr, (obj.__objclass__, obj.__name__, obj.__repr__()), obj=obj)
+        return
+if HAS_CTYPES:
+
+    @register(CellType)
+    def save_cell(pickler, obj):
+        log.info(('Ce: %s' % obj))
+        pickler.save_reduce(_create_cell, (obj.cell_contents,), obj=obj)
+        return
+if NumpyArrayType:
+
+    @register(NumpyUfuncType)
+    def save_numpy_ufunc(pickler, obj):
+        log.info(('Nu: %s' % obj))
+        StockPickler.save_global(pickler, obj)
+        return
+del diff, _use_diff, use_diff

@@ -1,0 +1,21 @@
+"\nExtensions to python's 'inspect' module, which can be used\nto retrieve information from live python objects. The methods\ndefined in this module are augmented to facilitate access to \nsource code of interactively defined functions and classes,\nas well as provide access to source code for objects defined\nin a file.\n"
+from __future__ import absolute_import
+__all__ = ['findsource', 'getsourcelines', 'getsource', 'indent', 'outdent', '_wrap', 'dumpsource', 'getname', '_namespace', 'getimport', '_importable', 'importable', 'isdynamic', 'isfrommain']
+import re
+import linecache
+from tokenize import TokenError
+from inspect import ismodule, isclass, ismethod, isfunction, istraceback
+from inspect import isframe, iscode, getfile, getmodule, getsourcefile
+from inspect import getblock, indentsize, isbuiltin
+from .dill import PY3
+__globals__ = globals()
+__locals__ = locals()
+wrap2 = ('\ndef _wrap(f):\n    """ encapsulate a function and it\'s __import__ """\n    def func(*args, **kwds):\n        try:\n            #_ = eval(getsource(f, force=True)) #FIXME: safer, but not as robust\n            exec getimportable(f, alias=\'_\') in %s, %s\n        except:\n            raise ImportError(\'cannot import name \' + f.__name__)\n        return _(*args, **kwds)\n    func.__name__ = f.__name__\n    func.__doc__ = f.__doc__\n    return func\n' % ('__globals__', '__locals__'))
+wrap3 = ('\ndef _wrap(f):\n    """ encapsulate a function and it\'s __import__ """\n    def func(*args, **kwds):\n        try:\n            #_ = eval(getsource(f, force=True)) #FIXME: safer, but not as robust\n            exec(getimportable(f, alias=\'_\'), %s, %s)\n        except:\n            raise ImportError(\'cannot import name \' + f.__name__)\n        return _(*args, **kwds)\n    func.__name__ = f.__name__\n    func.__doc__ = f.__doc__\n    return func\n' % ('__globals__', '__locals__'))
+if PY3:
+    exec wrap3
+else:
+    exec wrap2
+del wrap2, wrap3
+_get_name = getname
+getblocks_from_history = getblocks

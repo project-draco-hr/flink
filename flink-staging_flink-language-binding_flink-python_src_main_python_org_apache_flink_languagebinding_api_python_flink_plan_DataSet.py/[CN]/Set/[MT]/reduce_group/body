@@ -1,0 +1,21 @@
+def reduce_group(self, operator, types, combinable=False):
+    '\n        Applies a GroupReduce transformation.\n\n        The transformation calls a GroupReduceFunction once for each group of the DataSet, or one when applied on a\n        non-grouped DataSet.\n        The GroupReduceFunction can iterate over all elements of the DataSet and\n        emit any number of output elements including none.\n\n        :param operator: The GroupReduceFunction that is applied on the DataSet.\n        :param types: The type of the resulting DataSet.\n        :return:A GroupReduceOperator that represents the reduced DataSet.\n        '
+    if isinstance(operator, TYPES.FunctionType):
+        f = operator
+        operator = GroupReduceFunction()
+        operator.reduce = f
+    child = dict()
+    child_set = OperatorSet(self._env, child)
+    child[_Fields.IDENTIFIER] = _Identifier.GROUPREDUCE
+    child[_Fields.PARENT] = self._info
+    child[_Fields.OPERATOR] = copy.deepcopy(operator)
+    child[_Fields.OPERATOR]._combine = False
+    child[_Fields.META] = ((str(inspect.getmodule(operator)) + '|') + str(operator.__class__.__name__))
+    child[_Fields.TYPES] = types
+    child[_Fields.COMBINE] = combinable
+    child[_Fields.COMBINEOP] = operator
+    child[_Fields.COMBINEOP]._combine = True
+    child[_Fields.NAME] = 'PythonGroupReduce'
+    self._info[_Fields.CHILDREN].append(child)
+    self._env._sets.append(child)
+    return child_set

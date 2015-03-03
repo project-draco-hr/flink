@@ -1,0 +1,54 @@
+def _find_chains(self):
+    udf = set([_Identifier.MAP, _Identifier.FLATMAP, _Identifier.FILTER, _Identifier.MAPPARTITION, _Identifier.GROUPREDUCE, _Identifier.REDUCE, _Identifier.COGROUP, _Identifier.CROSS, _Identifier.CROSSH, _Identifier.CROSST, _Identifier.JOIN, _Identifier.JOINH, _Identifier.JOINT])
+    chainable = set([_Identifier.MAP, _Identifier.FILTER, _Identifier.FLATMAP, _Identifier.GROUPREDUCE, _Identifier.REDUCE])
+    multi_input = set([_Identifier.JOIN, _Identifier.JOINH, _Identifier.JOINT, _Identifier.CROSS, _Identifier.CROSSH, _Identifier.CROSST, _Identifier.COGROUP, _Identifier.UNION])
+    x = (len(self._sets) - 1)
+    while (x > (-1)):
+        child = self._sets[x]
+        child_type = child[_Fields.IDENTIFIER]
+        if (child_type in chainable):
+            parent = child[_Fields.PARENT]
+            parent_type = parent[_Fields.IDENTIFIER]
+            if (len(parent[_Fields.SINKS]) == 0):
+                if ((child_type == _Identifier.GROUPREDUCE) or (child_type == _Identifier.REDUCE)):
+                    if child[_Fields.COMBINE]:
+                        while ((parent_type == _Identifier.GROUP) or (parent_type == _Identifier.SORT)):
+                            parent = parent[_Fields.PARENT]
+                            parent_type = parent[_Fields.IDENTIFIER]
+                        if ((parent_type in udf) and (len(parent[_Fields.CHILDREN]) == 1)):
+                            if (parent[_Fields.OPERATOR] is not None):
+                                function = child[_Fields.COMBINEOP]
+                                meta = ((str(inspect.getmodule(function)) + '|') + str(function.__class__.__name__))
+                                parent[_Fields.OPERATOR]._chain(_dump(function), meta)
+                                child[_Fields.COMBINE] = False
+                                parent[_Fields.NAME] += ' -> PythonCombine'
+                                for bcvar in child[_Fields.BCVARS]:
+                                    bcvar_copy = copy.deepcopy(bcvar)
+                                    bcvar_copy[_Fields.PARENT] = parent
+                                    self._broadcast.append(bcvar_copy)
+                elif ((parent_type in udf) and (len(parent[_Fields.CHILDREN]) == 1)):
+                    parent_op = parent[_Fields.OPERATOR]
+                    if (parent_op is not None):
+                        function = child[_Fields.OPERATOR]
+                        meta = ((str(inspect.getmodule(function)) + '|') + str(function.__class__.__name__))
+                        parent_op._chain(_dump(function), meta)
+                        parent[_Fields.NAME] += (' -> ' + child[_Fields.NAME])
+                        parent[_Fields.TYPES] = child[_Fields.TYPES]
+                        for grand_child in child[_Fields.CHILDREN]:
+                            if (grand_child[_Fields.IDENTIFIER] in multi_input):
+                                if (grand_child[_Fields.PARENT][_Fields.ID] == child[_Fields.ID]):
+                                    grand_child[_Fields.PARENT] = parent
+                                else:
+                                    grand_child[_Fields.OTHER] = parent
+                            else:
+                                grand_child[_Fields.PARENT] = parent
+                                parent[_Fields.CHILDREN].append(grand_child)
+                        parent[_Fields.CHILDREN].remove(child)
+                        for sink in child[_Fields.SINKS]:
+                            sink[_Fields.PARENT] = parent
+                            parent[_Fields.SINKS].append(sink)
+                        for bcvar in child[_Fields.BCVARS]:
+                            bcvar[_Fields.PARENT] = parent
+                            parent[_Fields.BCVARS].append(bcvar)
+                        self._remove_set(child)
+        x -= 1

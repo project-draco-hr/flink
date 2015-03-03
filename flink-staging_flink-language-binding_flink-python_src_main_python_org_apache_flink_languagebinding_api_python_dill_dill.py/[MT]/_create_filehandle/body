@@ -1,0 +1,70 @@
+def _create_filehandle(name, mode, position, closed, open, strictio, fmode, fdata):
+    names = {'<stdin>': sys.__stdin__, '<stdout>': sys.__stdout__, '<stderr>': sys.__stderr__, }
+    if (name in list(names.keys())):
+        f = names[name]
+    elif (name == '<tmpfile>'):
+        f = os.tmpfile()
+    elif (name == '<fdopen>'):
+        import tempfile
+        f = tempfile.TemporaryFile(mode)
+    else:
+        if (('x' in mode) and (sys.hexversion < 50528256)):
+            raise ValueError(("invalid mode: '%s'" % mode))
+        if (not os.path.exists(name)):
+            if strictio:
+                raise FileNotFoundError(("[Errno 2] No such file or directory: '%s'" % name))
+            elif (('r' in mode) and (fmode != FILE_FMODE)):
+                name = '<fdopen>'
+            current_size = 0
+        else:
+            current_size = os.path.getsize(name)
+        if (position > current_size):
+            if strictio:
+                raise ValueError('invalid buffer size')
+            elif (fmode == CONTENTS_FMODE):
+                position = current_size
+        try:
+            if (fmode == FILE_FMODE):
+                f = open(name, (mode if ('w' in mode) else 'w'))
+                f.write(fdata)
+                if ('w' not in mode):
+                    f.close()
+                    f = open(name, mode)
+            elif (name == '<fdopen>'):
+                import tempfile
+                f = tempfile.TemporaryFile(mode)
+            elif ((fmode == CONTENTS_FMODE) and (('w' in mode) or ('x' in mode))):
+                flags = os.O_CREAT
+                if ('+' in mode):
+                    flags |= os.O_RDWR
+                else:
+                    flags |= os.O_WRONLY
+                f = os.fdopen(os.open(name, flags), mode)
+                if PY3:
+                    r = getattr(f, 'buffer', f)
+                    r = getattr(r, 'raw', r)
+                    r.name = name
+                else:
+
+
+                    class FILE(ctypes.Structure):
+                        _fields_ = [('refcount', ctypes.c_long), ('type_obj', ctypes.py_object), ('file_pointer', ctypes.c_voidp), ('name', ctypes.py_object)]
+
+
+                    class PyObject(ctypes.Structure):
+                        _fields_ = [('ob_refcnt', ctypes.c_int), ('ob_type', ctypes.py_object)]
+                    if (not HAS_CTYPES):
+                        raise ImportError("No module named 'ctypes'")
+                    ctypes.cast(id(f), ctypes.POINTER(FILE)).contents.name = name
+                    ctypes.cast(id(name), ctypes.POINTER(PyObject)).contents.ob_refcnt += 1
+                assert (f.name == name)
+            else:
+                f = open(name, mode)
+        except (IOError, FileNotFoundError):
+            err = sys.exc_info()[1]
+            raise UnpicklingError(err)
+    if closed:
+        f.close()
+    elif ((position >= 0) and (fmode != HANDLE_FMODE)):
+        f.seek(position)
+    return f

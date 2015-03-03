@@ -1,0 +1,20 @@
+import sys
+from flink.plan.Environment import get_environment
+from flink.plan.Constants import INT, STRING
+from flink.functions.FlatMapFunction import FlatMapFunction
+from flink.functions.GroupReduceFunction import GroupReduceFunction
+if (__name__ == '__main__'):
+    env = get_environment()
+    if ((len(sys.argv) != 1) and (len(sys.argv) != 3)):
+        sys.exit('Usage: ./bin/pyflink.sh WordCount[ - <text path> <result path>]')
+    if (len(sys.argv) == 3):
+        data = env.read_text(sys.argv[1])
+    else:
+        data = env.from_elements('hello', 'world', 'hello', 'car', 'tree', 'data', 'hello')
+    result = data.flat_map(Tokenizer(), (INT, STRING)).group_by(1).reduce_group(Adder(), (INT, STRING), combinable=True)
+    if (len(sys.argv) == 3):
+        result.write_csv(sys.argv[2])
+    else:
+        result.output()
+    env.set_degree_of_parallelism(1)
+    env.execute(local=True)

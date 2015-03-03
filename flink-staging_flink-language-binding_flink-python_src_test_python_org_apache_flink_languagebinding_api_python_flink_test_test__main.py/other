@@ -1,0 +1,42 @@
+from flink.plan.Environment import get_environment
+from flink.functions.MapFunction import MapFunction
+from flink.functions.FlatMapFunction import FlatMapFunction
+from flink.functions.FilterFunction import FilterFunction
+from flink.functions.MapPartitionFunction import MapPartitionFunction
+from flink.functions.ReduceFunction import ReduceFunction
+from flink.functions.CrossFunction import CrossFunction
+from flink.functions.JoinFunction import JoinFunction
+from flink.functions.GroupReduceFunction import GroupReduceFunction
+from flink.functions.CoGroupFunction import CoGroupFunction
+from flink.plan.Constants import INT, STRING, FLOAT, BOOL, Order
+if (__name__ == '__main__'):
+    env = get_environment()
+    d1 = env.from_elements(1, 6, 12)
+    d2 = env.from_elements((1, 0.5, 'hello', True), (2, 0.4, 'world', False))
+    d3 = env.from_elements(('hello',), ('world',))
+    d4 = env.from_elements((1, 0.5, 'hello', True), (1, 0.4, 'hello', False), (1, 0.5, 'hello', True), (2, 0.4, 'world', False))
+    d5 = env.from_elements((4.4, 4.3, 1), (4.3, 4.4, 1), (4.2, 4.1, 3), (4.1, 4.1, 3))
+    d1.map((lambda x: (x * x)), INT).map(Mapper(), INT).map_partition(Verify([1, 1296, 20736], 'Map'), STRING).output()
+    d1.map(Mapper(), INT).map((lambda x: (x * x)), INT).map_partition(Verify([1, 1296, 20736], 'Chained Lambda'), STRING).output()
+    d1.filter(Filter(5)).filter(Filter(8)).map_partition(Verify([12], 'Filter'), STRING).output()
+    d1.flat_map(FlatMap(), INT).flat_map(FlatMap(), INT).map_partition(Verify([1, 2, 2, 4, 6, 12, 12, 24, 12, 24, 24, 48], 'FlatMap'), STRING).output()
+    d1.map_partition(MapPartition(), INT).map_partition(Verify([2, 12, 24], 'MapPartition'), STRING).output()
+    d1.reduce(Reduce()).map_partition(Verify([19], 'AllReduce'), STRING).output()
+    d4.group_by(2).reduce(Reduce2()).map_partition(Verify([(3, 1.4, 'hello', True), (2, 0.4, 'world', False)], 'CombineReduce'), STRING).output()
+    d4.map(Id(), (INT, FLOAT, STRING, BOOL)).group_by(2).reduce(Reduce2()).map_partition(Verify([(3, 1.4, 'hello', True), (2, 0.4, 'world', False)], 'ChainedReduce'), STRING).output()
+    d1.map(MapperBcv(), INT).with_broadcast_set('test', d2).map_partition(Verify([1, 6, 12], 'Broadcast'), STRING).output()
+    d1.cross(d2).using(Cross(), (INT, BOOL)).map_partition(Verify([(1, True), (1, False), (6, True), (6, False), (12, True), (12, False)], 'Cross'), STRING).output()
+    d1.cross(d3).map_partition(Verify([(1, ('hello',)), (1, ('world',)), (6, ('hello',)), (6, ('world',)), (12, ('hello',)), (12, ('world',))], 'Default Cross'), STRING).output()
+    d2.cross(d3).project_second(0).project_first(0, 1).map_partition(Verify([('hello', 1, 0.5), ('world', 1, 0.5), ('hello', 2, 0.4), ('world', 2, 0.4)], 'Project Cross'), STRING).output()
+    d2.join(d3).where(2).equal_to(0).using(Join(), STRING).map_partition(Verify(['hello1', 'world0.4'], 'Join'), STRING).output()
+    d2.join(d3).where(2).equal_to(0).project_first(0, 3).project_second(0).map_partition(Verify([(1, True, 'hello'), (2, False, 'world')], 'Project Join'), STRING).output()
+    d2.join(d3).where(2).equal_to(0).map_partition(Verify([((1, 0.5, 'hello', True), ('hello',)), ((2, 0.4, 'world', False), ('world',))], 'Default Join'), STRING).output()
+    d2.project(0, 1).project(2).map_partition(Verify([(1, 0.5, 'hello'), (2, 0.4, 'world')], 'Project'), STRING).output()
+    d2.union(d4).map_partition(Verify2([(1, 0.5, 'hello', True), (2, 0.4, 'world', False), (1, 0.5, 'hello', True), (1, 0.4, 'hello', False), (1, 0.5, 'hello', True), (2, 0.4, 'world', False)], 'Union'), STRING).output()
+    d4.group_by(2).reduce_group(GroupReduce(), (INT, FLOAT, STRING, BOOL), combinable=False).map_partition(Verify([(3, 1.4, 'hello', True), (2, 0.4, 'world', False)], 'AllGroupReduce'), STRING).output()
+    d4.map(Id(), (INT, FLOAT, STRING, BOOL)).group_by(2).reduce_group(GroupReduce(), (INT, FLOAT, STRING, BOOL), combinable=True).map_partition(Verify([(3, 1.4, 'hello', True), (2, 0.4, 'world', False)], 'ChainedGroupReduce'), STRING).output()
+    d4.group_by(2).reduce_group(GroupReduce(), (INT, FLOAT, STRING, BOOL), combinable=True).map_partition(Verify([(3, 1.4, 'hello', True), (2, 0.4, 'world', False)], 'CombineGroupReduce'), STRING).output()
+    d5.group_by(2).sort_group(0, Order.DESCENDING).sort_group(1, Order.ASCENDING).reduce_group(GroupReduce3(), (FLOAT, FLOAT, INT), combinable=True).map_partition(Verify([(4.3, 4.4, 1), (4.1, 4.1, 3)], 'ChainedSortedGroupReduce'), STRING).output()
+    d4.co_group(d5).where(0).equal_to(2).using(CoGroup(), ((INT, FLOAT, STRING, BOOL), (FLOAT, FLOAT, INT))).map_partition(Verify([((1, 0.5, 'hello', True), (4.4, 4.3, 1)), ((1, 0.4, 'hello', False), (4.3, 4.4, 1))], 'CoGroup'), STRING).output()
+    env.set_degree_of_parallelism(1)
+    env.execute(local=True)

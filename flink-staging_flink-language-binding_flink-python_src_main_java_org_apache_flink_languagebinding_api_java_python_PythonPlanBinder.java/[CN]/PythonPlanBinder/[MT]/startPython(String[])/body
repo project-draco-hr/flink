@@ -1,0 +1,42 @@
+{
+  sets=new HashMap();
+  StringBuilder argsBuilder=new StringBuilder();
+  for (  String arg : args) {
+    argsBuilder.append(" ").append(arg);
+  }
+  receiver=new Receiver(null);
+  receiver.open(null);
+  if (usePython3) {
+    try {
+      Runtime.getRuntime().exec(FLINK_PYTHON3_BINARY_PATH);
+    }
+ catch (    IOException ex) {
+      throw new RuntimeException(FLINK_PYTHON3_BINARY_KEY + "=" + FLINK_PYTHON3_BINARY_PATH+ " does not point to a valid python binary.");
+    }
+    process=Runtime.getRuntime().exec(FLINK_PYTHON3_BINARY_PATH + " -B " + FLINK_PYTHON_FILE_PATH+ FLINK_PYTHON_PLAN_NAME+ argsBuilder.toString());
+  }
+ else {
+    try {
+      Runtime.getRuntime().exec(FLINK_PYTHON2_BINARY_PATH);
+    }
+ catch (    IOException ex) {
+      throw new RuntimeException(FLINK_PYTHON2_BINARY_KEY + "=" + FLINK_PYTHON2_BINARY_PATH+ " does not point to a valid python binary.");
+    }
+    process=Runtime.getRuntime().exec(FLINK_PYTHON2_BINARY_PATH + " -B " + FLINK_PYTHON_FILE_PATH+ FLINK_PYTHON_PLAN_NAME+ argsBuilder.toString());
+  }
+  new StreamPrinter(process.getInputStream()).start();
+  new StreamPrinter(process.getErrorStream()).start();
+  try {
+    Thread.sleep(2000);
+  }
+ catch (  InterruptedException ex) {
+  }
+  try {
+    int value=process.exitValue();
+    if (value != 0) {
+      throw new RuntimeException("Plan file caused an error. Check log-files for details.");
+    }
+  }
+ catch (  IllegalThreadStateException ise) {
+  }
+}
