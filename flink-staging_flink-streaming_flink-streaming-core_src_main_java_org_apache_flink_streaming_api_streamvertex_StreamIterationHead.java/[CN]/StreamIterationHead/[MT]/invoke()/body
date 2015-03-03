@@ -1,25 +1,32 @@
 {
   if (LOG.isDebugEnabled()) {
-    LOG.debug("SOURCE {} invoked with instance id {}",getName(),getInstanceID());
+    LOG.debug("Iteration source {} invoked with instance id {}",getName(),getInstanceID());
   }
-  StreamRecord<OUT> nextRecord;
-  List<StreamOutput<OUT>> outputs=new LinkedList<StreamOutput<OUT>>();
-  for (  StreamOutput<?> output : outputHandler.getOutputs()) {
-    outputs.add((StreamOutput<OUT>)output);
-  }
-  while (true) {
-    if (shouldWait) {
-      nextRecord=dataChannel.poll(iterationWaitTime,TimeUnit.MILLISECONDS);
-    }
+  try {
+    StreamRecord<OUT> nextRecord;
+    while (true) {
+      if (shouldWait) {
+        nextRecord=dataChannel.poll(iterationWaitTime,TimeUnit.MILLISECONDS);
+      }
  else {
-      nextRecord=dataChannel.take();
-    }
-    if (nextRecord == null) {
-      break;
-    }
-    for (    StreamOutput<OUT> output : outputs) {
-      output.collect(nextRecord.getObject());
+        nextRecord=dataChannel.take();
+      }
+      if (nextRecord == null) {
+        break;
+      }
+      for (      StreamOutput<?> output : outputs) {
+        ((StreamOutput<OUT>)output).collect(nextRecord.getObject());
+      }
     }
   }
-  outputHandler.flushOutputs();
+ catch (  Exception e) {
+    if (LOG.isErrorEnabled()) {
+      LOG.error("Iteration source failed due to: {}",StringUtils.stringifyException(e));
+    }
+    throw e;
+  }
+ finally {
+    outputHandler.flushOutputs();
+    clearBuffers();
+  }
 }

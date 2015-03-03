@@ -1,3 +1,31 @@
 {
-  outputHandler.invokeUserFunction("TASK",userInvokable);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Task {} invoked with instance id {}",getName(),getInstanceID());
+  }
+  try {
+    userInvokable.setRuntimeContext(context);
+    userInvokable.open(getTaskConfiguration());
+    for (    ChainableInvokable<?,?> invokable : outputHandler.chainedInvokables) {
+      invokable.setRuntimeContext(context);
+      invokable.open(getTaskConfiguration());
+    }
+    userInvokable.invoke();
+    userInvokable.close();
+    for (    ChainableInvokable<?,?> invokable : outputHandler.chainedInvokables) {
+      invokable.close();
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Task {} invoke finished instance id {}",getName(),getInstanceID());
+    }
+  }
+ catch (  Exception e) {
+    if (LOG.isErrorEnabled()) {
+      LOG.error("StreamInvokable failed due to: {}",StringUtils.stringifyException(e));
+    }
+    throw e;
+  }
+ finally {
+    outputHandler.flushOutputs();
+    clearBuffers();
+  }
 }
