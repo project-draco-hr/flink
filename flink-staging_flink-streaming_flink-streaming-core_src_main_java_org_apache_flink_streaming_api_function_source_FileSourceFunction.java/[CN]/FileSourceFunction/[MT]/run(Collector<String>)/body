@@ -1,0 +1,23 @@
+{
+  isRunning=true;
+  final TypeSerializer<String> serializer=typeInfo.createSerializer(getRuntimeContext().getExecutionConfig());
+  final Iterator<InputSplit> splitIterator=getInputSplits();
+  @SuppressWarnings("unchecked") final InputFormat<String,InputSplit> format=(InputFormat<String,InputSplit>)this.inputFormat;
+  try {
+    while (isRunning && splitIterator.hasNext()) {
+      final InputSplit split=splitIterator.next();
+      String record=serializer.createInstance();
+      format.open(split);
+      while (!format.reachedEnd()) {
+        if ((record=format.nextRecord(record)) != null) {
+          collector.collect(record);
+        }
+      }
+    }
+    collector.close();
+  }
+  finally {
+    format.close();
+  }
+  isRunning=false;
+}
