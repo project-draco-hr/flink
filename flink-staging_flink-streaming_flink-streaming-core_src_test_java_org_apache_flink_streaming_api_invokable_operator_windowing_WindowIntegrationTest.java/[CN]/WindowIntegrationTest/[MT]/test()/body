@@ -9,6 +9,7 @@
   inputs.add(10);
   inputs.add(11);
   inputs.add(11);
+  KeySelector<Integer,?> key=new ModKey(2);
   Timestamp<Integer> ts=new Timestamp<Integer>(){
     private static final long serialVersionUID=1L;
     @Override public long getTimestamp(    Integer value){
@@ -18,18 +19,20 @@
 ;
   StreamExecutionEnvironment env=new TestStreamEnvironment(2,MEMORYSIZE);
   DataStream<Integer> source=env.fromCollection(inputs);
-  source.window(Time.of(2,ts)).every(Time.of(3,ts)).sum(0).getDiscretizedStream().addSink(new CentralSink1());
+  source.window(Time.of(3,ts,1)).every(Time.of(2,ts,1)).sum(0).getDiscretizedStream().addSink(new CentralSink1());
   source.window(Time.of(4,ts,1)).groupBy(new ModKey(2)).mapWindow(new IdentityWindowMap()).flatten().addSink(new CentralSink2());
-  KeySelector<Integer,?> key=new ModKey(2);
   source.groupBy(key).window(Time.of(4,ts,1)).sum(0).getDiscretizedStream().addSink(new DistributedSink1());
   source.groupBy(new ModKey(3)).window(Count.of(2)).groupBy(new ModKey(2)).mapWindow(new IdentityWindowMap()).flatten().addSink(new DistributedSink2());
   source.window(Time.of(2,ts)).every(Time.of(3,ts)).min(0).getDiscretizedStream().addSink(new CentralSink3());
   source.groupBy(key).window(Time.of(4,ts,1)).max(0).getDiscretizedStream().addSink(new DistributedSink3());
   source.window(Time.of(5,ts,1)).mapWindow(new IdentityWindowMap()).flatten().addSink(new DistributedSink4());
+  source.window(Time.of(5,ts,1)).every(Time.of(4,ts,1)).sum(0).getDiscretizedStream().addSink(new DistributedSink5());
   env.execute();
   List<StreamWindow<Integer>> expected1=new ArrayList<StreamWindow<Integer>>();
   expected1.add(StreamWindow.fromElements(5));
+  expected1.add(StreamWindow.fromElements(11));
   expected1.add(StreamWindow.fromElements(9));
+  expected1.add(StreamWindow.fromElements(10));
   expected1.add(StreamWindow.fromElements(32));
   validateOutput(expected1,CentralSink1.windows);
   List<StreamWindow<Integer>> expected2=new ArrayList<StreamWindow<Integer>>();
@@ -72,4 +75,9 @@
   expected7.add(StreamWindow.fromElements(10));
   expected7.add(StreamWindow.fromElements(10,11,11));
   validateOutput(expected7,DistributedSink4.windows);
+  List<StreamWindow<Integer>> expected8=new ArrayList<StreamWindow<Integer>>();
+  expected8.add(StreamWindow.fromElements(12));
+  expected8.add(StreamWindow.fromElements(9));
+  expected8.add(StreamWindow.fromElements(32));
+  validateOutput(expected8,DistributedSink5.windows);
 }
