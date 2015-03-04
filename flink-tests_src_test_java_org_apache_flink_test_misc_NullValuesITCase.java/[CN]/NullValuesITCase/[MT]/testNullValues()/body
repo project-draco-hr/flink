@@ -1,0 +1,35 @@
+{
+  ForkableFlinkMiniCluster cluster=null;
+  try {
+    Configuration config=new Configuration();
+    config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,7);
+    cluster=new ForkableFlinkMiniCluster(config,false);
+    ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
+    env.setDegreeOfParallelism(1);
+    DataSet<String> data=env.fromElements("hallo").map(new MapFunction<String,String>(){
+      @Override public String map(      String value) throws Exception {
+        return null;
+      }
+    }
+);
+    data.writeAsText("/tmp/myTest",FileSystem.WriteMode.OVERWRITE);
+    try {
+      env.execute();
+      fail("this should fail due to null values.");
+    }
+ catch (    ProgramInvocationException e) {
+      assertNotNull(e.getCause());
+      assertNotNull(e.getCause().getCause());
+      assertTrue(e.getCause().getCause() instanceof NullPointerException);
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
