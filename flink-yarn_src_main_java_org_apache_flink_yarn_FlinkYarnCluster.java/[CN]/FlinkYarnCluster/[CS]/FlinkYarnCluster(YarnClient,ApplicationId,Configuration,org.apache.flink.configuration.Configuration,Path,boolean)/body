@@ -1,0 +1,44 @@
+{
+  this.akkaDuration=AkkaUtils.getTimeout(flinkConfig);
+  this.akkaTimeout=Timeout.durationToTimeout(akkaDuration);
+  this.yarnClient=yarnClient;
+  this.hadoopConfig=hadoopConfig;
+  this.sessionFilesDir=sessionFilesDir;
+  this.applicationId=appId;
+  this.detached=detached;
+  intialAppReport=yarnClient.getApplicationReport(appId);
+  String jobManagerHost=intialAppReport.getHost();
+  int jobManagerPort=intialAppReport.getRpcPort();
+  this.jobManagerAddress=new InetSocketAddress(jobManagerHost,jobManagerPort);
+  if (!detached) {
+    LOG.info("Start actor system.");
+    InetAddress ownHostname=NetUtils.resolveAddress(jobManagerAddress);
+    actorSystem=AkkaUtils.createActorSystem(flinkConfig,new Some(new Tuple2<String,Integer>(ownHostname.getCanonicalHostName(),0)));
+    LOG.info("Start application client.");
+    applicationClient=actorSystem.actorOf(Props.create(ApplicationClient.class),"applicationClient");
+    applicationClient.tell(new Messages.LocalRegisterClient(this.jobManagerAddress),applicationClient);
+    Runtime.getRuntime().addShutdownHook(clientShutdownHook);
+    actorRunner=new Thread(new Runnable(){
+      @Override public void run(){
+        actorSystem.awaitTermination();
+        try {
+          ApplicationReport appReport=yarnClient.getApplicationReport(appId);
+          LOG.info("Application " + appId + " finished with state "+ appReport.getYarnApplicationState()+ " and final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
+          if (appReport.getYarnApplicationState() == YarnApplicationState.FAILED || appReport.getYarnApplicationState() == YarnApplicationState.KILLED) {
+            LOG.warn("Application failed. Diagnostics " + appReport.getDiagnostics());
+            LOG.warn("If log aggregation is activated in the Hadoop cluster, we recommend to retrieve " + "the full application log using this command:\n" + "\tyarn logs -applicationId " + appReport.getApplicationId() + "\n"+ "(It sometimes takes a few seconds until the logs are aggregated)");
+          }
+        }
+ catch (        Exception e) {
+          LOG.warn("Error while getting final application report",e);
+        }
+      }
+    }
+);
+    actorRunner.setDaemon(true);
+    actorRunner.start();
+    pollingRunner=new PollingThread(yarnClient,appId);
+    pollingRunner.setDaemon(true);
+    pollingRunner.start();
+  }
+}

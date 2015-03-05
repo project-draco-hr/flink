@@ -1,0 +1,100 @@
+{
+  LOG.info("Starting testTaskManagerFailure()");
+  Runner runner=startWithArgs(new String[]{"-j",flinkUberjar.getAbsolutePath(),"-n","1","-jm","512","-tm","1024","-Dfancy-configuration-value=veryFancy","-Dyarn.maximum-failed-containers=3"},"Number of connected TaskManagers changed to 1. Slots available: 1",RunTypes.YARN_SESSION);
+  Assert.assertEquals(2,getRunningContainers());
+  try {
+    YarnClient yc=YarnClient.createYarnClient();
+    yc.init(yarnConfiguration);
+    yc.start();
+    List<ApplicationReport> apps=yc.getApplications(EnumSet.of(YarnApplicationState.RUNNING));
+    Assert.assertEquals(1,apps.size());
+    String url=apps.get(0).getTrackingUrl();
+    if (!url.endsWith("/")) {
+      url+="/";
+    }
+    if (!url.startsWith("http://")) {
+      url="http://" + url;
+    }
+    LOG.info("Got application URL from YARN {}",url);
+    Assert.assertEquals("{\"taskmanagers\": 1, \"slots\": 1}",getFromHTTP(url + "jobsInfo?get=taskmanagers"));
+    String config=getFromHTTP(url + "setupInfo?get=globalC");
+    JSONObject parsed=new JSONObject(config);
+    Assert.assertEquals("veryFancy",parsed.getString("fancy-configuration-value"));
+    Assert.assertEquals("3",parsed.getString("yarn.maximum-failed-containers"));
+    String logs=getFromHTTP(url + "logInfo");
+    Assert.assertTrue(logs.contains("Starting YARN ApplicationMaster/JobManager (Version"));
+  }
+ catch (  Throwable e) {
+    LOG.warn("Error while running test",e);
+    Assert.fail(e.getMessage());
+  }
+  ContainerId taskManagerContainer=null;
+  NodeManager nodeManager=null;
+  UserGroupInformation remoteUgi=null;
+  NMTokenIdentifier nmIdent=null;
+  try {
+    remoteUgi=UserGroupInformation.getCurrentUser();
+  }
+ catch (  IOException e) {
+    LOG.warn("Unable to get curr user",e);
+    Assert.fail();
+  }
+  for (int nmId=0; nmId < NUM_NODEMANAGERS; nmId++) {
+    NodeManager nm=yarnCluster.getNodeManager(nmId);
+    ConcurrentMap<ContainerId,Container> containers=nm.getNMContext().getContainers();
+    for (    Map.Entry<ContainerId,Container> entry : containers.entrySet()) {
+      String command=Joiner.on(" ").join(entry.getValue().getLaunchContext().getCommands());
+      if (command.contains(YarnTaskManagerRunner.class.getSimpleName())) {
+        taskManagerContainer=entry.getKey();
+        nodeManager=nm;
+        nmIdent=new NMTokenIdentifier(taskManagerContainer.getApplicationAttemptId(),null,"",0);
+        remoteUgi.addTokenIdentifier(nmIdent);
+      }
+    }
+    sleep(500);
+  }
+  Assert.assertNotNull("Unable to find container with TaskManager",taskManagerContainer);
+  Assert.assertNotNull("Illegal state",nodeManager);
+  List<ContainerId> toStop=new LinkedList<ContainerId>();
+  toStop.add(taskManagerContainer);
+  StopContainersRequest scr=StopContainersRequest.newInstance(toStop);
+  try {
+    nodeManager.getNMContext().getContainerManager().stopContainers(scr);
+  }
+ catch (  Throwable e) {
+    LOG.warn("Error stopping container",e);
+    Assert.fail("Error stopping container: " + e.getMessage());
+  }
+  boolean ok=false;
+  do {
+    LOG.debug("Waiting for correct order of events. Output: {}",errContent.toString());
+    String o=errContent.toString();
+    int killedOff=o.indexOf("Container killed by the ApplicationMaster");
+    if (killedOff != -1) {
+      o=o.substring(killedOff);
+      ok=o.indexOf("Launching container") > 0;
+    }
+    sleep(1000);
+  }
+ while (!ok);
+  runner.sendStop();
+  try {
+    runner.join(1000);
+  }
+ catch (  InterruptedException e) {
+    LOG.warn("Interrupted while stopping runner",e);
+  }
+  LOG.warn("stopped");
+  System.setOut(originalStdout);
+  System.setErr(originalStderr);
+  String oC=outContent.toString();
+  String eC=errContent.toString();
+  LOG.info("Sending stdout content through logger: \n\n{}\n\n",oC);
+  LOG.info("Sending stderr content through logger: \n\n{}\n\n",eC);
+  Assert.assertTrue("Expect to see failed container",eC.contains("New messages from the YARN cluster"));
+  Assert.assertTrue("Expect to see failed container",eC.contains("Container killed by the ApplicationMaster"));
+  Assert.assertTrue("Expect to see new container started",eC.contains("Launching container") && eC.contains("on host"));
+  remoteUgi.getTokenIdentifiers().remove(nmIdent);
+  LOG.info("Finished testTaskManagerFailure()");
+  ensureNoProhibitedStringInLogFiles(prohibtedStrings);
+}

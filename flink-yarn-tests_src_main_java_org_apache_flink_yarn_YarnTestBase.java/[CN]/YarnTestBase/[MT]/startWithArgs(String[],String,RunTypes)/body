@@ -1,0 +1,24 @@
+{
+  LOG.info("Running with args {}",Arrays.toString(args));
+  outContent=new ByteArrayOutputStream();
+  errContent=new ByteArrayOutputStream();
+  System.setOut(new PrintStream(outContent));
+  System.setErr(new PrintStream(errContent));
+  final int START_TIMEOUT_SECONDS=60;
+  Runner runner=new Runner(args,type);
+  runner.start();
+  for (int second=0; second < START_TIMEOUT_SECONDS; second++) {
+    sleep(1000);
+    if (outContent.toString().contains(startedAfterString) || errContent.toString().contains(startedAfterString)) {
+      LOG.info("Found expected output in redirected streams");
+      return runner;
+    }
+    if (!runner.isAlive()) {
+      sendOutput();
+      Assert.fail("Runner thread died before the test was finished. Return value = " + runner.getReturnValue());
+    }
+  }
+  sendOutput();
+  Assert.fail("During the timeout period of " + START_TIMEOUT_SECONDS + " seconds the "+ "expected string did not show up");
+  return null;
+}

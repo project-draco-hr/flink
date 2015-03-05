@@ -1,0 +1,25 @@
+{
+  LOG.info("Starting testDetachedMode()");
+  addTestAppender(FlinkYarnSessionCli.class,Level.INFO);
+  Runner runner=startWithArgs(new String[]{"-j",flinkUberjar.getAbsolutePath(),"-n","1","-jm","512","-tm","1024","--detached"},"Flink JobManager is now running on",RunTypes.YARN_SESSION);
+  checkForLogString("The Flink YARN client has been started in detached mode");
+  Assert.assertFalse("The runner should detach.",runner.isAlive());
+  try {
+    YarnClient yc=YarnClient.createYarnClient();
+    yc.init(yarnConfiguration);
+    yc.start();
+    List<ApplicationReport> apps=yc.getApplications(EnumSet.of(YarnApplicationState.RUNNING));
+    Assert.assertEquals(1,apps.size());
+    ApplicationId id=apps.get(0).getApplicationId();
+    yc.killApplication(id);
+    while (yc.getApplications(EnumSet.of(YarnApplicationState.KILLED)).size() == 0) {
+      sleep(500);
+    }
+  }
+ catch (  Throwable t) {
+    LOG.warn("Killing failed",t);
+    Assert.fail();
+  }
+  LOG.info("Finished testDetachedMode()");
+  ensureNoProhibitedStringInLogFiles(prohibtedStrings);
+}

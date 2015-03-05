@@ -1,8 +1,7 @@
 {
-  File cwd=new File("target/" + TEST_CLUSTER_NAME);
+  File cwd=new File("target/" + yarnConfiguration.get(TEST_CLUSTER_NAME_KEY));
   Assert.assertTrue("Expecting directory " + cwd.getAbsolutePath() + " to exist",cwd.exists());
   Assert.assertTrue("Expecting directory " + cwd.getAbsolutePath() + " to be a directory",cwd.isDirectory());
-  System.out.println("cwd = " + cwd.getAbsolutePath());
   File foundFile=findFile(cwd.getAbsolutePath(),new FilenameFilter(){
     @Override public boolean accept(    File dir,    String name){
       File f=new File(dir.getAbsolutePath() + "/" + name);
@@ -15,8 +14,11 @@
       }
       while (scanner.hasNextLine()) {
         final String lineFromFile=scanner.nextLine();
-        if (lineFromFile.contains("Exception")) {
-          return true;
+        for (int i=0; i < prohibited.length; i++) {
+          if (lineFromFile.contains(prohibited[i])) {
+            LOG.warn("Prohibited String '{}' in line '{}'",prohibited[i],lineFromFile);
+            return true;
+          }
         }
       }
       return false;
@@ -31,10 +33,10 @@
  catch (    FileNotFoundException e) {
       Assert.fail("Unable to locate file: " + e.getMessage() + " file: "+ foundFile.getAbsolutePath());
     }
-    LOG.warn("Found a file with an exception. Printing contents:");
+    LOG.warn("Found a file with a prohibited string. Printing contents:");
     while (scanner.hasNextLine()) {
       LOG.warn("LINE: " + scanner.nextLine());
     }
-    Assert.fail("Found a file " + foundFile + " with an exception");
+    Assert.fail("Found a file " + foundFile + " with a prohibited string: "+ Arrays.toString(prohibited));
   }
 }
