@@ -10,11 +10,21 @@
         return new TumblingGroupedPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),groupByKey,getType().createSerializer(getExecutionConfig()));
       }
     }
- else     if (WindowUtils.isSlidingCountPolicy(trigger,eviction) && groupByKey == null) {
-      return new SlidingCountPreReducer<OUT>(clean((ReduceFunction<OUT>)transformation.getUDF()),dataStream.getType().createSerializer(getExecutionConfig()),WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),((CountTriggerPolicy<?>)trigger).getStart());
+ else     if (WindowUtils.isSlidingCountPolicy(trigger,eviction)) {
+      if (groupByKey == null) {
+        return new SlidingCountPreReducer<OUT>(clean((ReduceFunction<OUT>)transformation.getUDF()),dataStream.getType().createSerializer(getExecutionConfig()),WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),((CountTriggerPolicy<?>)trigger).getStart());
+      }
+ else {
+        return new SlidingCountGroupedPreReducer<OUT>(clean((ReduceFunction<OUT>)transformation.getUDF()),dataStream.getType().createSerializer(getExecutionConfig()),groupByKey,WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),((CountTriggerPolicy<?>)trigger).getStart());
+      }
     }
- else     if (WindowUtils.isSlidingTimePolicy(trigger,eviction) && groupByKey == null) {
-      return new SlidingTimePreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),dataStream.getType().createSerializer(getExecutionConfig()),WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),WindowUtils.getTimeStampWrapper(trigger));
+ else     if (WindowUtils.isSlidingTimePolicy(trigger,eviction)) {
+      if (groupByKey == null) {
+        return new SlidingTimePreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),dataStream.getType().createSerializer(getExecutionConfig()),WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),WindowUtils.getTimeStampWrapper(trigger));
+      }
+ else {
+        return new SlidingTimeGroupedPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),dataStream.getType().createSerializer(getExecutionConfig()),groupByKey,WindowUtils.getWindowSize(eviction),WindowUtils.getSlideSize(trigger),WindowUtils.getTimeStampWrapper(trigger));
+      }
     }
   }
   return new BasicWindowBuffer<OUT>();
