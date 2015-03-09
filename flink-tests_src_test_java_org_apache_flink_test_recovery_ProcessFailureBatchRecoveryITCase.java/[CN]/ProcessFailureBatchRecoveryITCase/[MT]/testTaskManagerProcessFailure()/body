@@ -1,0 +1,131 @@
+{
+  final StringWriter processOutput1=new StringWriter();
+  final StringWriter processOutput2=new StringWriter();
+  final StringWriter processOutput3=new StringWriter();
+  ActorSystem jmActorSystem=null;
+  Process taskManagerProcess1=null;
+  Process taskManagerProcess2=null;
+  Process taskManagerProcess3=null;
+  File coordinateTempDir=null;
+  try {
+    String javaCommand=getJavaCommandPath();
+    if (javaCommand == null) {
+      System.out.println("---- Skipping ProcessFailureBatchRecoveryITCase : Could not find java executable");
+      return;
+    }
+    File tempLogFile=File.createTempFile(getClass().getSimpleName() + "-","-log4j.properties");
+    tempLogFile.deleteOnExit();
+    CommonTestUtils.printLog4jDebugConfig(tempLogFile);
+    coordinateTempDir=createTempDirectory();
+    final int jobManagerPort=NetUtils.getAvailablePort();
+    Tuple2<String,Object> localAddress=new Tuple2<String,Object>("localhost",jobManagerPort);
+    Configuration jmConfig=new Configuration();
+    jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_INTERVAL,"500 ms");
+    jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_PAUSE,"2 s");
+    jmConfig.setInteger(ConfigConstants.AKKA_WATCH_THRESHOLD,2);
+    jmActorSystem=AkkaUtils.createActorSystem(jmConfig,new Some<Tuple2<String,Object>>(localAddress));
+    ActorRef jmActor=JobManager.startJobManagerActors(jmConfig,jmActorSystem)._1();
+    String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms80m","-Xmx80m","-classpath",getCurrentClasspath(),TaskManagerProcessEntryPoint.class.getName(),String.valueOf(jobManagerPort)};
+    taskManagerProcess1=new ProcessBuilder(command).start();
+    new PipeForwarder(taskManagerProcess1.getErrorStream(),processOutput1);
+    taskManagerProcess2=new ProcessBuilder(command).start();
+    new PipeForwarder(taskManagerProcess2.getErrorStream(),processOutput2);
+    waitUntilNumTaskManagersAreRegistered(jmActor,2,20000);
+    final File coordinateDirClosure=coordinateTempDir;
+    final Throwable[] errorRef=new Throwable[1];
+    ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
+    env.setDegreeOfParallelism(PARALLELISM);
+    env.setNumberOfExecutionRetries(1);
+    final long NUM_ELEMENTS=1000000L;
+    final DataSet<Long> result=env.generateSequence(1,NUM_ELEMENTS).rebalance().map(new RichMapFunction<Long,Long>(){
+      private final File proceedFile=new File(coordinateDirClosure,PROCEED_MARKER_FILE);
+      private boolean markerCreated=false;
+      private boolean checkForProceedFile=true;
+      @Override public Long map(      Long value) throws Exception {
+        if (!markerCreated) {
+          int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
+          touchFile(new File(coordinateDirClosure,READY_MARKER_FILE_PREFIX + taskIndex));
+          markerCreated=true;
+        }
+        if (checkForProceedFile) {
+          if (proceedFile.exists()) {
+            checkForProceedFile=false;
+          }
+ else {
+            Thread.sleep(10);
+          }
+        }
+        return value;
+      }
+    }
+).reduce(new ReduceFunction<Long>(){
+      @Override public Long reduce(      Long value1,      Long value2){
+        return value1 + value2;
+      }
+    }
+);
+    Thread programTrigger=new Thread("ProcessFailureBatchRecoveryITCase Program Trigger"){
+      @Override public void run(){
+        try {
+          long sum=result.collect().get(0);
+          assertEquals(NUM_ELEMENTS * (NUM_ELEMENTS + 1L) / 2L,sum);
+        }
+ catch (        Throwable t) {
+          t.printStackTrace();
+          errorRef[0]=t;
+        }
+      }
+    }
+;
+    programTrigger.start();
+    waitForMarkerFiles(coordinateTempDir,PARALLELISM,20000);
+    taskManagerProcess3=new ProcessBuilder(command).start();
+    new PipeForwarder(taskManagerProcess3.getErrorStream(),processOutput3);
+    waitUntilNumTaskManagersAreRegistered(jmActor,3,20000);
+    taskManagerProcess1.destroy();
+    taskManagerProcess1=null;
+    touchFile(new File(coordinateTempDir,PROCEED_MARKER_FILE));
+    programTrigger.join(30000);
+    assertFalse("The program did not finish in time",programTrigger.isAlive());
+    if (errorRef[0] != null) {
+      Throwable error=errorRef[0];
+      error.printStackTrace();
+      fail("The program encountered a " + error.getClass().getSimpleName() + " : "+ error.getMessage());
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    printProcessLog("TaskManager 1",processOutput1.toString());
+    printProcessLog("TaskManager 2",processOutput2.toString());
+    printProcessLog("TaskManager 3",processOutput3.toString());
+    fail(e.getMessage());
+  }
+catch (  Error e) {
+    e.printStackTrace();
+    printProcessLog("TaskManager 1",processOutput1.toString());
+    printProcessLog("TaskManager 2",processOutput2.toString());
+    printProcessLog("TaskManager 3",processOutput3.toString());
+    throw e;
+  }
+ finally {
+    if (taskManagerProcess1 != null) {
+      taskManagerProcess1.destroy();
+    }
+    if (taskManagerProcess2 != null) {
+      taskManagerProcess2.destroy();
+    }
+    if (taskManagerProcess3 != null) {
+      taskManagerProcess3.destroy();
+    }
+    if (jmActorSystem != null) {
+      jmActorSystem.shutdown();
+    }
+    if (coordinateTempDir != null) {
+      try {
+        FileUtils.deleteDirectory(coordinateTempDir);
+      }
+ catch (      Throwable t) {
+      }
+    }
+  }
+}
