@@ -1,11 +1,31 @@
 {
   StreamingRuntimeContext context=(StreamingRuntimeContext)getRuntimeContext();
-  if (context.containsState("kafka")) {
-    kafkaOffSet=(OperatorState<Long>)context.getState("kafka");
+  int indexOfSubtask=context.getIndexOfThisSubtask();
+  int numberOfSubtasks=context.getNumberOfParallelSubtasks();
+  KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperServerAddress,zookeeperSyncTimeMillis,zookeeperSyncTimeMillis);
+  int numberOfPartitions=kafkaTopicUtils.getNumberOfPartitions(topicId);
+  String brokerAddress=kafkaTopicUtils.getLeaderBrokerAddressForTopic(topicId);
+  if (indexOfSubtask >= numberOfPartitions) {
+    iterator=new KafkaIdleConsumerIterator();
   }
  else {
-    kafkaOffSet=new OperatorState<Long>(initialOffset);
-    context.registerState("kafka",kafkaOffSet);
+    if (context.containsState("kafka")) {
+      kafkaOffSet=(OperatorState<Map<Integer,KafkaOffset>>)context.getState("kafka");
+      partitions=kafkaOffSet.getState();
+    }
+ else {
+      partitions=new HashMap<Integer,KafkaOffset>();
+      partition=indexOfSubtask;
+      for (int partitionIndex=indexOfSubtask; partitionIndex < numberOfPartitions; partitionIndex+=numberOfSubtasks) {
+        partitions.put(partitionIndex,new CurrentOffset());
+      }
+      kafkaOffSet=new OperatorState<Map<Integer,KafkaOffset>>(partitions);
+      context.registerState("kafka",kafkaOffSet);
+    }
+    iterator=getMultiKafkaIterator(brokerAddress,topicId,partitions,waitOnEmptyFetchMillis);
+    if (LOG.isInfoEnabled()) {
+      LOG.info("KafkaSource ({}/{}) listening to partitions {} of topic {}.",indexOfSubtask + 1,numberOfSubtasks,partitions.keySet(),topicId);
+    }
   }
-  super.open(parameters);
+  iterator.initialize();
 }

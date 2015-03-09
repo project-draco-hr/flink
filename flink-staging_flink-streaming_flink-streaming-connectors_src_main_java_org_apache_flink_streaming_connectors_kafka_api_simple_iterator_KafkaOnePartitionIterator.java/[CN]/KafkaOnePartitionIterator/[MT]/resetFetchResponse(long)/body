@@ -1,0 +1,20 @@
+{
+  FetchRequest req=new FetchRequestBuilder().clientId(clientName).addFetch(topic,partition,offset,100000).build();
+  fetchResponse=consumer.fetch(req);
+  if (fetchResponse.hasError()) {
+    short code=fetchResponse.errorCode(topic,partition);
+    if (LOG.isErrorEnabled()) {
+      LOG.error("Error fetching data from the Broker:" + leadBroker + " Reason: "+ code);
+    }
+    if (code == ErrorMapping.OffsetOutOfRangeCode()) {
+      if (LOG.isErrorEnabled()) {
+        LOG.error("Asked for invalid offset {}, setting the offset to the latest.",offset);
+      }
+      readOffset=new CurrentOffset().getOffset(consumer,topic,partition,clientName);
+    }
+    consumer.close();
+    consumer=null;
+    leadBroker=findNewLeader(leadBroker,topic,partition,port);
+  }
+  iter=fetchResponse.messageSet(topic,partition).iterator();
+}
