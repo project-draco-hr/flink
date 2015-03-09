@@ -1,8 +1,15 @@
 {
+  if (!parseParameters(args)) {
+    return;
+  }
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Vertex<Long,Double>> pages=getPagesDataSet(env);
   DataSet<Edge<Long,Double>> links=getLinksDataSet(env);
-  Graph<Long,Double,Double> network=Graph.fromDataSet(pages,links,env);
+  Graph<Long,Double,Double> network=Graph.fromDataSet(links,new MapFunction<Long,Double>(){
+    public Double map(    Long value) throws Exception {
+      return 1.0;
+    }
+  }
+,env);
   DataSet<Tuple2<Long,Long>> vertexOutDegrees=network.outDegrees();
   Graph<Long,Double,Double> networkWithWeights=network.joinWithEdgesOnSource(vertexOutDegrees,new MapFunction<Tuple2<Double,Long>,Double>(){
     public Double map(    Tuple2<Double,Long> value){
@@ -11,6 +18,11 @@
   }
 );
   DataSet<Vertex<Long,Double>> pageRanks=networkWithWeights.run(new PageRank<Long>(DAMPENING_FACTOR,maxIterations)).getVertices();
-  pageRanks.print();
+  if (fileOutput) {
+    pageRanks.writeAsCsv(outputPath,"\n","\t");
+  }
+ else {
+    pageRanks.print();
+  }
   env.execute();
 }
