@@ -1,0 +1,49 @@
+{
+  ShipStrategyType shipType;
+  FieldList partitionKeys;
+  boolean[] sortDirection;
+  Partitioner<?> partitioner;
+switch (this.partitioning) {
+case RANDOM_PARTITIONED:
+    shipType=globalDopChange ? ShipStrategyType.PARTITION_RANDOM : ShipStrategyType.FORWARD;
+  partitionKeys=null;
+sortDirection=null;
+partitioner=null;
+break;
+case FULL_REPLICATION:
+shipType=ShipStrategyType.BROADCAST;
+partitionKeys=null;
+sortDirection=null;
+partitioner=null;
+break;
+case ANY_PARTITIONING:
+case HASH_PARTITIONED:
+shipType=ShipStrategyType.PARTITION_HASH;
+partitionKeys=Utils.createOrderedFromSet(this.partitioningFields);
+sortDirection=null;
+partitioner=null;
+break;
+case RANGE_PARTITIONED:
+shipType=ShipStrategyType.PARTITION_RANGE;
+partitionKeys=this.ordering.getInvolvedIndexes();
+sortDirection=this.ordering.getFieldSortDirections();
+partitioner=null;
+break;
+case FORCED_REBALANCED:
+shipType=ShipStrategyType.PARTITION_RANDOM;
+partitionKeys=null;
+sortDirection=null;
+partitioner=null;
+break;
+case CUSTOM_PARTITIONING:
+shipType=ShipStrategyType.PARTITION_CUSTOM;
+partitionKeys=this.partitioningFields;
+sortDirection=null;
+partitioner=this.customPartitioner;
+break;
+default :
+throw new CompilerException("Unsupported partitioning strategy");
+}
+DataExchangeMode exMode=DataExchangeMode.select(exchangeMode,shipType,breakPipeline);
+channel.setShipStrategy(shipType,partitionKeys,sortDirection,partitioner,exMode);
+}

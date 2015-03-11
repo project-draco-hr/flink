@@ -17,7 +17,8 @@
     HashSet<NamedChannel> broadcastChannels=new HashSet<NamedChannel>(broadcastPlanCandidates.size());
     for (    PlanNode plan : broadcastPlanCandidates) {
       final NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
-      c.setShipStrategy(ShipStrategyType.BROADCAST);
+      DataExchangeMode exMode=DataExchangeMode.select(broadcastConnection.getDataExchangeMode(),ShipStrategyType.BROADCAST,broadcastConnection.isBreakingPipeline());
+      c.setShipStrategy(ShipStrategyType.BROADCAST,exMode);
       broadcastChannels.add(c);
     }
     broadcastPlanChannels.add(broadcastChannels);
@@ -31,15 +32,19 @@
       pairsGlob.addAll(ods.getPossibleGlobalProperties());
       pairsLoc.addAll(ods.getPossibleLocalProperties());
     }
-    allGlobalPairs=(GlobalPropertiesPair[])pairsGlob.toArray(new GlobalPropertiesPair[pairsGlob.size()]);
-    allLocalPairs=(LocalPropertiesPair[])pairsLoc.toArray(new LocalPropertiesPair[pairsLoc.size()]);
+    allGlobalPairs=pairsGlob.toArray(new GlobalPropertiesPair[pairsGlob.size()]);
+    allLocalPairs=pairsLoc.toArray(new LocalPropertiesPair[pairsLoc.size()]);
   }
   final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  final ExecutionMode input1Mode=this.input1.getDataExchangeMode();
+  final ExecutionMode input2Mode=this.input2.getDataExchangeMode();
   final int dop=getDegreeOfParallelism();
   final int inDop1=getFirstPredecessorNode().getDegreeOfParallelism();
   final int inDop2=getSecondPredecessorNode().getDegreeOfParallelism();
   final boolean dopChange1=dop != inDop1;
   final boolean dopChange2=dop != inDop2;
+  final boolean input1breaksPipeline=this.input1.isBreakingPipeline();
+  final boolean input2breaksPipeline=this.input2.isBreakingPipeline();
   for (  PlanNode child1 : subPlans1) {
     if (child1.getGlobalProperties().isFullyReplicated()) {
       if (dopChange1) {
@@ -66,17 +71,19 @@
       for (      RequestedGlobalProperties igps1 : intGlobal1) {
         final Channel c1=new Channel(child1,this.input1.getMaterializationMode());
         if (this.input1.getShipStrategy() == null) {
-          igps1.parameterizeChannel(c1,dopChange1);
+          igps1.parameterizeChannel(c1,dopChange1,input1Mode,input1breaksPipeline);
           if (dopChange1 && !c1.getShipStrategy().isNetworkStrategy()) {
             c1.getGlobalProperties().reset();
           }
         }
  else {
+          ShipStrategyType shipType=this.input1.getShipStrategy();
+          DataExchangeMode exMode=DataExchangeMode.select(input1Mode,shipType,input1breaksPipeline);
           if (this.keys1 != null) {
-            c1.setShipStrategy(this.input1.getShipStrategy(),this.keys1.toFieldList());
+            c1.setShipStrategy(shipType,this.keys1.toFieldList(),exMode);
           }
  else {
-            c1.setShipStrategy(this.input1.getShipStrategy());
+            c1.setShipStrategy(shipType,exMode);
           }
           if (dopChange1) {
             c1.adjustGlobalPropertiesForFullParallelismChange();
@@ -85,17 +92,19 @@
         for (        RequestedGlobalProperties igps2 : intGlobal2) {
           final Channel c2=new Channel(child2,this.input2.getMaterializationMode());
           if (this.input2.getShipStrategy() == null) {
-            igps2.parameterizeChannel(c2,dopChange2);
+            igps2.parameterizeChannel(c2,dopChange2,input2Mode,input2breaksPipeline);
             if (dopChange2 && !c2.getShipStrategy().isNetworkStrategy()) {
               c2.getGlobalProperties().reset();
             }
           }
  else {
+            ShipStrategyType shipType=this.input2.getShipStrategy();
+            DataExchangeMode exMode=DataExchangeMode.select(input2Mode,shipType,input2breaksPipeline);
             if (this.keys2 != null) {
-              c2.setShipStrategy(this.input2.getShipStrategy(),this.keys2.toFieldList());
+              c2.setShipStrategy(shipType,this.keys2.toFieldList(),exMode);
             }
  else {
-              c2.setShipStrategy(this.input2.getShipStrategy());
+              c2.setShipStrategy(shipType,exMode);
             }
             if (dopChange2) {
               c2.adjustGlobalPropertiesForFullParallelismChange();

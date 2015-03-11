@@ -1,0 +1,40 @@
+{
+  final Configuration conf=getPactContract().getParameters();
+  final String shipStrategy=conf.getString(PactCompiler.HINT_SHIP_STRATEGY,null);
+  final ShipStrategyType preSet;
+  if (shipStrategy != null) {
+    if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_HASH)) {
+      preSet=ShipStrategyType.PARTITION_HASH;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION_RANGE)) {
+      preSet=ShipStrategyType.PARTITION_RANGE;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_FORWARD)) {
+      preSet=ShipStrategyType.FORWARD;
+    }
+ else     if (shipStrategy.equalsIgnoreCase(PactCompiler.HINT_SHIP_STRATEGY_REPARTITION)) {
+      preSet=ShipStrategyType.PARTITION_RANDOM;
+    }
+ else {
+      throw new CompilerException("Unrecognized ship strategy hint: " + shipStrategy);
+    }
+  }
+ else {
+    preSet=null;
+  }
+  Operator<?> children=((SingleInputOperator<?,?,?>)getPactContract()).getInput();
+  OptimizerNode pred;
+  PactConnection conn;
+  if (children == null) {
+    throw new CompilerException("Error: Node for '" + getPactContract().getName() + "' has no input.");
+  }
+ else {
+    pred=contractToNode.get(children);
+    conn=new PactConnection(pred,this,defaultExchangeMode);
+    if (preSet != null) {
+      conn.setShipStrategy(preSet);
+    }
+  }
+  setIncomingConnection(conn);
+  pred.addOutgoingConnection(conn);
+}

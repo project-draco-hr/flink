@@ -14,8 +14,9 @@
     List<PlanNode> broadcastPlanCandidates=broadcastConnection.getSource().getAlternativePlans(estimator);
     HashSet<NamedChannel> broadcastChannels=new HashSet<NamedChannel>(broadcastPlanCandidates.size());
     for (    PlanNode plan : broadcastPlanCandidates) {
-      final NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
-      c.setShipStrategy(ShipStrategyType.BROADCAST);
+      NamedChannel c=new NamedChannel(broadcastConnectionName,plan);
+      DataExchangeMode exMode=DataExchangeMode.select(broadcastConnection.getDataExchangeMode(),ShipStrategyType.BROADCAST,broadcastConnection.isBreakingPipeline());
+      c.setShipStrategy(ShipStrategyType.BROADCAST,exMode);
       broadcastChannels.add(c);
     }
     broadcastPlanChannels.add(broadcastChannels);
@@ -26,12 +27,14 @@
     for (    OperatorDescriptorSingle ods : getPossibleProperties()) {
       pairs.addAll(ods.getPossibleGlobalProperties());
     }
-    allValidGlobals=(RequestedGlobalProperties[])pairs.toArray(new RequestedGlobalProperties[pairs.size()]);
+    allValidGlobals=pairs.toArray(new RequestedGlobalProperties[pairs.size()]);
   }
   final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
+  final ExecutionMode executionMode=this.inConn.getDataExchangeMode();
   final int dop=getDegreeOfParallelism();
   final int inDop=getPredecessorNode().getDegreeOfParallelism();
   final boolean dopChange=inDop != dop;
+  final boolean breaksPipeline=this.inConn.isBreakingPipeline();
   for (  PlanNode child : subPlans) {
     if (child.getGlobalProperties().isFullyReplicated()) {
       if (dopChange) {
@@ -45,7 +48,7 @@
     if (this.inConn.getShipStrategy() == null) {
       for (      RequestedGlobalProperties igps : intGlobal) {
         final Channel c=new Channel(child,this.inConn.getMaterializationMode());
-        igps.parameterizeChannel(c,dopChange);
+        igps.parameterizeChannel(c,dopChange,executionMode,breaksPipeline);
         if (dopChange && !c.getShipStrategy().isNetworkStrategy()) {
           c.getGlobalProperties().reset();
         }
@@ -60,11 +63,13 @@
     }
  else {
       final Channel c=new Channel(child,this.inConn.getMaterializationMode());
+      final ShipStrategyType shipStrategy=this.inConn.getShipStrategy();
+      final DataExchangeMode exMode=DataExchangeMode.select(executionMode,shipStrategy,breaksPipeline);
       if (this.keys != null) {
-        c.setShipStrategy(this.inConn.getShipStrategy(),this.keys.toFieldList());
+        c.setShipStrategy(shipStrategy,this.keys.toFieldList(),exMode);
       }
  else {
-        c.setShipStrategy(this.inConn.getShipStrategy());
+        c.setShipStrategy(shipStrategy,exMode);
       }
       if (dopChange) {
         c.adjustGlobalPropertiesForFullParallelismChange();

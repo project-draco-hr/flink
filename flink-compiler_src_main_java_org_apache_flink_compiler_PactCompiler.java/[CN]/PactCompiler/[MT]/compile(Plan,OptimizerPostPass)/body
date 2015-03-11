@@ -5,11 +5,11 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("Beginning compilation of program '" + program.getJobName() + '\'');
   }
-  int defaultParallelism=program.getDefaultParallelism() > 0 ? program.getDefaultParallelism() : this.defaultDegreeOfParallelism;
-  if (LOG.isDebugEnabled()) {
-    LOG.debug("Using a default degree of parallelism of " + defaultParallelism + '.');
-  }
-  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(defaultParallelism);
+  final ExecutionMode defaultDataExchangeMode=program.getExecutionConfig().getExecutionMode();
+  final int defaultParallelism=program.getDefaultParallelism() > 0 ? program.getDefaultParallelism() : this.defaultDegreeOfParallelism;
+  LOG.debug("Using a default parallelism of {}",defaultParallelism);
+  LOG.debug("Using default data exchange mode {}",defaultDataExchangeMode);
+  GraphCreatingVisitor graphCreator=new GraphCreatingVisitor(defaultParallelism,defaultDataExchangeMode);
   program.accept(graphCreator);
   OptimizerNode rootNode;
   if (graphCreator.sinks.size() == 1) {
@@ -26,10 +26,10 @@
     throw new CompilerException("Bug: The optimizer plan representation has no sinks.");
   }
   rootNode.accept(new IdAndEstimatesVisitor(this.statistics));
-  InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
-  rootNode.accept(propsVisitor);
   BranchesVisitor branchingVisitor=new BranchesVisitor();
   rootNode.accept(branchingVisitor);
+  InterestingPropertyVisitor propsVisitor=new InterestingPropertyVisitor(this.costEstimator);
+  rootNode.accept(propsVisitor);
   if (rootNode.getOpenBranches() != null && rootNode.getOpenBranches().size() > 0) {
     throw new CompilerException("Bug: Logic for branching plans (non-tree plans) has an error, and does not " + "track the re-joining of branches correctly.");
   }

@@ -1,0 +1,35 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.getConfig().setExecutionMode(execMode);
+    DataSet<String> dataSet=env.readTextFile("/never/accessed");
+    dataSet.map(new MapFunction<String,Integer>(){
+      @Override public Integer map(      String value){
+        return 0;
+      }
+    }
+).filter(new FilterFunction<Integer>(){
+      @Override public boolean filter(      Integer value){
+        return false;
+      }
+    }
+).groupBy(new IdentityKeyExtractor<Integer>()).reduceGroup(new Top1GroupReducer<Integer>()).output(new DiscardingOutputFormat<Integer>());
+    OptimizedPlan optPlan=compileNoStats(env.createProgramPlan());
+    SinkPlanNode sinkNode=optPlan.getDataSinks().iterator().next();
+    SingleInputPlanNode reduceNode=(SingleInputPlanNode)sinkNode.getPredecessor();
+    SingleInputPlanNode combineNode=(SingleInputPlanNode)reduceNode.getPredecessor();
+    SingleInputPlanNode keyExtractorNode=(SingleInputPlanNode)combineNode.getPredecessor();
+    SingleInputPlanNode filterNode=(SingleInputPlanNode)keyExtractorNode.getPredecessor();
+    SingleInputPlanNode mapNode=(SingleInputPlanNode)filterNode.getPredecessor();
+    assertEquals(toMap,mapNode.getInput().getDataExchangeMode());
+    assertEquals(toFilter,filterNode.getInput().getDataExchangeMode());
+    assertEquals(toKeyExtractor,keyExtractorNode.getInput().getDataExchangeMode());
+    assertEquals(toCombiner,combineNode.getInput().getDataExchangeMode());
+    assertEquals(toReduce,reduceNode.getInput().getDataExchangeMode());
+    assertEquals(toSink,sinkNode.getInput().getDataExchangeMode());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

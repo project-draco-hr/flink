@@ -1,0 +1,61 @@
+{
+  if (channel.getSource().getGlobalProperties().isFullyReplicated() && !(this.partitioning == PartitioningProperty.FULL_REPLICATION || this.partitioning == PartitioningProperty.ANY_DISTRIBUTION)) {
+    throw new CompilerException("Fully replicated input must be preserved " + "and may not be converted into another global property.");
+  }
+  if (isTrivial() || this.partitioning == PartitioningProperty.ANY_DISTRIBUTION) {
+    ShipStrategyType shipStrategy=globalDopChange ? ShipStrategyType.PARTITION_RANDOM : ShipStrategyType.FORWARD;
+    DataExchangeMode em=DataExchangeMode.select(exchangeMode,shipStrategy,breakPipeline);
+    channel.setShipStrategy(shipStrategy,em);
+    return;
+  }
+  final GlobalProperties inGlobals=channel.getSource().getGlobalProperties();
+  if (!globalDopChange && isMetBy(inGlobals)) {
+    DataExchangeMode em=DataExchangeMode.select(exchangeMode,ShipStrategyType.FORWARD,breakPipeline);
+    channel.setShipStrategy(ShipStrategyType.FORWARD,em);
+    return;
+  }
+  ShipStrategyType shipType;
+  FieldList partitionKeys;
+  boolean[] sortDirection;
+  Partitioner<?> partitioner;
+switch (this.partitioning) {
+case FULL_REPLICATION:
+    shipType=ShipStrategyType.BROADCAST;
+  partitionKeys=null;
+sortDirection=null;
+partitioner=null;
+break;
+case ANY_PARTITIONING:
+case HASH_PARTITIONED:
+shipType=ShipStrategyType.PARTITION_HASH;
+partitionKeys=Utils.createOrderedFromSet(this.partitioningFields);
+sortDirection=null;
+partitioner=null;
+break;
+case RANGE_PARTITIONED:
+shipType=ShipStrategyType.PARTITION_RANGE;
+partitionKeys=this.ordering.getInvolvedIndexes();
+sortDirection=this.ordering.getFieldSortDirections();
+partitioner=null;
+if (this.dataDistribution != null) {
+channel.setDataDistribution(this.dataDistribution);
+}
+break;
+case FORCED_REBALANCED:
+shipType=ShipStrategyType.PARTITION_FORCED_REBALANCE;
+partitionKeys=null;
+sortDirection=null;
+partitioner=null;
+break;
+case CUSTOM_PARTITIONING:
+shipType=ShipStrategyType.PARTITION_CUSTOM;
+partitionKeys=Utils.createOrderedFromSet(this.partitioningFields);
+sortDirection=null;
+partitioner=this.customPartitioner;
+break;
+default :
+throw new CompilerException("Invalid partitioning to create through a data exchange: " + this.partitioning.name());
+}
+DataExchangeMode exMode=DataExchangeMode.select(exchangeMode,shipType,breakPipeline);
+channel.setShipStrategy(shipType,partitionKeys,sortDirection,partitioner,exMode);
+}

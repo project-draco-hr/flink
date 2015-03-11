@@ -6,17 +6,19 @@
   List<PlanNode> outputPlans=new ArrayList<PlanNode>();
   final int dop=getDegreeOfParallelism();
   final int inDop=getPredecessorNode().getDegreeOfParallelism();
+  final ExecutionMode executionMode=this.input.getDataExchangeMode();
   final boolean dopChange=dop != inDop;
+  final boolean breakPipeline=this.input.isBreakingPipeline();
   InterestingProperties ips=this.input.getInterestingProperties();
   for (  PlanNode p : subPlans) {
     for (    RequestedGlobalProperties gp : ips.getGlobalProperties()) {
       for (      RequestedLocalProperties lp : ips.getLocalProperties()) {
         Channel c=new Channel(p);
-        gp.parameterizeChannel(c,dopChange);
+        gp.parameterizeChannel(c,dopChange,executionMode,breakPipeline);
         lp.parameterizeChannel(c);
         c.setRequiredLocalProps(lp);
         c.setRequiredGlobalProps(gp);
-        outputPlans.add(new SinkPlanNode(this,"DataSink(" + this.getPactContract().getName() + ")",c));
+        outputPlans.add(new SinkPlanNode(this,"DataSink (" + this.getPactContract().getName() + ")",c));
       }
     }
   }
