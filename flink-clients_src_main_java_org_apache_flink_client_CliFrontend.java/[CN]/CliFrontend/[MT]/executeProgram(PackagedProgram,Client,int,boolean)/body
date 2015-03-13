@@ -1,0 +1,41 @@
+{
+  LOG.info("Starting execution of program");
+  JobSubmissionResult execResult;
+  try {
+    client.setPrintStatusDuringExecution(true);
+    execResult=client.run(program,parallelism,wait);
+  }
+ catch (  ProgramInvocationException e) {
+    return handleError(e);
+  }
+ finally {
+    program.deleteExtractedLibraries();
+  }
+  if (wait) {
+    LOG.info("Program execution finished");
+  }
+  if (execResult != null) {
+    if (yarnCluster != null && yarnCluster.isDetached()) {
+      if (execResult.getJobID() == null) {
+        throw new RuntimeException("Error while starting job. No Job ID set.");
+      }
+      yarnCluster.stopAfterJob(execResult.getJobID());
+      yarnCluster.disconnect();
+      System.out.println("The Job has been submitted with JobID " + execResult.getJobID());
+      return 0;
+    }
+    if (execResult instanceof JobExecutionResult) {
+      JobExecutionResult result=(JobExecutionResult)execResult;
+      System.out.println("Job Runtime: " + result.getNetRuntime());
+      Map<String,Object> accumulatorsResult=result.getAllAccumulatorResults();
+      if (accumulatorsResult.size() > 0) {
+        System.out.println("Accumulator Results: ");
+        System.out.println(AccumulatorHelper.getResultsFormated(accumulatorsResult));
+      }
+    }
+ else {
+      LOG.info("The Job did not return an execution result");
+    }
+  }
+  return 0;
+}

@@ -6,6 +6,10 @@
   LOG.info("\tTaskManager memory = {}",taskManagerMemoryMb);
   yarnApplication=yarnClient.createApplication();
   GetNewApplicationResponse appResponse=yarnApplication.getNewApplicationResponse();
+  List<Tuple2<String,String>> dynProperties=CliFrontend.getDynamicProperties(dynamicPropertiesEncoded);
+  for (  Tuple2<String,String> dynProperty : dynProperties) {
+    flinkConfiguration.setString(dynProperty.f0,dynProperty.f1);
+  }
   try {
     List<QueueInfo> queues=yarnClient.getAllQueues();
     if (queues.size() > 0 && this.yarnQueue != null) {
@@ -87,7 +91,7 @@
     shipFiles.add(new File(log4jFile));
   }
   ContainerLaunchContext amContainer=Records.newRecord(ContainerLaunchContext.class);
-  String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jobManagerMemoryMb) + "M "+ javaOpts;
+  String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jobManagerMemoryMb,flinkConfiguration) + "M "+ javaOpts;
   if (hasLogback || hasLog4j) {
     amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-main.log\"";
   }
@@ -145,6 +149,7 @@
   appMasterEnv.put(FlinkYarnClient.ENV_CLIENT_SHIP_FILES,envShipFileList.toString());
   appMasterEnv.put(FlinkYarnClient.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
   appMasterEnv.put(FlinkYarnClient.ENV_SLOTS,String.valueOf(slots));
+  appMasterEnv.put(FlinkYarnClient.ENV_DETACHED,String.valueOf(detached));
   if (dynamicPropertiesEncoded != null) {
     appMasterEnv.put(FlinkYarnClient.ENV_DYNAMIC_PROPERTIES,dynamicPropertiesEncoded);
   }
