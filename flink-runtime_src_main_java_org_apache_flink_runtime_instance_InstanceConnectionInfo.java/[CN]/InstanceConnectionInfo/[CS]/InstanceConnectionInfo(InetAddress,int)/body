@@ -11,11 +11,15 @@
     this.fqdnHostName=this.inetAddress.getCanonicalHostName();
   }
  catch (  Throwable t) {
-    LOG.warn("Unable to determine hostname for TaskManager. The performance might be degraded since HDFS input split assignment is not possible");
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("getCanonicalHostName() Exception",t);
-    }
-    this.fqdnHostName=inetAddress.getHostAddress();
-    this.fqdnHostNameIsIP=true;
+    LOG.warn("Unable to determine the canonical hostname. Input split assignment (such as " + "for HDFS files) may be non-local when the canonical hostname is missing.");
+    LOG.debug("getCanonicalHostName() Exception:",t);
+    this.fqdnHostName=this.inetAddress.getHostAddress();
+  }
+  if (this.fqdnHostName.equals(this.inetAddress.getHostAddress())) {
+    this.hostName=this.fqdnHostName;
+    LOG.warn("No hostname could be resolved for the IP address {}, using IP address as host name. " + "Local input split assignment (such as for HDFS files) may be impacted.");
+  }
+ else {
+    this.hostName=NetUtils.getHostnameFromFQDN(this.fqdnHostName);
   }
 }
