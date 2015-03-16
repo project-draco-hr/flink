@@ -1,0 +1,41 @@
+{
+  this.updateFunction.setOptDegrees(this.configuration.isOptDegrees());
+  DataSet<Tuple2<VertexKey,Long>> inDegrees=graph.inDegrees();
+  DataSet<Tuple2<VertexKey,Long>> outDegrees=graph.outDegrees();
+  DataSet<Tuple3<VertexKey,Long,Long>> degrees=inDegrees.join(outDegrees).where(0).equalTo(0).with(new FlatJoinFunction<Tuple2<VertexKey,Long>,Tuple2<VertexKey,Long>,Tuple3<VertexKey,Long,Long>>(){
+    @Override public void join(    Tuple2<VertexKey,Long> first,    Tuple2<VertexKey,Long> second,    Collector<Tuple3<VertexKey,Long,Long>> out) throws Exception {
+      out.collect(new Tuple3<VertexKey,Long,Long>(first.f0,first.f1,second.f1));
+    }
+  }
+);
+  DataSet<Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>> verticesWithDegrees=initialVertices.join(degrees).where(0).equalTo(0).with(new FlatJoinFunction<Vertex<VertexKey,VertexValue>,Tuple3<VertexKey,Long,Long>,Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>>(){
+    @Override public void join(    Vertex<VertexKey,VertexValue> vertex,    Tuple3<VertexKey,Long,Long> degrees,    Collector<Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>> out) throws Exception {
+      out.collect(new Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>(vertex.getId(),new Tuple3<VertexValue,Long,Long>(vertex.getValue(),degrees.f1,degrees.f2)));
+    }
+  }
+);
+  TypeInformation<Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>> vertexTypes=verticesWithDegrees.getType();
+  final DeltaIteration<Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>,Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>> iteration=setUpIteration(verticesWithDegrees);
+switch (messagingDirection) {
+case IN:
+    messages=buildMessagingFunctionVerticesWithDegrees(iteration,messageTypeInfo,1,0);
+  break;
+case OUT:
+messages=buildMessagingFunctionVerticesWithDegrees(iteration,messageTypeInfo,0,0);
+break;
+case ALL:
+messages=buildMessagingFunctionVerticesWithDegrees(iteration,messageTypeInfo,1,0).union(buildMessagingFunctionVerticesWithDegrees(iteration,messageTypeInfo,0,0));
+break;
+default :
+throw new IllegalArgumentException("Illegal edge direction");
+}
+VertexUpdateUdf<VertexKey,Tuple3<VertexValue,Long,Long>,VertexValue,Message> updateUdf=new VertexUpdateUdfVertexValueWithDegrees<VertexKey,VertexValue,Message>(updateFunction,vertexTypes);
+CoGroupOperator<?,?,Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>> updates=messages.coGroup(iteration.getSolutionSet()).where(0).equalTo(0).with(updateUdf);
+configureUpdateFunction(updates);
+return iteration.closeWith(updates,updates).map(new MapFunction<Vertex<VertexKey,Tuple3<VertexValue,Long,Long>>,Vertex<VertexKey,VertexValue>>(){
+@Override public Vertex<VertexKey,VertexValue> map(Vertex<VertexKey,Tuple3<VertexValue,Long,Long>> vertex) throws Exception {
+return new Vertex<VertexKey,VertexValue>(vertex.getId(),vertex.getValue().f0);
+}
+}
+);
+}
