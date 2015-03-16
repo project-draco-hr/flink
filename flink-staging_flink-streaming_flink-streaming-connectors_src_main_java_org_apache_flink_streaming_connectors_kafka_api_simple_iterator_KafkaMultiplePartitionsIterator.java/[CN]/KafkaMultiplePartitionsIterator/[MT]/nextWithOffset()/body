@@ -1,18 +1,22 @@
 {
-  KafkaOnePartitionIterator partition;
+  KafkaSinglePartitionIterator partition;
   while (true) {
     for (int i=nextPartition(lastCheckedPartitionIndex); i < partitions.size(); i=nextPartition(i)) {
       partition=partitions.get(i);
       if (partition.fetchHasNext()) {
+        gotNewMessage=true;
         lastCheckedPartitionIndex=i;
         return partition.nextWithOffset();
       }
     }
-    try {
-      Thread.sleep(waitOnEmptyFetch);
+    if (!gotNewMessage) {
+      try {
+        Thread.sleep(waitOnEmptyFetch);
+      }
+ catch (      InterruptedException e) {
+        LOG.warn("Interrupted while waiting for new messages",e);
+      }
     }
- catch (    InterruptedException e) {
-      e.printStackTrace();
-    }
+    gotNewMessage=false;
   }
 }

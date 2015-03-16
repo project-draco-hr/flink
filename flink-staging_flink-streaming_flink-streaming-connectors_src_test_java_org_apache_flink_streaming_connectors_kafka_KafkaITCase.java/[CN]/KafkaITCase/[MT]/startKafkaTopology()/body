@@ -1,0 +1,65 @@
+{
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
+  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(zookeeperConnectionString,TOPIC,new JavaDefaultStringSchema(),5000,100,Offset.FROM_BEGINNING));
+  consuming.addSink(new SinkFunction<String>(){
+    int elCnt=0;
+    int start=-1;
+    BitSet validator=new BitSet(101);
+    @Override public void invoke(    String value) throws Exception {
+      LOG.info("Got " + value);
+      String[] sp=value.split("-");
+      int v=Integer.parseInt(sp[1]);
+      if (start == -1) {
+        start=v;
+      }
+      Assert.assertFalse("Received tuple twice",validator.get(v - start));
+      validator.set(v - start);
+      elCnt++;
+      if (elCnt == 100) {
+        int nc;
+        if ((nc=validator.nextClearBit(0)) != 100) {
+          throw new RuntimeException("The bitset was not set to 1 on all elements. Next clear:" + nc + " Set: "+ validator);
+        }
+        throw new SuccessException();
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  DataStream<String> stream=env.addSource(new SourceFunction<String>(){
+    boolean running=true;
+    @Override public void run(    Collector<String> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      while (running) {
+        collector.collect("kafka-" + cnt++);
+        try {
+          Thread.sleep(100);
+        }
+ catch (        InterruptedException ignored) {
+        }
+      }
+    }
+    @Override public void cancel(){
+      LOG.info("Source got chancel()");
+      running=false;
+    }
+  }
+);
+  stream.addSink(new KafkaSink<String>(zookeeperConnectionString,TOPIC,new JavaDefaultStringSchema()));
+  try {
+    env.setDegreeOfParallelism(1);
+    env.execute();
+  }
+ catch (  JobExecutionException good) {
+    Throwable t=good.getCause();
+    int limit=0;
+    while (!(t instanceof SuccessException)) {
+      t=t.getCause();
+      if (limit++ == 20) {
+        throw good;
+      }
+    }
+  }
+}
