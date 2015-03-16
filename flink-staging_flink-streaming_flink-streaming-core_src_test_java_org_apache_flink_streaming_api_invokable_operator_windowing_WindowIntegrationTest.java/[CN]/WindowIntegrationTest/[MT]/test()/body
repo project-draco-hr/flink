@@ -27,6 +27,32 @@
   source.groupBy(key).window(Time.of(4,ts,1)).max(0).getDiscretizedStream().addSink(new DistributedSink3());
   source.window(Time.of(5,ts,1)).mapWindow(new IdentityWindowMap()).flatten().addSink(new DistributedSink4());
   source.window(Time.of(5,ts,1)).every(Time.of(4,ts,1)).groupBy(new ModKey(2)).sum(0).getDiscretizedStream().addSink(new DistributedSink5());
+  DataStream<Integer> source2=env.addSource(new ParallelSourceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public void run(    Collector<Integer> collector) throws Exception {
+      for (int i=1; i <= 10; i++) {
+        collector.collect(i);
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  DataStream<Integer> source3=env.addSource(new RichParallelSourceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public void run(    Collector<Integer> collector) throws Exception {
+      for (int i=1; i <= 11; i++) {
+        if (i % 2 == getRuntimeContext().getIndexOfThisSubtask()) {
+          collector.collect(i);
+        }
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  source2.window(Time.of(2,ts,1)).sum(0).getDiscretizedStream().addSink(new DistributedSink6());
+  source3.window(Time.of(5,ts,1)).groupBy(new ModKey(2)).sum(0).getDiscretizedStream().addSink(new DistributedSink7());
   env.execute();
   List<StreamWindow<Integer>> expected1=new ArrayList<StreamWindow<Integer>>();
   expected1.add(StreamWindow.fromElements(5));
@@ -83,4 +109,18 @@
     Collections.sort(sw);
   }
   validateOutput(expected8,DistributedSink5.windows);
+  List<StreamWindow<Integer>> expected9=new ArrayList<StreamWindow<Integer>>();
+  expected9.add(StreamWindow.fromElements(6));
+  expected9.add(StreamWindow.fromElements(14));
+  expected9.add(StreamWindow.fromElements(22));
+  expected9.add(StreamWindow.fromElements(30));
+  expected9.add(StreamWindow.fromElements(38));
+  validateOutput(expected9,DistributedSink6.windows);
+  List<StreamWindow<Integer>> expected10=new ArrayList<StreamWindow<Integer>>();
+  expected10.add(StreamWindow.fromElements(6,9));
+  expected10.add(StreamWindow.fromElements(16,24));
+  for (  List<Integer> sw : DistributedSink7.windows) {
+    Collections.sort(sw);
+  }
+  validateOutput(expected10,DistributedSink7.windows);
 }

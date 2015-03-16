@@ -1,11 +1,16 @@
 {
-  WindowTransformation transformation=WindowTransformation.REDUCEWINDOW.with(clean(reduceFunction));
-  WindowBuffer<OUT> windowBuffer=getWindowBuffer(transformation);
-  DiscretizedStream<OUT> discretized=discretize(transformation,windowBuffer);
-  if (windowBuffer instanceof CompletePreAggregator) {
-    return discretized;
+  if (WindowUtils.isTimeOnly(getTrigger(),getEviction()) && discretizerKey == null && dataStream.getParallelism() > 1) {
+    return timeReduce(reduceFunction);
   }
  else {
-    return discretized.reduceWindow(reduceFunction);
+    WindowTransformation transformation=WindowTransformation.REDUCEWINDOW.with(clean(reduceFunction));
+    WindowBuffer<OUT> windowBuffer=getWindowBuffer(transformation);
+    DiscretizedStream<OUT> discretized=discretize(transformation,windowBuffer);
+    if (windowBuffer instanceof PreAggregator) {
+      return discretized;
+    }
+ else {
+      return discretized.reduceWindow(reduceFunction);
+    }
   }
 }

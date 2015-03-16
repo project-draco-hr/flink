@@ -1,0 +1,50 @@
+{
+  ReduceFunction<Integer> reducer=new ReduceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer reduce(    Integer a,    Integer b) throws Exception {
+      return a + b;
+    }
+  }
+;
+  TestCollector<StreamWindow<Integer>> out=new TestCollector<StreamWindow<Integer>>();
+  List<StreamWindow<Integer>> output=out.getCollected();
+  ParallelMerge<Integer> merger=new ParallelMerge<Integer>(reducer);
+  merger.numberOfDiscretizers=2;
+  merger.flatMap1(createTestWindow(1),out);
+  merger.flatMap1(createTestWindow(1),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(1,1),out);
+  assertTrue(output.isEmpty());
+  merger.flatMap2(new Tuple2<Integer,Integer>(1,1),out);
+  assertEquals(StreamWindow.fromElements(2),output.get(0));
+  merger.flatMap2(new Tuple2<Integer,Integer>(2,2),out);
+  merger.flatMap1(createTestWindow(2),out);
+  merger.flatMap1(createTestWindow(2),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(2,1),out);
+  assertEquals(1,output.size());
+  merger.flatMap1(createTestWindow(2),out);
+  assertEquals(StreamWindow.fromElements(3),output.get(1));
+  merger.flatMap1(createTestWindow(3),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(3,1),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(3,1),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(4,1),out);
+  merger.flatMap2(new Tuple2<Integer,Integer>(4,1),out);
+  merger.flatMap1(createTestWindow(4),out);
+  try {
+    merger.flatMap1(createTestWindow(4),out);
+    fail();
+  }
+ catch (  RuntimeException e) {
+  }
+  ParallelMerge<Integer> merger2=new ParallelMerge<Integer>(reducer);
+  merger2.numberOfDiscretizers=2;
+  merger2.flatMap1(createTestWindow(0),out);
+  merger2.flatMap1(createTestWindow(1),out);
+  merger2.flatMap1(createTestWindow(1),out);
+  merger2.flatMap2(new Tuple2<Integer,Integer>(1,1),out);
+  try {
+    merger2.flatMap2(new Tuple2<Integer,Integer>(1,1),out);
+    fail();
+  }
+ catch (  RuntimeException e) {
+  }
+}
