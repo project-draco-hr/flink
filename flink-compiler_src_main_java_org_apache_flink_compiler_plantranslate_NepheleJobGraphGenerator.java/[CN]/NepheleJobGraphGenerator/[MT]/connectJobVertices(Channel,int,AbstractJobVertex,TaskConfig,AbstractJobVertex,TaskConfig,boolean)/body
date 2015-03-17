@@ -15,7 +15,20 @@ break;
 default :
 throw new RuntimeException("Unknown runtime ship strategy: " + channel.getShipStrategy());
 }
-targetVertex.connectNewDataSetAsInput(sourceVertex,distributionPattern);
+final ResultPartitionType resultType;
+switch (channel.getDataExchangeMode()) {
+case PIPELINED:
+resultType=ResultPartitionType.PIPELINED;
+break;
+case BATCH:
+resultType=channel.getSource().isOnDynamicPath() ? ResultPartitionType.PIPELINED : ResultPartitionType.BLOCKING;
+break;
+case PIPELINE_WITH_BATCH_FALLBACK:
+throw new UnsupportedOperationException("Data exchange mode " + channel.getDataExchangeMode() + " currently not supported.");
+default :
+throw new UnsupportedOperationException("Unknown data exchange mode.");
+}
+targetVertex.connectNewDataSetAsInput(sourceVertex,distributionPattern,resultType);
 final int outputIndex=sourceConfig.getNumOutputs();
 sourceConfig.addOutputShipStrategy(channel.getShipStrategy());
 if (outputIndex == 0) {
