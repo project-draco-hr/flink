@@ -1,0 +1,113 @@
+{
+  if (this.con2node.containsKey(c)) {
+    return false;
+  }
+  final OptimizerNode n;
+  if (c instanceof GenericDataSinkBase) {
+    DataSinkNode dsn=new DataSinkNode((GenericDataSinkBase<?>)c);
+    this.sinks.add(dsn);
+    n=dsn;
+  }
+ else   if (c instanceof GenericDataSourceBase) {
+    n=new DataSourceNode((GenericDataSourceBase<?,?>)c);
+  }
+ else   if (c instanceof MapOperatorBase) {
+    n=new MapNode((MapOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof MapPartitionOperatorBase) {
+    n=new MapPartitionNode((MapPartitionOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof org.apache.flink.api.common.operators.base.CollectorMapOperatorBase) {
+    n=new CollectorMapNode((org.apache.flink.api.common.operators.base.CollectorMapOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof FlatMapOperatorBase) {
+    n=new FlatMapNode((FlatMapOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof FilterOperatorBase) {
+    n=new FilterNode((FilterOperatorBase<?,?>)c);
+  }
+ else   if (c instanceof ReduceOperatorBase) {
+    n=new ReduceNode((ReduceOperatorBase<?,?>)c);
+  }
+ else   if (c instanceof GroupReduceOperatorBase) {
+    n=new GroupReduceNode((GroupReduceOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof GroupCombineOperatorBase) {
+    n=new GroupCombineNode((GroupCombineOperatorBase<?,?,?>)c);
+  }
+ else   if (c instanceof JoinOperatorBase) {
+    n=new JoinNode((JoinOperatorBase<?,?,?,?>)c);
+  }
+ else   if (c instanceof CoGroupOperatorBase) {
+    n=new CoGroupNode((CoGroupOperatorBase<?,?,?,?>)c);
+  }
+ else   if (c instanceof CrossOperatorBase) {
+    n=new CrossNode((CrossOperatorBase<?,?,?,?>)c);
+  }
+ else   if (c instanceof BulkIterationBase) {
+    n=new BulkIterationNode((BulkIterationBase<?>)c);
+  }
+ else   if (c instanceof DeltaIterationBase) {
+    n=new WorksetIterationNode((DeltaIterationBase<?,?>)c);
+  }
+ else   if (c instanceof Union) {
+    n=new BinaryUnionNode((Union<?>)c);
+  }
+ else   if (c instanceof PartitionOperatorBase) {
+    n=new PartitionNode((PartitionOperatorBase<?>)c);
+  }
+ else   if (c instanceof SortPartitionOperatorBase) {
+    n=new SortPartitionNode((SortPartitionOperatorBase<?>)c);
+  }
+ else   if (c instanceof PartialSolutionPlaceHolder) {
+    if (this.parent == null) {
+      throw new InvalidProgramException("It is currently not supported to create data sinks inside iterations.");
+    }
+    final PartialSolutionPlaceHolder<?> holder=(PartialSolutionPlaceHolder<?>)c;
+    final BulkIterationBase<?> enclosingIteration=holder.getContainingBulkIteration();
+    final BulkIterationNode containingIterationNode=(BulkIterationNode)this.parent.con2node.get(enclosingIteration);
+    BulkPartialSolutionNode p=new BulkPartialSolutionNode(holder,containingIterationNode);
+    p.setDegreeOfParallelism(containingIterationNode.getParallelism());
+    n=p;
+  }
+ else   if (c instanceof WorksetPlaceHolder) {
+    if (this.parent == null) {
+      throw new InvalidProgramException("It is currently not supported to create data sinks inside iterations.");
+    }
+    final WorksetPlaceHolder<?> holder=(WorksetPlaceHolder<?>)c;
+    final DeltaIterationBase<?,?> enclosingIteration=holder.getContainingWorksetIteration();
+    final WorksetIterationNode containingIterationNode=(WorksetIterationNode)this.parent.con2node.get(enclosingIteration);
+    WorksetNode p=new WorksetNode(holder,containingIterationNode);
+    p.setDegreeOfParallelism(containingIterationNode.getParallelism());
+    n=p;
+  }
+ else   if (c instanceof SolutionSetPlaceHolder) {
+    if (this.parent == null) {
+      throw new InvalidProgramException("It is currently not supported to create data sinks inside iterations.");
+    }
+    final SolutionSetPlaceHolder<?> holder=(SolutionSetPlaceHolder<?>)c;
+    final DeltaIterationBase<?,?> enclosingIteration=holder.getContainingWorksetIteration();
+    final WorksetIterationNode containingIterationNode=(WorksetIterationNode)this.parent.con2node.get(enclosingIteration);
+    SolutionSetNode p=new SolutionSetNode(holder,containingIterationNode);
+    p.setDegreeOfParallelism(containingIterationNode.getParallelism());
+    n=p;
+  }
+ else {
+    throw new IllegalArgumentException("Unknown operator type: " + c);
+  }
+  this.con2node.put(c,n);
+  if (n.getParallelism() < 1) {
+    int par=c.getDegreeOfParallelism();
+    if (par > 0) {
+      if (this.forceDOP && par != this.defaultParallelism) {
+        par=this.defaultParallelism;
+        LOG.warn("The parallelism of nested dataflows (such as step functions in iterations) is " + "currently fixed to the parallelism of the surrounding operator (the iteration).");
+      }
+    }
+ else {
+      par=this.defaultParallelism;
+    }
+    n.setDegreeOfParallelism(par);
+  }
+  return true;
+}

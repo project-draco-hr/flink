@@ -1,0 +1,96 @@
+{
+  if (this.vertices.containsKey(node) || this.chainedTasks.containsKey(node) || this.iterations.containsKey(node)) {
+    return false;
+  }
+  final AbstractJobVertex vertex;
+  try {
+    if (node instanceof SinkPlanNode) {
+      vertex=createDataSinkVertex((SinkPlanNode)node);
+    }
+ else     if (node instanceof SourcePlanNode) {
+      vertex=createDataSourceVertex((SourcePlanNode)node);
+    }
+ else     if (node instanceof BulkIterationPlanNode) {
+      BulkIterationPlanNode iterationNode=(BulkIterationPlanNode)node;
+      PlanNode root=iterationNode.getRootOfStepFunction();
+      if (root.getParallelism() != node.getParallelism()) {
+        throw new CompilerException("Error: The final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      IterationDescriptor descr=new IterationDescriptor(iterationNode,this.iterationIdEnumerator++);
+      this.iterations.put(iterationNode,descr);
+      vertex=null;
+    }
+ else     if (node instanceof WorksetIterationPlanNode) {
+      WorksetIterationPlanNode iterationNode=(WorksetIterationPlanNode)node;
+      PlanNode nextWorkSet=iterationNode.getNextWorkSetPlanNode();
+      PlanNode solutionSetDelta=iterationNode.getSolutionSetDeltaPlanNode();
+      if (nextWorkSet.getParallelism() != node.getParallelism()) {
+        throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      if (solutionSetDelta.getParallelism() != node.getParallelism()) {
+        throw new CompilerException("It is currently not supported that the final operator of the step " + "function has a different degree of parallelism than the iteration operator itself.");
+      }
+      IterationDescriptor descr=new IterationDescriptor(iterationNode,this.iterationIdEnumerator++);
+      this.iterations.put(iterationNode,descr);
+      vertex=null;
+    }
+ else     if (node instanceof SingleInputPlanNode) {
+      vertex=createSingleInputVertex((SingleInputPlanNode)node);
+    }
+ else     if (node instanceof DualInputPlanNode) {
+      vertex=createDualInputVertex((DualInputPlanNode)node);
+    }
+ else     if (node instanceof NAryUnionPlanNode) {
+      vertex=null;
+    }
+ else     if (node instanceof BulkPartialSolutionPlanNode) {
+      vertex=createBulkIterationHead((BulkPartialSolutionPlanNode)node);
+    }
+ else     if (node instanceof SolutionSetPlanNode) {
+      for (      Channel c : node.getOutgoingChannels()) {
+        DualInputPlanNode target=(DualInputPlanNode)c.getTarget();
+        AbstractJobVertex accessingVertex=this.vertices.get(target);
+        TaskConfig conf=new TaskConfig(accessingVertex.getConfiguration());
+        int inputNum=c == target.getInput1() ? 0 : c == target.getInput2() ? 1 : -1;
+        if (inputNum == -1) {
+          throw new CompilerException();
+        }
+        if (conf.getDriver().equals(MatchDriver.class)) {
+          conf.setDriver(inputNum == 0 ? JoinWithSolutionSetFirstDriver.class : JoinWithSolutionSetSecondDriver.class);
+        }
+ else         if (conf.getDriver().equals(CoGroupDriver.class)) {
+          conf.setDriver(inputNum == 0 ? CoGroupWithSolutionSetFirstDriver.class : CoGroupWithSolutionSetSecondDriver.class);
+        }
+ else {
+          throw new CompilerException("Found join with solution set using incompatible operator (only Join/CoGroup are valid).");
+        }
+      }
+      this.chainedTasks.put(node,ALREADY_VISITED_PLACEHOLDER);
+      vertex=null;
+    }
+ else     if (node instanceof WorksetPlanNode) {
+      vertex=createWorksetIterationHead((WorksetPlanNode)node);
+    }
+ else {
+      throw new CompilerException("Unrecognized node type: " + node.getClass().getName());
+    }
+  }
+ catch (  Exception e) {
+    throw new CompilerException("Error translating node '" + node + "': "+ e.getMessage(),e);
+  }
+  if (vertex != null) {
+    int pd=node.getParallelism();
+    vertex.setParallelism(pd);
+    vertex.setSlotSharingGroup(sharingGroup);
+    if (this.currentIteration != null) {
+      PlanNode iterationNode=(PlanNode)this.currentIteration;
+      if (iterationNode.getParallelism() < pd) {
+        throw new CompilerException("Error: All functions that are part of an iteration must have the same, or a lower, degree-of-parallelism than the iteration operator.");
+      }
+      IterationDescriptor descr=this.iterations.get(this.currentIteration);
+      new TaskConfig(vertex.getConfiguration()).setIterationId(descr.getId());
+    }
+    this.vertices.put(node,vertex);
+  }
+  return true;
+}

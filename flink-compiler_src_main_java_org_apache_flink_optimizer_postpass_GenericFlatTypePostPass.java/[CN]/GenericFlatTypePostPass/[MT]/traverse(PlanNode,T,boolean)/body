@@ -8,13 +8,13 @@
       getSinkSchema(sn,schema);
     }
  catch (    ConflictingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Conflicting type infomation for the data sink '" + sn.getSinkNode().getPactContract().getName() + "'.");
+      throw new CompilerPostPassException("Conflicting type infomation for the data sink '" + sn.getSinkNode().getOperator().getName() + "'.");
     }
     try {
       propagateToChannel(schema,inchannel,createUtilities);
     }
  catch (    MissingFieldTypeInfoException ex) {
-      throw new CompilerPostPassException("Missing type infomation for the channel that inputs to the data sink '" + sn.getSinkNode().getPactContract().getName() + "'.");
+      throw new CompilerPostPassException("Missing type infomation for the channel that inputs to the data sink '" + sn.getSinkNode().getOperator().getName() + "'.");
     }
   }
  else   if (node instanceof SourcePlanNode) {
@@ -34,7 +34,7 @@
     }
     schema.increaseNumConnectionsThatContributed();
     if (propagateParentSchemaDown) {
-      addSchemaToSchema(parentSchema,schema,iterationNode.getPactContract().getName());
+      addSchemaToSchema(parentSchema,schema,iterationNode.getProgramOperator().getName());
     }
     if (schema.getNumConnectionsThatContributed() < iterationNode.getOutgoingChannels().size()) {
       return;
@@ -68,7 +68,7 @@
         throw new RuntimeException(e);
       }
     }
-    addSchemaToSchema(pss,schema,iterationNode.getPactContract().getName());
+    addSchemaToSchema(pss,schema,iterationNode.getProgramOperator().getName());
     if (createUtilities) {
       iterationNode.setSerializerForIterationChannel(createSerializer(pss,iterationNode.getPartialSolutionPlanNode()));
     }
@@ -76,7 +76,7 @@
       propagateToChannel(schema,iterationNode.getInput(),createUtilities);
     }
  catch (    MissingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + iterationNode.getPactContract().getName() + "'. Missing type information for key field "+ e.getFieldNumber());
+      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + iterationNode.getProgramOperator().getName() + "'. Missing type information for key field "+ e.getFieldNumber());
     }
   }
  else   if (node instanceof WorksetIterationPlanNode) {
@@ -91,7 +91,7 @@
     }
     schema.increaseNumConnectionsThatContributed();
     if (propagateParentSchemaDown) {
-      addSchemaToSchema(parentSchema,schema,iterationNode.getPactContract().getName());
+      addSchemaToSchema(parentSchema,schema,iterationNode.getProgramOperator().getName());
     }
     if (schema.getNumConnectionsThatContributed() < iterationNode.getOutgoingChannels().size()) {
       return;
@@ -121,7 +121,7 @@
       }
     }
  catch (    ConflictingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Conflicting type information for field " + e.getFieldNumber() + " in node '"+ iterationNode.getPactContract().getName()+ "'. Contradicting types between the "+ "result of the iteration and the solution set schema: "+ e.getPreviousType()+ " and "+ e.getNewType()+ ". Most probable cause: Invalid constant field annotations.");
+      throw new CompilerPostPassException("Conflicting type information for field " + e.getFieldNumber() + " in node '"+ iterationNode.getProgramOperator().getName()+ "'. Contradicting types between the "+ "result of the iteration and the solution set schema: "+ e.getPreviousType()+ " and "+ e.getNewType()+ ". Most probable cause: Invalid constant field annotations.");
     }
     if (createUtilities) {
       WorksetIterationNode optNode=iterationNode.getIterationNode();
@@ -131,7 +131,7 @@
         iterationNode.setSolutionSetComparator(createComparator(optNode.getSolutionSetKeyFields(),null,sss));
       }
  catch (      MissingFieldTypeInfoException ex) {
-        throw new CompilerPostPassException("Could not set up the solution set for workset iteration '" + optNode.getPactContract().getName() + "'. Missing type information for key field "+ ex.getFieldNumber()+ '.');
+        throw new CompilerPostPassException("Could not set up the solution set for workset iteration '" + optNode.getOperator().getName() + "'. Missing type information for key field "+ ex.getFieldNumber()+ '.');
       }
     }
     try {
@@ -139,7 +139,7 @@
       propagateToChannel(wss,iterationNode.getInitialWorksetInput(),createUtilities);
     }
  catch (    MissingFieldTypeInfoException ex) {
-      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + iterationNode.getPactContract().getName() + "'. Missing type information for key field "+ ex.getFieldNumber());
+      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + iterationNode.getProgramOperator().getName() + "'. Missing type information for key field "+ ex.getFieldNumber());
     }
   }
  else   if (node instanceof SingleInputPlanNode) {
@@ -164,7 +164,7 @@
       getSingleInputNodeSchema(sn,schema);
     }
  catch (    ConflictingFieldTypeInfoException e) {
-      throw new CompilerPostPassException(getConflictingTypeErrorMessage(e,optNode.getPactContract().getName()));
+      throw new CompilerPostPassException(getConflictingTypeErrorMessage(e,optNode.getOperator().getName()));
     }
     if (createUtilities) {
       for (int i=0; i < sn.getDriverStrategy().getNumRequiredComparators(); i++) {
@@ -172,7 +172,7 @@
           sn.setComparator(createComparator(sn.getKeys(i),sn.getSortOrders(i),schema),i);
         }
  catch (        MissingFieldTypeInfoException e) {
-          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getPactContract().getName() + "'. Missing type information for key field "+ e.getFieldNumber());
+          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getOperator().getName() + "'. Missing type information for key field "+ e.getFieldNumber());
         }
       }
     }
@@ -180,14 +180,14 @@
       propagateToChannel(schema,sn.getInput(),createUtilities);
     }
  catch (    MissingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+      throw new CompilerPostPassException("Could not set up runtime strategy for input channel to node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
     }
     for (    Channel c : sn.getBroadcastInputs()) {
       try {
         propagateToChannel(createEmptySchema(),c,createUtilities);
       }
  catch (      MissingFieldTypeInfoException e) {
-        throw new CompilerPostPassException("Could not set up runtime strategy for broadcast channel in node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+        throw new CompilerPostPassException("Could not set up runtime strategy for broadcast channel in node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
       }
     }
   }
@@ -219,7 +219,7 @@
       getDualInputNodeSchema(dn,schema1,schema2);
     }
  catch (    ConflictingFieldTypeInfoException e) {
-      throw new CompilerPostPassException(getConflictingTypeErrorMessage(e,optNode.getPactContract().getName()));
+      throw new CompilerPostPassException(getConflictingTypeErrorMessage(e,optNode.getOperator().getName()));
     }
     if (createUtilities) {
       if (dn.getDriverStrategy().getNumRequiredComparators() > 0) {
@@ -228,13 +228,13 @@
           dn.setComparator2(createComparator(dn.getKeysForInput2(),dn.getSortOrders(),schema2));
         }
  catch (        MissingFieldTypeInfoException e) {
-          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
         }
         try {
           dn.setPairComparator(createPairComparator(dn.getKeysForInput1(),dn.getKeysForInput2(),dn.getSortOrders(),schema1,schema2));
         }
  catch (        MissingFieldTypeInfoException e) {
-          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+          throw new CompilerPostPassException("Could not set up runtime strategy for node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
         }
       }
     }
@@ -242,20 +242,20 @@
       propagateToChannel(schema1,dn.getInput1(),createUtilities);
     }
  catch (    MissingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Could not set up runtime strategy for the first input channel to node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+      throw new CompilerPostPassException("Could not set up runtime strategy for the first input channel to node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
     }
     try {
       propagateToChannel(schema2,dn.getInput2(),createUtilities);
     }
  catch (    MissingFieldTypeInfoException e) {
-      throw new CompilerPostPassException("Could not set up runtime strategy for the second input channel to node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+      throw new CompilerPostPassException("Could not set up runtime strategy for the second input channel to node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
     }
     for (    Channel c : dn.getBroadcastInputs()) {
       try {
         propagateToChannel(createEmptySchema(),c,createUtilities);
       }
  catch (      MissingFieldTypeInfoException e) {
-        throw new CompilerPostPassException("Could not set up runtime strategy for broadcast channel in node '" + optNode.getPactContract().getName() + "'. Missing type information for field "+ e.getFieldNumber());
+        throw new CompilerPostPassException("Could not set up runtime strategy for broadcast channel in node '" + optNode.getOperator().getName() + "'. Missing type information for field "+ e.getFieldNumber());
       }
     }
   }
@@ -281,7 +281,7 @@
  else {
         schema=(T)psn.postPassHelper;
       }
-      name="partial solution of bulk iteration '" + psn.getPartialSolutionNode().getIterationNode().getPactContract().getName() + "'";
+      name="partial solution of bulk iteration '" + psn.getPartialSolutionNode().getIterationNode().getOperator().getName() + "'";
     }
  else     if (node instanceof SolutionSetPlanNode) {
       SolutionSetPlanNode ssn=(SolutionSetPlanNode)node;
@@ -292,7 +292,7 @@
  else {
         schema=(T)ssn.postPassHelper;
       }
-      name="solution set of workset iteration '" + ssn.getSolutionSetNode().getIterationNode().getPactContract().getName() + "'";
+      name="solution set of workset iteration '" + ssn.getSolutionSetNode().getIterationNode().getOperator().getName() + "'";
     }
  else     if (node instanceof WorksetPlanNode) {
       WorksetPlanNode wsn=(WorksetPlanNode)node;
@@ -303,7 +303,7 @@
  else {
         schema=(T)wsn.postPassHelper;
       }
-      name="workset of workset iteration '" + wsn.getWorksetNode().getIterationNode().getPactContract().getName() + "'";
+      name="workset of workset iteration '" + wsn.getWorksetNode().getIterationNode().getOperator().getName() + "'";
     }
  else {
       throw new CompilerException();
