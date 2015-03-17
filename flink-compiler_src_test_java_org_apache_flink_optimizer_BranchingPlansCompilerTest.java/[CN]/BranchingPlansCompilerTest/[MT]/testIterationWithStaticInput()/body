@@ -1,21 +1,16 @@
 {
-  FileDataSource source=new FileDataSource(DummyInputFormat.class,IN_FILE,"source");
-  MapOperator mappedSource=MapOperator.builder(IdentityMap.class).input(source).name("Identity mapped source").build();
-  ReduceOperator reducedSource=ReduceOperator.builder(IdentityReduce.class).input(source).name("Identity reduce source").build();
-  BulkIteration iteration=new BulkIteration("Loop");
-  iteration.setInput(mappedSource);
-  iteration.setMaximumNumberOfIterations(10);
-  JoinOperator nextPartialSolution=JoinOperator.builder(DummyMatchStub.class,IntValue.class,0,0).input1(iteration.getPartialSolution()).input2(reducedSource).name("Next partial solution").build();
-  iteration.setNextPartialSolution(nextPartialSolution);
-  FileDataSink sink=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Iteration sink");
-  List<FileDataSink> sinks=new ArrayList<FileDataSink>();
-  sinks.add(sink);
-  Plan plan=new Plan(sinks);
   try {
-    compileNoStats(plan);
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(100);
+    DataSet<Long> source=env.generateSequence(1,1000000);
+    DataSet<Long> mapped=source.map(new IdentityMapper<Long>());
+    DataSet<Long> reduced=source.groupBy(new IdentityKeyExtractor<Long>()).reduce(new SelectOneReducer<Long>());
+    IterativeDataSet<Long> iteration=mapped.iterate(10);
+    iteration.closeWith(iteration.join(reduced).where(new IdentityKeyExtractor<Long>()).equalTo(new IdentityKeyExtractor<Long>()).with(new DummyFlatJoinFunction<Long>())).output(new DiscardingOutputFormat<Long>());
+    compileNoStats(env.createProgramPlan());
   }
  catch (  Exception e) {
     e.printStackTrace();
-    Assert.fail(e.getMessage());
+    fail(e.getMessage());
   }
 }

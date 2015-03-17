@@ -1,27 +1,21 @@
 {
   final int SINKS=5;
   try {
-    List<FileDataSink> sinks=new ArrayList<FileDataSink>();
-    final String out1Path="file:///test/1";
-    final String out2Path="file:///test/2";
-    FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE);
-    MapOperator mapA=MapOperator.builder(IdentityMap.class).input(sourceA).name("Map A").build();
-    MapOperator mapC=MapOperator.builder(IdentityMap.class).input(mapA).name("Map C").build();
-    FileDataSink[] sinkA=new FileDataSink[SINKS];
-    FileDataSink[] sinkB=new FileDataSink[SINKS];
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setDegreeOfParallelism(DEFAULT_PARALLELISM);
+    DataSet<Long> source=env.generateSequence(1,10000);
+    DataSet<Long> mappedA=source.map(new IdentityMapper<Long>());
+    DataSet<Long> mappedC=source.map(new IdentityMapper<Long>());
     for (int sink=0; sink < SINKS; sink++) {
-      sinkA[sink]=new FileDataSink(DummyOutputFormat.class,out1Path,mapA,"Sink A:" + sink);
-      sinks.add(sinkA[sink]);
-      sinkB[sink]=new FileDataSink(DummyOutputFormat.class,out2Path,mapC,"Sink B:" + sink);
-      sinks.add(sinkB[sink]);
+      mappedA.output(new DiscardingOutputFormat<Long>());
+      mappedC.output(new DiscardingOutputFormat<Long>());
     }
-    Plan plan=new Plan(sinks,"Plans With Multiple Data Sinks");
+    Plan plan=env.createProgramPlan("Plans With Multiple Data Sinks");
     OptimizedPlan oPlan=compileNoStats(plan);
-    JobGraphGenerator jobGen=new JobGraphGenerator();
-    jobGen.compileJobGraph(oPlan);
+    new JobGraphGenerator().compileJobGraph(oPlan);
   }
  catch (  Exception e) {
     e.printStackTrace();
-    Assert.fail(e.getMessage());
+    fail(e.getMessage());
   }
 }
