@@ -23,7 +23,6 @@
     jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_INTERVAL,"500 ms");
     jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_PAUSE,"2 s");
     jmConfig.setInteger(ConfigConstants.AKKA_WATCH_THRESHOLD,2);
-    jmConfig.setString(ConfigConstants.DEFAULT_EXECUTION_RETRY_DELAY_KEY,"4 s");
     jmActorSystem=AkkaUtils.createActorSystem(jmConfig,new Some<Tuple2<String,Object>>(localAddress));
     ActorRef jmActor=JobManager.startJobManagerActors(jmConfig,jmActorSystem)._1();
     String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms80m","-Xmx80m","-classpath",getCurrentClasspath(),TaskManagerProcessEntryPoint.class.getName(),String.valueOf(jobManagerPort)};
@@ -34,51 +33,7 @@
     waitUntilNumTaskManagersAreRegistered(jmActor,2,20000);
     final File coordinateDirClosure=coordinateTempDir;
     final Throwable[] errorRef=new Throwable[1];
-    ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
-    env.setParallelism(PARALLELISM);
-    env.setNumberOfExecutionRetries(1);
-    env.getConfig().setExecutionMode(executionMode);
-    final long NUM_ELEMENTS=100000L;
-    final DataSet<Long> result=env.generateSequence(1,NUM_ELEMENTS).rebalance().map(new RichMapFunction<Long,Long>(){
-      private final File proceedFile=new File(coordinateDirClosure,PROCEED_MARKER_FILE);
-      private boolean markerCreated=false;
-      private boolean checkForProceedFile=true;
-      @Override public Long map(      Long value) throws Exception {
-        if (!markerCreated) {
-          int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
-          touchFile(new File(coordinateDirClosure,READY_MARKER_FILE_PREFIX + taskIndex));
-          markerCreated=true;
-        }
-        if (checkForProceedFile) {
-          if (proceedFile.exists()) {
-            checkForProceedFile=false;
-          }
- else {
-            Thread.sleep(100);
-          }
-        }
-        return value;
-      }
-    }
-).reduce(new ReduceFunction<Long>(){
-      @Override public Long reduce(      Long value1,      Long value2){
-        return value1 + value2;
-      }
-    }
-);
-    Thread programTrigger=new Thread("ProcessFailureBatchRecoveryITCase Program Trigger"){
-      @Override public void run(){
-        try {
-          long sum=result.collect().get(0);
-          assertEquals(NUM_ELEMENTS * (NUM_ELEMENTS + 1L) / 2L,sum);
-        }
- catch (        Throwable t) {
-          t.printStackTrace();
-          errorRef[0]=t;
-        }
-      }
-    }
-;
+    Thread programTrigger=testProgram(jobManagerPort,coordinateDirClosure,errorRef);
     programTrigger.start();
     waitForMarkerFiles(coordinateTempDir,PARALLELISM,20000);
     taskManagerProcess3=new ProcessBuilder(command).start();
@@ -89,6 +44,7 @@
     touchFile(new File(coordinateTempDir,PROCEED_MARKER_FILE));
     programTrigger.join(120000);
     assertFalse("The program did not finish in time",programTrigger.isAlive());
+    postSubmit();
     if (errorRef[0] != null) {
       Throwable error=errorRef[0];
       error.printStackTrace();

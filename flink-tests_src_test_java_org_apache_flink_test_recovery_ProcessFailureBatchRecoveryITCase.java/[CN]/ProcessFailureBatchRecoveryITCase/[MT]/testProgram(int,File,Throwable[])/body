@@ -1,0 +1,46 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
+  env.setDegreeOfParallelism(PARALLELISM);
+  env.setNumberOfExecutionRetries(1);
+  final long NUM_ELEMENTS=100000L;
+  final DataSet<Long> result=env.generateSequence(1,NUM_ELEMENTS).rebalance().map(new RichMapFunction<Long,Long>(){
+    private final File proceedFile=new File(coordinateDirClosure,PROCEED_MARKER_FILE);
+    private boolean markerCreated=false;
+    private boolean checkForProceedFile=true;
+    @Override public Long map(    Long value) throws Exception {
+      if (!markerCreated) {
+        int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
+        touchFile(new File(coordinateDirClosure,READY_MARKER_FILE_PREFIX + taskIndex));
+        markerCreated=true;
+      }
+      if (checkForProceedFile) {
+        if (proceedFile.exists()) {
+          checkForProceedFile=false;
+        }
+ else {
+          Thread.sleep(100);
+        }
+      }
+      return value;
+    }
+  }
+).reduce(new ReduceFunction<Long>(){
+    @Override public Long reduce(    Long value1,    Long value2){
+      return value1 + value2;
+    }
+  }
+);
+  return new Thread("ProcessFailureBatchRecoveryITCase Program Trigger"){
+    @Override public void run(){
+      try {
+        long sum=result.collect().get(0);
+        assertEquals(NUM_ELEMENTS * (NUM_ELEMENTS + 1L) / 2L,sum);
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+        errorRef[0]=t;
+      }
+    }
+  }
+;
+}

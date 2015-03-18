@@ -1,0 +1,56 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
+  env.setDegreeOfParallelism(PARALLELISM);
+  env.setNumberOfExecutionRetries(1);
+  env.enableMonitoring(100);
+  final DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(DATA_COUNT)).shuffle().map(new RichMapFunction<Long,Long>(){
+    private boolean markerCreated=false;
+    @Override public void open(    Configuration parameters) throws IOException {
+      if (!markerCreated) {
+        int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
+        try {
+          touchFile(new File(coordinateDirClosure,READY_MARKER_FILE_PREFIX + taskIndex));
+        }
+ catch (        IOException e) {
+          e.printStackTrace();
+        }
+        markerCreated=true;
+      }
+    }
+    @Override public Long map(    Long value) throws Exception {
+      return value;
+    }
+  }
+);
+  result.addSink(new RichSinkFunction<Long>(){
+    private transient File output;
+    private transient int outputIndex;
+    private transient BufferedWriter writer;
+    @Override public void open(    Configuration parameters) throws IOException {
+      outputIndex=0;
+      do {
+        output=new File(RESULT_PATH + "-" + outputIndex);
+        outputIndex++;
+      }
+ while (output.exists());
+      writer=new BufferedWriter(new FileWriter(output));
+    }
+    @Override public void invoke(    Long value) throws Exception {
+      writer.write(value.toString());
+      writer.newLine();
+    }
+    @Override public void close(){
+      try {
+        writer.close();
+      }
+ catch (      IOException e) {
+        e.printStackTrace();
+      }
+    }
+    @Override public void cancel(){
+      close();
+    }
+  }
+);
+  return new ProgramTrigger(env,errorRef);
+}
