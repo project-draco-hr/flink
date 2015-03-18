@@ -1,0 +1,34 @@
+{
+  FileDataSource sourceA=new FileDataSource(new DummyInputFormat(),IN_FILE);
+  FileDataSource sourceB=new FileDataSource(new DummyInputFormat(),IN_FILE);
+  ReduceOperator redA=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(sourceA).build();
+  ReduceOperator redB=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(sourceB).build();
+  JoinOperator mat=JoinOperator.builder(new DummyMatchStub(),IntValue.class,0,0).input1(redA).input2(redB).build();
+  FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,mat);
+  sourceA.setParallelism(5);
+  sourceB.setParallelism(7);
+  redA.setParallelism(5);
+  redB.setParallelism(7);
+  mat.setParallelism(5);
+  sink.setParallelism(5);
+  Plan plan=new Plan(sink,"Partition on DoP Change");
+  OptimizedPlan oPlan=compileNoStats(plan);
+  JobGraphGenerator jobGen=new JobGraphGenerator();
+  jobGen.compileJobGraph(oPlan);
+  oPlan.accept(new Visitor<PlanNode>(){
+    @Override public boolean preVisit(    PlanNode visitable){
+      if (visitable instanceof DualInputPlanNode) {
+        DualInputPlanNode node=(DualInputPlanNode)visitable;
+        Channel c1=node.getInput1();
+        Channel c2=node.getInput2();
+        Assert.assertEquals("Incompatible shipping strategy chosen for match",ShipStrategyType.FORWARD,c1.getShipStrategy());
+        Assert.assertEquals("Incompatible shipping strategy chosen for match",ShipStrategyType.PARTITION_HASH,c2.getShipStrategy());
+        return false;
+      }
+      return true;
+    }
+    @Override public void postVisit(    PlanNode visitable){
+    }
+  }
+);
+}

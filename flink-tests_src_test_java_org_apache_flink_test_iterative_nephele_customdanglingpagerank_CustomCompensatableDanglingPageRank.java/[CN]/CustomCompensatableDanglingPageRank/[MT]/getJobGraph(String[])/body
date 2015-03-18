@@ -1,5 +1,5 @@
 {
-  int degreeOfParallelism=2;
+  int parallelism=2;
   String pageWithRankInputPath="";
   String adjacencyListInputPath="";
   String outputPath=TestBaseUtils.constructTestURI(CustomCompensatableDanglingPageRank.class,"flink_iterations");
@@ -13,7 +13,7 @@
   int failingIteration=2;
   double messageLoss=0.75;
   if (args.length >= 14) {
-    degreeOfParallelism=Integer.parseInt(args[0]);
+    parallelism=Integer.parseInt(args[0]);
     pageWithRankInputPath=args[1];
     adjacencyListInputPath=args[2];
     outputPath=args[3];
@@ -29,18 +29,18 @@
   }
   int totalMemoryConsumption=3 * minorConsumer + matchMemory + coGroupSortMemory;
   JobGraph jobGraph=new JobGraph("CompensatableDanglingPageRank");
-  InputFormatVertex pageWithRankInput=JobGraphUtils.createInput(new CustomImprovedDanglingPageRankInputFormat(),pageWithRankInputPath,"DanglingPageWithRankInput",jobGraph,degreeOfParallelism);
+  InputFormatVertex pageWithRankInput=JobGraphUtils.createInput(new CustomImprovedDanglingPageRankInputFormat(),pageWithRankInputPath,"DanglingPageWithRankInput",jobGraph,parallelism);
   TaskConfig pageWithRankInputConfig=new TaskConfig(pageWithRankInput.getConfiguration());
   pageWithRankInputConfig.addOutputShipStrategy(ShipStrategyType.PARTITION_HASH);
   pageWithRankInputConfig.setOutputComparator(vertexWithRankAndDanglingComparator,0);
   pageWithRankInputConfig.setOutputSerializer(vertexWithRankAndDanglingSerializer);
   pageWithRankInputConfig.setStubParameter("pageRank.numVertices",String.valueOf(numVertices));
-  InputFormatVertex adjacencyListInput=JobGraphUtils.createInput(new CustomImprovedAdjacencyListInputFormat(),adjacencyListInputPath,"AdjancencyListInput",jobGraph,degreeOfParallelism);
+  InputFormatVertex adjacencyListInput=JobGraphUtils.createInput(new CustomImprovedAdjacencyListInputFormat(),adjacencyListInputPath,"AdjancencyListInput",jobGraph,parallelism);
   TaskConfig adjacencyListInputConfig=new TaskConfig(adjacencyListInput.getConfiguration());
   adjacencyListInputConfig.addOutputShipStrategy(ShipStrategyType.PARTITION_HASH);
   adjacencyListInputConfig.setOutputSerializer(vertexWithAdjacencyListSerializer);
   adjacencyListInputConfig.setOutputComparator(vertexWithAdjacencyListComparator,0);
-  AbstractJobVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"IterationHead",jobGraph,degreeOfParallelism);
+  AbstractJobVertex head=JobGraphUtils.createTask(IterationHeadPactTask.class,"IterationHead",jobGraph,parallelism);
   TaskConfig headConfig=new TaskConfig(head.getConfiguration());
   headConfig.setIterationId(ITERATION_ID);
   headConfig.addInputToGroup(0);
@@ -69,7 +69,7 @@
   headConfig.setStubParameter("compensation.failingIteration",String.valueOf(failingIteration));
   headConfig.setStubParameter("compensation.messageLoss",String.valueOf(messageLoss));
   headConfig.addIterationAggregator(CustomCompensatableDotProductCoGroup.AGGREGATOR_NAME,new PageRankStatsAggregator());
-  AbstractJobVertex intermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"IterationIntermediate",jobGraph,degreeOfParallelism);
+  AbstractJobVertex intermediate=JobGraphUtils.createTask(IterationIntermediatePactTask.class,"IterationIntermediate",jobGraph,parallelism);
   TaskConfig intermediateConfig=new TaskConfig(intermediate.getConfiguration());
   intermediateConfig.setIterationId(ITERATION_ID);
   intermediateConfig.setDriver(BuildSecondCachedMatchDriver.class);
@@ -90,7 +90,7 @@
   intermediateConfig.setStubParameter("compensation.failingWorker",failingWorkers);
   intermediateConfig.setStubParameter("compensation.failingIteration",String.valueOf(failingIteration));
   intermediateConfig.setStubParameter("compensation.messageLoss",String.valueOf(messageLoss));
-  AbstractJobVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,degreeOfParallelism);
+  AbstractJobVertex tail=JobGraphUtils.createTask(IterationTailPactTask.class,"IterationTail",jobGraph,parallelism);
   TaskConfig tailConfig=new TaskConfig(tail.getConfiguration());
   tailConfig.setIterationId(ITERATION_ID);
   tailConfig.setIsWorksetUpdate();
@@ -117,13 +117,13 @@
   tailConfig.setStubParameter("compensation.failingWorker",failingWorkers);
   tailConfig.setStubParameter("compensation.failingIteration",String.valueOf(failingIteration));
   tailConfig.setStubParameter("compensation.messageLoss",String.valueOf(messageLoss));
-  OutputFormatVertex output=JobGraphUtils.createFileOutput(jobGraph,"FinalOutput",degreeOfParallelism);
+  OutputFormatVertex output=JobGraphUtils.createFileOutput(jobGraph,"FinalOutput",parallelism);
   TaskConfig outputConfig=new TaskConfig(output.getConfiguration());
   outputConfig.addInputToGroup(0);
   outputConfig.setInputSerializer(vertexWithRankAndDanglingSerializer,0);
   outputConfig.setStubWrapper(new UserCodeClassWrapper<CustomPageWithRankOutFormat>(CustomPageWithRankOutFormat.class));
   outputConfig.setStubParameter(FileOutputFormat.FILE_PARAMETER_KEY,outputPath);
-  AbstractJobVertex sync=JobGraphUtils.createSync(jobGraph,degreeOfParallelism);
+  AbstractJobVertex sync=JobGraphUtils.createSync(jobGraph,parallelism);
   TaskConfig syncConfig=new TaskConfig(sync.getConfiguration());
   syncConfig.setNumberOfIterations(numIterations);
   syncConfig.addIterationAggregator(CustomCompensatableDotProductCoGroup.AGGREGATOR_NAME,new PageRankStatsAggregator());
@@ -136,7 +136,7 @@
   JobGraphUtils.connect(head,tail,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(intermediate,tail,DistributionPattern.ALL_TO_ALL);
   tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(0,1);
-  tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(1,degreeOfParallelism);
+  tailConfig.setGateIterativeWithNumberOfEventsUntilInterrupt(1,parallelism);
   JobGraphUtils.connect(head,output,DistributionPattern.POINTWISE);
   JobGraphUtils.connect(head,sync,DistributionPattern.POINTWISE);
   SlotSharingGroup sharingGroup=new SlotSharingGroup();

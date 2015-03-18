@@ -1,0 +1,29 @@
+{
+  final int degOfPar=DEFAULT_PARALLELISM;
+  FileDataSource source=new FileDataSource(new DummyInputFormat(),IN_FILE,"Source");
+  source.setParallelism(degOfPar);
+  MapOperator map1=MapOperator.builder(new IdentityMap()).name("Map1").build();
+  map1.setParallelism(degOfPar);
+  map1.setInput(source);
+  ReduceOperator reduce1=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).name("Reduce 1").build();
+  reduce1.setParallelism(degOfPar);
+  reduce1.setInput(map1);
+  MapOperator map2=MapOperator.builder(new IdentityMap()).name("Map2").build();
+  map2.setParallelism(degOfPar);
+  map2.setInput(reduce1);
+  ReduceOperator reduce2=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).name("Reduce 2").build();
+  reduce2.setParallelism(degOfPar * 2);
+  reduce2.setInput(map2);
+  FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,"Sink");
+  sink.setParallelism(degOfPar * 2);
+  sink.setInput(reduce2);
+  Plan plan=new Plan(sink,"Test Increasing parallelism");
+  OptimizedPlan oPlan=compileNoStats(plan);
+  SinkPlanNode sinkNode=oPlan.getDataSinks().iterator().next();
+  SingleInputPlanNode red2Node=(SingleInputPlanNode)sinkNode.getPredecessor();
+  SingleInputPlanNode map2Node=(SingleInputPlanNode)red2Node.getPredecessor();
+  ShipStrategyType mapIn=map2Node.getInput().getShipStrategy();
+  ShipStrategyType reduceIn=red2Node.getInput().getShipStrategy();
+  Assert.assertEquals("Invalid ship strategy for an operator.",ShipStrategyType.FORWARD,mapIn);
+  Assert.assertEquals("Invalid ship strategy for an operator.",ShipStrategyType.PARTITION_HASH,reduceIn);
+}

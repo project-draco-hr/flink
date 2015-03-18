@@ -31,13 +31,13 @@
   }
   final ArrayList<PlanNode> outputPlans=new ArrayList<PlanNode>();
   final ExecutionMode executionMode=this.inConn.getDataExchangeMode();
-  final int dop=getParallelism();
-  final int inDop=getPredecessorNode().getParallelism();
-  final boolean dopChange=inDop != dop;
+  final int parallelism=getParallelism();
+  final int inParallelism=getPredecessorNode().getParallelism();
+  final boolean parallelismChange=inParallelism != parallelism;
   final boolean breaksPipeline=this.inConn.isBreakingPipeline();
   for (  PlanNode child : subPlans) {
     if (child.getGlobalProperties().isFullyReplicated()) {
-      if (dopChange) {
+      if (parallelismChange) {
         childrenSkippedDueToReplicatedInput=true;
         continue;
       }
@@ -48,8 +48,8 @@
     if (this.inConn.getShipStrategy() == null) {
       for (      RequestedGlobalProperties igps : intGlobal) {
         final Channel c=new Channel(child,this.inConn.getMaterializationMode());
-        igps.parameterizeChannel(c,dopChange,executionMode,breaksPipeline);
-        if (dopChange && !c.getShipStrategy().isNetworkStrategy()) {
+        igps.parameterizeChannel(c,parallelismChange,executionMode,breaksPipeline);
+        if (parallelismChange && !c.getShipStrategy().isNetworkStrategy()) {
           c.getGlobalProperties().reset();
         }
         for (        RequestedGlobalProperties rgps : allValidGlobals) {
@@ -71,7 +71,7 @@
  else {
         c.setShipStrategy(shipStrategy,exMode);
       }
-      if (dopChange) {
+      if (parallelismChange) {
         c.adjustGlobalPropertiesForFullParallelismChange();
       }
       for (      RequestedGlobalProperties rgps : allValidGlobals) {
