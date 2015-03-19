@@ -4,13 +4,10 @@
     if (current == RUNNING || current == DEPLOYING) {
       if (transitionState(current,FINISHED)) {
         try {
-          if (getVertex().finishAllBlockingPartitions()) {
-            IntermediateResult[] allResults=getVertex().getJobVertex().getProducedDataSets();
-            LOG.debug("Finished all produced partitions ({}). Scheduling all receivers " + "of the following datasets: {}.",this,Arrays.toString(allResults));
-            for (            IntermediateResult result : allResults) {
-              for (              IntermediateResultPartition p : result.getPartitions()) {
-                scheduleOrUpdateConsumers(p.getConsumers());
-              }
+          for (          IntermediateResultPartition finishedPartition : getVertex().finishAllBlockingPartitions()) {
+            IntermediateResultPartition[] allPartitions=finishedPartition.getIntermediateResult().getPartitions();
+            for (            IntermediateResultPartition partition : allPartitions) {
+              scheduleOrUpdateConsumers(partition.getConsumers());
             }
           }
           assignedResource.releaseSlot();

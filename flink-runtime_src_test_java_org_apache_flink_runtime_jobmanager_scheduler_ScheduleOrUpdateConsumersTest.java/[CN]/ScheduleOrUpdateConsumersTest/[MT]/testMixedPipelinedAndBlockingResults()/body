@@ -1,0 +1,22 @@
+{
+  final AbstractJobVertex sender=new AbstractJobVertex("Sender");
+  sender.setInvokableClass(BinaryRoundRobinSubtaskIndexSender.class);
+  sender.getConfiguration().setInteger(BinaryRoundRobinSubtaskIndexSender.CONFIG_KEY,PARALLELISM);
+  sender.setParallelism(PARALLELISM);
+  final AbstractJobVertex pipelinedReceiver=new AbstractJobVertex("Pipelined Receiver");
+  pipelinedReceiver.setInvokableClass(SlotCountExceedingParallelismTest.SubtaskIndexReceiver.class);
+  pipelinedReceiver.getConfiguration().setInteger(CONFIG_KEY,PARALLELISM);
+  pipelinedReceiver.setParallelism(PARALLELISM);
+  pipelinedReceiver.connectNewDataSetAsInput(sender,DistributionPattern.ALL_TO_ALL,ResultPartitionType.PIPELINED);
+  final AbstractJobVertex blockingReceiver=new AbstractJobVertex("Blocking Receiver");
+  blockingReceiver.setInvokableClass(SlotCountExceedingParallelismTest.SubtaskIndexReceiver.class);
+  blockingReceiver.getConfiguration().setInteger(CONFIG_KEY,PARALLELISM);
+  blockingReceiver.setParallelism(PARALLELISM);
+  blockingReceiver.connectNewDataSetAsInput(sender,DistributionPattern.ALL_TO_ALL,ResultPartitionType.BLOCKING);
+  SlotSharingGroup slotSharingGroup=new SlotSharingGroup(sender.getID(),pipelinedReceiver.getID(),blockingReceiver.getID());
+  sender.setSlotSharingGroup(slotSharingGroup);
+  pipelinedReceiver.setSlotSharingGroup(slotSharingGroup);
+  blockingReceiver.setSlotSharingGroup(slotSharingGroup);
+  final JobGraph jobGraph=new JobGraph("",sender,pipelinedReceiver,blockingReceiver);
+  JobClient.submitJobAndWait(jobGraph,false,jobClient,TestingUtils.TESTING_DURATION());
+}
