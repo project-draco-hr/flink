@@ -1,0 +1,48 @@
+{
+  final File tempTestOutput=new File(new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH),UUID.randomUUID().toString());
+  assertTrue("Cannot create directory for temp output",tempTestOutput.mkdirs());
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
+  env.setParallelism(PARALLELISM);
+  env.setNumberOfExecutionRetries(1);
+  env.enableCheckpointing(200);
+  DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).map(new RichMapFunction<Long,Long>(){
+    private boolean markerCreated=false;
+    @Override public Long map(    Long value) throws Exception {
+      if (!markerCreated) {
+        int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
+        touchFile(new File(coordinateDir,READY_MARKER_FILE_PREFIX + taskIndex));
+        markerCreated=true;
+      }
+      return value;
+    }
+  }
+);
+  result.addSink(new RichSinkFunction<Long>(){
+    private transient FileChannel writer;
+    @Override public void open(    Configuration parameters) throws IOException {
+      int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
+      File output=new File(tempTestOutput,"task-" + taskIndex + "-"+ UUID.randomUUID().toString());
+      RandomAccessFile outputFile=new RandomAccessFile(output,"rws");
+      this.writer=outputFile.getChannel();
+    }
+    @Override public void invoke(    Long value) throws Exception {
+      String text=value + "\n";
+      byte[] bytes=text.getBytes(Charset.defaultCharset());
+      ByteBuffer buffer=ByteBuffer.wrap(bytes);
+      writer.write(buffer);
+    }
+    @Override public void close() throws Exception {
+      writer.close();
+    }
+  }
+);
+  try {
+    env.execute();
+    fileBatchHasEveryNumberLower(PARALLELISM,DATA_COUNT,tempTestOutput);
+  }
+  finally {
+    if (tempTestOutput.exists()) {
+      FileUtils.deleteDirectory(tempTestOutput);
+    }
+  }
+}

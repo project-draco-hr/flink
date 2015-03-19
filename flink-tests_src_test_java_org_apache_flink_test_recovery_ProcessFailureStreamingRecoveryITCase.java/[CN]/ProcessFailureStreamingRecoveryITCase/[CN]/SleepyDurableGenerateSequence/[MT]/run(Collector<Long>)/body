@@ -1,8 +1,30 @@
 {
+  StreamingRuntimeContext context=(StreamingRuntimeContext)getRuntimeContext();
+  OperatorState<Long> collectedState;
+  if (context.containsState("collected")) {
+    collectedState=(OperatorState<Long>)context.getState("collected");
+  }
+ else {
+    collectedState=new OperatorState<Long>(0L);
+    context.registerState("collected",collectedState);
+  }
+  final long stepSize=context.getNumberOfParallelSubtasks();
+  final long congruence=context.getIndexOfThisSubtask();
+  final long toCollect=(end % stepSize > congruence) ? (end / stepSize + 1) : (end / stepSize);
+  long collected=collectedState.getState();
+  final File proceedFile=new File(coordinateDir,PROCEED_MARKER_FILE);
+  boolean checkForProceedFile=true;
   while (collected < toCollect) {
-    collector.collect(collected * stepSize + coungrence);
+    if (checkForProceedFile) {
+      if (proceedFile.exists()) {
+        checkForProceedFile=false;
+      }
+ else {
+        Thread.sleep(SLEEP_TIME);
+      }
+    }
+    collector.collect(collected * stepSize + congruence);
     collectedState.update(collected);
     collected++;
-    Thread.sleep(SLEEP_TIME);
   }
 }
