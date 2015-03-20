@@ -1,0 +1,72 @@
+{
+  assertTrue("Broken test setup",NUM_STRINGS % 40 == 0);
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
+    env.setDegreeOfParallelism(PARALLELISM);
+    DataStream<String> stream=env.addSource(new RichParallelSourceFunction<String>(){
+      private Random rnd;
+      private StringBuilder stringBuilder;
+      private int step;
+      private boolean running=true;
+      @Override public void open(      Configuration parameters){
+        rnd=new Random();
+        stringBuilder=new StringBuilder();
+        step=getRuntimeContext().getNumberOfParallelSubtasks();
+      }
+      @Override public void run(      Collector<String> collector) throws Exception {
+        for (long i=getRuntimeContext().getIndexOfThisSubtask(); running && i < NUM_STRINGS; i+=step) {
+          char first=(char)((i % 40) + 40);
+          stringBuilder.setLength(0);
+          stringBuilder.append(first);
+          collector.collect(randomString(stringBuilder,rnd));
+        }
+      }
+      @Override public void cancel(){
+        running=false;
+      }
+    }
+);
+    stream.filter(new FilterFunction<String>(){
+      @Override public boolean filter(      String value){
+        return value.length() < 100;
+      }
+    }
+).map(new MapFunction<String,PrefixCount>(){
+      @Override public PrefixCount map(      String value){
+        return new PrefixCount(value.substring(0,1),value,1L);
+      }
+    }
+).groupBy("prefix").reduce(new ReduceFunction<PrefixCount>(){
+      @Override public PrefixCount reduce(      PrefixCount value1,      PrefixCount value2){
+        value1.count+=value2.count;
+        return value1;
+      }
+    }
+).addSink(new RichSinkFunction<PrefixCount>(){
+      private Map<Character,Long> counts=new HashMap<Character,Long>();
+      @Override public void invoke(      PrefixCount value){
+        Character first=value.prefix.charAt(0);
+        Long previous=counts.get(first);
+        if (previous == null) {
+          counts.put(first,value.count);
+        }
+ else {
+          counts.put(first,Math.max(previous,value.count));
+        }
+      }
+      @Override public void close(){
+        for (        Long count : counts.values()) {
+          assertEquals(NUM_STRINGS / 40,count.longValue());
+        }
+      }
+      @Override public void cancel(){
+      }
+    }
+);
+    env.execute();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
