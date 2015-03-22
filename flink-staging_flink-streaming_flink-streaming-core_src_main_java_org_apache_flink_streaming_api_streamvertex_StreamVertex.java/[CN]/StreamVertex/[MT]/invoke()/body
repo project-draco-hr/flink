@@ -1,24 +1,27 @@
 {
+  boolean operatorOpen=false;
   if (LOG.isDebugEnabled()) {
     LOG.debug("Task {} invoked with instance id {}",getName(),getInstanceID());
   }
   try {
     userInvokable.setRuntimeContext(context);
-    userInvokable.open(getTaskConfiguration());
-    for (    ChainableInvokable<?,?> invokable : outputHandler.chainedInvokables) {
-      invokable.setRuntimeContext(context);
-      invokable.open(getTaskConfiguration());
-    }
+    operatorOpen=true;
+    openOperator();
     userInvokable.invoke();
-    userInvokable.close();
-    for (    ChainableInvokable<?,?> invokable : outputHandler.chainedInvokables) {
-      invokable.close();
-    }
+    closeOperator();
+    operatorOpen=false;
     if (LOG.isDebugEnabled()) {
       LOG.debug("Task {} invoke finished instance id {}",getName(),getInstanceID());
     }
   }
  catch (  Exception e) {
+    if (operatorOpen) {
+      try {
+        closeOperator();
+      }
+ catch (      Throwable t) {
+      }
+    }
     if (LOG.isErrorEnabled()) {
       LOG.error("StreamInvokable failed due to: {}",StringUtils.stringifyException(e));
     }
