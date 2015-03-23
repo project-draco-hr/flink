@@ -1,7 +1,11 @@
 {
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Initializing consumer {} / {} with hosts {}",topic,partition,hosts);
+  }
   PartitionMetadata metadata;
+  isRunning=true;
   do {
-    metadata=findLeader(hosts,port,topic,partition);
+    metadata=findLeader(hosts,topic,partition);
     try {
       Thread.sleep(DEFAULT_WAIT_ON_EMPTY_FETCH);
     }
@@ -9,13 +13,37 @@
       throw new InterruptedException("Establishing connection to Kafka failed");
     }
   }
- while (metadata == null);
+ while (isRunning && metadata == null);
+  isRunning=false;
   if (metadata.leader() == null) {
-    throw new RuntimeException("Can't find Leader for Topic and Partition. (at " + hosts.get(0) + ":"+ port);
+    throw new RuntimeException("Can't find Leader for Topic and Partition. (at " + hosts + ")");
   }
-  leadBroker=metadata.leader().host();
+  leadBroker=metadata.leader();
   clientName="Client_" + topic + "_"+ partition;
-  consumer=new SimpleConsumer(leadBroker,port,connectTimeoutMs,bufferSize,clientName);
-  readOffset=initialOffset.getOffset(consumer,topic,partition,clientName);
-  resetFetchResponse(readOffset);
+  consumer=new SimpleConsumer(leadBroker.host(),leadBroker.port(),connectTimeoutMs,bufferSize,clientName);
+  try {
+    readOffset=initialOffset.getOffset(consumer,topic,partition,clientName);
+  }
+ catch (  NotLeaderForPartitionException e) {
+    do {
+      metadata=findLeader(hosts,topic,partition);
+      try {
+        Thread.sleep(DEFAULT_WAIT_ON_EMPTY_FETCH);
+      }
+ catch (      InterruptedException ie) {
+        throw new InterruptedException("Establishing connection to Kafka failed");
+      }
+    }
+ while (metadata == null);
+    readOffset=initialOffset.getOffset(consumer,topic,partition,clientName);
+  }
+  try {
+    resetFetchResponse(readOffset);
+  }
+ catch (  ClosedChannelException e) {
+    if (LOG.isWarnEnabled()) {
+      LOG.warn("Got ClosedChannelException, trying to find new leader.");
+    }
+    findNewLeader();
+  }
 }

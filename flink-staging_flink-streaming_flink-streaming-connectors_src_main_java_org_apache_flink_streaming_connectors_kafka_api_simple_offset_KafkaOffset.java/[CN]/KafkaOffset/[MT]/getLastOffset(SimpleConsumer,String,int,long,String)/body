@@ -4,9 +4,18 @@
   requestInfo.put(topicAndPartition,new PartitionOffsetRequestInfo(whichTime,1));
   kafka.javaapi.OffsetRequest request=new kafka.javaapi.OffsetRequest(requestInfo,kafka.api.OffsetRequest.CurrentVersion(),clientName);
   OffsetResponse response=consumer.getOffsetsBefore(request);
-  if (response.hasError()) {
-    throw new RuntimeException("Error fetching data from Kafka broker. Reason: " + response.errorCode(topic,partition));
-  }
-  long[] offsets=response.offsets(topic,partition);
-  return offsets[0];
+  while (response.hasError()) {
+switch (response.errorCode(topic,partition)) {
+case 6:
+case 3:
+      LOG.warn("Kafka broker trying to fetch from a non-leader broker.");
+    break;
+default :
+  throw new RuntimeException("Error fetching data from Kafka broker. Reason: " + response.errorCode(topic,partition));
+}
+request=new kafka.javaapi.OffsetRequest(requestInfo,kafka.api.OffsetRequest.CurrentVersion(),clientName);
+response=consumer.getOffsetsBefore(request);
+}
+long[] offsets=response.offsets(topic,partition);
+return offsets[0];
 }

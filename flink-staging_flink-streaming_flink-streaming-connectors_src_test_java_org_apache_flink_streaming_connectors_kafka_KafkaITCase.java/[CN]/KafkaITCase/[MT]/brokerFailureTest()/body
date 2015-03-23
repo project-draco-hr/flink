@@ -1,0 +1,106 @@
+{
+  String topic="brokerFailureTestTopic";
+  createTestTopic(topic,2,2);
+  KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperConnectionString);
+  final String leaderToShutDown=kafkaTopicUtils.waitAndGetPartitionMetadata(topic,0).leader().get().connectionString();
+  final Thread brokerShutdown=new Thread(new Runnable(){
+    @Override public void run(){
+      shutdownKafkaBroker=false;
+      while (!shutdownKafkaBroker) {
+        try {
+          Thread.sleep(10);
+        }
+ catch (        InterruptedException e) {
+          LOG.warn("Interruption",e);
+        }
+      }
+      for (      KafkaServer kafkaServer : brokers) {
+        if (leaderToShutDown.equals(kafkaServer.config().advertisedHostName() + ":" + kafkaServer.config().advertisedPort())) {
+          LOG.info("Killing Kafka Server {}",leaderToShutDown);
+          kafkaServer.shutdown();
+          leaderHasShutDown=true;
+          break;
+        }
+      }
+    }
+  }
+);
+  brokerShutdown.start();
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
+  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema(),5000,10,Offset.FROM_BEGINNING));
+  consuming.setParallelism(1);
+  consuming.addSink(new SinkFunction<String>(){
+    int elCnt=0;
+    int start=0;
+    int numOfMessagesToReceive=100;
+    BitSet validator=new BitSet(numOfMessagesToReceive + 1);
+    @Override public void invoke(    String value) throws Exception {
+      LOG.debug("Got " + value);
+      String[] sp=value.split("-");
+      int v=Integer.parseInt(sp[1]);
+      if (start == -1) {
+        start=v;
+      }
+      Assert.assertFalse("Received tuple twice",validator.get(v - start));
+      if (v - start < 0 && LOG.isWarnEnabled()) {
+        LOG.warn("Not in order: {}",value);
+      }
+      validator.set(v - start);
+      elCnt++;
+      if (elCnt == 20) {
+        shutdownKafkaBroker=true;
+      }
+      if (elCnt == numOfMessagesToReceive && leaderHasShutDown) {
+        int nc;
+        if ((nc=validator.nextClearBit(0)) != numOfMessagesToReceive) {
+          System.out.println("The bitset was not set to 1 on all elements. Next clear:" + nc + " Set: "+ validator);
+        }
+        throw new SuccessException();
+      }
+ else       if (elCnt == numOfMessagesToReceive) {
+        numOfMessagesToReceive+=50;
+        LOG.info("Waiting for more messages till {}",numOfMessagesToReceive);
+      }
+    }
+  }
+);
+  DataStream<String> stream=env.addSource(new SourceFunction<String>(){
+    boolean running=true;
+    @Override public void run(    Collector<String> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      while (running) {
+        collector.collect("kafka-" + cnt++);
+        if ((cnt - 1) % 20 == 0) {
+          LOG.debug("Sending message #{}",cnt - 1);
+        }
+        try {
+          Thread.sleep(10);
+        }
+ catch (        InterruptedException ignored) {
+        }
+      }
+    }
+    @Override public void cancel(){
+      LOG.info("Source got chancel()");
+      running=false;
+    }
+  }
+);
+  stream.addSink(new KafkaSink<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema())).setParallelism(1);
+  try {
+    env.setParallelism(1);
+    env.execute();
+  }
+ catch (  JobExecutionException good) {
+    Throwable t=good.getCause();
+    int limit=0;
+    while (!(t instanceof SuccessException)) {
+      t=t.getCause();
+      if (limit++ == 20) {
+        LOG.warn("Test failed with exception",good);
+        Assert.fail("Test failed with: " + good.getMessage());
+      }
+    }
+  }
+}

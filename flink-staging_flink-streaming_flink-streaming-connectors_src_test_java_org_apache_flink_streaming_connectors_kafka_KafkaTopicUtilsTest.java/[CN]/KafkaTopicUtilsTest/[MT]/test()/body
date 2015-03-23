@@ -1,0 +1,54 @@
+{
+  int zkPort;
+  String kafkaHost;
+  String zookeeperConnectionString;
+  File tmpZkDir;
+  List<File> tmpKafkaDirs;
+  Map<String,KafkaServer> kafkaServers=null;
+  TestingServer zookeeper=null;
+  try {
+    tmpZkDir=tempFolder.newFolder();
+    tmpKafkaDirs=new ArrayList<File>(NUMBER_OF_BROKERS);
+    for (int i=0; i < NUMBER_OF_BROKERS; i++) {
+      tmpKafkaDirs.add(tempFolder.newFolder());
+    }
+    zkPort=NetUtils.getAvailablePort();
+    kafkaHost=InetAddress.getLocalHost().getHostName();
+    zookeeperConnectionString="localhost:" + zkPort;
+    zookeeper=new TestingServer(zkPort,tmpZkDir);
+    kafkaServers=new HashMap<String,KafkaServer>();
+    for (int i=0; i < NUMBER_OF_BROKERS; i++) {
+      KafkaServer kafkaServer=getKafkaServer(kafkaHost,zookeeperConnectionString,i,tmpKafkaDirs.get(i));
+      kafkaServers.put(kafkaServer.config().advertisedHostName() + ":" + kafkaServer.config().advertisedPort(),kafkaServer);
+    }
+    final KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperConnectionString);
+    kafkaTopicUtils.createTopic(TOPIC,1,2);
+    assertTrue(kafkaTopicUtils.topicExists(TOPIC));
+    assertEquals(1,kafkaTopicUtils.getNumberOfPartitions(TOPIC));
+    PartitionMetadata partitionMetadata=kafkaTopicUtils.waitAndGetPartitionMetadata(TOPIC,0);
+    assertEquals(0,partitionMetadata.errorCode());
+    assertEquals(new HashSet<String>(kafkaServers.keySet()),kafkaTopicUtils.getBrokerAddresses(TOPIC));
+  }
+ catch (  IOException e) {
+    fail(e.toString());
+  }
+catch (  Exception e) {
+    fail(e.toString());
+  }
+ finally {
+    LOG.info("Shutting down all services");
+    for (    KafkaServer broker : kafkaServers.values()) {
+      if (broker != null) {
+        broker.shutdown();
+      }
+    }
+    if (zookeeper != null) {
+      try {
+        zookeeper.stop();
+      }
+ catch (      IOException e) {
+        LOG.warn("ZK.stop() failed",e);
+      }
+    }
+  }
+}

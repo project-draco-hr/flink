@@ -1,23 +1,30 @@
 {
   KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperAddress);
-  String brokerAddress=kafkaTopicUtils.getLeaderBrokerAddressForTopic(topicId);
-  props=new Properties();
-  props.put("metadata.broker.list",brokerAddress);
-  props.put("request.required.acks","1");
-  props.put("serializer.class",DefaultEncoder.class.getCanonicalName());
-  props.put("key.serializer.class",DefaultEncoder.class.getCanonicalName());
+  String listOfBrokers=kafkaTopicUtils.getBrokerList(topicId);
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Broker list: {}",listOfBrokers);
+  }
+  Properties properties=new Properties();
+  properties.put("metadata.broker.list",listOfBrokers);
+  properties.put("request.required.acks","-1");
+  properties.put("message.send.max.retries","10");
+  properties.put("serializer.class",DefaultEncoder.class.getCanonicalName());
+  properties.put("key.serializer.class",DefaultEncoder.class.getCanonicalName());
+  for (  Map.Entry<Object,Object> propertiesEntry : userDefinedProperties.entrySet()) {
+    properties.put(propertiesEntry.getKey(),propertiesEntry.getValue());
+  }
   if (partitioner != null) {
-    props.put("partitioner.class",PartitionerWrapper.class.getCanonicalName());
-    props.put(PartitionerWrapper.SERIALIZED_WRAPPER_NAME,partitioner);
+    properties.put("partitioner.class",PartitionerWrapper.class.getCanonicalName());
+    properties.put(PartitionerWrapper.SERIALIZED_WRAPPER_NAME,partitioner);
   }
   if (partitionerClass != null) {
-    props.put("partitioner.class",partitionerClass);
+    properties.put("partitioner.class",partitionerClass);
   }
-  ProducerConfig config=new ProducerConfig(props);
+  ProducerConfig config=new ProducerConfig(properties);
   try {
     producer=new Producer<IN,byte[]>(config);
   }
  catch (  NullPointerException e) {
-    throw new RuntimeException("Cannot connect to Kafka broker " + brokerAddress,e);
+    throw new RuntimeException("Cannot connect to Kafka broker " + listOfBrokers,e);
   }
 }
