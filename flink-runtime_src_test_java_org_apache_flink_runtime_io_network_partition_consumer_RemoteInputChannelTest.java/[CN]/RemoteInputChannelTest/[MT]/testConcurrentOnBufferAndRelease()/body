@@ -1,0 +1,40 @@
+{
+  final int numberOfRepetitions=8192;
+  final ExecutorService executor=Executors.newFixedThreadPool(2);
+  try {
+    final SingleInputGate inputGate=mock(SingleInputGate.class);
+    for (int i=0; i < numberOfRepetitions; i++) {
+      final RemoteInputChannel inputChannel=createRemoteInputChannel(inputGate);
+      final Callable<Void> enqueueTask=new Callable<Void>(){
+        @Override public Void call() throws Exception {
+          while (true) {
+            for (int j=0; j < 128; j++) {
+              inputChannel.onBuffer(TestBufferFactory.getMockBuffer(),j);
+            }
+            if (inputChannel.isReleased()) {
+              return null;
+            }
+          }
+        }
+      }
+;
+      final Callable<Void> releaseTask=new Callable<Void>(){
+        @Override public Void call() throws Exception {
+          inputChannel.releaseAllResources();
+          return null;
+        }
+      }
+;
+      List<Future<Void>> results=Lists.newArrayListWithCapacity(2);
+      results.add(executor.submit(enqueueTask));
+      results.add(executor.submit(releaseTask));
+      for (      Future<Void> result : results) {
+        result.get();
+      }
+      assertEquals("Resource leak during concurrent release and enqueue.",0,inputChannel.getNumberOfQueuedBuffers());
+    }
+  }
+  finally {
+    executor.shutdown();
+  }
+}
