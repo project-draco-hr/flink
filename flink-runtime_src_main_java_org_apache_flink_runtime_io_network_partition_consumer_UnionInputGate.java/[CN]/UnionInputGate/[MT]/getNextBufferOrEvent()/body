@@ -1,7 +1,15 @@
 {
+  if (inputGatesWithRemainingData.isEmpty()) {
+    return null;
+  }
   requestPartitions();
   final InputGate inputGate=inputGateListener.getNextInputGateToReadFrom();
   final BufferOrEvent bufferOrEvent=inputGate.getNextBufferOrEvent();
+  if (bufferOrEvent.isEvent() && bufferOrEvent.getEvent().getClass() == EndOfPartitionEvent.class && inputGate.isFinished()) {
+    if (!inputGatesWithRemainingData.remove(inputGate)) {
+      throw new IllegalStateException("Couldn't find input gate in set of remaining " + "input gates.");
+    }
+  }
   final int channelIndexOffset=inputGateToIndexOffsetMap.get(inputGate);
   bufferOrEvent.setChannelIndex(channelIndexOffset + bufferOrEvent.getChannelIndex());
   return bufferOrEvent;
