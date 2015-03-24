@@ -3,14 +3,31 @@
   if (bufferOrEvent != null) {
     return bufferOrEvent;
   }
+ else   if (blockedNonprocessed.isEmpty() && inputFinished) {
+    return endOfStreamEvent;
+  }
  else {
     while (true) {
-      bufferOrEvent=inputGate.getNextBufferOrEvent();
-      if (isBlocked(bufferOrEvent.getChannelIndex())) {
-        blockedNonprocessed.add(new SpillingBufferOrEvent(bufferOrEvent,bufferSpiller,spillReader));
+      if (!inputFinished) {
+        bufferOrEvent=inputGate.getNextBufferOrEvent();
+        if (!bufferOrEvent.isBuffer() && bufferOrEvent.getEvent() instanceof EndOfPartitionEvent) {
+          if (inputGate.isFinished()) {
+            endOfStreamEvent=bufferOrEvent;
+            inputFinished=true;
+          }
+        }
+ else {
+          if (isBlocked(bufferOrEvent.getChannelIndex())) {
+            blockedNonprocessed.add(new SpillingBufferOrEvent(bufferOrEvent,bufferSpiller,spillReader));
+          }
+ else {
+            return bufferOrEvent;
+          }
+        }
       }
  else {
-        return bufferOrEvent;
+        actOnAllBlocked();
+        return getNextNonBlocked();
       }
     }
   }
