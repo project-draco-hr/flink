@@ -1,0 +1,24 @@
+{
+  final int[] numberOfBuffersPerChannel=new int[numberOfInputChannels];
+  try {
+    BufferOrEvent boe;
+    while ((boe=inputGate.getNextBufferOrEvent()) != null) {
+      if (boe.isBuffer()) {
+        boe.getBuffer().recycle();
+        if (++numberOfBuffersPerChannel[boe.getChannelIndex()] > numberOfExpectedBuffersPerChannel) {
+          throw new IllegalStateException("Received more buffers than expected " + "on channel " + boe.getChannelIndex() + ".");
+        }
+      }
+    }
+    for (int i=0; i < numberOfBuffersPerChannel.length; i++) {
+      final int actualNumberOfReceivedBuffers=numberOfBuffersPerChannel[i];
+      if (actualNumberOfReceivedBuffers != numberOfExpectedBuffersPerChannel) {
+        throw new IllegalStateException("Received unexpected number of buffers " + "on channel " + i + " ("+ actualNumberOfReceivedBuffers+ " instead "+ "of "+ numberOfExpectedBuffersPerChannel+ ").");
+      }
+    }
+  }
+  finally {
+    inputGate.releaseAllResources();
+  }
+  return null;
+}

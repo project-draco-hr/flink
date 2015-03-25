@@ -1,0 +1,23 @@
+{
+synchronized (buffers) {
+    if (!isFinished) {
+      throw new IllegalStateException("Subpartition has not been finished yet, " + "but blocking subpartitions can only be consumed after they have " + "been finished.");
+    }
+    if (readView != null) {
+      throw new IllegalStateException("Subpartition is being or already has been " + "consumed, but we currently allow subpartitions to only be consumed once.");
+    }
+    boolean isSpilled=spillWriter != null && (spillWriter.isClosed() || spillWriter.getNumberOfOutstandingRequests() == 0);
+    if (isSpilled) {
+      if (ioMode.isSynchronous()) {
+        readView=new SpilledSubpartitionViewSyncIO(this,bufferProvider.getMemorySegmentSize(),spillWriter.getChannelID(),0);
+      }
+ else {
+        readView=new SpilledSubpartitionViewAsyncIO(this,bufferProvider,ioManager,spillWriter.getChannelID(),0);
+      }
+    }
+ else {
+      readView=new SpillableSubpartitionView(this,bufferProvider,buffers.size(),ioMode);
+    }
+    return readView;
+  }
+}

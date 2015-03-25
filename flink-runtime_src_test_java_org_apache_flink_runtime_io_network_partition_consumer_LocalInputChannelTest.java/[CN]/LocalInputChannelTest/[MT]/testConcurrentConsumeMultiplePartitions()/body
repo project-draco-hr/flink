@@ -1,0 +1,39 @@
+{
+  final int parallelism=32;
+  final int producerBufferPoolSize=parallelism + 1;
+  final int numberOfBuffersPerChannel=1024;
+  checkArgument(parallelism >= 1);
+  checkArgument(producerBufferPoolSize >= parallelism);
+  checkArgument(numberOfBuffersPerChannel >= 1);
+  final ExecutorService executor=Executors.newFixedThreadPool(2 * parallelism);
+  final NetworkBufferPool networkBuffers=new NetworkBufferPool((parallelism * producerBufferPoolSize) + (parallelism * parallelism),TestBufferFactory.BUFFER_SIZE);
+  final ResultPartitionConsumableNotifier partitionConsumableNotifier=mock(ResultPartitionConsumableNotifier.class);
+  final IOManager ioManager=mock(IOManager.class);
+  final JobID jobId=new JobID();
+  final ResultPartitionManager partitionManager=new ResultPartitionManager();
+  final ResultPartitionID[] partitionIds=new ResultPartitionID[parallelism];
+  final TestPartitionProducer[] partitionProducers=new TestPartitionProducer[parallelism];
+  for (int i=0; i < parallelism; i++) {
+    partitionIds[i]=new ResultPartitionID();
+    final ResultPartition partition=new ResultPartition(jobId,partitionIds[i],ResultPartitionType.PIPELINED,parallelism,partitionManager,partitionConsumableNotifier,ioManager,ASYNC);
+    partition.registerBufferPool(networkBuffers.createBufferPool(producerBufferPoolSize,true));
+    partitionProducers[i]=new TestPartitionProducer(partition,false,new TestPartitionProducerBufferSource(parallelism,partition.getBufferProvider(),numberOfBuffersPerChannel));
+    partitionManager.registerResultPartition(partition);
+  }
+  try {
+    List<Future<?>> results=Lists.newArrayListWithCapacity(parallelism + 1);
+    for (int i=0; i < parallelism; i++) {
+      results.add(executor.submit(partitionProducers[i]));
+    }
+    for (int i=0; i < parallelism; i++) {
+      results.add(executor.submit(new TestLocalInputChannelConsumer(i,parallelism,numberOfBuffersPerChannel,networkBuffers.createBufferPool(parallelism,true),partitionManager,new TaskEventDispatcher(),partitionIds)));
+    }
+    for (    Future<?> result : results) {
+      result.get();
+    }
+  }
+  finally {
+    networkBuffers.destroy();
+    executor.shutdown();
+  }
+}
