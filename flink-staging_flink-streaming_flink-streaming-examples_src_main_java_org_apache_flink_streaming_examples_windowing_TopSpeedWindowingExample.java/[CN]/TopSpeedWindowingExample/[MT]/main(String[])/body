@@ -2,13 +2,25 @@
   if (!parseParameters(args)) {
     return;
   }
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  @SuppressWarnings({"rawtypes","serial"}) DataStream topSpeeds=env.addSource(CarSource.create(numOfCars)).groupBy(0).window(Time.of(evictionSec,TimeUnit.SECONDS)).every(Delta.of(triggerMeters,new DeltaFunction<Tuple4<Integer,Integer,Double,Long>>(){
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  @SuppressWarnings({"rawtypes","serial"}) DataStream<Tuple4<Integer,Integer,Double,Long>> carData;
+  if (fileInput) {
+    carData=env.readTextFile(inputPath).map(new ParseCarData());
+  }
+ else {
+    carData=env.addSource(CarSource.create(numOfCars));
+  }
+  DataStream<Tuple4<Integer,Integer,Double,Long>> topSpeeds=carData.groupBy(0).window(Time.of(evictionSec,new CarTimestamp())).every(Delta.of(triggerMeters,new DeltaFunction<Tuple4<Integer,Integer,Double,Long>>(){
     @Override public double getDelta(    Tuple4<Integer,Integer,Double,Long> oldDataPoint,    Tuple4<Integer,Integer,Double,Long> newDataPoint){
       return newDataPoint.f2 - oldDataPoint.f2;
     }
   }
 ,new Tuple4<Integer,Integer,Double,Long>(0,0,0d,0l))).local().maxBy(1).flatten();
-  topSpeeds.print();
+  if (fileOutput) {
+    topSpeeds.writeAsText(outputPath);
+  }
+ else {
+    topSpeeds.print();
+  }
   env.execute("CarTopSpeedWindowingExample");
 }

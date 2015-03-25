@@ -3,8 +3,9 @@
     return;
   }
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  DataStream<Double[]> model=env.addSource(new TrainingDataSource()).window(Time.of(5000,TimeUnit.MILLISECONDS)).mapWindow(new PartialModelBuilder()).flatten();
-  DataStream<Integer> prediction=env.addSource(new NewDataSource()).connect(model).map(new Predictor());
+  createSourceStreams(env);
+  DataStream<Double[]> model=trainingData.window(Time.of(5000,new LinearTimestamp())).mapWindow(new PartialModelBuilder()).flatten();
+  DataStream<Integer> prediction=newData.connect(model).map(new Predictor());
   if (fileOutput) {
     prediction.writeAsText(outputPath,1);
   }
