@@ -1,0 +1,25 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(2);
+  final List<Tuple3<String,Long,Integer>> input=new ArrayList<Tuple3<String,Long,Integer>>();
+  input.add(new Tuple3<String,Long,Integer>("a",1L,1));
+  input.add(new Tuple3<String,Long,Integer>("b",1L,1));
+  input.add(new Tuple3<String,Long,Integer>("b",3L,1));
+  input.add(new Tuple3<String,Long,Integer>("b",5L,1));
+  input.add(new Tuple3<String,Long,Integer>("c",6L,1));
+  input.add(new Tuple3<String,Long,Integer>("a",10L,1));
+  input.add(new Tuple3<String,Long,Integer>("c",11L,1));
+  DataStream<Tuple3<String,Long,Integer>> source=env.addSource(new SourceFunction<Tuple3<String,Long,Integer>>(){
+    @Override public void run(    Collector<Tuple3<String,Long,Integer>> collector) throws Exception {
+      for (      Tuple3<String,Long,Integer> value : input) {
+        Thread.sleep(3000);
+        collector.collect(value);
+        System.out.println("Collected: " + value);
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  source.groupBy(0).window(new SessionTriggerPolicy(3L),new TumblingEvictionPolicy<Tuple3<String,Long,Integer>>()).sum(2).flatten().print();
+  env.execute();
+}
