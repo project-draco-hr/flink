@@ -1,0 +1,12 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  Graph<Long,Long,Long> graph=Graph.fromCollection(TestGraphUtils.getLongLongVertices(),TestGraphUtils.getLongLongEdges(),env).mapVertices(new AssignOneMapper());
+  IterationConfiguration parameters=new IterationConfiguration();
+  parameters.addBroadcastSetForUpdateFunction("updateBcastSet",env.fromElements(1,2,3));
+  parameters.addBroadcastSetForMessagingFunction("messagingBcastSet",env.fromElements(4,5,6));
+  parameters.registerAggregator("superstepAggregator",new LongSumAggregator());
+  Graph<Long,Long,Long> result=graph.runVertexCentricIteration(new UpdateFunction(),new MessageFunction(),10,parameters);
+  result.getVertices().map(new VertexToTuple2Map<Long,Long>()).writeAsCsv(resultPath,"\n","\t");
+  env.execute();
+  expectedResult="1	11\n" + "2	11\n" + "3	11\n"+ "4	11\n"+ "5	11";
+}

@@ -5,27 +5,35 @@
   TypeInformation<Vertex<VertexKey,VertexValue>> vertexTypes=initialVertices.getType();
   TypeInformation<VertexKey> keyType=((TupleTypeInfo<?>)initialVertices.getType()).getTypeAt(0);
   TypeInformation<Tuple2<VertexKey,Message>> messageTypeInfo=new TupleTypeInfo<Tuple2<VertexKey,Message>>(keyType,messageType);
-  final String name=(this.name != null) ? this.name : "Vertex-centric iteration (" + updateFunction + " | "+ messagingFunction+ ")";
   final int[] zeroKeyPos=new int[]{0};
   final DeltaIteration<Vertex<VertexKey,VertexValue>,Vertex<VertexKey,VertexValue>> iteration=this.initialVertices.iterateDelta(this.initialVertices,this.maximumNumberOfIterations,zeroKeyPos);
-  iteration.name(name);
-  iteration.parallelism(parallelism);
-  iteration.setSolutionSetUnManaged(unmanagedSolutionSet);
-  for (  Map.Entry<String,Aggregator<?>> entry : this.aggregators.entrySet()) {
-    iteration.registerAggregator(entry.getKey(),entry.getValue());
+  if (this.configuration != null) {
+    iteration.name(this.configuration.getName("Vertex-centric iteration (" + updateFunction + " | "+ messagingFunction+ ")"));
+    iteration.parallelism(this.configuration.getParallelism());
+    iteration.setSolutionSetUnManaged(this.configuration.isSolutionSetUnmanagedMemory());
+    for (    Map.Entry<String,Aggregator<?>> entry : this.configuration.getAggregators().entrySet()) {
+      iteration.registerAggregator(entry.getKey(),entry.getValue());
+    }
+  }
+ else {
+    iteration.name("Vertex-centric iteration (" + updateFunction + " | "+ messagingFunction+ ")");
   }
   CoGroupOperator<?,?,Tuple2<VertexKey,Message>> messages;
   MessagingUdfWithEdgeValues<VertexKey,VertexValue,Message,EdgeValue> messenger=new MessagingUdfWithEdgeValues<VertexKey,VertexValue,Message,EdgeValue>(messagingFunction,messageTypeInfo);
   messages=this.edgesWithValue.coGroup(iteration.getWorkset()).where(0).equalTo(0).with(messenger);
   messages=messages.name("Messaging");
-  for (  Tuple2<String,DataSet<?>> e : this.bcVarsMessaging) {
-    messages=messages.withBroadcastSet(e.f1,e.f0);
+  if (this.configuration != null) {
+    for (    Tuple2<String,DataSet<?>> e : this.configuration.getMessagingBcastVars()) {
+      messages=messages.withBroadcastSet(e.f1,e.f0);
+    }
   }
   VertexUpdateUdf<VertexKey,VertexValue,Message> updateUdf=new VertexUpdateUdf<VertexKey,VertexValue,Message>(updateFunction,vertexTypes);
   CoGroupOperator<?,?,Vertex<VertexKey,VertexValue>> updates=messages.coGroup(iteration.getSolutionSet()).where(0).equalTo(0).with(updateUdf);
   updates=updates.name("Vertex State Updates");
-  for (  Tuple2<String,DataSet<?>> e : this.bcVarsUpdate) {
-    updates=updates.withBroadcastSet(e.f1,e.f0);
+  if (this.configuration != null) {
+    for (    Tuple2<String,DataSet<?>> e : this.configuration.getUpdateBcastVars()) {
+      updates=updates.withBroadcastSet(e.f1,e.f0);
+    }
   }
   updates.withForwardedFieldsFirst("0").withForwardedFieldsSecond("0");
   return iteration.closeWith(updates,updates);
