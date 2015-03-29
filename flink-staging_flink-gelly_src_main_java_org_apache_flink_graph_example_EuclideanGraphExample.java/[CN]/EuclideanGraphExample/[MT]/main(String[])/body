@@ -6,17 +6,15 @@
   DataSet<Vertex<Long,Point>> vertices=getVerticesDataSet(env);
   DataSet<Edge<Long,Double>> edges=getEdgesDataSet(env);
   Graph<Long,Point,Double> graph=Graph.fromDataSet(vertices,edges,env);
-  DataSet<Tuple3<Long,Long,Double>> resultedTriplets=graph.getTriplets().map(new MapFunction<Triplet<Long,Point,Double>,Tuple3<Long,Long,Double>>(){
+  DataSet<Tuple3<Long,Long,Double>> edgesWithEuclideanWeight=graph.getTriplets().map(new MapFunction<Triplet<Long,Point,Double>,Tuple3<Long,Long,Double>>(){
     @Override public Tuple3<Long,Long,Double> map(    Triplet<Long,Point,Double> triplet) throws Exception {
       Vertex<Long,Point> srcVertex=triplet.getSrcVertex();
       Vertex<Long,Point> trgVertex=triplet.getTrgVertex();
-      Edge<Long,Double> edge=triplet.getEdge();
-      edge.setValue(srcVertex.getValue().euclideanDistance(trgVertex.getValue()));
-      return new Tuple3<Long,Long,Double>(srcVertex.getId(),trgVertex.getId(),edge.getValue());
+      return new Tuple3<Long,Long,Double>(srcVertex.getId(),trgVertex.getId(),srcVertex.getValue().euclideanDistance(trgVertex.getValue()));
     }
   }
 );
-  Graph<Long,Point,Double> resultedGraph=graph.joinWithEdges(resultedTriplets,new MapFunction<Tuple2<Double,Double>,Double>(){
+  Graph<Long,Point,Double> resultedGraph=graph.joinWithEdges(edgesWithEuclideanWeight,new MapFunction<Tuple2<Double,Double>,Double>(){
     @Override public Double map(    Tuple2<Double,Double> distance) throws Exception {
       return distance.f1;
     }
