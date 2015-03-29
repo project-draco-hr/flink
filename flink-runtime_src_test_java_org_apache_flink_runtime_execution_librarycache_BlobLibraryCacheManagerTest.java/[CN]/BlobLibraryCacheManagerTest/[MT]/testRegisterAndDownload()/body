@@ -1,0 +1,67 @@
+{
+  BlobServer server=null;
+  BlobCache cache=null;
+  File cacheDir=null;
+  try {
+    Configuration config=new Configuration();
+    server=new BlobServer(config);
+    InetSocketAddress serverAddress=new InetSocketAddress("localhost",server.getPort());
+    cache=new BlobCache(serverAddress,config);
+    BlobClient uploader=new BlobClient(serverAddress);
+    BlobKey dataKey1=uploader.put(new byte[]{1,2,3,4,5,6,7,8});
+    BlobKey dataKey2=uploader.put(new byte[]{11,12,13,14,15,16,17,18});
+    uploader.close();
+    BlobLibraryCacheManager libCache=new BlobLibraryCacheManager(cache,1000000000L);
+    assertEquals(0,libCache.getNumberOfCachedLibraries());
+    try {
+      libCache.getClassLoader(new JobID());
+      fail("Should fail with an IllegalStateException");
+    }
+ catch (    IllegalStateException e) {
+    }
+{
+      JobID jid=new JobID();
+      ExecutionAttemptID executionId=new ExecutionAttemptID();
+      Collection<BlobKey> keys=Collections.singleton(dataKey1);
+      libCache.registerTask(jid,executionId,keys);
+      assertEquals(1,libCache.getNumberOfReferenceHolders(jid));
+      assertEquals(1,libCache.getNumberOfCachedLibraries());
+      assertNotNull(libCache.getClassLoader(jid));
+      libCache.unregisterTask(jid,executionId);
+      assertEquals(0,libCache.getNumberOfReferenceHolders(jid));
+      assertEquals(1,libCache.getNumberOfCachedLibraries());
+      try {
+        libCache.getClassLoader(jid);
+        fail("Should fail with an IllegalStateException");
+      }
+ catch (      IllegalStateException e) {
+      }
+    }
+    cacheDir=new File(cache.getStorageDir(),"cache");
+    assertTrue(cacheDir.exists());
+    assertTrue("Could not remove write permissions from cache directory",cacheDir.setWritable(false,false));
+    try {
+      libCache.registerTask(new JobID(),new ExecutionAttemptID(),Collections.singleton(dataKey2));
+      fail("This should fail with an IOException");
+    }
+ catch (    IOException e) {
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (cacheDir != null) {
+      if (!cacheDir.setWritable(true,false)) {
+        System.err.println("Could not re-add write permissions to cache directory.");
+      }
+    }
+    if (cache != null) {
+      cache.shutdown();
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+  }
+}
