@@ -4,44 +4,52 @@
   if (writers.length != producedPartitions.length) {
     throw new IllegalStateException("Unequal number of writers and partitions.");
   }
-  for (int i=0; i < producedPartitions.length; i++) {
-    final ResultPartition partition=producedPartitions[i];
-    final ResultPartitionWriter writer=writers[i];
-    BufferPool bufferPool=null;
-    try {
-      bufferPool=networkBufferPool.createBufferPool(partition.getNumberOfSubpartitions(),false);
-      partition.registerBufferPool(bufferPool);
-      partitionManager.registerResultPartition(partition);
+synchronized (lock) {
+    if (isShutdown) {
+      throw new IllegalStateException("NetworkEnvironment is shut down");
     }
- catch (    Throwable t) {
-      if (bufferPool != null) {
-        bufferPool.lazyDestroy();
+    if (!isAssociated()) {
+      throw new IllegalStateException("NetworkEnvironment is not associated with a TaskManager");
+    }
+    for (int i=0; i < producedPartitions.length; i++) {
+      final ResultPartition partition=producedPartitions[i];
+      final ResultPartitionWriter writer=writers[i];
+      BufferPool bufferPool=null;
+      try {
+        bufferPool=networkBufferPool.createBufferPool(partition.getNumberOfSubpartitions(),false);
+        partition.registerBufferPool(bufferPool);
+        partitionManager.registerResultPartition(partition);
       }
-      if (t instanceof IOException) {
-        throw (IOException)t;
-      }
+ catch (      Throwable t) {
+        if (bufferPool != null) {
+          bufferPool.lazyDestroy();
+        }
+        if (t instanceof IOException) {
+          throw (IOException)t;
+        }
  else {
-        throw new IOException(t.getMessage(),t);
+          throw new IOException(t.getMessage(),t);
+        }
       }
+      taskEventDispatcher.registerWriterForIncomingTaskEvents(writer.getPartitionId(),writer);
     }
-    taskEventDispatcher.registerWriterForIncomingTaskEvents(writer.getPartitionId(),writer);
-  }
-  final SingleInputGate[] inputGates=task.getInputGates();
-  for (  SingleInputGate gate : inputGates) {
-    BufferPool bufferPool=null;
-    try {
-      bufferPool=networkBufferPool.createBufferPool(gate.getNumberOfInputChannels(),false);
-      gate.setBufferPool(bufferPool);
-    }
- catch (    Throwable t) {
-      if (bufferPool != null) {
-        bufferPool.lazyDestroy();
+    final SingleInputGate[] inputGates=task.getInputGates();
+    for (    SingleInputGate gate : inputGates) {
+      BufferPool bufferPool=null;
+      try {
+        bufferPool=networkBufferPool.createBufferPool(gate.getNumberOfInputChannels(),false);
+        gate.setBufferPool(bufferPool);
       }
-      if (t instanceof IOException) {
-        throw (IOException)t;
-      }
+ catch (      Throwable t) {
+        if (bufferPool != null) {
+          bufferPool.lazyDestroy();
+        }
+        if (t instanceof IOException) {
+          throw (IOException)t;
+        }
  else {
-        throw new IOException(t.getMessage(),t);
+          throw new IOException(t.getMessage(),t);
+        }
       }
     }
   }

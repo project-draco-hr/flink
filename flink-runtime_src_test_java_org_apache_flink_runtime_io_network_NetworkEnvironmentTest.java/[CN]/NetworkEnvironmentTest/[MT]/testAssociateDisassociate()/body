@@ -1,0 +1,58 @@
+{
+  final int BUFFER_SIZE=1024;
+  final int NUM_BUFFERS=20;
+  final int port;
+  try {
+    port=NetUtils.getAvailablePort();
+  }
+ catch (  Throwable t) {
+    return;
+  }
+  try {
+    NettyConfig nettyConf=new NettyConfig(InetAddress.getLocalHost(),port,BUFFER_SIZE,new Configuration());
+    NetworkEnvironmentConfiguration config=new NetworkEnvironmentConfiguration(NUM_BUFFERS,BUFFER_SIZE,IOManager.IOMode.SYNC,new Some<NettyConfig>(nettyConf));
+    NetworkEnvironment env=new NetworkEnvironment(new FiniteDuration(30,TimeUnit.SECONDS),config);
+    assertFalse(env.isShutdown());
+    assertFalse(env.isAssociated());
+    assertNotNull(env.getNetworkBufferPool());
+    assertEquals(NUM_BUFFERS,env.getNetworkBufferPool().getTotalNumberOfMemorySegments());
+    assertNull(env.getConnectionManager());
+    assertNull(env.getPartitionConsumableNotifier());
+    assertNull(env.getTaskEventDispatcher());
+    assertNull(env.getPartitionManager());
+    ActorRef jmActor=Mockito.mock(ActorRef.class);
+    ActorRef tmActor=Mockito.mock(ActorRef.class);
+    env.associateWithTaskManagerAndJobManager(jmActor,tmActor);
+    assertNotNull(env.getConnectionManager());
+    assertNotNull(env.getPartitionConsumableNotifier());
+    assertNotNull(env.getTaskEventDispatcher());
+    assertNotNull(env.getPartitionManager());
+    BufferPool localPool=env.getNetworkBufferPool().createBufferPool(10,false);
+    assertNotNull(localPool);
+    env.disassociate();
+    assertNull(env.getConnectionManager());
+    assertNull(env.getPartitionConsumableNotifier());
+    assertNull(env.getTaskEventDispatcher());
+    assertNull(env.getPartitionManager());
+    assertNotNull(env.getNetworkBufferPool());
+    assertTrue(localPool.isDestroyed());
+    jmActor=Mockito.mock(ActorRef.class);
+    tmActor=Mockito.mock(ActorRef.class);
+    env.associateWithTaskManagerAndJobManager(jmActor,tmActor);
+    assertNotNull(env.getConnectionManager());
+    assertNotNull(env.getPartitionConsumableNotifier());
+    assertNotNull(env.getTaskEventDispatcher());
+    assertNotNull(env.getPartitionManager());
+    env.shutdown();
+    assertTrue(env.isShutdown());
+    assertFalse(env.isAssociated());
+    assertNull(env.getConnectionManager());
+    assertNull(env.getPartitionConsumableNotifier());
+    assertNull(env.getTaskEventDispatcher());
+    assertNull(env.getPartitionManager());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

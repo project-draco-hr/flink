@@ -1,25 +1,30 @@
 {
   LOG.debug("Unregistering task {} ({}) from network environment (state: {}).",task.getTaskNameWithSubtasks(),task.getExecutionState());
   final ExecutionAttemptID executionId=task.getExecutionId();
-  if (task.isCanceledOrFailed()) {
-    partitionManager.releasePartitionsProducedBy(executionId);
-  }
-  ResultPartitionWriter[] writers=task.getWriters();
-  if (writers != null) {
-    for (    ResultPartitionWriter writer : task.getWriters()) {
-      taskEventDispatcher.unregisterWriter(writer);
+synchronized (lock) {
+    if (isShutdown || !isAssociated()) {
+      return;
     }
-  }
-  final SingleInputGate[] inputGates=task.getInputGates();
-  if (inputGates != null) {
-    for (    SingleInputGate gate : inputGates) {
-      try {
-        if (gate != null) {
-          gate.releaseAllResources();
-        }
+    if (task.isCanceledOrFailed()) {
+      partitionManager.releasePartitionsProducedBy(executionId);
+    }
+    ResultPartitionWriter[] writers=task.getWriters();
+    if (writers != null) {
+      for (      ResultPartitionWriter writer : task.getWriters()) {
+        taskEventDispatcher.unregisterWriter(writer);
       }
- catch (      IOException e) {
-        LOG.error("Error during release of reader resources: " + e.getMessage(),e);
+    }
+    final SingleInputGate[] inputGates=task.getInputGates();
+    if (inputGates != null) {
+      for (      SingleInputGate gate : inputGates) {
+        try {
+          if (gate != null) {
+            gate.releaseAllResources();
+          }
+        }
+ catch (        IOException e) {
+          LOG.error("Error during release of reader resources: " + e.getMessage(),e);
+        }
       }
     }
   }
