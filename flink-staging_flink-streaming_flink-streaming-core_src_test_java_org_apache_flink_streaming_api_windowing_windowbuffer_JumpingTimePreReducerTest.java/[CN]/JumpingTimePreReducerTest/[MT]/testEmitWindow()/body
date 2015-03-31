@@ -1,0 +1,30 @@
+{
+  TestCollector<StreamWindow<Integer>> collector=new TestCollector<StreamWindow<Integer>>();
+  List<StreamWindow<Integer>> collected=collector.getCollected();
+  WindowBuffer<Integer> wb=new JumpingTimePreReducer<Integer>(reducer,serializer,3,2,new TimestampWrapper<Integer>(new Timestamp<Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public long getTimestamp(    Integer value){
+      return value;
+    }
+  }
+,1));
+  wb.store(1);
+  wb.store(2);
+  wb.store(3);
+  wb.evict(1);
+  wb.emitWindow(collector);
+  assertEquals(1,collected.size());
+  assertEquals(StreamWindow.fromElements(5),collected.get(0));
+  wb.store(4);
+  wb.store(5);
+  wb.evict(2);
+  wb.store(6);
+  wb.emitWindow(collector);
+  wb.evict(2);
+  wb.emitWindow(collector);
+  wb.store(12);
+  wb.emitWindow(collector);
+  assertEquals(3,collected.size());
+  assertEquals(StreamWindow.fromElements(11),collected.get(1));
+  assertEquals(StreamWindow.fromElements(12),collected.get(2));
+}

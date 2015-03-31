@@ -1,0 +1,31 @@
+{
+  List<Tuple2<Integer,Integer>> inputs=new ArrayList<Tuple2<Integer,Integer>>();
+  inputs.add(new Tuple2<Integer,Integer>(1,1));
+  inputs.add(new Tuple2<Integer,Integer>(2,0));
+  inputs.add(new Tuple2<Integer,Integer>(3,-1));
+  inputs.add(new Tuple2<Integer,Integer>(4,-2));
+  inputs.add(new Tuple2<Integer,Integer>(5,-3));
+  TestCollector<StreamWindow<Tuple2<Integer,Integer>>> collector=new TestCollector<StreamWindow<Tuple2<Integer,Integer>>>();
+  List<StreamWindow<Tuple2<Integer,Integer>>> collected=collector.getCollected();
+  WindowBuffer<Tuple2<Integer,Integer>> wb=new JumpingCountPreReducer<Tuple2<Integer,Integer>>(reducer,serializer,2);
+  wb.store(serializer.copy(inputs.get(0)));
+  wb.store(serializer.copy(inputs.get(1)));
+  wb.store(serializer.copy(inputs.get(2)));
+  wb.store(serializer.copy(inputs.get(3)));
+  wb.store(serializer.copy(inputs.get(4)));
+  wb.emitWindow(collector);
+  assertEquals(1,collected.size());
+  assertEquals(StreamWindow.fromElements(new Tuple2<Integer,Integer>(12,-6)),collected.get(0));
+  wb.store(serializer.copy(inputs.get(0)));
+  wb.store(serializer.copy(inputs.get(1)));
+  wb.store(serializer.copy(inputs.get(2)));
+  wb.evict(3);
+  wb.store(serializer.copy(inputs.get(3)));
+  wb.emitWindow(collector);
+  assertEquals(2,collected.size());
+  assertEquals(StreamWindow.fromElements(new Tuple2<Integer,Integer>(7,-3)),collected.get(1));
+  assertEquals(3,reducer.allInputs.size());
+  assertEquals(reducer.allInputs.get(0),inputs.get(3));
+  assertEquals(reducer.allInputs.get(1),inputs.get(4));
+  assertEquals(reducer.allInputs.get(2),inputs.get(3));
+}
