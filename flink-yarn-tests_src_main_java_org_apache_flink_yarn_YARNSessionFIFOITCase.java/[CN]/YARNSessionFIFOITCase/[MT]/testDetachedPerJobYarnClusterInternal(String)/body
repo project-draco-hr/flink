@@ -1,0 +1,63 @@
+{
+  YarnClient yc=YarnClient.createYarnClient();
+  yc.init(yarnConfiguration);
+  yc.start();
+  Runner runner=startWithArgs(new String[]{"run","-m","yarn-cluster","-yj",flinkUberjar.getAbsolutePath(),"-yn","1","-yjm","512","-yD","yarn.heap-cutoff-ratio=0.5","-ytm","1024","--yarndetached",job},"The Job has been submitted with JobID",RunTypes.CLI_FRONTEND);
+  Assert.assertTrue("There should be at most 2 containers running",getRunningContainers() <= 2);
+  Assert.assertFalse("The runner should detach.",runner.isAlive());
+  LOG.info("CLI Frontend has returned, so the job is running");
+  try {
+    List<ApplicationReport> apps=yc.getApplications(EnumSet.of(YarnApplicationState.RUNNING));
+    ApplicationId tmpAppId=null;
+    if (apps.size() == 1) {
+      tmpAppId=apps.get(0).getApplicationId();
+      LOG.info("waiting for the job with appId {} to finish",tmpAppId);
+      while (yc.getApplications(EnumSet.of(YarnApplicationState.RUNNING)).size() == 0) {
+        sleep(500);
+      }
+    }
+ else {
+      apps=yc.getApplications();
+      Collections.sort(apps,new Comparator<ApplicationReport>(){
+        @Override public int compare(        ApplicationReport o1,        ApplicationReport o2){
+          return o1.getApplicationId().compareTo(o2.getApplicationId()) * -1;
+        }
+      }
+);
+      tmpAppId=apps.get(0).getApplicationId();
+      LOG.info("Selected {} as the last appId from {}",tmpAppId,Arrays.toString(apps.toArray()));
+    }
+    final ApplicationId id=tmpAppId;
+    File taskmanagerOut=YarnTestBase.findFile("..",new FilenameFilter(){
+      @Override public boolean accept(      File dir,      String name){
+        return name.contains("taskmanager") && name.contains("stdout") && dir.getAbsolutePath().contains(id.toString());
+      }
+    }
+);
+    Assert.assertNotNull("Taskmanager output not found",taskmanagerOut);
+    LOG.info("The job has finished. TaskManager output file found {}",taskmanagerOut.getAbsolutePath());
+    String content=FileUtils.readFileToString(taskmanagerOut);
+    Assert.assertTrue("Expected string '(all,2)' not found ",content.contains("(all,2)"));
+    Assert.assertTrue("Expected string '(mind,1)' not found",content.contains("(mind,1)"));
+    File jobmanagerLog=YarnTestBase.findFile("..",new FilenameFilter(){
+      @Override public boolean accept(      File dir,      String name){
+        return name.contains("jobmanager-main") && dir.getAbsolutePath().contains(id.toString());
+      }
+    }
+);
+    content=FileUtils.readFileToString(jobmanagerLog);
+    Assert.assertTrue("Expected string 'Starting TM with command=$JAVA_HOME/bin/java -Xmx512m' not found in JobManager log",content.contains("Starting TM with command=$JAVA_HOME/bin/java -Xmx512m"));
+    LOG.info("Checking again that app has finished");
+    ApplicationReport rep;
+    do {
+      sleep(500);
+      rep=yc.getApplicationReport(id);
+      LOG.info("Got report {}",rep);
+    }
+ while (rep.getYarnApplicationState() == YarnApplicationState.RUNNING);
+  }
+ catch (  Throwable t) {
+    LOG.warn("Error while detached yarn session was running",t);
+    Assert.fail();
+  }
+}
