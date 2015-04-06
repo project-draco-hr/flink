@@ -21,11 +21,22 @@
           }
         }
 ;
-        final ActorRef fakeJobManager2=actorSystem.actorOf(fakeJmProps,jobManagerName);
+        ActorRef fakeJobManager2=null;
+        long deadline=20000000000L + System.nanoTime();
+        do {
+          try {
+            fakeJobManager2=actorSystem.actorOf(fakeJmProps,jobManagerName);
+          }
+ catch (          InvalidActorNameException e) {
+            Thread.sleep(100);
+          }
+        }
+ while (fakeJobManager2 == null && System.nanoTime() < deadline);
+        final ActorRef jm2Closure=fakeJobManager2;
         new Within(new FiniteDuration(10,TimeUnit.SECONDS)){
           @Override protected void run(){
             expectMsgClass(RegisterTaskManager.class);
-            taskManager.tell(new AcknowledgeRegistration(fakeJobManager2,new InstanceID(),45234),fakeJobManager2);
+            taskManager.tell(new AcknowledgeRegistration(jm2Closure,new InstanceID(),45234),jm2Closure);
           }
         }
 ;
