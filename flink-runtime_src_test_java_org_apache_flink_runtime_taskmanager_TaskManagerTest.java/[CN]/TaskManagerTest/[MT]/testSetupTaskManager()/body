@@ -1,16 +1,19 @@
 {
   new JavaTestKit(system){
 {
+      ActorRef jobManager=null;
+      ActorRef taskManager=null;
       try {
-        ActorRef jobManager=system.actorOf(Props.create(SimpleJobManager.class));
-        final ActorRef tm=createTaskManager(jobManager);
+        jobManager=system.actorOf(Props.create(SimpleJobManager.class));
+        taskManager=createTaskManager(jobManager);
         JobID jid=new JobID();
         JobVertexID vid=new JobVertexID();
         final ExecutionAttemptID eid=new ExecutionAttemptID();
         final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"TestTask",2,7,new Configuration(),new Configuration(),TestInvokableCorrect.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
-        new Within(duration("1 seconds")){
+        final ActorRef tmClosure=taskManager;
+        new Within(duration("2 seconds")){
           @Override protected void run(){
-            tm.tell(new SubmitTask(tdd),getRef());
+            tmClosure.tell(new SubmitTask(tdd),getRef());
             expectMsgEquals(new TaskOperationResult(eid,true));
           }
         }
@@ -19,6 +22,14 @@
  catch (      Exception e) {
         e.printStackTrace();
         fail(e.getMessage());
+      }
+ finally {
+        if (taskManager != null) {
+          taskManager.tell(Kill.getInstance(),ActorRef.noSender());
+        }
+        if (jobManager != null) {
+          jobManager.tell(Kill.getInstance(),ActorRef.noSender());
+        }
       }
     }
   }

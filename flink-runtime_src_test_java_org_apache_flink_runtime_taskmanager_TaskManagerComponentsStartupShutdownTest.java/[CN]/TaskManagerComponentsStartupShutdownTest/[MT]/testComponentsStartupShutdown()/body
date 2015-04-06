@@ -1,0 +1,54 @@
+{
+  final String[] TMP_DIR=new String[]{ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH};
+  final FiniteDuration timeout=new FiniteDuration(100,TimeUnit.SECONDS);
+  final int BUFFER_SIZE=32 * 1024;
+  Configuration config=new Configuration();
+  config.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_INTERVAL,"200 ms");
+  config.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_PAUSE,"1 s");
+  config.setInteger(ConfigConstants.AKKA_WATCH_THRESHOLD,1);
+  ActorSystem actorSystem=null;
+  try {
+    actorSystem=AkkaUtils.createLocalActorSystem(config);
+    final ActorRef jobManager=JobManager.startJobManagerActors(config,actorSystem)._1();
+    final TaskManagerConfiguration tmConfig=new TaskManagerConfiguration(TMP_DIR,1000000,timeout,Option.<FiniteDuration>empty(),1,config);
+    final NetworkEnvironmentConfiguration netConf=new NetworkEnvironmentConfiguration(32,BUFFER_SIZE,IOManager.IOMode.SYNC,Option.<NettyConfig>empty());
+    final InstanceConnectionInfo connectionInfo=new InstanceConnectionInfo(InetAddress.getLocalHost(),10000);
+    final MemoryManager memManager=new DefaultMemoryManager(32 * BUFFER_SIZE,1,BUFFER_SIZE);
+    final IOManager ioManager=new IOManagerAsync(TMP_DIR);
+    final NetworkEnvironment network=new NetworkEnvironment(timeout,netConf);
+    final int numberOfSlots=1;
+    final Props tmProps=Props.create(TaskManager.class,tmConfig,connectionInfo,jobManager.path().toString(),memManager,ioManager,network,numberOfSlots);
+    final ActorRef taskManager=actorSystem.actorOf(tmProps);
+    new JavaTestKit(actorSystem){
+{
+        new Within(new FiniteDuration(5000,TimeUnit.SECONDS)){
+          @Override protected void run(){
+            taskManager.tell(TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),getTestActor());
+            expectMsgEquals(TaskManagerMessages.getRegisteredAtJobManagerMessage());
+          }
+        }
+;
+      }
+    }
+;
+    assertTrue(network.isAssociated());
+    taskManager.tell(Kill.getInstance(),ActorRef.noSender());
+    jobManager.tell(Kill.getInstance(),ActorRef.noSender());
+    actorSystem.shutdown();
+    actorSystem.awaitTermination();
+    actorSystem=null;
+    assertFalse(network.isAssociated());
+    assertTrue(network.isShutdown());
+    assertTrue(ioManager.isProperlyShutDown());
+    assertTrue(memManager.isShutdown());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (actorSystem != null) {
+      actorSystem.shutdown();
+    }
+  }
+}

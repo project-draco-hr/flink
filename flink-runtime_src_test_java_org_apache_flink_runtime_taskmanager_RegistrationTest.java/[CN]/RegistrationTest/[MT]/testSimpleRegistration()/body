@@ -1,0 +1,29 @@
+{
+  new JavaTestKit(actorSystem){
+{
+      try {
+        ActorRef jobManager=startJobManager();
+        final ActorRef taskManager1=startTaskManager(jobManager);
+        final ActorRef taskManager2=startTaskManager(jobManager);
+        Future<Object> responseFuture1=Patterns.ask(taskManager1,TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),5000);
+        Future<Object> responseFuture2=Patterns.ask(taskManager2,TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),5000);
+        Object response1=Await.result(responseFuture1,new FiniteDuration(5,TimeUnit.SECONDS));
+        Object response2=Await.result(responseFuture2,new FiniteDuration(5,TimeUnit.SECONDS));
+        Class<?> confirmClass=TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass();
+        assertTrue(response1 != null && confirmClass.isAssignableFrom(response1.getClass()));
+        assertTrue(response2 != null && confirmClass.isAssignableFrom(response2.getClass()));
+        Future<Object> numTaskManagersFuture=Patterns.ask(jobManager,JobManagerMessages.getRequestNumberRegisteredTaskManager(),1000);
+        Integer count=(Integer)Await.result(numTaskManagersFuture,new FiniteDuration(1,TimeUnit.SECONDS));
+        assertEquals(2,count.intValue());
+        stopActor(taskManager1);
+        stopActor(taskManager2);
+        stopActor(jobManager);
+      }
+ catch (      Exception e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
+    }
+  }
+;
+}

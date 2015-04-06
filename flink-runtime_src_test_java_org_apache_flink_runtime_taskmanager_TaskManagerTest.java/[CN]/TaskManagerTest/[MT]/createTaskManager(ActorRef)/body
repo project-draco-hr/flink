@@ -1,15 +1,23 @@
 {
-  Configuration cfg=new Configuration();
-  cfg.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,10);
-  String jobManagerURL=jm.path().toString();
-  ActorRef taskManager=TestingUtils.startTestingTaskManagerWithConfiguration("localhost",jobManagerURL,cfg,system);
+  ActorRef taskManager=null;
+  try {
+    Configuration cfg=new Configuration();
+    cfg.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,10);
+    Option<String> jobMangerUrl=Option.apply(jobManager.path().toString());
+    taskManager=TaskManager.startTaskManagerComponentsAndActor(cfg,system,"localhost",Option.<String>empty(),jobMangerUrl,true,TestingTaskManager.class);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail("Could not create test TaskManager: " + e.getMessage());
+  }
   Future<Object> response=Patterns.ask(taskManager,TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),timeout);
   try {
     FiniteDuration d=new FiniteDuration(20,TimeUnit.SECONDS);
     Await.ready(response,d);
   }
  catch (  Exception e) {
-    throw new RuntimeException("Exception while waiting for the task manager registration.",e);
+    e.printStackTrace();
+    fail("Exception while waiting for the task manager registration: " + e.getMessage());
   }
   return taskManager;
 }

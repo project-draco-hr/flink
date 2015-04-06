@@ -1,0 +1,42 @@
+{
+  new JavaTestKit(actorSystem){
+{
+      try {
+        final Props fakeJmProps=Props.create(ForwardingActor.class,getTestActor());
+        final String jobManagerName="FAKE_JOB_MANAGER";
+        final ActorRef fakeJobManager1=actorSystem.actorOf(fakeJmProps,jobManagerName);
+        final ActorRef taskManager=startTaskManager(fakeJobManager1);
+        new Within(new FiniteDuration(2,TimeUnit.SECONDS)){
+          @Override protected void run(){
+            expectMsgClass(RegisterTaskManager.class);
+            taskManager.tell(new AcknowledgeRegistration(fakeJobManager1,new InstanceID(),45234),fakeJobManager1);
+          }
+        }
+;
+        watch(fakeJobManager1);
+        stopActor(fakeJobManager1);
+        new Within(new FiniteDuration(2,TimeUnit.SECONDS)){
+          @Override protected void run(){
+            expectTerminated(fakeJobManager1);
+          }
+        }
+;
+        final ActorRef fakeJobManager2=actorSystem.actorOf(fakeJmProps,jobManagerName);
+        new Within(new FiniteDuration(10,TimeUnit.SECONDS)){
+          @Override protected void run(){
+            expectMsgClass(RegisterTaskManager.class);
+            taskManager.tell(new AcknowledgeRegistration(fakeJobManager2,new InstanceID(),45234),fakeJobManager2);
+          }
+        }
+;
+        stopActor(taskManager);
+        stopActor(fakeJobManager2);
+      }
+ catch (      Throwable e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
+    }
+  }
+;
+}
