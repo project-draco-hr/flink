@@ -1,0 +1,25 @@
+{
+  ExecutionGraph cached=cache.get(jid);
+  if (cached != null) {
+    return cached;
+  }
+  try {
+    Timeout to=new Timeout(timeout);
+    Future<Object> future=Patterns.ask(source,new JobManagerMessages.RequestJob(jid),to);
+    Object result=Await.result(future,timeout);
+    if (result instanceof JobManagerMessages.JobNotFound) {
+      return null;
+    }
+ else     if (result instanceof JobManagerMessages.JobFound) {
+      ExecutionGraph eg=((JobManagerMessages.JobFound)result).executionGraph();
+      cache.put(jid,eg);
+      return eg;
+    }
+ else {
+      throw new RuntimeException("Unknown response from JobManager / Archive: " + result);
+    }
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Error requesting execution graph",e);
+  }
+}
