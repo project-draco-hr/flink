@@ -2,18 +2,21 @@
   if (this.getTopologyJobId(name) != null) {
     throw new AlreadyAliveException();
   }
-  final File uploadedJarFile=new File(uploadedJarLocation);
+  final URI uploadedJarUri;
+  final URL uploadedJarUrl;
   try {
-    JobWithJars.checkJarFile(uploadedJarFile);
+    uploadedJarUri=new File(uploadedJarLocation).getAbsoluteFile().toURI();
+    uploadedJarUrl=uploadedJarUri.toURL();
+    JobWithJars.checkJarFile(uploadedJarUrl);
   }
  catch (  final IOException e) {
-    throw new RuntimeException("Problem with jar file " + uploadedJarFile.getAbsolutePath(),e);
+    throw new RuntimeException("Problem with jar file " + uploadedJarLocation,e);
   }
   if (this.conf != null) {
     topology.getConfig().setGlobalJobParameters(new StormConfig(this.conf));
   }
   final JobGraph jobGraph=topology.getStreamGraph().getJobGraph(name);
-  jobGraph.addJar(new Path(uploadedJarFile.getAbsolutePath()));
+  jobGraph.addJar(new Path(uploadedJarUri));
   final Configuration configuration=jobGraph.getJobConfiguration();
   configuration.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,jobManagerHost);
   configuration.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,jobManagerPort);
@@ -25,7 +28,7 @@
     throw new RuntimeException("Could not establish a connection to the job manager",e);
   }
   try {
-    ClassLoader classLoader=JobWithJars.buildUserCodeClassLoader(Lists.newArrayList(uploadedJarFile),this.getClass().getClassLoader());
+    ClassLoader classLoader=JobWithJars.buildUserCodeClassLoader(Lists.newArrayList(uploadedJarUrl),Collections.<URL>emptyList(),this.getClass().getClassLoader());
     client.runDetached(jobGraph,classLoader);
   }
  catch (  final ProgramInvocationException e) {

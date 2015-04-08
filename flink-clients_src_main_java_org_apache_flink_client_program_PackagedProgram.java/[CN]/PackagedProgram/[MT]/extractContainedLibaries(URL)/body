@@ -1,0 +1,80 @@
+{
+  Random rnd=new Random();
+  JarFile jar=null;
+  try {
+    jar=new JarFile(new File(jarFile.toURI()));
+    final List<JarEntry> containedJarFileEntries=new ArrayList<JarEntry>();
+    Enumeration<JarEntry> entries=jar.entries();
+    while (entries.hasMoreElements()) {
+      JarEntry entry=entries.nextElement();
+      String name=entry.getName();
+      if (name.length() > 8 && name.startsWith("lib/") && name.endsWith(".jar")) {
+        containedJarFileEntries.add(entry);
+      }
+    }
+    if (containedJarFileEntries.isEmpty()) {
+      return Collections.emptyList();
+    }
+ else {
+      final List<File> extractedTempLibraries=new ArrayList<File>(containedJarFileEntries.size());
+      final byte[] buffer=new byte[4096];
+      boolean incomplete=true;
+      try {
+        for (int i=0; i < containedJarFileEntries.size(); i++) {
+          final JarEntry entry=containedJarFileEntries.get(i);
+          String name=entry.getName();
+          name=name.replace(File.separatorChar,'_');
+          File tempFile;
+          try {
+            tempFile=File.createTempFile(String.valueOf(Math.abs(rnd.nextInt()) + "_"),name);
+            tempFile.deleteOnExit();
+          }
+ catch (          IOException e) {
+            throw new ProgramInvocationException("An I/O error occurred while creating temporary file to extract nested library '" + entry.getName() + "'.",e);
+          }
+          extractedTempLibraries.add(tempFile);
+          OutputStream out=null;
+          InputStream in=null;
+          try {
+            out=new FileOutputStream(tempFile);
+            in=new BufferedInputStream(jar.getInputStream(entry));
+            int numRead=0;
+            while ((numRead=in.read(buffer)) != -1) {
+              out.write(buffer,0,numRead);
+            }
+          }
+ catch (          IOException e) {
+            throw new ProgramInvocationException("An I/O error occurred while extracting nested library '" + entry.getName() + "' to temporary file '"+ tempFile.getAbsolutePath()+ "'.");
+          }
+ finally {
+            if (out != null) {
+              out.close();
+            }
+            if (in != null) {
+              in.close();
+            }
+          }
+        }
+        incomplete=false;
+      }
+  finally {
+        if (incomplete) {
+          deleteExtractedLibraries(extractedTempLibraries);
+        }
+      }
+      return extractedTempLibraries;
+    }
+  }
+ catch (  Throwable t) {
+    throw new ProgramInvocationException("Unknown I/O error while extracting contained jar files.",t);
+  }
+ finally {
+    if (jar != null) {
+      try {
+        jar.close();
+      }
+ catch (      Throwable t) {
+      }
+    }
+  }
+}

@@ -1,12 +1,14 @@
 {
   final boolean[] callme={false};
   try {
-    String[] arguments={"-c",TEST_JAR_CLASSLOADERTEST_CLASS,getTestJarPath(),"true","arg1","arg2"};
-    String[] progArgs={"true","arg1","arg2"};
-    InfoOptions options=CliFrontendParser.parseInfoCommand(arguments);
+    String[] arguments={"--classpath","file:///tmp/foo","--classpath","file:///tmp/bar","-c",TEST_JAR_CLASSLOADERTEST_CLASS,getTestJarPath(),"true","arg1","arg2"};
+    URL[] classpath=new URL[]{new URL("file:///tmp/foo"),new URL("file:///tmp/bar")};
+    String[] reducedArguments={"true","arg1","arg2"};
+    RunOptions options=CliFrontendParser.parseRunCommand(arguments);
     assertEquals(getTestJarPath(),options.getJarFilePath());
+    assertArrayEquals(classpath,options.getClasspaths().toArray());
     assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,options.getEntryPointClassName());
-    assertArrayEquals(progArgs,options.getProgramArgs());
+    assertArrayEquals(reducedArguments,options.getProgramArgs());
     CliFrontend frontend=new CliFrontend(CliFrontendTestUtils.getConfigDir());
     PackagedProgram prog=spy(frontend.buildProgram(options));
     ClassLoader testClassLoader=new ClassLoader(prog.getUserCodeClassLoader()){
@@ -23,7 +25,7 @@
 ;
     when(prog.getUserCodeClassLoader()).thenReturn(testClassLoader);
     assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS,prog.getMainClassName());
-    assertArrayEquals(progArgs,prog.getArguments());
+    assertArrayEquals(reducedArguments,prog.getArguments());
     Configuration c=new Configuration();
     Optimizer compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),c);
     Client.getOptimizedPlanAsJson(compiler,prog,666);

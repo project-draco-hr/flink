@@ -1,0 +1,43 @@
+{
+  if (jarFile == null) {
+    throw new IllegalArgumentException("The jar file must not be null.");
+  }
+  URL jarFileUrl;
+  try {
+    jarFileUrl=jarFile.getAbsoluteFile().toURI().toURL();
+  }
+ catch (  MalformedURLException e1) {
+    throw new IllegalArgumentException("The jar file path is invalid.");
+  }
+  checkJarFile(jarFileUrl);
+  this.jarFile=jarFileUrl;
+  this.args=args == null ? new String[0] : args;
+  if (entryPointClassName == null) {
+    entryPointClassName=getEntryPointClassNameFromJar(jarFileUrl);
+  }
+  this.extractedTempLibraries=extractContainedLibaries(jarFileUrl);
+  this.classpaths=classpaths;
+  this.userCodeClassLoader=JobWithJars.buildUserCodeClassLoader(getAllLibraries(),classpaths,getClass().getClassLoader());
+  this.mainClass=loadMainClass(entryPointClassName,userCodeClassLoader);
+  if (Program.class.isAssignableFrom(this.mainClass)) {
+    Program prg=null;
+    try {
+      prg=InstantiationUtil.instantiate(this.mainClass.asSubclass(Program.class),Program.class);
+    }
+ catch (    Exception e) {
+      if (!hasMainMethod(mainClass)) {
+        throw new ProgramInvocationException("The given program class implements the " + Program.class.getName() + " interface, but cannot be instantiated. "+ "It also declares no main(String[]) method as alternative entry point",e);
+      }
+    }
+catch (    Throwable t) {
+      throw new ProgramInvocationException("Error while trying to instantiate program class.",t);
+    }
+    this.program=prg;
+  }
+ else   if (hasMainMethod(mainClass)) {
+    this.program=null;
+  }
+ else {
+    throw new ProgramInvocationException("The given program class neither has a main(String[]) method, nor does it implement the " + Program.class.getName() + " interface.");
+  }
+}
