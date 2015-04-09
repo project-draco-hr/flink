@@ -2,13 +2,13 @@
   YarnClient yc=YarnClient.createYarnClient();
   yc.init(yarnConfiguration);
   yc.start();
-  Runner runner=startWithArgs(new String[]{"run","-m","yarn-cluster","-yj",flinkUberjar.getAbsolutePath(),"-yn","1","-yjm","512","-yD","yarn.heap-cutoff-ratio=0.5","-ytm","1024","--yarndetached",job},"The Job has been submitted with JobID",RunTypes.CLI_FRONTEND);
+  Runner runner=startWithArgs(new String[]{"run","-m","yarn-cluster","-yj",flinkUberjar.getAbsolutePath(),"-yn","1","-yjm","512","-yD","yarn.heap-cutoff-ratio=0.5","-ytm","1024","-ys","2","--yarndetached",job},"The Job has been submitted with JobID",RunTypes.CLI_FRONTEND);
   Assert.assertTrue("There should be at most 2 containers running",getRunningContainers() <= 2);
   Assert.assertFalse("The runner should detach.",runner.isAlive());
   LOG.info("CLI Frontend has returned, so the job is running");
   try {
     List<ApplicationReport> apps=yc.getApplications(EnumSet.of(YarnApplicationState.RUNNING));
-    ApplicationId tmpAppId=null;
+    ApplicationId tmpAppId;
     if (apps.size() == 1) {
       tmpAppId=apps.get(0).getApplicationId();
       LOG.info("waiting for the job with appId {} to finish",tmpAppId);
@@ -45,8 +45,10 @@
       }
     }
 );
+    Assert.assertNotNull("Unable to locate JobManager log",jobmanagerLog);
     content=FileUtils.readFileToString(jobmanagerLog);
     Assert.assertTrue("Expected string 'Starting TM with command=$JAVA_HOME/bin/java -Xmx512m' not found in JobManager log",content.contains("Starting TM with command=$JAVA_HOME/bin/java -Xmx512m"));
+    Assert.assertTrue("Expected string ' (2/2) (attempt #0) to ' not found in JobManager log." + "This string checks that the job has been started with a parallelism of 2.",content.contains(" (2/2) (attempt #0) to "));
     LOG.info("Checking again that app has finished");
     ApplicationReport rep;
     do {
