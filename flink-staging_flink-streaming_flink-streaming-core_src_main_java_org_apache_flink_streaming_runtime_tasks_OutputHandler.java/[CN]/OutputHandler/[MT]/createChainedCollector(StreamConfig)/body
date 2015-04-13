@@ -1,0 +1,22 @@
+{
+  OutputSelectorWrapper<OUT> outputSelectorWrapper=chainedTaskConfig.getOutputSelectorWrapper(cl);
+  CollectorWrapper<OUT> wrapper=new CollectorWrapper<OUT>(outputSelectorWrapper);
+  for (  StreamEdge outputEdge : chainedTaskConfig.getNonChainedOutputs(cl)) {
+    Collector<?> outCollector=outputMap.get(outputEdge);
+    wrapper.addCollector(outCollector,outputEdge);
+  }
+  for (  StreamEdge outputEdge : chainedTaskConfig.getChainedOutputs(cl)) {
+    Integer output=outputEdge.getTargetID();
+    Collector<?> outCollector=createChainedCollector(chainedConfigs.get(output));
+    wrapper.addCollector(outCollector,outputEdge);
+  }
+  if (chainedTaskConfig.isChainStart()) {
+    return wrapper;
+  }
+ else {
+    ChainableStreamOperator chainableOperator=chainedTaskConfig.getStreamOperator(vertex.getUserCodeClassLoader());
+    chainableOperator.setup(wrapper,chainedTaskConfig.getTypeSerializerIn1(vertex.getUserCodeClassLoader()));
+    chainedOperators.add(chainableOperator);
+    return chainableOperator;
+  }
+}

@@ -1,0 +1,32 @@
+{
+  StreamOperator<StreamWindow<Integer>,StreamWindow<Integer>> windowMerger=new WindowMerger<Integer>();
+  StreamWindow<Integer> w1=new StreamWindow<Integer>();
+  StreamWindow<Integer> w2=StreamWindow.fromElements(1,2,3,4);
+  StreamWindow<Integer> w3=StreamWindow.fromElements(-1,2,3,4);
+  StreamWindow<Integer> w4_1=new StreamWindow<Integer>(1,2);
+  StreamWindow<Integer> w4_2=new StreamWindow<Integer>(1,2);
+  w4_1.add(1);
+  w4_2.add(2);
+  List<StreamWindow<Integer>> expected=new ArrayList<StreamWindow<Integer>>();
+  expected.add(w1);
+  expected.add(w2);
+  expected.add(w3);
+  expected.add(StreamWindow.fromElements(1,2));
+  List<StreamWindow<Integer>> input=new ArrayList<StreamWindow<Integer>>();
+  input.add(w1);
+  input.add(w4_1);
+  input.addAll(StreamWindow.split(w2,2));
+  input.addAll(StreamWindow.partitionBy(w3,new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value % 2;
+    }
+  }
+,false));
+  input.add(w4_2);
+  List<StreamWindow<Integer>> output=MockContext.createAndExecute(windowMerger,input);
+  assertEquals(expected.size(),expected.size());
+  for (int i=0; i < output.size(); i++) {
+    assertEquals(new HashSet<Integer>(expected.get(i)),new HashSet<Integer>(output.get(i)));
+  }
+}

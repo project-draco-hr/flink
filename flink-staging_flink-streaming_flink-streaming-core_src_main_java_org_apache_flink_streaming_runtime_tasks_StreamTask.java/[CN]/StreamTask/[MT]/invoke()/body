@@ -1,0 +1,36 @@
+{
+  this.isRunning=true;
+  boolean operatorOpen=false;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Task {} invoked with instance id {}",getName(),getInstanceID());
+  }
+  try {
+    streamOperator.setRuntimeContext(context);
+    operatorOpen=true;
+    openOperator();
+    streamOperator.run();
+    closeOperator();
+    operatorOpen=false;
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Task {} invoke finished instance id {}",getName(),getInstanceID());
+    }
+  }
+ catch (  Exception e) {
+    if (operatorOpen) {
+      try {
+        closeOperator();
+      }
+ catch (      Throwable t) {
+      }
+    }
+    if (LOG.isErrorEnabled()) {
+      LOG.error("StreamOperator failed due to: {}",StringUtils.stringifyException(e));
+    }
+    throw e;
+  }
+ finally {
+    this.isRunning=false;
+    outputHandler.flushOutputs();
+    clearBuffers();
+  }
+}

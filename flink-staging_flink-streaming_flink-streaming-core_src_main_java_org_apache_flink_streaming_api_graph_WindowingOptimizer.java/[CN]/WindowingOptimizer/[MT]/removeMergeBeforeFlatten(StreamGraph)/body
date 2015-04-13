@@ -1,0 +1,23 @@
+{
+  Set<Tuple2<Integer,StreamOperator<?,?>>> operators=streamGraph.getOperators();
+  List<Integer> flatteners=new ArrayList<Integer>();
+  for (  Tuple2<Integer,StreamOperator<?,?>> entry : operators) {
+    if (entry.f1 instanceof WindowFlattener) {
+      flatteners.add(entry.f0);
+    }
+  }
+  for (  Integer flattenerID : flatteners) {
+    StreamNode input=streamGraph.getVertex(flattenerID).getInEdges().get(0).getSourceVertex();
+    if (input.getOperator() instanceof WindowMerger) {
+      StreamNode mergeInput=input.getInEdges().get(0).getSourceVertex();
+      streamGraph.addEdge(mergeInput.getID(),flattenerID,new DistributePartitioner(true),0,new ArrayList<String>());
+      if (input.getOutEdges().size() > 1) {
+        streamGraph.removeEdge(streamGraph.getEdge(input.getID(),flattenerID));
+      }
+ else {
+        streamGraph.removeVertex(input);
+      }
+      streamGraph.setParallelism(flattenerID,mergeInput.getParallelism());
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  Set<Tuple2<Integer,StreamOperator<?,?>>> operators=streamGraph.getOperators();
+  List<Tuple2<Integer,StreamDiscretizer<?>>> discretizers=new ArrayList<Tuple2<Integer,StreamDiscretizer<?>>>();
+  for (  Tuple2<Integer,StreamOperator<?,?>> entry : operators) {
+    if (entry.f1 instanceof StreamDiscretizer) {
+      discretizers.add(new Tuple2<Integer,StreamDiscretizer<?>>(entry.f0,(StreamDiscretizer<?>)entry.f1));
+    }
+  }
+  List<Tuple2<StreamDiscretizer<?>,List<Integer>>> matchingDiscretizers=new ArrayList<Tuple2<StreamDiscretizer<?>,List<Integer>>>();
+  for (  Tuple2<Integer,StreamDiscretizer<?>> discretizer : discretizers) {
+    boolean inMatching=false;
+    for (    Tuple2<StreamDiscretizer<?>,List<Integer>> matching : matchingDiscretizers) {
+      Set<Integer> discretizerInEdges=new HashSet<Integer>(streamGraph.getVertex(discretizer.f0).getInEdgeIndices());
+      Set<Integer> matchingInEdges=new HashSet<Integer>(streamGraph.getVertex(matching.f1.get(0)).getInEdgeIndices());
+      if (discretizer.f1.equals(matching.f0) && discretizerInEdges.equals(matchingInEdges)) {
+        matching.f1.add(discretizer.f0);
+        inMatching=true;
+        break;
+      }
+    }
+    if (!inMatching) {
+      List<Integer> matchingNames=new ArrayList<Integer>();
+      matchingNames.add(discretizer.f0);
+      matchingDiscretizers.add(new Tuple2<StreamDiscretizer<?>,List<Integer>>(discretizer.f1,matchingNames));
+    }
+  }
+  for (  Tuple2<StreamDiscretizer<?>,List<Integer>> matching : matchingDiscretizers) {
+    List<Integer> matchList=matching.f1;
+    if (matchList.size() > 1) {
+      Integer first=matchList.get(0);
+      for (int i=1; i < matchList.size(); i++) {
+        replaceDiscretizer(streamGraph,matchList.get(i),first);
+      }
+    }
+  }
+}
