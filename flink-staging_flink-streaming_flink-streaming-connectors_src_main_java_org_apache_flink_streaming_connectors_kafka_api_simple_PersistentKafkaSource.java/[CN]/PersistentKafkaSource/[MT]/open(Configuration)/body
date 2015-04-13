@@ -1,8 +1,9 @@
 {
+  LOG.info("Starting PersistentKafkaSource");
   StreamingRuntimeContext context=(StreamingRuntimeContext)getRuntimeContext();
   int indexOfSubtask=context.getIndexOfThisSubtask();
   int numberOfSubtasks=context.getNumberOfParallelSubtasks();
-  KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperServerAddress,zookeeperSyncTimeMillis,zookeeperSyncTimeMillis);
+  KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(consumerConfig.zkConnect(),consumerConfig.zkSyncTimeMs(),consumerConfig.zkConnectionTimeoutMs());
   int numberOfPartitions=kafkaTopicUtils.getNumberOfPartitions(topicId);
   if (indexOfSubtask >= numberOfPartitions) {
     iterator=new KafkaIdleConsumerIterator();
@@ -20,9 +21,9 @@
       kafkaOffSet=new OperatorState<Map<Integer,KafkaOffset>>(partitions);
       context.registerState("kafka",kafkaOffSet);
     }
-    iterator=new KafkaMultiplePartitionsIterator(topicId,partitions,kafkaTopicUtils,waitOnEmptyFetchMillis,connectTimeoutMs,bufferSize);
+    iterator=new KafkaMultiplePartitionsIterator(topicId,partitions,kafkaTopicUtils,this.consumerConfig);
     if (LOG.isInfoEnabled()) {
-      LOG.info("KafkaSource ({}/{}) listening to partitions {} of topic {}.",indexOfSubtask + 1,numberOfSubtasks,partitions.keySet(),topicId);
+      LOG.info("PersistentKafkaSource ({}/{}) listening to partitions {} of topic {}.",indexOfSubtask + 1,numberOfSubtasks,partitions.keySet(),topicId);
     }
   }
   iterator.initialize();

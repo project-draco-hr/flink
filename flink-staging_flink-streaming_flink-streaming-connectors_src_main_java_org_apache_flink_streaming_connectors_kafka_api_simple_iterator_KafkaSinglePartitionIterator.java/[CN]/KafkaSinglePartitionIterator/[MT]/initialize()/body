@@ -3,7 +3,6 @@
     LOG.info("Initializing consumer {} / {} with hosts {}",topic,partition,hosts);
   }
   PartitionMetadata metadata;
-  isRunning=true;
   do {
     metadata=findLeader(hosts,topic,partition);
     try {
@@ -13,14 +12,13 @@
       throw new InterruptedException("Establishing connection to Kafka failed");
     }
   }
- while (isRunning && metadata == null);
-  isRunning=false;
+ while (metadata == null);
   if (metadata.leader() == null) {
     throw new RuntimeException("Can't find Leader for Topic and Partition. (at " + hosts + ")");
   }
   leadBroker=metadata.leader();
   clientName="Client_" + topic + "_"+ partition;
-  consumer=new SimpleConsumer(leadBroker.host(),leadBroker.port(),connectTimeoutMs,bufferSize,clientName);
+  consumer=new SimpleConsumer(leadBroker.host(),leadBroker.port(),consumerConfig.socketTimeoutMs(),consumerConfig.socketReceiveBufferBytes(),clientName);
   try {
     readOffset=initialOffset.getOffset(consumer,topic,partition,clientName);
   }

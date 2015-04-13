@@ -4,12 +4,12 @@
   createTestTopic(topic,1,1);
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
   DataStreamSource<Tuple2<Long,String>> consuming=env.addSource(new PersistentKafkaSource<Tuple2<Long,String>>(zookeeperConnectionString,topic,new TupleSerializationSchema(),5000,100,Offset.FROM_BEGINNING));
-  consuming.addSink(new SinkFunction<Tuple2<Long,String>>(){
+  consuming.addSink(new RichSinkFunction<Tuple2<Long,String>>(){
     int elCnt=0;
     int start=-1;
     BitSet validator=new BitSet(101);
     @Override public void invoke(    Tuple2<Long,String> value) throws Exception {
-      LOG.debug("Got " + value);
+      LOG.info("Got value " + value);
       String[] sp=value.f1.split("-");
       int v=Integer.parseInt(sp[1]);
       assertEquals(value.f0 - 1000,(long)v);
@@ -27,6 +27,10 @@
         throw new SuccessException();
       }
     }
+    @Override public void close() throws Exception {
+      super.close();
+      Assert.assertTrue("No element received",elCnt > 0);
+    }
   }
 );
   DataStream<Tuple2<Long,String>> stream=env.addSource(new SourceFunction<Tuple2<Long,String>>(){
@@ -37,6 +41,7 @@
       int cnt=0;
       while (running) {
         collector.collect(new Tuple2<Long,String>(1000L + cnt,"kafka-" + cnt++));
+        LOG.info("Produced " + cnt);
         try {
           Thread.sleep(100);
         }
