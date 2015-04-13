@@ -1,23 +1,23 @@
 {
-  Set<Entry<Integer,StreamInvokable<?,?>>> invokables=streamGraph.getInvokables();
+  Set<Tuple2<Integer,StreamInvokable<?,?>>> invokables=streamGraph.getInvokables();
   List<Integer> flatteners=new ArrayList<Integer>();
-  for (  Entry<Integer,StreamInvokable<?,?>> entry : invokables) {
-    if (entry.getValue() instanceof WindowFlattener) {
-      flatteners.add(entry.getKey());
+  for (  Tuple2<Integer,StreamInvokable<?,?>> entry : invokables) {
+    if (entry.f1 instanceof WindowFlattener) {
+      flatteners.add(entry.f0);
     }
   }
-  for (  Integer flattener : flatteners) {
-    Integer input=streamGraph.getInEdges(flattener).get(0).getSourceVertex();
-    if (streamGraph.getInvokable(input) instanceof WindowMerger) {
-      Integer mergeInput=streamGraph.getInEdges(input).get(0).getSourceVertex();
-      streamGraph.setEdge(mergeInput,flattener,new DistributePartitioner(true),0,new ArrayList<String>());
-      if (streamGraph.getOutEdges(input).size() > 1) {
-        streamGraph.removeEdge(input,flattener);
+  for (  Integer flattenerID : flatteners) {
+    StreamNode input=streamGraph.getVertex(flattenerID).getInEdges().get(0).getSourceVertex();
+    if (input.getInvokable() instanceof WindowMerger) {
+      StreamNode mergeInput=input.getInEdges().get(0).getSourceVertex();
+      streamGraph.addEdge(mergeInput.getID(),flattenerID,new DistributePartitioner(true),0,new ArrayList<String>());
+      if (input.getOutEdges().size() > 1) {
+        streamGraph.removeEdge(streamGraph.getEdge(input.getID(),flattenerID));
       }
  else {
         streamGraph.removeVertex(input);
       }
-      streamGraph.setParallelism(flattener,streamGraph.getParallelism(mergeInput));
+      streamGraph.setParallelism(flattenerID,mergeInput.getParallelism());
     }
   }
 }

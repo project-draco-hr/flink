@@ -1,0 +1,43 @@
+{
+  Integer vertexID=toVisit.get(0);
+  StreamNode vertex=streamGraph.getVertex(vertexID);
+  if (streamGraph.getSourceIDs().contains(vertexID) || Collections.disjoint(vertex.getInEdges(),toVisit)) {
+    JSONObject node=new JSONObject();
+    decorateNode(vertexID,node);
+    if (!streamGraph.getSourceIDs().contains(vertexID)) {
+      JSONArray inputs=new JSONArray();
+      node.put(PREDECESSORS,inputs);
+      for (      StreamEdge inEdge : vertex.getInEdges()) {
+        int inputID=inEdge.getSourceID();
+        Integer mappedID=(edgeRemapings.keySet().contains(inputID)) ? edgeRemapings.get(inputID) : inputID;
+        decorateEdge(inputs,vertexID,mappedID,inputID);
+      }
+    }
+    jsonArray.put(node);
+    toVisit.remove(vertexID);
+  }
+ else {
+    Integer iterationHead=-1;
+    for (    StreamEdge inEdge : vertex.getInEdges()) {
+      int operator=inEdge.getSourceID();
+      if (streamGraph.vertexIDtoLoop.containsKey(operator)) {
+        iterationHead=operator;
+      }
+    }
+    JSONObject obj=new JSONObject();
+    JSONArray iterationSteps=new JSONArray();
+    obj.put(STEPS,iterationSteps);
+    obj.put(ID,iterationHead);
+    obj.put(PACT,"IterativeDataStream");
+    obj.put(PARALLELISM,streamGraph.getVertex(iterationHead).getParallelism());
+    obj.put(CONTENTS,"Stream Iteration");
+    JSONArray iterationInputs=new JSONArray();
+    obj.put(PREDECESSORS,iterationInputs);
+    toVisit.remove(iterationHead);
+    visitIteration(iterationSteps,toVisit,iterationHead,edgeRemapings,iterationInputs);
+    jsonArray.put(obj);
+  }
+  if (!toVisit.isEmpty()) {
+    visit(jsonArray,toVisit,edgeRemapings);
+  }
+}
