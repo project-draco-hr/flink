@@ -1,13 +1,24 @@
 {
   try {
     final JobGraph jobGraph=getJobGraph(plan);
-    final ActorRef client=this.executor.getJobClient();
-    final ActorSystem actorSystem=executor.getJobClientActorSystem();
+    final Thread currentThread=Thread.currentThread();
+    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
     boolean jobSuccessfullyCancelled=false;
-    Future<Object> result=Patterns.ask(client,new JobClientMessages.SubmitJobAndWait(jobGraph,false),new Timeout(AkkaUtils.getDefaultTimeout()));
-    actorSystem.scheduler().scheduleOnce(new FiniteDuration(msecsTillCanceling,TimeUnit.MILLISECONDS),client,new JobManagerMessages.CancelJob(jobGraph.getJobID()),actorSystem.dispatcher(),ActorRef.noSender());
+    new Thread(){
+      @Override public void run(){
+        try {
+          Thread.sleep(msecsTillCanceling);
+          executor.getJobManager().tell(new JobManagerMessages.CancelJob(jobGraph.getJobID()),ActorRef.noSender());
+        }
+ catch (        Throwable t) {
+          error.set(t);
+          currentThread.interrupt();
+        }
+      }
+    }
+.run();
     try {
-      Await.result(result,AkkaUtils.getDefaultTimeout());
+      executor.submitJobAndWait(jobGraph,false);
     }
  catch (    JobCancellationException exception) {
       jobSuccessfullyCancelled=true;

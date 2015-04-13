@@ -1,40 +1,23 @@
 {
-  new JavaTestKit(system){
-{
-      final int numSlots=20;
-      final ForkableFlinkMiniCluster cluster=ForkableFlinkMiniCluster.startCluster(numSlots / 2,2,TestingUtils.TESTING_DURATION().toString());
-      final ActorRef jobClient=cluster.getJobClient();
-      final AbstractJobVertex failingJobVertex=new FailingJobVertex("Failing job vertex");
-      failingJobVertex.setInvokableClass(Tasks.NoOpInvokable.class);
-      final JobGraph failingJobGraph=new JobGraph("Failing testing job",failingJobVertex);
-      try {
-        new Within(TestingUtils.TESTING_DURATION()){
-          @Override protected void run(){
-            try {
-              submitJob(failingJobGraph,jobClient);
-              fail("Expected JobExecutionException.");
-            }
- catch (            JobExecutionException e) {
-              assertEquals("Test exception.",e.getCause().getMessage());
-            }
-catch (            Throwable t) {
-              fail("Caught wrong exception of type " + t.getClass() + ".");
-              t.printStackTrace();
-            }
-            try {
-              JobClient.submitJobAndWait(workingJobGraph,false,jobClient,TestingUtils.TESTING_DURATION());
-            }
- catch (            Throwable t) {
-              fail("Caught unexpected exception " + t.getMessage() + ".");
-            }
-          }
-        }
-;
-      }
-  finally {
-        cluster.stop();
-      }
+  try {
+    final AbstractJobVertex failingJobVertex=new FailingJobVertex("Failing job vertex");
+    failingJobVertex.setInvokableClass(Tasks.NoOpInvokable.class);
+    final JobGraph failingJobGraph=new JobGraph("Failing testing job",failingJobVertex);
+    try {
+      submitJob(failingJobGraph);
+      fail("Expected JobExecutionException.");
     }
+ catch (    JobExecutionException e) {
+      assertEquals("Test exception.",e.getCause().getMessage());
+    }
+catch (    Throwable t) {
+      t.printStackTrace();
+      fail("Caught wrong exception of type " + t.getClass() + ".");
+    }
+    cluser.submitJobAndWait(workingJobGraph,false);
   }
-;
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
 }

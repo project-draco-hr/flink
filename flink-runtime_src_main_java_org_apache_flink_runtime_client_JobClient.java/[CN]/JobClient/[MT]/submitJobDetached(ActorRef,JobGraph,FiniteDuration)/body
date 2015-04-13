@@ -1,0 +1,27 @@
+{
+  if (jobManager == null || jobGraph == null || timeout == null) {
+    throw new NullPointerException();
+  }
+  Future<Object> future=Patterns.ask(jobManager,new JobManagerMessages.SubmitJob(jobGraph,false),new Timeout(timeout));
+  try {
+    Object result=Await.result(future,timeout);
+    if (result instanceof JobID) {
+      JobID respondedID=(JobID)result;
+      if (!respondedID.equals(jobGraph.getJobID())) {
+        throw new Exception("JobManager responded for wrong Job. This Job: " + jobGraph.getJobID() + ", response: "+ respondedID);
+      }
+    }
+ else {
+      throw new Exception("Unexpected response: " + result);
+    }
+  }
+ catch (  JobExecutionException e) {
+    throw e;
+  }
+catch (  TimeoutException e) {
+    throw new JobTimeoutException(jobGraph.getJobID(),"JobManager did not respond within " + timeout.toString(),e);
+  }
+catch (  Throwable t) {
+    throw new JobExecutionException(jobGraph.getJobID(),"Failed to send job to JobManager: " + t.getMessage(),t.getCause());
+  }
+}

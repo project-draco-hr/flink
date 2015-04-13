@@ -1,0 +1,61 @@
+{
+  if (message instanceof ExecutionGraphMessages.ExecutionStateChanged) {
+    logAndPrintMessage(message);
+  }
+ else   if (message instanceof ExecutionGraphMessages.JobStatusChanged) {
+    logAndPrintMessage(message);
+  }
+ else   if (message instanceof JobClientMessages.SubmitJobAndWait) {
+    if (this.submitter == null) {
+      JobGraph jobGraph=((JobClientMessages.SubmitJobAndWait)message).jobGraph();
+      if (jobGraph == null) {
+        logger.error("Received null JobGraph");
+        sender().tell(new Status.Failure(new Exception("JobGraph is null")),getSelf());
+      }
+ else {
+        logger.info("Sending message to JobManager {} to submit job {} ({}) and wait for progress",jobManager.path().toString(),jobGraph.getName(),jobGraph.getJobID());
+        this.submitter=getSender();
+        jobManager.tell(new JobManagerMessages.SubmitJob(jobGraph,true),getSelf());
+        getContext().watch(jobManager);
+      }
+    }
+ else {
+      String msg="Received repeated 'SubmitJobAndWait'";
+      logger.error(msg);
+      getSender().tell(new Status.Failure(new Exception(msg)),ActorRef.noSender());
+      getContext().unwatch(jobManager);
+      getSelf().tell(PoisonPill.getInstance(),ActorRef.noSender());
+    }
+  }
+ else   if (message instanceof JobManagerMessages.JobResultSuccess) {
+    logger.debug("Received JobResultSuccess message from JobManager");
+    if (this.submitter != null) {
+      this.submitter.tell(message,getSelf());
+    }
+    getContext().unwatch(jobManager);
+    getSelf().tell(PoisonPill.getInstance(),ActorRef.noSender());
+  }
+ else   if (message instanceof Status.Success) {
+    logger.info("Job was successfully submitted to the JobManager");
+  }
+ else   if (message instanceof Status.Failure) {
+    logger.debug("Received failure from JobManager",((Status.Failure)message).cause());
+    if (submitter != null) {
+      submitter.tell(message,sender());
+    }
+  }
+ else   if (message instanceof Terminated) {
+    ActorRef target=((Terminated)message).getActor();
+    if (jobManager.equals(target)) {
+      String msg="Lost connection to JobManager " + jobManager.path();
+      logger.info(msg);
+      submitter.tell(new Status.Failure(new Exception(msg)),getSelf());
+    }
+ else {
+      logger.error("Received 'Terminated' for unknown actor " + target);
+    }
+  }
+ else {
+    logger.error("JobClient received unknown message: " + message);
+  }
+}
