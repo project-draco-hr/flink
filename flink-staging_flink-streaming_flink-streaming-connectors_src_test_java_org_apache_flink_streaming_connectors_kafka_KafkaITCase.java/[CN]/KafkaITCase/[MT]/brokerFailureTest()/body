@@ -32,10 +32,11 @@
   consuming.addSink(new SinkFunction<String>(){
     int elCnt=0;
     int start=0;
-    int numOfMessagesToReceive=100;
-    BitSet validator=new BitSet(numOfMessagesToReceive + 1);
+    int numOfMessagesToBeCorrect=100;
+    int stopAfterMessages=150;
+    BitSet validator=new BitSet(numOfMessagesToBeCorrect + 1);
     @Override public void invoke(    String value) throws Exception {
-      LOG.debug("Got " + value);
+      LOG.info("Got message = " + value + " leader has shut down "+ leaderHasShutDown+ " el cnt = "+ elCnt+ " to rec"+ numOfMessagesToBeCorrect);
       String[] sp=value.split("-");
       int v=Integer.parseInt(sp[1]);
       if (start == -1) {
@@ -50,16 +51,14 @@
       if (elCnt == 20) {
         shutdownKafkaBroker=true;
       }
-      if (elCnt == numOfMessagesToReceive && leaderHasShutDown) {
-        int nc;
-        if ((nc=validator.nextClearBit(0)) != numOfMessagesToReceive) {
-          throw new RuntimeException("The bitset was not set to 1 on all elements. Next clear:" + nc + " Set: "+ validator);
+      if (leaderHasShutDown) {
+        if (elCnt >= stopAfterMessages) {
+          int nc;
+          if ((nc=validator.nextClearBit(0)) < numOfMessagesToBeCorrect) {
+            throw new RuntimeException("The bitset was not set to 1 on all elements to be checked. Next clear:" + nc + " Set: "+ validator);
+          }
+          throw new SuccessException();
         }
-        throw new SuccessException();
-      }
- else       if (elCnt == numOfMessagesToReceive) {
-        numOfMessagesToReceive+=50;
-        LOG.info("Waiting for more messages till {}",numOfMessagesToReceive);
       }
     }
   }
@@ -70,7 +69,9 @@
       LOG.info("Starting source.");
       int cnt=0;
       while (running) {
-        collector.collect("kafka-" + cnt++);
+        String msg="kafka-" + cnt++;
+        collector.collect(msg);
+        LOG.info("sending message = " + msg);
         if ((cnt - 1) % 20 == 0) {
           LOG.debug("Sending message #{}",cnt - 1);
         }

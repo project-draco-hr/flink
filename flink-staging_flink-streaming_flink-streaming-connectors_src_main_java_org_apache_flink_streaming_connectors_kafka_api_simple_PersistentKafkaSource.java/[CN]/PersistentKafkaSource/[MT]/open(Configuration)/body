@@ -6,24 +6,27 @@
   KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(consumerConfig.zkConnect(),consumerConfig.zkSyncTimeMs(),consumerConfig.zkConnectionTimeoutMs());
   int numberOfPartitions=kafkaTopicUtils.getNumberOfPartitions(topicId);
   if (indexOfSubtask >= numberOfPartitions) {
+    LOG.info("Creating idle consumer because this subtask ({}) is higher than the number partitions ({})",indexOfSubtask + 1,numberOfPartitions);
     iterator=new KafkaIdleConsumerIterator();
   }
  else {
     if (context.containsState("kafka")) {
-      kafkaOffSet=(OperatorState<Map<Integer,KafkaOffset>>)context.getState("kafka");
-      partitions=kafkaOffSet.getState();
+      LOG.info("Initializing PersistentKafkaSource from existing state.");
+      kafkaOffSetOperatorState=(OperatorState<Map<Integer,KafkaOffset>>)context.getState("kafka");
+      partitionOffsets=kafkaOffSetOperatorState.getState();
     }
  else {
-      partitions=new HashMap<Integer,KafkaOffset>();
+      LOG.info("No existing state found. Creating new");
+      partitionOffsets=new HashMap<Integer,KafkaOffset>();
       for (int partitionIndex=indexOfSubtask; partitionIndex < numberOfPartitions; partitionIndex+=numberOfSubtasks) {
-        partitions.put(partitionIndex,startingOffset);
+        partitionOffsets.put(partitionIndex,startingOffset);
       }
-      kafkaOffSet=new OperatorState<Map<Integer,KafkaOffset>>(partitions);
-      context.registerState("kafka",kafkaOffSet);
+      kafkaOffSetOperatorState=new OperatorState<Map<Integer,KafkaOffset>>(partitionOffsets);
+      context.registerState("kafka",kafkaOffSetOperatorState);
     }
-    iterator=new KafkaMultiplePartitionsIterator(topicId,partitions,kafkaTopicUtils,this.consumerConfig);
+    iterator=new KafkaMultiplePartitionsIterator(topicId,partitionOffsets,kafkaTopicUtils,this.consumerConfig);
     if (LOG.isInfoEnabled()) {
-      LOG.info("PersistentKafkaSource ({}/{}) listening to partitions {} of topic {}.",indexOfSubtask + 1,numberOfSubtasks,partitions.keySet(),topicId);
+      LOG.info("PersistentKafkaSource ({}/{}) listening to partitionOffsets {} of topic {}.",indexOfSubtask + 1,numberOfSubtasks,partitionOffsets.keySet(),topicId);
     }
   }
   iterator.initialize();

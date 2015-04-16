@@ -8,9 +8,20 @@
     }
     if (code == ErrorMapping.OffsetOutOfRangeCode()) {
       if (LOG.isErrorEnabled()) {
-        LOG.error("Asked for invalid offset {}, setting the offset to the latest.",offset);
+        LOG.error("Asked for invalid offset {}",offset);
       }
-      readOffset=new CurrentOffset().getOffset(consumer,topic,partition,clientName);
+      String reset=consumerConfig.autoOffsetReset();
+      if (reset.equals("smallest")) {
+        LOG.info("Setting read offset to beginning (smallest)");
+        readOffset=new BeginningOffset().getOffset(consumer,topic,partition,clientName);
+      }
+ else       if (reset.equals("largest")) {
+        LOG.info("Setting read offset to current offset (largest)");
+        readOffset=new CurrentOffset().getOffset(consumer,topic,partition,clientName);
+      }
+ else {
+        throw new RuntimeException("Unknown 'autooffset.reset' mode '" + reset + "' Supported values are 'smallest' and 'largest'.");
+      }
     }
     findNewLeader();
   }

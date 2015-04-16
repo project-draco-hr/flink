@@ -1,0 +1,26 @@
+{
+  PartitionMetadata metadata;
+  int retry=0;
+  int waitTime=consumerConfig.props().getInt(PersistentKafkaSource.WAIT_ON_FAILED_LEADER_MS_KEY,PersistentKafkaSource.WAIT_ON_FAILED_LEADER__MS_DEFAULT);
+  do {
+    metadata=findLeader(hosts,topic,partition);
+    if (metadata == null) {
+      retry++;
+      if (retry == consumerConfig.props().getInt(PersistentKafkaSource.MAX_FAILED_LEADER_RETRIES_KEY,PersistentKafkaSource.MAX_FAILED_LEADER_RETRIES_DEFAULT)) {
+        throw new RuntimeException("Tried finding a leader " + retry + " times without success");
+      }
+      LOG.warn("Unable to get leader and partition metadata. Waiting {} ms until retrying. Retries so far {}",waitTime,retry - 1);
+      try {
+        Thread.sleep(waitTime);
+      }
+ catch (      InterruptedException e) {
+        throw new RuntimeException("Establishing connection to Kafka failed",e);
+      }
+    }
+  }
+ while (metadata == null);
+  if (metadata.leader() == null) {
+    throw new RuntimeException("Can't find Leader for Topic and Partition. (at " + hosts + ")");
+  }
+  return metadata;
+}
