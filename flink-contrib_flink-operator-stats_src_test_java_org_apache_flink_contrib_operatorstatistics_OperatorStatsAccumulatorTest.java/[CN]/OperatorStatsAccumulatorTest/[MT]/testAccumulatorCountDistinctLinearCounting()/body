@@ -1,0 +1,24 @@
+{
+  String input="";
+  Random rand=new Random();
+  for (int i=1; i < 1000; i++) {
+    if (rand.nextDouble() < 0.2) {
+      input+=String.valueOf(rand.nextInt(4)) + "\n";
+    }
+ else {
+      input+=String.valueOf(rand.nextInt(100)) + "\n";
+    }
+  }
+  String inputFile=createTempFile("datapoints.txt",input);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  OperatorStatisticsConfig operatorStatisticsConfig=new OperatorStatisticsConfig(false);
+  operatorStatisticsConfig.collectCountDistinct=true;
+  operatorStatisticsConfig.countDistinctAlgorithm=OperatorStatisticsConfig.CountDistinctAlgorithm.LINEAR_COUNTING;
+  operatorStatisticsConfig.setCountDbitmap(10000);
+  env.readTextFile(inputFile).flatMap(new StringToInt(operatorStatisticsConfig)).output(new DiscardingOutputFormat<Tuple1<Integer>>());
+  JobExecutionResult result=env.execute();
+  OperatorStatistics globalStats=result.getAccumulatorResult(ACCUMULATOR_NAME);
+  System.out.println("Global Stats");
+  System.out.println(globalStats.toString());
+  Assert.assertTrue("Count Distinct for accumulator should not be null",globalStats.countDistinct != null);
+}

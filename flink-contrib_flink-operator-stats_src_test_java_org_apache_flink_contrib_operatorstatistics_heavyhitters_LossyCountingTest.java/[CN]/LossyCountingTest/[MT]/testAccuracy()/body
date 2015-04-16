@@ -1,0 +1,29 @@
+{
+  long[] actualFreq=new long[maxScale];
+  LossyCounting lossyCounting=new LossyCounting(fraction,error);
+  for (int i=0; i < cardinality; i++) {
+    int value;
+    if (r.nextDouble() < 0.1) {
+      value=r.nextInt(10);
+    }
+ else {
+      value=r.nextInt(maxScale);
+    }
+    lossyCounting.addObject(value);
+    actualFreq[value]++;
+  }
+  LOG.debug("Size of heavy hitters: " + lossyCounting.getHeavyHitters().size());
+  LOG.debug(lossyCounting.toString());
+  Map<Object,Long> heavyHitters=lossyCounting.getHeavyHitters();
+  long frequency=(long)Math.ceil(cardinality * fraction);
+  long minFrequency=(long)Math.ceil(cardinality * (fraction - error));
+  for (int i=0; i < actualFreq.length; ++i) {
+    if (actualFreq[i] >= frequency) {
+      assertTrue("All items with freq. > s.n will be found. Item " + i + ". Real freq. "+ actualFreq[i]+ " Expected freq."+ frequency,heavyHitters.containsKey(i));
+    }
+    if (heavyHitters.containsKey(i)) {
+      assertTrue("no item with freq. < (s-e).n will be found. Item " + i + ". Real freq. "+ actualFreq[i]+ " Min freq."+ minFrequency,actualFreq[i] >= minFrequency);
+      assertTrue("the estimated freq. underestimates the true freq. by < e.n. Real freq. " + actualFreq[i] + " Lower bound "+ heavyHitters.get(i),Math.abs(heavyHitters.get(i) - actualFreq[i]) < error * cardinality);
+    }
+  }
+}
