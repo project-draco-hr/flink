@@ -3,14 +3,13 @@
     return;
   }
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Vertex<Long,Long>> vertices=getVertexDataSet(env);
   DataSet<Edge<Long,NullValue>> edges=getEdgeDataSet(env);
+  DataSet<Vertex<Long,Long>> vertices=edges.flatMap(new InitVerticesMapper()).distinct();
   Graph<Long,Long,NullValue> graph=Graph.fromDataSet(vertices,edges,env);
   GatherFunction<Long,NullValue,Long> gather=new ConnectedComponentsGather();
   SumFunction<Long,NullValue,Long> sum=new ConnectedComponentsSum();
   ApplyFunction<Long,NullValue,Long> apply=new ConnectedComponentsApply();
-  GatherSumApplyIteration<Long,Long,NullValue,Long> iteration=graph.createGatherSumApplyIteration(gather,sum,apply,maxIterations);
-  Graph<Long,Long,NullValue> result=graph.runGatherSumApplyIteration(iteration);
+  Graph<Long,Long,NullValue> result=graph.runGatherSumApplyIteration(gather,sum,apply,maxIterations);
   DataSet<Vertex<Long,Long>> greedyGraphColoring=result.getVertices();
   if (fileOutput) {
     greedyGraphColoring.writeAsCsv(outputPath,"\n"," ");

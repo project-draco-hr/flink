@@ -3,14 +3,13 @@
     return;
   }
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Vertex<Long,Double>> vertices=getVertexDataSet(env);
   DataSet<Edge<Long,Double>> edges=getEdgeDataSet(env);
+  DataSet<Vertex<Long,Double>> vertices=edges.flatMap(new InitVerticesMapper(srcVertexId)).distinct();
   Graph<Long,Double,Double> graph=Graph.fromDataSet(vertices,edges,env);
   GatherFunction<Double,Double,Double> gather=new SingleSourceShortestPathGather();
   SumFunction<Double,Double,Double> sum=new SingleSourceShortestPathSum();
   ApplyFunction<Double,Double,Double> apply=new SingleSourceShortestPathApply();
-  GatherSumApplyIteration<Long,Double,Double,Double> iteration=graph.createGatherSumApplyIteration(gather,sum,apply,maxIterations);
-  Graph<Long,Double,Double> result=graph.mapVertices(new InitVerticesMapper<Long>(srcVertexId)).runGatherSumApplyIteration(iteration);
+  Graph<Long,Double,Double> result=graph.runGatherSumApplyIteration(gather,sum,apply,maxIterations);
   DataSet<Vertex<Long,Double>> singleSourceShortestPaths=result.getVertices();
   if (fileOutput) {
     singleSourceShortestPaths.writeAsCsv(outputPath,"\n"," ");
