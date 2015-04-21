@@ -1,0 +1,28 @@
+{
+  TypeSerializer serializer=stream.getType().createSerializer(stream.getExecutionEnvironment().getConfig());
+  DataStreamIterator<OUT> it=new DataStreamIterator<OUT>(serializer);
+  StreamExecutionEnvironment env=stream.getExecutionEnvironment();
+  InetAddress clientAddress;
+  if (env instanceof RemoteStreamEnvironment) {
+    String host=((RemoteStreamEnvironment)env).getHost();
+    int port=((RemoteStreamEnvironment)env).getPort();
+    try {
+      clientAddress=NetUtils.findConnectingAddress(new InetSocketAddress(host,port),2000,400);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("IOException while trying to connect to the master",e);
+    }
+  }
+ else {
+    try {
+      clientAddress=InetAddress.getLocalHost();
+    }
+ catch (    UnknownHostException e) {
+      throw new RuntimeException("getLocalHost failed",e);
+    }
+  }
+  DataStreamSink<OUT> sink=stream.addSink(new CollectSink<OUT>(clientAddress,it.getPort(),serializer));
+  sink.setParallelism(1);
+  (new CallExecute(stream)).start();
+  return it;
+}
