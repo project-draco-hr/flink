@@ -3,11 +3,21 @@
   EvictionPolicy<OUT> eviction=getEviction();
   if (transformation == WindowTransformation.REDUCEWINDOW) {
     if (WindowUtils.isTumblingPolicy(trigger,eviction)) {
-      if (groupByKey == null) {
-        return new TumblingPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),getType().createSerializer(getExecutionConfig()));
+      if (eviction instanceof KeepAllEvictionPolicy) {
+        if (groupByKey == null) {
+          return new TumblingPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),getType().createSerializer(getExecutionConfig())).noEvict();
+        }
+ else {
+          return new TumblingGroupedPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),groupByKey,getType().createSerializer(getExecutionConfig())).noEvict();
+        }
       }
  else {
-        return new TumblingGroupedPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),groupByKey,getType().createSerializer(getExecutionConfig()));
+        if (groupByKey == null) {
+          return new TumblingPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),getType().createSerializer(getExecutionConfig()));
+        }
+ else {
+          return new TumblingGroupedPreReducer<OUT>((ReduceFunction<OUT>)transformation.getUDF(),groupByKey,getType().createSerializer(getExecutionConfig()));
+        }
       }
     }
  else     if (WindowUtils.isSlidingCountPolicy(trigger,eviction)) {
@@ -43,5 +53,10 @@
       }
     }
   }
-  return new BasicWindowBuffer<OUT>();
+  if (eviction instanceof KeepAllEvictionPolicy) {
+    throw new RuntimeException("Full stream policy can only be used with operations that support preaggregations, such as reduce or aggregations");
+  }
+ else {
+    return new BasicWindowBuffer<OUT>();
+  }
 }
