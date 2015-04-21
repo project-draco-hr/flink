@@ -30,12 +30,13 @@
     final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot);
     vertex.getExecutionGraph().registerExecution(this);
     final Instance instance=slot.getInstance();
-    Future<Object> deployAction=Patterns.ask(instance.getTaskManager(),new SubmitTask(deployment),new Timeout(timeout));
+    final Future<Object> deployAction=Patterns.ask(instance.getTaskManager(),new SubmitTask(deployment),new Timeout(timeout));
     deployAction.onComplete(new OnComplete<Object>(){
       @Override public void onComplete(      Throwable failure,      Object success) throws Throwable {
         if (failure != null) {
           if (failure instanceof TimeoutException) {
-            markFailed(new Exception("Cannot deploy task - TaskManager " + instance + " not responding.",failure));
+            String taskname=Task.getTaskNameWithSubtaskAndID(deployment.getTaskName(),deployment.getIndexInSubtaskGroup(),deployment.getNumberOfSubtasks(),attemptId);
+            markFailed(new Exception("Cannot deploy task " + taskname + " - TaskManager ("+ instance+ ") not responding after a timeout of "+ timeout,failure));
           }
  else {
             markFailed(failure);
