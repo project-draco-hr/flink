@@ -1,14 +1,22 @@
 {
   Preconditions.checkNotNull(config,"Configuration is null");
+  Preconditions.checkNotNull(userCodeClassLoader,"User code ClassLoader is null");
   this.configuration=config;
+  this.userCodeClassLoader=userCodeClassLoader;
   final String address=config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
   if (address == null) {
-    throw new CompilerException("Cannot find address to job manager's RPC service in the global configuration.");
+    throw new IllegalConfigurationException("Cannot find address to job manager's RPC service in the global configuration.");
   }
-  final int port=GlobalConfiguration.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
+  final int port=config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
   if (port < 0) {
-    throw new CompilerException("Cannot find port to job manager's RPC service in the global configuration.");
+    throw new IllegalConfigurationException("Cannot find port to job manager's RPC service in the global configuration.");
+  }
+  try {
+    InetAddress inetAddress=InetAddress.getByName(address);
+    this.jobManagerAddress=new InetSocketAddress(inetAddress,port);
+  }
+ catch (  UnknownHostException e) {
+    throw new UnknownHostException("Cannot resolve the JobManager hostname '" + address + "' specified in the configuration");
   }
   this.compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),configuration);
-  this.userCodeClassLoader=userCodeClassLoader;
 }

@@ -6,9 +6,10 @@
     jobGraph.addJar(new Path(file.getAbsolutePath()));
   }
   Configuration configuration=jobGraph.getJobConfiguration();
-  Client client=new Client(new InetSocketAddress(host,port),configuration,JobWithJars.buildUserCodeClassLoader(jarFiles,JobWithJars.class.getClassLoader()),-1);
-  client.setPrintStatusDuringExecution(getConfig().isSysoutLoggingEnabled());
+  ClassLoader usercodeClassLoader=JobWithJars.buildUserCodeClassLoader(jarFiles,getClass().getClassLoader());
   try {
+    Client client=new Client(new InetSocketAddress(host,port),configuration,usercodeClassLoader,-1);
+    client.setPrintStatusDuringExecution(getConfig().isSysoutLoggingEnabled());
     JobSubmissionResult result=client.run(jobGraph,true);
     if (result instanceof JobExecutionResult) {
       return (JobExecutionResult)result;
@@ -19,6 +20,13 @@
     }
   }
  catch (  ProgramInvocationException e) {
-    throw new RuntimeException("Cannot execute job due to ProgramInvocationException",e);
+    throw e;
+  }
+catch (  UnknownHostException e) {
+    throw new ProgramInvocationException(e.getMessage(),e);
+  }
+catch (  Exception e) {
+    String term=e.getMessage() == null ? "." : (": " + e.getMessage());
+    throw new ProgramInvocationException("The program execution failed" + term,e);
   }
 }

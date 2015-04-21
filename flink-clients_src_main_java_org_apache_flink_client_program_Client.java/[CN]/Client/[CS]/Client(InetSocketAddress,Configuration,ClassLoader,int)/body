@@ -1,8 +1,21 @@
 {
+  Preconditions.checkNotNull(jobManagerAddress,"JobManager address is null");
   Preconditions.checkNotNull(config,"Configuration is null");
+  Preconditions.checkNotNull(userCodeClassLoader,"User code ClassLoader is null");
   this.configuration=config;
-  configuration.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,jobManagerAddress.getAddress().getHostAddress());
-  configuration.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,jobManagerAddress.getPort());
+  if (jobManagerAddress.isUnresolved()) {
+    String host=jobManagerAddress.getHostString();
+    try {
+      InetAddress address=InetAddress.getByName(host);
+      this.jobManagerAddress=new InetSocketAddress(address,jobManagerAddress.getPort());
+    }
+ catch (    UnknownHostException e) {
+      throw new UnknownHostException("Cannot resolve JobManager host name '" + host + "'.");
+    }
+  }
+ else {
+    this.jobManagerAddress=jobManagerAddress;
+  }
   this.compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),configuration);
   this.userCodeClassLoader=userCodeClassLoader;
   this.maxSlots=maxSlots;
