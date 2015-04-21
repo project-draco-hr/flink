@@ -1,0 +1,26 @@
+{
+  expected1="";
+  for (int i=0; i < 8; i++) {
+    expected1+="(10,(a,1))\n";
+  }
+  expected1+="(10,(a,1))";
+  expected2="";
+  for (int i=0; i < 18; i++) {
+    expected2+="(20,(a,1))\n";
+  }
+  expected2+="(20,(a,1))";
+  StreamExecutionEnvironment env=new TestStreamEnvironment(4,32);
+  env.setParallelism(4);
+  DataStream<Tuple2<Long,Tuple2<String,Long>>> sourceStream1=env.addSource(new TupleSource()).setParallelism(1);
+  IterativeDataStream<Tuple2<Long,Tuple2<String,Long>>> it=sourceStream1.sum(0).setParallelism(1).filter(new FilterFunction<Tuple2<Long,Tuple2<String,Long>>>(){
+    @Override public boolean filter(    Tuple2<Long,Tuple2<String,Long>> value) throws Exception {
+      return value.f0 < 20;
+    }
+  }
+).iterate(5000);
+  SplitDataStream<Tuple2<Long,Tuple2<String,Long>>> step=it.map(new IncrementMap()).split(new MyOutputSelector());
+  it.closeWith(step.select("iterate"));
+  step.select("firstOutput").writeAsText(resultPath1,FileSystem.WriteMode.OVERWRITE);
+  step.select("secondOutput").writeAsText(resultPath2,FileSystem.WriteMode.OVERWRITE);
+  env.execute();
+}
