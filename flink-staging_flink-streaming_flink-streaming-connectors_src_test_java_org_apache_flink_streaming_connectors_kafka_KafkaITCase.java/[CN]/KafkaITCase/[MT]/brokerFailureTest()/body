@@ -1,8 +1,17 @@
 {
   String topic="brokerFailureTestTopic";
   createTestTopic(topic,2,2);
-  KafkaTopicUtils kafkaTopicUtils=new KafkaTopicUtils(zookeeperConnectionString);
-  final String leaderToShutDown=kafkaTopicUtils.waitAndGetPartitionMetadata(topic,0).leader().get().connectionString();
+  PartitionMetadata firstPart=null;
+  do {
+    if (firstPart != null) {
+      LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
+      Thread.sleep(150);
+    }
+    Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
+    firstPart=partitionMetadata.head();
+  }
+ while (firstPart.errorCode() != 0);
+  final String leaderToShutDown=firstPart.leader().get().connectionString();
   final Thread brokerShutdown=new Thread(new Runnable(){
     @Override public void run(){
       shutdownKafkaBroker=false;
@@ -27,7 +36,7 @@
 );
   brokerShutdown.start();
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
-  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema(),5000,10,Offset.FROM_BEGINNING));
+  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(topic,new JavaDefaultStringSchema(),standardCC));
   consuming.setParallelism(1);
   consuming.addSink(new SinkFunction<String>(){
     int elCnt=0;
@@ -88,20 +97,6 @@
     }
   }
 );
-  stream.addSink(new KafkaSink<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema())).setParallelism(1);
-  try {
-    env.setParallelism(1);
-    env.execute();
-  }
- catch (  JobExecutionException good) {
-    Throwable t=good.getCause();
-    int limit=0;
-    while (!(t instanceof SuccessException)) {
-      t=t.getCause();
-      if (limit++ == 20) {
-        LOG.warn("Test failed with exception",good);
-        Assert.fail("Test failed with: " + good.getMessage());
-      }
-    }
-  }
+  stream.addSink(new KafkaSink<String>(brokerConnectionStrings,topic,new JavaDefaultStringSchema())).setParallelism(1);
+  tryExecute(env,"broker failure test");
 }

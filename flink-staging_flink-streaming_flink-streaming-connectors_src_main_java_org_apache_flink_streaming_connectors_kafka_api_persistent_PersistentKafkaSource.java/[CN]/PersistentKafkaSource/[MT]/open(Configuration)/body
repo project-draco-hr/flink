@@ -1,0 +1,26 @@
+{
+  super.open(parameters);
+  ConsumerConnector consumer=Consumer.createJavaConsumerConnector(this.consumerConfig);
+  Map<String,Integer> topicCountMap=Collections.singletonMap(topicName,1);
+  Map<String,List<KafkaStream<byte[],byte[]>>> streams=consumer.createMessageStreams(topicCountMap);
+  if (streams.size() != 1) {
+    throw new RuntimeException("Expected only one message stream but got " + streams.size());
+  }
+  List<KafkaStream<byte[],byte[]>> kafkaStreams=streams.get(topicName);
+  if (kafkaStreams == null) {
+    throw new RuntimeException("Requested stream not available. Available streams: " + streams.toString());
+  }
+  if (kafkaStreams.size() != 1) {
+    throw new RuntimeException("Requested 1 stream from Kafka, bot got " + kafkaStreams.size() + " streams");
+  }
+  LOG.info("Opening Consumer instance for topic '{}' on group '{}'",topicName,consumerConfig.groupId());
+  this.iteratorToRead=kafkaStreams.get(0).iterator();
+  this.consumer=consumer;
+  zkClient=new ZkClient(consumerConfig.zkConnect(),consumerConfig.zkSessionTimeoutMs(),consumerConfig.zkConnectionTimeoutMs(),new KafkaZKStringSerializer());
+  int numPartitions=getNumberOfPartitions();
+  LOG.debug("The topic {} has {} partitions",topicName,numPartitions);
+  this.lastOffsets=new long[numPartitions];
+  this.commitedOffsets=new long[numPartitions];
+  Arrays.fill(this.lastOffsets,-1);
+  Arrays.fill(this.commitedOffsets,0);
+}

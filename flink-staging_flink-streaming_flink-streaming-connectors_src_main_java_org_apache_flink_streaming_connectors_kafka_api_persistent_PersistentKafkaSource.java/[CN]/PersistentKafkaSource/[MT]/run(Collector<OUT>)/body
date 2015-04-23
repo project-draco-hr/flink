@@ -1,0 +1,42 @@
+{
+  if (iteratorToRead == null) {
+    throw new RuntimeException("Stream to read not initialized properly. Has open() been called");
+  }
+  try {
+    while (iteratorToRead.hasNext()) {
+      if (!running) {
+        LOG.info("Source got stopped");
+        break;
+      }
+      MessageAndMetadata<byte[],byte[]> message=iteratorToRead.next();
+      if (lastOffsets[message.partition()] >= message.offset()) {
+        LOG.info("Skipping message with offset {} from partition {}",message.offset(),message.partition());
+        continue;
+      }
+      lastOffsets[message.partition()]=message.offset();
+      OUT out=deserializationSchema.deserialize(message.message());
+      if (deserializationSchema.isEndOfStream(out)) {
+        LOG.info("DeserializationSchema signaled end of stream for this source");
+        break;
+      }
+      collector.collect(out);
+      if (LOG.isTraceEnabled()) {
+        LOG.trace("Processed record with offset {} from partition {}",message.offset(),message.partition());
+      }
+    }
+  }
+ catch (  Exception ie) {
+    if (ie instanceof InterruptedException) {
+      if (running) {
+        throw new RuntimeException("Error while reading kafka consumer",ie);
+      }
+ else {
+        LOG.debug("Kafka consumer got interrupted because it has been cancelled. This is expected",ie);
+      }
+    }
+ else {
+      throw ie;
+    }
+  }
+  LOG.info("Source has finished reading data from the KafkaStream");
+}

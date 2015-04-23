@@ -1,0 +1,26 @@
+{
+  LOG.info("Starting testPersistentSourceWithOffsetUpdates()");
+  ZkClient zk=new ZkClient(standardCC.zkConnect(),standardCC.zkSessionTimeoutMs(),standardCC.zkConnectionTimeoutMs(),new PersistentKafkaSource.KafkaZKStringSerializer());
+  final String topicName="testOffsetHacking";
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(3);
+  env.getConfig().disableSysoutLogging();
+  env.enableCheckpointing(50);
+  env.setNumberOfExecutionRetries(0);
+  Properties topicConfig=new Properties();
+  LOG.info("Creating topic {}",topicName);
+  AdminUtils.createTopic(zk,topicName,3,2,topicConfig);
+  writeSequence(env,topicName,0,99);
+  readSequence(env,standardCC,topicName,0,100,300);
+  Assert.assertEquals("The offset seems incorrect",99L,PersistentKafkaSource.getOffset(zk,standardCC.groupId(),topicName,0));
+  Assert.assertEquals("The offset seems incorrect",99L,PersistentKafkaSource.getOffset(zk,standardCC.groupId(),topicName,1));
+  Assert.assertEquals("The offset seems incorrect",99L,PersistentKafkaSource.getOffset(zk,standardCC.groupId(),topicName,2));
+  LOG.info("Manipulating offsets");
+  PersistentKafkaSource.setOffset(zk,standardCC.groupId(),topicName,0,50);
+  PersistentKafkaSource.setOffset(zk,standardCC.groupId(),topicName,1,50);
+  PersistentKafkaSource.setOffset(zk,standardCC.groupId(),topicName,2,50);
+  env=StreamExecutionEnvironment.createLocalEnvironment(3);
+  env.getConfig().disableSysoutLogging();
+  readSequence(env,standardCC,topicName,50,50,150);
+  zk.close();
+  LOG.info("Finished testPersistentSourceWithOffsetUpdates()");
+}

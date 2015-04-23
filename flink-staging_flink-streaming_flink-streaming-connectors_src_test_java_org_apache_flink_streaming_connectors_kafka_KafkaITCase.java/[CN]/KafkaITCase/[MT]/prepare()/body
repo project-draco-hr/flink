@@ -17,6 +17,12 @@
     brokers=new ArrayList<KafkaServer>(NUMBER_OF_KAFKA_SERVERS);
     for (int i=0; i < NUMBER_OF_KAFKA_SERVERS; i++) {
       brokers.add(getKafkaServer(i,tmpKafkaDirs.get(i)));
+      SocketServer socketServer=brokers.get(i).socketServer();
+      String host="localhost";
+      if (socketServer.host() != null) {
+        host=socketServer.host();
+      }
+      brokerConnectionStrings+=host + ":" + socketServer.port()+ ",";
     }
     LOG.info("ZK and KafkaServer started.");
   }
@@ -24,4 +30,11 @@
     LOG.warn("Test failed with exception",t);
     Assert.fail("Test failed with: " + t.getMessage());
   }
+  Properties cProps=new Properties();
+  cProps.setProperty("zookeeper.connect",zookeeperConnectionString);
+  cProps.setProperty("group.id","flink-tests");
+  cProps.setProperty("auto.commit.enable","false");
+  cProps.setProperty("auto.offset.reset","smallest");
+  standardCC=new ConsumerConfig(cProps);
+  zkClient=new ZkClient(standardCC.zkConnect(),standardCC.zkSessionTimeoutMs(),standardCC.zkConnectionTimeoutMs(),new PersistentKafkaSource.KafkaZKStringSerializer());
 }

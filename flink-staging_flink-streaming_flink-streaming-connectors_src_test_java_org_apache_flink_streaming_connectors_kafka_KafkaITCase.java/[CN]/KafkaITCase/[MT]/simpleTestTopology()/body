@@ -2,7 +2,7 @@
   String topic="simpleTestTopic";
   createTestTopic(topic,1,1);
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
-  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema(),5000,100,Offset.FROM_BEGINNING));
+  DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(topic,new JavaDefaultStringSchema(),standardCC));
   consuming.addSink(new SinkFunction<String>(){
     int elCnt=0;
     int start=-1;
@@ -48,20 +48,6 @@
     }
   }
 );
-  stream.addSink(new KafkaSink<String>(zookeeperConnectionString,topic,new JavaDefaultStringSchema()));
-  try {
-    env.setParallelism(1);
-    env.execute();
-  }
- catch (  JobExecutionException good) {
-    Throwable t=good.getCause();
-    int limit=0;
-    while (!(t instanceof SuccessException)) {
-      t=t.getCause();
-      if (limit++ == 20) {
-        LOG.warn("Test failed with exception",good);
-        Assert.fail("Test failed with: " + good.getMessage());
-      }
-    }
-  }
+  stream.addSink(new KafkaSink<String>(brokerConnectionStrings,topic,new JavaDefaultStringSchema()));
+  tryExecute(env,"simpletest");
 }

@@ -1,0 +1,32 @@
+{
+  LOG.info("Reading sequence for verification until final count {}",finalCount);
+  DataStream<Tuple2<Integer,Integer>> source=env.addSource(new PersistentKafkaSource<Tuple2<Integer,Integer>>(topicName,new Utils.TypeInformationSerializationSchema<Tuple2<Integer,Integer>>(new Tuple2<Integer,Integer>(1,1),env.getConfig()),cc)).map(new MapFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
+    @Override public Tuple2<Integer,Integer> map(    Tuple2<Integer,Integer> value) throws Exception {
+      Thread.sleep(75);
+      return value;
+    }
+  }
+).setParallelism(3);
+  DataStream<Integer> validIndexes=source.flatMap(new RichFlatMapFunction<Tuple2<Integer,Integer>,Integer>(){
+    int[] values=new int[valuesCount];
+    int count=0;
+    @Override public void flatMap(    Tuple2<Integer,Integer> value,    Collector<Integer> out) throws Exception {
+      values[value.f1 - valuesStartFrom]++;
+      count++;
+      LOG.info("Reader " + getRuntimeContext().getIndexOfThisSubtask() + " got "+ value+ " count="+ count+ "/"+ finalCount);
+      if (count == finalCount) {
+        LOG.info("Received all values");
+        for (int i=0; i < values.length; i++) {
+          int v=values[i];
+          if (v != 3) {
+            throw new RuntimeException("Expected v to be 3, but was " + v + " on element "+ i+ " array="+ Arrays.toString(values));
+          }
+        }
+        throw new SuccessException();
+      }
+    }
+  }
+).setParallelism(1);
+  tryExecute(env,"Read data from Kafka");
+  LOG.info("Successfully read sequence for verification");
+}
