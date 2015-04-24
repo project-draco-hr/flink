@@ -1,17 +1,12 @@
 {
-  FileDataSource sourceA=new FileDataSource(new DummyInputFormat(),IN_FILE);
-  FileDataSource sourceB=new FileDataSource(new DummyInputFormat(),IN_FILE);
-  ReduceOperator redA=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(sourceA).build();
-  ReduceOperator redB=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(sourceB).build();
-  JoinOperator mat=JoinOperator.builder(new DummyMatchStub(),IntValue.class,0,0).input1(redA).input2(redB).build();
-  FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,mat);
-  sourceA.setParallelism(5);
-  sourceB.setParallelism(7);
-  redA.setParallelism(5);
-  redB.setParallelism(7);
-  mat.setParallelism(5);
-  sink.setParallelism(5);
-  Plan plan=new Plan(sink,"Partition on DoP Change");
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Long> set1=env.generateSequence(0,1).setParallelism(5);
+  DataSet<Long> set2=env.generateSequence(0,1).setParallelism(7);
+  DataSet<Long> reduce1=set1.groupBy("*").reduceGroup(new IdentityGroupReducer<Long>()).withForwardedFields("*").setParallelism(5);
+  DataSet<Long> reduce2=set2.groupBy("*").reduceGroup(new IdentityGroupReducer<Long>()).withForwardedFields("*").setParallelism(7);
+  reduce1.join(reduce2).where("*").equalTo("*").with(new IdentityJoiner<Long>()).setParallelism(5).output(new DiscardingOutputFormat<Long>()).setParallelism(5);
+  JavaPlan plan=env.createProgramPlan();
   OptimizedPlan oPlan=compileNoStats(plan);
   JobGraphGenerator jobGen=new JobGraphGenerator();
   jobGen.compileJobGraph(oPlan);

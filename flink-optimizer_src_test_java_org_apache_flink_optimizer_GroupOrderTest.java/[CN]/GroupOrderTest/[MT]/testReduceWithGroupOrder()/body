@@ -1,11 +1,9 @@
 {
-  FileDataSource source=new FileDataSource(new DummyInputFormat(),IN_FILE,"Source");
-  ReduceOperator reduce=ReduceOperator.builder(new IdentityReduce()).keyField(IntValue.class,2).name("Reduce").input(source).build();
-  Ordering groupOrder=new Ordering(5,StringValue.class,Order.DESCENDING);
-  reduce.setGroupOrder(groupOrder);
-  FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,reduce,"Sink");
-  Plan plan=new Plan(sink,"Test Temp Task");
-  plan.setDefaultParallelism(DEFAULT_PARALLELISM);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Tuple4<Long,Long,Long,Long>> set1=env.readCsvFile("/tmp/fake.csv").types(Long.class,Long.class,Long.class,Long.class);
+  set1.groupBy(1).sortGroup(3,Order.DESCENDING).reduceGroup(new IdentityGroupReducer<Tuple4<Long,Long,Long,Long>>()).name("Reduce").output(new DiscardingOutputFormat<Tuple4<Long,Long,Long,Long>>()).name("Sink");
+  JavaPlan plan=env.createProgramPlan();
   OptimizedPlan oPlan;
   try {
     oPlan=compileNoStats(plan);
@@ -22,10 +20,10 @@
   Assert.assertEquals(ShipStrategyType.PARTITION_HASH,reducer.getInput().getShipStrategy());
   Channel c=reducer.getInput();
   Assert.assertEquals(LocalStrategy.SORT,c.getLocalStrategy());
-  FieldList ship=new FieldList(2);
-  FieldList local=new FieldList(2,5);
+  FieldList ship=new FieldList(1);
+  FieldList local=new FieldList(1,3);
   Assert.assertEquals(ship,c.getShipStrategyKeys());
   Assert.assertEquals(local,c.getLocalStrategyKeys());
   Assert.assertTrue(c.getLocalStrategySortOrder()[0] == reducer.getSortOrders(0)[0]);
-  Assert.assertTrue(c.getLocalStrategySortOrder()[1] == groupOrder.getFieldSortDirections()[0]);
+  Assert.assertEquals(false,c.getLocalStrategySortOrder()[1]);
 }

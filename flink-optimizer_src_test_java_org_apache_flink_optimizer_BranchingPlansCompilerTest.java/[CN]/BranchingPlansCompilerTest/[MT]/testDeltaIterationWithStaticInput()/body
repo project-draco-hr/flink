@@ -1,19 +1,15 @@
 {
-  FileDataSource source=new FileDataSource(DummyInputFormat.class,IN_FILE,"source");
-  MapOperator mappedSource=MapOperator.builder(IdentityMap.class).input(source).name("Identity mapped source").build();
-  ReduceOperator reducedSource=ReduceOperator.builder(IdentityReduce.class).input(source).name("Identity reduce source").build();
-  DeltaIteration iteration=new DeltaIteration(0,"Loop");
-  iteration.setMaximumNumberOfIterations(10);
-  iteration.setInitialSolutionSet(source);
-  iteration.setInitialWorkset(mappedSource);
-  JoinOperator nextWorkset=JoinOperator.builder(DummyNonPreservingMatchStub.class,IntValue.class,0,0).input1(iteration.getWorkset()).input2(reducedSource).name("Next work set").build();
-  JoinOperator solutionSetDelta=JoinOperator.builder(DummyNonPreservingMatchStub.class,IntValue.class,0,0).input1(iteration.getSolutionSet()).input2(nextWorkset).name("Solution set delta").build();
-  iteration.setNextWorkset(nextWorkset);
-  iteration.setSolutionSetDelta(solutionSetDelta);
-  FileDataSink sink=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Iteration sink");
-  List<FileDataSink> sinks=new ArrayList<FileDataSink>();
-  sinks.add(sink);
-  Plan plan=new Plan(sinks);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Tuple2<Long,Long>> source=env.generateSequence(0,1).map(new Duplicator<Long>());
+  DataSet<Tuple2<Long,Long>> map=source.map(new IdentityMapper<Tuple2<Long,Long>>());
+  DataSet<Tuple2<Long,Long>> reduce=source.reduceGroup(new IdentityGroupReducer<Tuple2<Long,Long>>());
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> loop=source.iterateDelta(map,10,0);
+  DataSet<Tuple2<Long,Long>> workset=loop.getWorkset().join(reduce).where(0).equalTo(0).with(new IdentityJoiner<Tuple2<Long,Long>>()).name("Next work set");
+  DataSet<Tuple2<Long,Long>> delta=loop.getSolutionSet().join(workset).where(0).equalTo(0).with(new IdentityJoiner<Tuple2<Long,Long>>()).name("Solution set delta");
+  DataSet<Tuple2<Long,Long>> result=loop.closeWith(delta,workset);
+  result.output(new DiscardingOutputFormat<Tuple2<Long,Long>>());
+  JavaPlan plan=env.createProgramPlan();
   try {
     compileNoStats(plan);
   }

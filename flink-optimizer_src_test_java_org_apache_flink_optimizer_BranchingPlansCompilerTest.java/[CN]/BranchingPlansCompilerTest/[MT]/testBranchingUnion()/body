@@ -1,17 +1,18 @@
 {
   try {
-    FileDataSource source1=new FileDataSource(new DummyInputFormat(),IN_FILE);
-    FileDataSource source2=new FileDataSource(new DummyInputFormat(),IN_FILE);
-    JoinOperator mat1=JoinOperator.builder(new DummyMatchStub(),IntValue.class,0,0).input1(source1).input2(source2).name("Match 1").build();
-    MapOperator ma1=MapOperator.builder(new IdentityMap()).input(mat1).name("Map1").build();
-    ReduceOperator r1=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(ma1).name("Reduce 1").build();
-    ReduceOperator r2=ReduceOperator.builder(new IdentityReduce(),IntValue.class,0).input(mat1).name("Reduce 2").build();
-    MapOperator ma2=MapOperator.builder(new IdentityMap()).input(mat1).name("Map 2").build();
-    MapOperator ma3=MapOperator.builder(new IdentityMap()).input(ma2).name("Map 3").build();
-    @SuppressWarnings("unchecked") JoinOperator mat2=JoinOperator.builder(new DummyMatchStub(),IntValue.class,0,0).input1(r1,r2,ma2,ma3).input2(ma2).name("Match 2").build();
-    mat2.setParameter(Optimizer.HINT_LOCAL_STRATEGY,Optimizer.HINT_LOCAL_STRATEGY_MERGE);
-    FileDataSink sink=new FileDataSink(new DummyOutputFormat(),OUT_FILE,mat2);
-    Plan plan=new Plan(sink,"Branching Union");
+    ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(DEFAULT_PARALLELISM);
+    DataSet<Long> source1=env.generateSequence(0,1);
+    DataSet<Long> source2=env.generateSequence(0,1);
+    DataSet<Long> join1=source1.join(source2).where("*").equalTo("*").with(new IdentityJoiner<Long>()).name("Join 1");
+    DataSet<Long> map1=join1.map(new IdentityMapper<Long>()).name("Map 1");
+    DataSet<Long> reduce1=map1.groupBy("*").reduceGroup(new IdentityGroupReducer<Long>()).name("Reduce 1");
+    DataSet<Long> reduce2=join1.groupBy("*").reduceGroup(new IdentityGroupReducer<Long>()).name("Reduce 2");
+    DataSet<Long> map2=join1.map(new IdentityMapper<Long>()).name("Map 2");
+    DataSet<Long> map3=map2.map(new IdentityMapper<Long>()).name("Map 3");
+    DataSet<Long> join2=reduce1.union(reduce2).union(map2).union(map3).join(map2,JoinHint.REPARTITION_SORT_MERGE).where("*").equalTo("*").with(new IdentityJoiner<Long>()).name("Join 2");
+    join2.output(new DiscardingOutputFormat<Long>());
+    JavaPlan plan=env.createProgramPlan();
     OptimizedPlan oPlan=compileNoStats(plan);
     JobGraphGenerator jobGen=new JobGraphGenerator();
     jobGen.compileJobGraph(oPlan);

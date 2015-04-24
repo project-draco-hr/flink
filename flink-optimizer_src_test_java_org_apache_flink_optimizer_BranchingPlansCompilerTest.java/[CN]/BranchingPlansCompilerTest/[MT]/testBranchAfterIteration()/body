@@ -1,17 +1,14 @@
 {
-  FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE,"Source 2");
-  BulkIteration iteration=new BulkIteration("Loop");
-  iteration.setInput(sourceA);
-  iteration.setMaximumNumberOfIterations(10);
-  MapOperator mapper=MapOperator.builder(IdentityMap.class).name("Mapper").input(iteration.getPartialSolution()).build();
-  iteration.setNextPartialSolution(mapper);
-  FileDataSink sink1=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Sink 1");
-  MapOperator postMap=MapOperator.builder(IdentityMap.class).name("Post Iteration Mapper").input(iteration).build();
-  FileDataSink sink2=new FileDataSink(DummyOutputFormat.class,OUT_FILE,postMap,"Sink 2");
-  List<FileDataSink> sinks=new ArrayList<FileDataSink>();
-  sinks.add(sink1);
-  sinks.add(sink2);
-  Plan plan=new Plan(sinks);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Long> sourceA=env.generateSequence(0,1);
+  IterativeDataSet<Long> loopHead=sourceA.iterate(10);
+  DataSet<Long> loopTail=loopHead.map(new IdentityMapper<Long>()).name("Mapper");
+  DataSet<Long> loopRes=loopHead.closeWith(loopTail);
+  loopRes.output(new DiscardingOutputFormat<Long>());
+  loopRes.map(new IdentityMapper<Long>()).output(new DiscardingOutputFormat<Long>());
+  ;
+  JavaPlan plan=env.createProgramPlan();
   try {
     compileNoStats(plan);
   }

@@ -1,19 +1,15 @@
 {
-  FileDataSource sourceA=new FileDataSource(DummyInputFormat.class,IN_FILE,"Source 1");
-  FileDataSource sourceB=new FileDataSource(DummyInputFormat.class,IN_FILE,"Source 2");
-  FileDataSink sink1=new FileDataSink(DummyOutputFormat.class,OUT_FILE,sourceA,"Sink 1");
-  FileDataSink sink2=new FileDataSink(DummyOutputFormat.class,OUT_FILE,sourceB,"Sink 2");
-  BulkIteration iteration=new BulkIteration("Loop");
-  iteration.setInput(sourceA);
-  iteration.setMaximumNumberOfIterations(10);
-  CrossOperator stepFunction=CrossOperator.builder(DummyCrossStub.class).name("StepFunction").input1(iteration.getPartialSolution()).input2(sourceB).build();
-  iteration.setNextPartialSolution(stepFunction);
-  FileDataSink sink3=new FileDataSink(DummyOutputFormat.class,OUT_FILE,iteration,"Sink 3");
-  List<FileDataSink> sinks=new ArrayList<FileDataSink>();
-  sinks.add(sink1);
-  sinks.add(sink2);
-  sinks.add(sink3);
-  Plan plan=new Plan(sinks);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Long> sourceA=env.generateSequence(0,1);
+  DataSet<Long> sourceB=env.generateSequence(0,1);
+  sourceA.output(new DiscardingOutputFormat<Long>());
+  sourceB.output(new DiscardingOutputFormat<Long>());
+  IterativeDataSet<Long> loopHead=sourceA.iterate(10).name("Loop");
+  DataSet<Long> loopTail=loopHead.cross(sourceB).with(new IdentityCrosser<Long>());
+  DataSet<Long> loopRes=loopHead.closeWith(loopTail);
+  loopRes.output(new DiscardingOutputFormat<Long>());
+  JavaPlan plan=env.createProgramPlan();
   try {
     compileNoStats(plan);
   }
