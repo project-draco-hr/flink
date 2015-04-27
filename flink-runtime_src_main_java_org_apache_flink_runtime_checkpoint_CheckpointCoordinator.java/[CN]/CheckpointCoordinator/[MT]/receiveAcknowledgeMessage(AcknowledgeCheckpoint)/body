@@ -1,0 +1,57 @@
+{
+  if (shutdown || message == null) {
+    return;
+  }
+  if (!job.equals(message.getJob())) {
+    LOG.error("Received AcknowledgeCheckpoint message for wrong job: {}",message);
+    return;
+  }
+  final long checkpointId=message.getCheckpointId();
+  boolean checkpointCompleted=false;
+synchronized (lock) {
+    if (shutdown) {
+      return;
+    }
+    PendingCheckpoint checkpoint=pendingCheckpoints.get(checkpointId);
+    if (checkpoint != null && !checkpoint.isDiscarded()) {
+      if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState())) {
+        if (checkpoint.isFullyAcknowledged()) {
+          LOG.info("Completed checkpoint " + checkpointId);
+          SuccessfulCheckpoint completed=checkpoint.toCompletedCheckpoint();
+          completedCheckpoints.addLast(completed);
+          if (completedCheckpoints.size() > numSuccessfulCheckpointsToRetain) {
+            completedCheckpoints.removeFirst();
+          }
+          pendingCheckpoints.remove(checkpointId);
+          rememberRecentCheckpointId(checkpointId);
+          dropSubsumedCheckpoints(completed.getTimestamp());
+          checkpointCompleted=true;
+        }
+      }
+ else {
+        LOG.error("Received duplicate or invalid acknowledge message for checkpoint " + checkpointId + " , task "+ message.getTaskExecutionId());
+      }
+    }
+ else     if (checkpoint != null) {
+      throw new IllegalStateException("Received message for discarded but non-removed checkpoint " + checkpointId);
+    }
+ else {
+      if (recentPendingCheckpoints.contains(checkpointId)) {
+        LOG.warn("Received late message for now expired checkpoint attempt " + checkpointId);
+      }
+ else {
+        LOG.info("Received message for non-existing checkpoint " + checkpointId);
+      }
+    }
+  }
+  if (checkpointCompleted) {
+    for (    ExecutionVertex ev : tasksToCommitTo) {
+      Execution ee=ev.getCurrentExecutionAttempt();
+      if (ee != null) {
+        ExecutionAttemptID attemptId=ee.getAttemptId();
+        ConfirmCheckpoint confirmMessage=new ConfirmCheckpoint(job,attemptId,checkpointId);
+        ev.sendMessageToCurrentExecution(confirmMessage,ee.getAttemptId());
+      }
+    }
+  }
+}

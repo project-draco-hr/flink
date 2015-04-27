@@ -1,0 +1,34 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final long timestamp=System.currentTimeMillis();
+    final ExecutionAttemptID triggerAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID ackAttemptID1=new ExecutionAttemptID();
+    final ExecutionAttemptID ackAttemptID2=new ExecutionAttemptID();
+    final ExecutionAttemptID commitAttemptID=new ExecutionAttemptID();
+    ExecutionVertex triggerVertex=mockExecutionVertex(triggerAttemptID);
+    ExecutionVertex ackVertex1=mockExecutionVertex(ackAttemptID1);
+    ExecutionVertex ackVertex2=mockExecutionVertex(ackAttemptID2);
+    ExecutionVertex commitVertex=mockExecutionVertex(commitAttemptID);
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,2,200,new ExecutionVertex[]{triggerVertex},new ExecutionVertex[]{ackVertex1,ackVertex2},new ExecutionVertex[]{commitVertex});
+    assertTrue(coord.triggerCheckpoint(timestamp));
+    assertEquals(1,coord.getNumberOfPendingCheckpoints());
+    PendingCheckpoint checkpoint=coord.getPendingCheckpoints().values().iterator().next();
+    assertFalse(checkpoint.isDiscarded());
+    coord.receiveAcknowledgeMessage(new AcknowledgeCheckpoint(jid,ackAttemptID1,checkpoint.getCheckpointId()));
+    long deadline=System.currentTimeMillis() + 5000;
+    do {
+      Thread.sleep(250);
+    }
+ while (!checkpoint.isDiscarded() && System.currentTimeMillis() < deadline);
+    assertTrue("Checkpoint was not canceled by the timeout",checkpoint.isDiscarded());
+    assertEquals(0,coord.getNumberOfPendingCheckpoints());
+    assertEquals(0,coord.getNumberOfRetainedSuccessfulCheckpoints());
+    verify(commitVertex,times(0)).sendMessageToCurrentExecution(any(ConfirmCheckpoint.class),any(ExecutionAttemptID.class));
+    coord.shutdown();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
