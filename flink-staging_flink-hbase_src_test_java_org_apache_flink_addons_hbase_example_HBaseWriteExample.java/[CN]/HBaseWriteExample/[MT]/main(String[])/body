@@ -1,0 +1,27 @@
+{
+  if (!parseParameters(args)) {
+    return;
+  }
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<String> text=getTextDataSet(env);
+  DataSet<Tuple2<String,Integer>> counts=text.flatMap(new Tokenizer()).groupBy(0).sum(1);
+  Job job=Job.getInstance();
+  job.getConfiguration().set(TableOutputFormat.OUTPUT_TABLE,outputTableName);
+  job.getConfiguration().set("mapred.output.dir",HBaseFlinkTestConstants.TMP_DIR);
+  counts.map(new RichMapFunction<Tuple2<String,Integer>,Tuple2<Text,Mutation>>(){
+    private transient Tuple2<Text,Mutation> reuse;
+    @Override public void open(    Configuration parameters) throws Exception {
+      super.open(parameters);
+      reuse=new Tuple2<Text,Mutation>();
+    }
+    @Override public Tuple2<Text,Mutation> map(    Tuple2<String,Integer> t) throws Exception {
+      reuse.f0=new Text(t.f0);
+      Put put=new Put(t.f0.getBytes());
+      put.add(HBaseFlinkTestConstants.CF_SOME,HBaseFlinkTestConstants.Q_SOME,Bytes.toBytes(t.f1));
+      reuse.f1=put;
+      return reuse;
+    }
+  }
+).output(new HadoopOutputFormat<Text,Mutation>(new TableOutputFormat<Text>(),job));
+  env.execute("WordCount (HBase sink) Example");
+}
