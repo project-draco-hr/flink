@@ -1,0 +1,16 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(8);
+  FilterFunction<Long> dummyFilter=new FilterFunction<Long>(){
+    @Override public boolean filter(    Long value) throws Exception {
+      return false;
+    }
+  }
+;
+  env.generateSequence(1,10).filter(dummyFilter).isolateResources().filter(dummyFilter).disableChaining().filter(dummyFilter).startNewResourceGroup().filter(dummyFilter).startNewChain().print();
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  List<AbstractJobVertex> vertices=jobGraph.getVerticesSortedTopologicallyFromSources();
+  assertEquals(vertices.get(0).getSlotSharingGroup(),vertices.get(2).getSlotSharingGroup());
+  assertNotEquals(vertices.get(0).getSlotSharingGroup(),vertices.get(1).getSlotSharingGroup());
+  assertNotEquals(vertices.get(2).getSlotSharingGroup(),vertices.get(3).getSlotSharingGroup());
+  assertEquals(vertices.get(3).getSlotSharingGroup(),vertices.get(4).getSlotSharingGroup());
+}
