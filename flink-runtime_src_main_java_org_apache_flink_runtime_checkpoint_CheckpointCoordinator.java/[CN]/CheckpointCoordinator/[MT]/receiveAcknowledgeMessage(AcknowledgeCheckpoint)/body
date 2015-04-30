@@ -7,7 +7,7 @@
     return;
   }
   final long checkpointId=message.getCheckpointId();
-  boolean checkpointCompleted=false;
+  SuccessfulCheckpoint completed=null;
 synchronized (lock) {
     if (shutdown) {
       return;
@@ -17,7 +17,7 @@ synchronized (lock) {
       if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState())) {
         if (checkpoint.isFullyAcknowledged()) {
           LOG.info("Completed checkpoint " + checkpointId);
-          SuccessfulCheckpoint completed=checkpoint.toCompletedCheckpoint();
+          completed=checkpoint.toCompletedCheckpoint();
           completedCheckpoints.addLast(completed);
           if (completedCheckpoints.size() > numSuccessfulCheckpointsToRetain) {
             completedCheckpoints.removeFirst();
@@ -25,7 +25,6 @@ synchronized (lock) {
           pendingCheckpoints.remove(checkpointId);
           rememberRecentCheckpointId(checkpointId);
           dropSubsumedCheckpoints(completed.getTimestamp());
-          checkpointCompleted=true;
         }
       }
  else {
@@ -44,12 +43,13 @@ synchronized (lock) {
       }
     }
   }
-  if (checkpointCompleted) {
+  if (completed != null) {
+    final long timestamp=completed.getTimestamp();
     for (    ExecutionVertex ev : tasksToCommitTo) {
       Execution ee=ev.getCurrentExecutionAttempt();
       if (ee != null) {
         ExecutionAttemptID attemptId=ee.getAttemptId();
-        ConfirmCheckpoint confirmMessage=new ConfirmCheckpoint(job,attemptId,checkpointId);
+        ConfirmCheckpoint confirmMessage=new ConfirmCheckpoint(job,attemptId,checkpointId,timestamp);
         ev.sendMessageToCurrentExecution(confirmMessage,ee.getAttemptId());
       }
     }

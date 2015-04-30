@@ -1,0 +1,44 @@
+{
+  AbstractInvokable invokable=this.invokable;
+  if (executionState == ExecutionState.RUNNING && invokable != null) {
+    if (invokable instanceof CheckpointedOperator) {
+      final CheckpointedOperator checkpointer=(CheckpointedOperator)invokable;
+      final Logger logger=LOG;
+      final String taskName=taskNameWithSubtask;
+      Runnable runnable=new Runnable(){
+        @Override public void run(){
+          try {
+            checkpointer.triggerCheckpoint(checkpointID,checkpointTimestamp);
+          }
+ catch (          Throwable t) {
+            logger.error("Error while triggering checkpoint for " + taskName,t);
+          }
+        }
+      }
+;
+      executeAsyncCallRunnable(runnable,"Checkpoint Trigger");
+    }
+ else     if (invokable instanceof BarrierTransceiver) {
+      final BarrierTransceiver barrierTransceiver=(BarrierTransceiver)invokable;
+      final Logger logger=LOG;
+      Runnable runnable=new Runnable(){
+        @Override public void run(){
+          try {
+            barrierTransceiver.broadcastBarrierFromSource(checkpointID);
+          }
+ catch (          Throwable t) {
+            logger.error("Error while triggering checkpoint barriers",t);
+          }
+        }
+      }
+;
+      executeAsyncCallRunnable(runnable,"Checkpoint Trigger");
+    }
+ else {
+      LOG.error("Task received a checkpoint request, but is not a checkpointing task - " + taskNameWithSubtask);
+    }
+  }
+ else {
+    LOG.debug("Ignoring request to trigger a checkpoint for non-running task.");
+  }
+}

@@ -1,0 +1,44 @@
+{
+synchronized (lock) {
+    if (shutdown) {
+      throw new IllegalStateException("CheckpointCoordinator is hut down");
+    }
+    if (completedCheckpoints.isEmpty()) {
+      if (errorIfNoCheckpoint) {
+        throw new IllegalStateException("No completed checkpoint available");
+      }
+ else {
+        return;
+      }
+    }
+    SuccessfulCheckpoint latest=completedCheckpoints.getLast();
+    if (allOrNothingState) {
+      Map<ExecutionJobVertex,Integer> stateCounts=new HashMap<ExecutionJobVertex,Integer>();
+      for (      StateForTask state : latest.getStates()) {
+        ExecutionJobVertex vertex=tasks.get(state.getOperatorId());
+        Execution exec=vertex.getTaskVertices()[state.getSubtask()].getCurrentExecutionAttempt();
+        exec.setInitialState(state.getState());
+        Integer count=stateCounts.get(vertex);
+        if (count != null) {
+          stateCounts.put(vertex,count + 1);
+        }
+ else {
+          stateCounts.put(vertex,1);
+        }
+      }
+      for (      Map.Entry<ExecutionJobVertex,Integer> entry : stateCounts.entrySet()) {
+        ExecutionJobVertex vertex=entry.getKey();
+        if (entry.getValue() != vertex.getParallelism()) {
+          throw new IllegalStateException("The checkpoint contained state only for a subset of tasks for vertex " + vertex);
+        }
+      }
+    }
+ else {
+      for (      StateForTask state : latest.getStates()) {
+        ExecutionJobVertex vertex=tasks.get(state.getOperatorId());
+        Execution exec=vertex.getTaskVertices()[state.getSubtask()].getCurrentExecutionAttempt();
+        exec.setInitialState(state.getState());
+      }
+    }
+  }
+}

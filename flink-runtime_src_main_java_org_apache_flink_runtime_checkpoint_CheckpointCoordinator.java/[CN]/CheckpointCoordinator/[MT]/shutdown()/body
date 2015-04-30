@@ -4,7 +4,16 @@ synchronized (lock) {
       return;
     }
     shutdown=true;
-    timeoutTimer.cancel();
+    LOG.info("Stopping checkpoint coordinator jor job " + job);
+    timer.cancel();
+    if (jobStatusListener != null) {
+      jobStatusListener.tell(PoisonPill.getInstance(),ActorRef.noSender());
+      jobStatusListener=null;
+    }
+    if (periodicScheduler != null) {
+      periodicScheduler.cancel();
+      periodicScheduler=null;
+    }
     for (    PendingCheckpoint pending : pendingCheckpoints.values()) {
       pending.discard();
     }

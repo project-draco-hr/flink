@@ -53,14 +53,24 @@
  catch (    Exception e) {
       throw new Exception("Call to registerInputOutput() of invokable failed",e);
     }
+    SerializedValue<StateHandle<?>> operatorState=this.operatorState;
     if (operatorState != null) {
       if (invokable instanceof OperatorStateCarrier) {
-        ((OperatorStateCarrier)invokable).injectState(operatorState);
+        try {
+          StateHandle<?> state=operatorState.deserializeValue(userCodeClassLoader);
+          OperatorStateCarrier<?> op=(OperatorStateCarrier<?>)invokable;
+          StateUtils.setOperatorState(op,state);
+        }
+ catch (        Exception e) {
+          throw new Exception("Failed to deserialize state handle and setup initial operator state");
+        }
       }
  else {
         throw new IllegalStateException("Found operator state for a non-stateful task invokable");
       }
     }
+    operatorState=null;
+    this.operatorState=null;
     this.invokable=invokable;
     if (!STATE_UPDATER.compareAndSet(this,ExecutionState.DEPLOYING,ExecutionState.RUNNING)) {
       throw new CancelTaskException();

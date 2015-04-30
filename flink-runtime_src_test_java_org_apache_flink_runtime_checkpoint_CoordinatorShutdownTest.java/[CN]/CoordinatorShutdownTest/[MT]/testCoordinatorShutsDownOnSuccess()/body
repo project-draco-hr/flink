@@ -1,0 +1,32 @@
+{
+  LocalFlinkMiniCluster cluster=null;
+  try {
+    cluster=new LocalFlinkMiniCluster(new Configuration(),true);
+    AbstractJobVertex vertex=new AbstractJobVertex("Test Vertex");
+    vertex.setInvokableClass(Tasks.NoOpInvokable.class);
+    List<JobVertexID> vertexIdList=Collections.singletonList(vertex.getID());
+    JobGraph testGraph=new JobGraph("test job",vertex);
+    testGraph.setSnapshotSettings(new JobSnapshottingSettings(vertexIdList,vertexIdList,vertexIdList,5000));
+    ActorRef jobManager=cluster.getJobManager();
+    FiniteDuration timeout=new FiniteDuration(60,TimeUnit.SECONDS);
+    JobManagerMessages.SubmitJob submitMessage=new JobManagerMessages.SubmitJob(testGraph,false);
+    Future<Object> submitFuture=Patterns.ask(jobManager,submitMessage,timeout.toMillis());
+    Await.result(submitFuture,timeout);
+    Future<Object> jobRequestFuture=Patterns.ask(jobManager,new JobManagerMessages.RequestJob(testGraph.getJobID()),timeout.toMillis());
+    ExecutionGraph graph=((JobManagerMessages.JobFound)Await.result(jobRequestFuture,timeout)).executionGraph();
+    assertNotNull(graph);
+    graph.waitUntilFinished();
+    CheckpointCoordinator coord=graph.getCheckpointCoordinator();
+    assertTrue(coord == null || coord.isShutdown());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+      cluster.awaitTermination();
+    }
+  }
+}
