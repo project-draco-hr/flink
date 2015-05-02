@@ -7,12 +7,27 @@
   this.executionState=executionState;
   this.cachedError=error;
   if (error != null) {
+    byte[] serializedError;
     try {
-      this.serializedError=InstantiationUtil.serializeObject(error);
+      serializedError=InstantiationUtil.serializeObject(error);
     }
- catch (    IOException e) {
-      throw new RuntimeException("Error while serializing task exception",e);
+ catch (    Throwable t) {
+      try {
+        this.cachedError=new Exception(ExceptionUtils.stringifyException(error));
+        serializedError=InstantiationUtil.serializeObject(this.cachedError);
+      }
+ catch (      Throwable tt) {
+        try {
+          this.cachedError=new Exception("Cause is a '" + error.getClass().getName() + "' (failed to serialize or stringify)");
+          serializedError=InstantiationUtil.serializeObject(this.cachedError);
+        }
+ catch (        Throwable ttt) {
+          this.cachedError=null;
+          serializedError=null;
+        }
+      }
     }
+    this.serializedError=serializedError;
   }
  else {
     this.serializedError=null;
