@@ -1,18 +1,31 @@
 {
 synchronized (lock) {
-    if (!jobCounts.containsKey(jobID)) {
-      jobCounts.put(jobID,new HashMap<String,Integer>());
+    Map<String,Tuple4<Integer,File,Path,Future<Path>>> jobEntries=entries.get(jobID);
+    if (jobEntries == null) {
+      jobEntries=new HashMap<String,Tuple4<Integer,File,Path,Future<Path>>>();
+      entries.put(jobID,jobEntries);
     }
-    Map<String,Integer> count=jobCounts.get(jobID);
-    if (count.containsKey(name)) {
-      count.put(name,count.get(name) + 1);
+    Tuple4<Integer,File,Path,Future<Path>> fileEntry=jobEntries.get(name);
+    if (fileEntry != null) {
+      fileEntry.f0=fileEntry.f0 + 1;
+      return fileEntry.f3;
     }
  else {
-      count.put(name,1);
+      File tempDirToUse=new File(storageDirectories[nextDirectory++],jobID.toString());
+      if (nextDirectory >= storageDirectories.length) {
+        nextDirectory=0;
+      }
+      String sourceFile=entry.filePath;
+      int posOfSep=sourceFile.lastIndexOf("/");
+      if (posOfSep > 0) {
+        sourceFile=sourceFile.substring(posOfSep + 1);
+      }
+      Path target=new Path(tempDirToUse.getAbsolutePath() + "/" + sourceFile);
+      CopyProcess cp=new CopyProcess(entry,target);
+      FutureTask<Path> copyTask=new FutureTask<Path>(cp);
+      executorService.submit(copyTask);
+      jobEntries.put(name,new Tuple4<Integer,File,Path,Future<Path>>(1,tempDirToUse,target,copyTask));
+      return copyTask;
     }
   }
-  CopyProcess cp=new CopyProcess(entry,jobID);
-  FutureTask<Path> copyTask=new FutureTask<Path>(cp);
-  executorService.submit(copyTask);
-  return copyTask;
 }

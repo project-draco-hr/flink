@@ -1,44 +1,27 @@
 {
-  JobID jobID=new JobID();
-  String filePath=f.toURI().toString();
-  fileCache.createTmpFile("test_file",new DistributedCacheEntry(filePath,false),jobID);
   try {
-    Thread.sleep(1000);
+    final JobID jobID=new JobID();
+    final String fileName="test_file";
+    final String filePath=f.toURI().toString();
+    Future<Path> copyResult=fileCache.createTmpFile(fileName,new DistributedCacheEntry(filePath,false),jobID);
+    copyResult.get();
+    Future<Path> copyResult2=fileCache.createTmpFile(fileName,new DistributedCacheEntry(filePath,false),jobID);
+    assertTrue(copyResult2.isDone());
+    fileCache.deleteTmpFile(fileName,jobID);
+    assertTrue(fileCache.holdsStillReference(fileName,jobID));
+    fileCache.deleteTmpFile(fileName,jobID);
+    assertTrue(fileCache.holdsStillReference(fileName,jobID));
+    fileCache.createTmpFile(fileName,new DistributedCacheEntry(filePath,false),jobID);
+    fileCache.deleteTmpFile(fileName,jobID);
+    long deadline=System.currentTimeMillis() + 20000;
+    do {
+      Thread.sleep(5500);
+    }
+ while (fileCache.holdsStillReference(fileName,jobID) && System.currentTimeMillis() < deadline);
+    assertFalse(fileCache.holdsStillReference(fileName,jobID));
   }
- catch (  InterruptedException e) {
-    throw new RuntimeException("Interrupted error",e);
-  }
-  fileCache.deleteTmpFile("test_file",new DistributedCacheEntry(filePath,false),jobID);
-  try {
-    Thread.sleep(1000);
-  }
- catch (  InterruptedException e) {
-    throw new RuntimeException("Interrupted error",e);
-  }
-  try {
-    Assert.assertTrue("Local cache file should not be deleted when another task comes in 5 seconds!",lfs.exists(fileCache.getTempDir(jobID,"cacheFile")));
-  }
- catch (  IOException e) {
-    throw new RuntimeException("Interrupted error",e);
-  }
-  fileCache.createTmpFile("test_file",new DistributedCacheEntry(filePath,false),jobID);
-  try {
-    Thread.sleep(1000);
-  }
- catch (  InterruptedException e) {
-    throw new RuntimeException("Interrupted error",e);
-  }
-  fileCache.deleteTmpFile("test_file",new DistributedCacheEntry(filePath,false),jobID);
-  try {
-    Thread.sleep(7000);
-  }
- catch (  InterruptedException e) {
-    throw new RuntimeException("Interrupted error",e);
-  }
-  try {
-    Assert.assertTrue("Local cache file should be deleted when no task comes in 5 seconds!",!lfs.exists(fileCache.getTempDir(jobID,"cacheFile")));
-  }
- catch (  IOException e) {
-    throw new RuntimeException("Interrupted error",e);
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
   }
 }

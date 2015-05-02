@@ -1,21 +1,36 @@
 {
-  Path tmp=getTempDir(jobID,filePath.substring(filePath.lastIndexOf("/") + 1));
   try {
 synchronized (lock) {
-      Map<String,Integer> count=jobCounts.get(jobID);
-      if (count.containsKey(name)) {
-        count.put(name,count.get(name) - 1);
-        if (count.get(name) == 0) {
-          if (lfs.exists(tmp)) {
-            lfs.delete(tmp,true);
+      Map<String,Tuple4<Integer,File,Path,Future<Path>>> jobEntries=entries.get(jobID);
+      if (jobEntries != null) {
+        Tuple4<Integer,File,Path,Future<Path>> entry=jobEntries.get(name);
+        if (entry != null) {
+          int count=entry.f0;
+          if (count > 1) {
+            entry.f0=count - 1;
           }
-          count.remove(name);
-          if (count.isEmpty()) {
-            tmp=getTempDir(jobID,"");
-            if (lfs.exists(tmp)) {
-              lfs.delete(tmp,true);
+ else {
+            jobEntries.remove(name);
+            if (jobEntries.isEmpty()) {
+              entries.remove(jobID);
             }
-            jobCounts.remove(jobID);
+            entry.f3.cancel(true);
+            File file=new File(entry.f2.toString());
+            if (file.exists()) {
+              if (file.isDirectory()) {
+                FileUtils.deleteDirectory(file);
+              }
+ else               if (!file.delete()) {
+                LOG.error("Could not delete locally cached file " + file.getAbsolutePath());
+              }
+            }
+            File parent=entry.f1;
+            if (parent.isDirectory()) {
+              String[] children=parent.list();
+              if (children == null || children.length == 0) {
+                parent.delete();
+              }
+            }
           }
         }
       }

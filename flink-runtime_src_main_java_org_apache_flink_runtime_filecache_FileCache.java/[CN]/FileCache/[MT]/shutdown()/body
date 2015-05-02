@@ -1,12 +1,32 @@
 {
-  ScheduledExecutorService es=this.executorService;
-  if (es != null) {
-    es.shutdown();
-    try {
-      es.awaitTermination(5000L,TimeUnit.MILLISECONDS);
+synchronized (lock) {
+    ScheduledExecutorService es=this.executorService;
+    if (es != null) {
+      es.shutdown();
+      try {
+        es.awaitTermination(5000L,TimeUnit.MILLISECONDS);
+      }
+ catch (      InterruptedException e) {
+      }
     }
- catch (    InterruptedException e) {
-      throw new RuntimeException("Error shutting down the file cache",e);
+    entries.clear();
+    for (    File dir : storageDirectories) {
+      try {
+        FileUtils.deleteDirectory(dir);
+      }
+ catch (      IOException e) {
+        LOG.error("File cache could not properly clean up storage directory.");
+      }
+    }
+    if (shutdownHook != null && shutdownHook != Thread.currentThread()) {
+      try {
+        Runtime.getRuntime().removeShutdownHook(shutdownHook);
+      }
+ catch (      IllegalStateException e) {
+      }
+catch (      Throwable t) {
+        LOG.warn("Exception while unregistering file cache's cleanup shutdown hook.");
+      }
     }
   }
 }
