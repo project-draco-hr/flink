@@ -1,0 +1,73 @@
+{
+  LOG.info("--------------------------------------------------------------------\n" + "     Starting testSubmitAndExecuteTask() \n" + "--------------------------------------------------------------------");
+  new JavaTestKit(system){
+{
+      ActorRef taskManager=null;
+      try {
+        taskManager=createTaskManager(getTestActor(),false);
+        final ActorRef tmClosure=taskManager;
+        new Within(d){
+          @Override protected void run(){
+            expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
+            final InstanceID iid=new InstanceID();
+            assertEquals(tmClosure,getLastSender());
+            tmClosure.tell(new RegistrationMessages.AcknowledgeRegistration(getTestActor(),iid,12345),getTestActor());
+          }
+        }
+;
+        final JobID jid=new JobID();
+        final JobVertexID vid=new JobVertexID();
+        final ExecutionAttemptID eid=new ExecutionAttemptID();
+        final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"TestTask",2,7,new Configuration(),new Configuration(),TestInvokableCorrect.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
+        new Within(d){
+          @Override protected void run(){
+            tmClosure.tell(new SubmitTask(tdd),getRef());
+            long deadline=System.currentTimeMillis() + 10000;
+            do {
+              Object message=receiveOne(d);
+              if (message == Messages.getAcknowledge()) {
+                break;
+              }
+            }
+ while (System.currentTimeMillis() < deadline);
+            Object toRunning=new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.RUNNING));
+            Object toFinished=new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.FINISHED));
+            deadline=System.currentTimeMillis() + 10000;
+            do {
+              Object message=receiveOne(d);
+              if (message.equals(toRunning)) {
+                break;
+              }
+ else               if (!(message instanceof TaskManagerMessages.Heartbeat)) {
+                fail("Unexpected message: " + message);
+              }
+            }
+ while (System.currentTimeMillis() < deadline);
+            deadline=System.currentTimeMillis() + 10000;
+            do {
+              Object message=receiveOne(d);
+              if (message.equals(toFinished)) {
+                break;
+              }
+ else               if (!(message instanceof TaskManagerMessages.Heartbeat)) {
+                fail("Unexpected message: " + message);
+              }
+            }
+ while (System.currentTimeMillis() < deadline);
+          }
+        }
+;
+      }
+ catch (      Exception e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
+ finally {
+        if (taskManager != null) {
+          taskManager.tell(Kill.getInstance(),ActorRef.noSender());
+        }
+      }
+    }
+  }
+;
+}

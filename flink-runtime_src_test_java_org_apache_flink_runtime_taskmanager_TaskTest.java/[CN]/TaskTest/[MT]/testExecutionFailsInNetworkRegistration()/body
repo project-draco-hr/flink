@@ -1,0 +1,25 @@
+{
+  try {
+    LibraryCacheManager libCache=mock(LibraryCacheManager.class);
+    when(libCache.getClassLoader(any(JobID.class))).thenReturn(getClass().getClassLoader());
+    ResultPartitionManager partitionManager=mock(ResultPartitionManager.class);
+    ResultPartitionConsumableNotifier consumableNotifier=mock(ResultPartitionConsumableNotifier.class);
+    NetworkEnvironment network=mock(NetworkEnvironment.class);
+    when(network.getPartitionManager()).thenReturn(partitionManager);
+    when(network.getPartitionConsumableNotifier()).thenReturn(consumableNotifier);
+    when(network.getDefaultIOMode()).thenReturn(IOManager.IOMode.SYNC);
+    doThrow(new RuntimeException("buffers")).when(network).registerTask(any(Task.class));
+    Task task=createTask(TestInvokableCorrect.class,libCache,network);
+    task.registerExecutionListener(listenerActor);
+    task.run();
+    assertEquals(ExecutionState.FAILED,task.getExecutionState());
+    assertTrue(task.isCanceledOrFailed());
+    assertTrue(task.getFailureCause().getMessage().contains("buffers"));
+    validateUnregisterTask(task.getExecutionId());
+    validateListenerMessage(ExecutionState.FAILED,task,true);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
