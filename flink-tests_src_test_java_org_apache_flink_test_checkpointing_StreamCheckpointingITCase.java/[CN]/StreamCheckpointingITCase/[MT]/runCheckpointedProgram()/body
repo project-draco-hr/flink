@@ -8,23 +8,25 @@
     DataStream<String> stream=env.addSource(new RichParallelSourceFunction<String>(){
       private Random rnd;
       private StringBuilder stringBuilder;
+      private int index;
       private int step;
       private boolean running=true;
       @Override public void open(      Configuration parameters){
         rnd=new Random();
         stringBuilder=new StringBuilder();
         step=getRuntimeContext().getNumberOfParallelSubtasks();
+        index=getRuntimeContext().getIndexOfThisSubtask();
       }
-      @Override public void run(      Collector<String> collector) throws Exception {
-        for (long i=getRuntimeContext().getIndexOfThisSubtask(); running && i < NUM_STRINGS; i+=step) {
-          char first=(char)((i % 40) + 40);
-          stringBuilder.setLength(0);
-          stringBuilder.append(first);
-          collector.collect(randomString(stringBuilder,rnd));
-        }
+      @Override public boolean reachedEnd() throws Exception {
+        return index >= NUM_STRINGS;
       }
-      @Override public void cancel(){
-        running=false;
+      @Override public String next() throws Exception {
+        char first=(char)((index % 40) + 40);
+        stringBuilder.setLength(0);
+        stringBuilder.append(first);
+        String result=randomString(stringBuilder,rnd);
+        index+=step;
+        return result;
       }
     }
 );

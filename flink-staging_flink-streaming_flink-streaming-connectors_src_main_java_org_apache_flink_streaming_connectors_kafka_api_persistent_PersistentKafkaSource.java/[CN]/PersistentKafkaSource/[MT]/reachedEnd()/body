@@ -1,0 +1,24 @@
+{
+  if (nextElement != null) {
+    return false;
+  }
+  while (iteratorToRead.hasNext()) {
+    MessageAndMetadata<byte[],byte[]> message=iteratorToRead.next();
+    if (lastOffsets[message.partition()] >= message.offset()) {
+      LOG.info("Skipping message with offset {} from partition {}",message.offset(),message.partition());
+      continue;
+    }
+    lastOffsets[message.partition()]=message.offset();
+    OUT out=deserializationSchema.deserialize(message.message());
+    if (deserializationSchema.isEndOfStream(out)) {
+      LOG.info("DeserializationSchema signaled end of stream for this source");
+      break;
+    }
+    nextElement=out;
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Processed record with offset {} from partition {}",message.offset(),message.partition());
+    }
+    break;
+  }
+  return nextElement == null;
+}

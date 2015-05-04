@@ -1,6 +1,6 @@
 {
-  OutputSelectorWrapper<OUT> outputSelectorWrapper=chainedTaskConfig.getOutputSelectorWrapper(cl);
-  CollectorWrapper<OUT> wrapper=new CollectorWrapper<OUT>(outputSelectorWrapper);
+  OutputSelectorWrapper<?> outputSelectorWrapper=chainedTaskConfig.getOutputSelectorWrapper(cl);
+  CollectorWrapper wrapper=new CollectorWrapper(outputSelectorWrapper);
   for (  StreamEdge outputEdge : chainedTaskConfig.getNonChainedOutputs(cl)) {
     Collector<?> outCollector=outputMap.get(outputEdge);
     wrapper.addCollector(outCollector,outputEdge);
@@ -11,12 +11,12 @@
     wrapper.addCollector(outCollector,outputEdge);
   }
   if (chainedTaskConfig.isChainStart()) {
-    return wrapper;
+    return (Output<X>)wrapper;
   }
  else {
-    ChainableStreamOperator chainableOperator=chainedTaskConfig.getStreamOperator(vertex.getUserCodeClassLoader());
-    chainableOperator.setup(wrapper,chainedTaskConfig.getTypeSerializerIn1(vertex.getUserCodeClassLoader()));
+    OneInputStreamOperator chainableOperator=chainedTaskConfig.getStreamOperator(vertex.getUserCodeClassLoader());
+    chainableOperator.setup(wrapper,vertex.context);
     chainedOperators.add(chainableOperator);
-    return chainableOperator;
+    return new OperatorCollector<X>(chainableOperator);
   }
 }

@@ -1,0 +1,70 @@
+{
+  this.isRunning=true;
+  boolean operatorOpen=false;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Task {} invoked",getName());
+  }
+  try {
+    openOperator();
+    operatorOpen=true;
+    int next;
+    StreamRecord<IN1> reuse1=inputDeserializer1.createInstance();
+    StreamRecord<IN2> reuse2=inputDeserializer2.createInstance();
+    while (isRunning) {
+      try {
+        next=coIter.next(reuse1,reuse2);
+      }
+ catch (      IOException e) {
+        if (isRunning) {
+          throw new RuntimeException("Could not read next record.",e);
+        }
+ else {
+          next=0;
+        }
+      }
+catch (      IllegalStateException e) {
+        if (isRunning) {
+          throw new RuntimeException("Could not read next record.",e);
+        }
+ else {
+          next=0;
+        }
+      }
+      if (next == 0) {
+        break;
+      }
+ else       if (next == 1) {
+        streamOperator.processElement1(reuse1.getObject());
+        reuse1=inputDeserializer1.createInstance();
+      }
+ else {
+        streamOperator.processElement2(reuse2.getObject());
+        reuse2=inputDeserializer2.createInstance();
+      }
+    }
+    closeOperator();
+    operatorOpen=false;
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Task {} invocation finished",getName());
+    }
+  }
+ catch (  Exception e) {
+    if (operatorOpen) {
+      try {
+        closeOperator();
+      }
+ catch (      Throwable t) {
+        LOG.info("Caught exception while closing operator.",e);
+      }
+    }
+    if (LOG.isErrorEnabled()) {
+      LOG.error("StreamOperator failed. ",e);
+    }
+    throw e;
+  }
+ finally {
+    this.isRunning=false;
+    outputHandler.flushOutputs();
+    clearBuffers();
+  }
+}

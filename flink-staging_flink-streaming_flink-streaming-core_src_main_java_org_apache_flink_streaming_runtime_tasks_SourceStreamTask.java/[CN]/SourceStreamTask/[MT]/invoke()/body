@@ -1,0 +1,36 @@
+{
+  this.isRunning=true;
+  boolean operatorOpen=false;
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Task {} invoked",getName());
+  }
+  try {
+    openOperator();
+    operatorOpen=true;
+    streamOperator.run();
+    closeOperator();
+    operatorOpen=false;
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Task {} invocation finished",getName());
+    }
+  }
+ catch (  Exception e) {
+    if (operatorOpen) {
+      try {
+        closeOperator();
+      }
+ catch (      Throwable t) {
+        LOG.info("Caught exception while closing operator.",e);
+      }
+    }
+    if (LOG.isErrorEnabled()) {
+      LOG.error("StreamOperator failed.",e);
+    }
+    throw e;
+  }
+ finally {
+    this.isRunning=false;
+    outputHandler.flushOutputs();
+    clearBuffers();
+  }
+}

@@ -1,0 +1,52 @@
+{
+  MockCoContext<IN1,IN2,OUT> mockContext=new MockCoContext<IN1,IN2,OUT>(input1,input2);
+  RuntimeContext runtimeContext=new StreamingRuntimeContext("CoMockTask",new MockEnvironment(3 * 1024 * 1024,new MockInputSplitProvider(),1024),null,new ExecutionConfig());
+  operator.setup(mockContext.collector,runtimeContext);
+  try {
+    operator.open(null);
+    StreamRecordSerializer<IN1> inputDeserializer1=mockContext.getInDeserializer1();
+    StreamRecordSerializer<IN2> inputDeserializer2=mockContext.getInDeserializer2();
+    CoReaderIterator<StreamRecord<IN1>,StreamRecord<IN2>> coIter=mockContext.mockIterator;
+    boolean isRunning=true;
+    int next;
+    StreamRecord<IN1> reuse1=inputDeserializer1.createInstance();
+    StreamRecord<IN2> reuse2=inputDeserializer2.createInstance();
+    while (isRunning) {
+      try {
+        next=coIter.next(reuse1,reuse2);
+      }
+ catch (      IOException e) {
+        if (isRunning) {
+          throw new RuntimeException("Could not read next record.",e);
+        }
+ else {
+          next=0;
+        }
+      }
+catch (      IllegalStateException e) {
+        if (isRunning) {
+          throw new RuntimeException("Could not read next record.",e);
+        }
+ else {
+          next=0;
+        }
+      }
+      if (next == 0) {
+        break;
+      }
+ else       if (next == 1) {
+        operator.processElement1(reuse1.getObject());
+        reuse1=inputDeserializer1.createInstance();
+      }
+ else {
+        operator.processElement2(reuse2.getObject());
+        reuse2=inputDeserializer2.createInstance();
+      }
+    }
+    operator.close();
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Cannot invoke operator.",e);
+  }
+  return mockContext.getOutputs();
+}

@@ -5,12 +5,17 @@ synchronized (checkpointLock) {
         LOG.info("Starting checkpoint {} on task {}",checkpointId,getName());
         LocalStateHandle state;
         try {
-          Serializable userState=streamOperator.getStateSnapshotFromFunction(checkpointId,timestamp);
-          if (chained) {
+          Serializable userState=null;
+          if (streamOperator instanceof StatefulStreamOperator) {
+            userState=((StatefulStreamOperator)streamOperator).getStateSnapshotFromFunction(checkpointId,timestamp);
+          }
+          if (hasChainedOperators) {
             List<Serializable> chainedStates=new ArrayList<Serializable>();
             chainedStates.add(userState);
-            for (            StreamOperator<?,?> chainedOperator : outputHandler.getChainedOperators()) {
-              chainedStates.add(chainedOperator.getStateSnapshotFromFunction(checkpointId,timestamp));
+            for (            OneInputStreamOperator<?,?> chainedOperator : outputHandler.getChainedOperators()) {
+              if (chainedOperator instanceof StatefulStreamOperator) {
+                chainedStates.add(((StatefulStreamOperator)chainedOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
+              }
             }
             userState=CollectionUtils.exists(chainedStates,NotNullPredicate.INSTANCE) ? (Serializable)chainedStates : null;
           }

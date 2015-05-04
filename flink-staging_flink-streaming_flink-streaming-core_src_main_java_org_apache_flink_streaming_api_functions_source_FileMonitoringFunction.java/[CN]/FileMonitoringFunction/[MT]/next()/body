@@ -1,0 +1,31 @@
+{
+  if (pendingFiles.size() > 0) {
+    return pendingFiles.poll();
+  }
+ else {
+    while (true) {
+      List<String> files=listNewFiles();
+      for (      String filePath : files) {
+        if (watchType == WatchType.ONLY_NEW_FILES || watchType == WatchType.REPROCESS_WITH_APPENDED) {
+          pendingFiles.add(new Tuple3<String,Long,Long>(filePath,0L,-1L));
+          offsetOfFiles.put(filePath,-1L);
+        }
+ else         if (watchType == WatchType.PROCESS_ONLY_APPENDED) {
+          long offset=0;
+          long fileSize=fileSystem.getFileStatus(new Path(filePath)).getLen();
+          if (offsetOfFiles.containsKey(filePath)) {
+            offset=offsetOfFiles.get(filePath);
+          }
+          pendingFiles.add(new Tuple3<String,Long,Long>(filePath,offset,fileSize));
+          offsetOfFiles.put(filePath,fileSize);
+          LOG.info("File added to queue: {}, {}, {}",filePath,offset,fileSize);
+        }
+      }
+      if (files.size() > 0) {
+        break;
+      }
+      Thread.sleep(interval);
+    }
+  }
+  return pendingFiles.poll();
+}
