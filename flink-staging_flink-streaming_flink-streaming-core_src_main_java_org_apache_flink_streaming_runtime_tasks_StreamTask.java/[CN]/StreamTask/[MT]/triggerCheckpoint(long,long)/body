@@ -1,3 +1,29 @@
 {
-  broadcastBarrierFromSource(checkpointId);
+synchronized (checkpointLock) {
+    if (isRunning) {
+      try {
+        LOG.info("Starting checkpoint " + checkpointId);
+        LocalStateHandle state;
+        try {
+          Serializable userState=streamOperator.getStateSnapshotFromFunction(checkpointId,timestamp);
+          state=userState == null ? null : new LocalStateHandle(userState);
+        }
+ catch (        Exception e) {
+          throw new Exception("Error while drawing snapshot of the user state.");
+        }
+        outputHandler.broadcastBarrier(checkpointId,timestamp);
+        if (state == null) {
+          getEnvironment().acknowledgeCheckpoint(checkpointId);
+        }
+ else {
+          getEnvironment().acknowledgeCheckpoint(checkpointId,state);
+        }
+      }
+ catch (      Exception e) {
+        if (isRunning) {
+          throw e;
+        }
+      }
+    }
+  }
 }
