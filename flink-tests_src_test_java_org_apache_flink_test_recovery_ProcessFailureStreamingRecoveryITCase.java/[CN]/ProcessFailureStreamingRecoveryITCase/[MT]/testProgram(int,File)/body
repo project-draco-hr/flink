@@ -6,18 +6,12 @@
   env.getConfig().disableSysoutLogging();
   env.setNumberOfExecutionRetries(1);
   env.enableCheckpointing(200);
-  DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).map(new RichMapFunction<Long,Long>(){
-    private boolean markerCreated=false;
+  DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).distribute().map(new MapFunction<Long,Long>(){
     @Override public Long map(    Long value) throws Exception {
-      if (!markerCreated) {
-        int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
-        touchFile(new File(coordinateDir,READY_MARKER_FILE_PREFIX + taskIndex));
-        markerCreated=true;
-      }
       return value;
     }
   }
-);
+).map(new StatefulMapper(coordinateDir));
   result.addSink(new RichSinkFunction<Long>(){
     private transient FileChannel writer;
     @Override public void open(    Configuration parameters) throws IOException {
