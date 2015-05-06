@@ -1,0 +1,34 @@
+{
+  final NettyConfig conf=new NettyConfig(InetAddress.getLocalHost(),NetUtils.getAvailablePort(),PageSize,new Configuration());
+  final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+  final NettyProtocol protocol=new NettyProtocol(){
+    @Override public void setServerChannelPipeline(    ChannelPipeline channelPipeline){
+      channelPipeline.addLast(new TestLowAndHighWatermarkHandler(error));
+    }
+    @Override public void setClientChannelPipeline(    ChannelPipeline channelPipeline){
+    }
+  }
+;
+  final NettyServer server=new NettyServer(conf);
+  final NettyClient client=new NettyClient(conf);
+  try {
+    server.init(protocol);
+    client.init(protocol);
+    final Channel ch=client.connect(new InetSocketAddress(conf.getServerAddress(),conf.getServerPort())).sync().channel();
+    while (ch.isActive()) {
+      ch.closeFuture().await(1,TimeUnit.SECONDS);
+    }
+    final Throwable t=error.get();
+    if (t != null) {
+      throw t;
+    }
+  }
+  finally {
+    if (server != null) {
+      server.shutdown();
+    }
+    if (client != null) {
+      client.shutdown();
+    }
+  }
+}
