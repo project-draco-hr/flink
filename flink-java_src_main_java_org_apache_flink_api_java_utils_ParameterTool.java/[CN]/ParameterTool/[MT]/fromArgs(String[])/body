@@ -1,0 +1,71 @@
+{
+  Map<String,String> map=new HashMap<String,String>(args.length / 2);
+  String key=null;
+  String value=null;
+  boolean expectValue=false;
+  for (  String arg : args) {
+    if (arg.startsWith("--")) {
+      if (expectValue) {
+        if (value != null) {
+          throw new IllegalStateException("Unexpected state");
+        }
+        map.put(key,NO_VALUE_KEY);
+      }
+      key=arg.substring(2);
+      expectValue=true;
+    }
+ else     if (arg.startsWith("-")) {
+      if (expectValue) {
+        if (NumberUtils.isNumber(arg)) {
+          value=arg;
+          expectValue=false;
+        }
+ else {
+          if (value != null) {
+            throw new IllegalStateException("Unexpected state");
+          }
+          map.put(key,NO_VALUE_KEY);
+          key=arg.substring(1);
+          expectValue=true;
+        }
+      }
+ else {
+        key=arg.substring(1);
+        expectValue=true;
+      }
+    }
+ else {
+      if (expectValue) {
+        value=arg;
+        expectValue=false;
+      }
+ else {
+        throw new RuntimeException("Error parsing arguments '" + Arrays.toString(args) + "' on '"+ arg+ "'. Unexpected value. Please prefix values with -- or -.");
+      }
+    }
+    if (value == null && key == null) {
+      throw new IllegalStateException("Value and key can not be null at the same time");
+    }
+    if (key != null && value == null && !expectValue) {
+      throw new IllegalStateException("Value expected but flag not set");
+    }
+    if (key != null && value != null) {
+      map.put(key,value);
+      key=null;
+      value=null;
+      expectValue=false;
+    }
+    if (key != null && key.length() == 0) {
+      throw new IllegalArgumentException("The input " + Arrays.toString(args) + " contains an empty argument");
+    }
+    if (key != null && !expectValue) {
+      map.put(key,NO_VALUE_KEY);
+      key=null;
+      expectValue=false;
+    }
+  }
+  if (key != null) {
+    map.put(key,NO_VALUE_KEY);
+  }
+  return fromMap(map);
+}
