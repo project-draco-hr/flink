@@ -1,0 +1,25 @@
+{
+  final File tempFile=File.createTempFile("input-stream-decoration-test","tmp");
+  tempFile.deleteOnExit();
+  final int blockSize=8;
+  final int numBlocks=3;
+  FileOutputStream fileOutputStream=new FileOutputStream(tempFile);
+  for (int i=0; i < blockSize * numBlocks; i++) {
+    fileOutputStream.write(new byte[]{1});
+  }
+  fileOutputStream.close();
+  final Configuration config=new Configuration();
+  final FileInputFormat<byte[]> inputFormat=new MyDecoratedInputFormat();
+  inputFormat.setFilePath(tempFile.toURI().toString());
+  inputFormat.configure(config);
+  FileInputSplit[] inputSplits=inputFormat.createInputSplits(3);
+  byte[] bytes=null;
+  for (  FileInputSplit inputSplit : inputSplits) {
+    inputFormat.open(inputSplit);
+    while (!inputFormat.reachedEnd()) {
+      if ((bytes=inputFormat.nextRecord(bytes)) != null) {
+        Assert.assertArrayEquals(new byte[]{(byte)0xFE},bytes);
+      }
+    }
+  }
+}
