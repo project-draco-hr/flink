@@ -1,0 +1,25 @@
+{
+  LOG.debug("Requesting subpartition {} of partition {} with {} ms delay.",subpartitionIndex,partitionId,delayMs);
+  partitionRequestHandler.addInputChannel(inputChannel);
+  final PartitionRequest request=new PartitionRequest(partitionId,subpartitionIndex,inputChannel.getInputChannelId());
+  final ChannelFutureListener listener=new ChannelFutureListener(){
+    @Override public void operationComplete(    ChannelFuture future) throws Exception {
+      if (!future.isSuccess()) {
+        partitionRequestHandler.removeInputChannel(inputChannel);
+        inputChannel.onError(future.cause());
+      }
+    }
+  }
+;
+  if (delayMs == 0) {
+    tcpChannel.writeAndFlush(request).addListener(listener);
+  }
+ else {
+    tcpChannel.eventLoop().schedule(new Runnable(){
+      @Override public void run(){
+        tcpChannel.writeAndFlush(request).addListener(listener);
+      }
+    }
+,delayMs,TimeUnit.MILLISECONDS);
+  }
+}
