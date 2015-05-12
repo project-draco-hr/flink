@@ -1,0 +1,81 @@
+{
+  final StringWriter processOutput=new StringWriter();
+  ActorSystem jmActorSystem=null;
+  Process taskManagerProcess=null;
+  try {
+    String javaCommand=getJavaCommandPath();
+    if (javaCommand == null) {
+      System.out.println("---- Skipping Process Failure test : Could not find java executable ----");
+      return;
+    }
+    File tempLogFile=File.createTempFile(getClass().getSimpleName() + "-","-log4j.properties");
+    tempLogFile.deleteOnExit();
+    CommonTestUtils.printLog4jDebugConfig(tempLogFile);
+    final int jobManagerPort=NetUtils.getAvailablePort();
+    Tuple2<String,Object> localAddress=new Tuple2<String,Object>("localhost",jobManagerPort);
+    Configuration jmConfig=new Configuration();
+    jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_INTERVAL,"5 s");
+    jmConfig.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_PAUSE,"2000 s");
+    jmConfig.setInteger(ConfigConstants.AKKA_WATCH_THRESHOLD,10);
+    jmConfig.setString(ConfigConstants.AKKA_ASK_TIMEOUT,"10 s");
+    jmActorSystem=AkkaUtils.createActorSystem(jmConfig,new Some<Tuple2<String,Object>>(localAddress));
+    ActorRef jmActor=JobManager.startJobManagerActors(jmConfig,jmActorSystem)._1();
+    String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms80m","-Xmx80m","-classpath",getCurrentClasspath(),AbstractProcessFailureRecoveryTest.TaskManagerProcessEntryPoint.class.getName(),String.valueOf(jobManagerPort)};
+    taskManagerProcess=new ProcessBuilder(command).start();
+    new AbstractProcessFailureRecoveryTest.PipeForwarder(taskManagerProcess.getErrorStream(),processOutput);
+    waitUntilNumTaskManagersAreRegistered(jmActor,1,30000);
+    final Throwable[] errorRef=new Throwable[1];
+    Runnable programRunner=new Runnable(){
+      @Override public void run(){
+        try {
+          ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
+          env.setParallelism(2);
+          env.setNumberOfExecutionRetries(0);
+          env.getConfig().disableSysoutLogging();
+          env.generateSequence(0,Long.MAX_VALUE).map(new MapFunction<Long,Long>(){
+            @Override public Long map(            Long value) throws Exception {
+synchronized (this) {
+                wait();
+              }
+              return 0L;
+            }
+          }
+).output(new DiscardingOutputFormat<Long>());
+          env.execute();
+        }
+ catch (        Throwable t) {
+          errorRef[0]=t;
+        }
+      }
+    }
+;
+    Thread programThread=new Thread(programRunner);
+    taskManagerProcess.destroy();
+    taskManagerProcess=null;
+    programThread.start();
+    cancelRunningJob(jmActor);
+    programThread.join(120000);
+    assertFalse("The program did not cancel in time (2 minutes)",programThread.isAlive());
+    Throwable error=errorRef[0];
+    assertNotNull("The program did not fail properly",error);
+    assertTrue(error instanceof ProgramInvocationException);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    printProcessLog("TaskManager",processOutput.toString());
+    fail(e.getMessage());
+  }
+catch (  Error e) {
+    e.printStackTrace();
+    printProcessLog("TaskManager 1",processOutput.toString());
+    throw e;
+  }
+ finally {
+    if (taskManagerProcess != null) {
+      taskManagerProcess.destroy();
+    }
+    if (jmActorSystem != null) {
+      jmActorSystem.shutdown();
+    }
+  }
+}
