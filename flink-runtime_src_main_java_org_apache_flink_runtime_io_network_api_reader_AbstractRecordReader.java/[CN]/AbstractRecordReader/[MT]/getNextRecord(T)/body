@@ -18,13 +18,18 @@
       currentRecordDeserializer=recordDeserializers[bufferOrEvent.getChannelIndex()];
       currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
     }
- else     if (handleEvent(bufferOrEvent.getEvent())) {
-      if (inputGate.isFinished()) {
-        isFinished=true;
-        return false;
+ else {
+      if (recordDeserializers[bufferOrEvent.getChannelIndex()].hasUnfinishedData()) {
+        throw new IllegalStateException("Received an event in channel " + bufferOrEvent.getChannelIndex() + " while still having "+ "data from a record. This indicates broken serialization logic. "+ "If you are using custom serialization code (Writable or Value types), check their "+ "serialization routines. In the case of Kryo, check the respective Kryo serializer.");
       }
- else       if (hasReachedEndOfSuperstep()) {
-        return false;
+      if (handleEvent(bufferOrEvent.getEvent())) {
+        if (inputGate.isFinished()) {
+          isFinished=true;
+          return false;
+        }
+ else         if (hasReachedEndOfSuperstep()) {
+          return false;
+        }
       }
     }
   }
