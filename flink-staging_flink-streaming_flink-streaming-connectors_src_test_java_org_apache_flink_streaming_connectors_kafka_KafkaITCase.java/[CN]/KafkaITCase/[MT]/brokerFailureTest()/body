@@ -1,6 +1,35 @@
 {
   String topic="brokerFailureTestTopic";
   createTestTopic(topic,2,2);
+  LOG.info("Writing data to topic {}",topic);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
+  DataStream<String> stream=env.addSource(new SourceFunction<String>(){
+    boolean running=true;
+    @Override public void run(    Collector<String> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      while (running) {
+        String msg="kafka-" + cnt++;
+        collector.collect(msg);
+        LOG.info("sending message = " + msg);
+        if ((cnt - 1) % 20 == 0) {
+          LOG.debug("Sending message #{}",cnt - 1);
+        }
+        if (cnt == 200) {
+          LOG.info("Stopping to produce after 200 msgs");
+          break;
+        }
+      }
+    }
+    @Override public void cancel(){
+      LOG.info("Source got chancel()");
+      running=false;
+    }
+  }
+);
+  stream.addSink(new KafkaSink<String>(brokerConnectionStrings,topic,new JavaDefaultStringSchema())).setParallelism(1);
+  tryExecute(env,"broker failure test - writer");
+  LOG.info("Reading data from topic {} and let a broker fail",topic);
   PartitionMetadata firstPart=null;
   do {
     if (firstPart != null) {
@@ -12,6 +41,7 @@
   }
  while (firstPart.errorCode() != 0);
   final String leaderToShutDown=firstPart.leader().get().connectionString();
+  LOG.info("Leader to shutdown {}",leaderToShutDown);
   final Thread brokerShutdown=new Thread(new Runnable(){
     @Override public void run(){
       shutdownKafkaBroker=false;
@@ -35,7 +65,6 @@
   }
 );
   brokerShutdown.start();
-  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
   DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(topic,new JavaDefaultStringSchema(),standardCC));
   consuming.setParallelism(1);
   consuming.addSink(new SinkFunction<String>(){
@@ -51,14 +80,19 @@
       if (start == -1) {
         start=v;
       }
-      Assert.assertFalse("Received tuple twice",validator.get(v - start));
+      int offset=v - start;
+      Assert.assertFalse("Received tuple with value " + offset + " twice",validator.get(offset));
       if (v - start < 0 && LOG.isWarnEnabled()) {
         LOG.warn("Not in order: {}",value);
       }
-      validator.set(v - start);
+      validator.set(offset);
       elCnt++;
       if (elCnt == 20) {
+        LOG.info("Asking leading broker to shut down");
         shutdownKafkaBroker=true;
+      }
+      if (shutdownKafkaBroker) {
+        Thread.sleep(20);
       }
       if (leaderHasShutDown) {
         if (elCnt >= stopAfterMessages) {
@@ -72,31 +106,5 @@
     }
   }
 );
-  DataStream<String> stream=env.addSource(new SourceFunction<String>(){
-    boolean running=true;
-    @Override public void run(    Collector<String> collector) throws Exception {
-      LOG.info("Starting source.");
-      int cnt=0;
-      while (running) {
-        String msg="kafka-" + cnt++;
-        collector.collect(msg);
-        LOG.info("sending message = " + msg);
-        if ((cnt - 1) % 20 == 0) {
-          LOG.debug("Sending message #{}",cnt - 1);
-        }
-        try {
-          Thread.sleep(10);
-        }
- catch (        InterruptedException ignored) {
-        }
-      }
-    }
-    @Override public void cancel(){
-      LOG.info("Source got chancel()");
-      running=false;
-    }
-  }
-);
-  stream.addSink(new KafkaSink<String>(brokerConnectionStrings,topic,new JavaDefaultStringSchema())).setParallelism(1);
-  tryExecute(env,"broker failure test");
+  tryExecute(env,"broker failure test - reader");
 }
