@@ -35,7 +35,7 @@
 synchronized (lock) {
             if (!checkpoint.isDiscarded()) {
               LOG.info("Checkpoint " + checkpointID + " expired before completing.");
-              checkpoint.discard();
+              checkpoint.discard(userClassLoader,true);
               pendingCheckpoints.remove(checkpointID);
               rememberRecentCheckpointId(checkpointID);
             }
@@ -66,7 +66,10 @@ synchronized (lock) {
     int numUnsuccessful=numUnsuccessfulCheckpointsTriggers.incrementAndGet();
     LOG.warn("Failed to trigger checkpoint (" + numUnsuccessful + " consecutive failed attempts so far)",t);
 synchronized (lock) {
-      pendingCheckpoints.remove(checkpointID);
+      PendingCheckpoint checkpoint=pendingCheckpoints.remove(checkpointID);
+      if (checkpoint != null && !checkpoint.isDiscarded()) {
+        checkpoint.discard(userClassLoader,true);
+      }
     }
     return false;
   }
