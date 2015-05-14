@@ -1,0 +1,27 @@
+{
+  if (internalExecutor) {
+    Configuration configuration=jobGraph.getJobConfiguration();
+    configuration.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,getParallelism());
+    configuration.setLong(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,memorySize);
+    executor=new ForkableFlinkMiniCluster(configuration);
+  }
+  try {
+    sync=true;
+    SerializedJobExecutionResult result=executor.submitJobAndWait(jobGraph,false);
+    latestResult=result.toJobExecutionResult(getClass().getClassLoader());
+    return latestResult;
+  }
+ catch (  JobExecutionException e) {
+    if (e.getMessage().contains("GraphConversionException")) {
+      throw new Exception(CANNOT_EXECUTE_EMPTY_JOB,e);
+    }
+ else {
+      throw e;
+    }
+  }
+ finally {
+    if (internalExecutor) {
+      executor.shutdown();
+    }
+  }
+}
