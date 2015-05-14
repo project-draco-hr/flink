@@ -1,0 +1,30 @@
+{
+  if (this.getTopologyJobId(name) != null) {
+    throw new AlreadyAliveException();
+  }
+  final File uploadedJarFile=new File(uploadedJarLocation);
+  try {
+    JobWithJars.checkJarFile(uploadedJarFile);
+  }
+ catch (  final IOException e) {
+    throw new RuntimeException("Problem with jar file " + uploadedJarFile.getAbsolutePath(),e);
+  }
+  final List<File> jarFiles=new ArrayList<File>();
+  jarFiles.add(uploadedJarFile);
+  final JobGraph jobGraph=topology.getStreamGraph().getJobGraph(name);
+  jobGraph.addJar(new Path(uploadedJarFile.getAbsolutePath()));
+  final Configuration configuration=jobGraph.getJobConfiguration();
+  final Client client;
+  try {
+    client=new Client(new InetSocketAddress(this.jobManagerHost,this.jobManagerPort),configuration,JobWithJars.buildUserCodeClassLoader(jarFiles,JobWithJars.class.getClassLoader()),-1);
+  }
+ catch (  final UnknownHostException e) {
+    throw new RuntimeException("Cannot execute job due to UnknownHostException",e);
+  }
+  try {
+    client.run(jobGraph,false);
+  }
+ catch (  final ProgramInvocationException e) {
+    throw new RuntimeException("Cannot execute job due to ProgramInvocationException",e);
+  }
+}
