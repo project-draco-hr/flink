@@ -1,15 +1,16 @@
 {
   LOG.info("Commit checkpoint {}",checkpointId);
-  long[] checkpointOffsets=pendingCheckpoints.remove(checkpointId);
-  if (checkpointOffsets == null) {
+  final int posInMap=pendingCheckpoints.indexOf(checkpointId);
+  if (posInMap == -1) {
     LOG.warn("Unable to find pending checkpoint for id {}",checkpointId);
     return;
   }
-  LOG.info("Got corresponding offsets {}",Arrays.toString(checkpointOffsets));
-  for (int partition=0; partition < checkpointOffsets.length; partition++) {
-    long offset=checkpointOffsets[partition];
-    if (offset != -1) {
-      setOffset(partition,offset);
+  long[] checkpointOffsets=(long[])pendingCheckpoints.remove(posInMap);
+  LOG.info("Committing offsets {} to ZooKeeper",Arrays.toString(checkpointOffsets));
+  if (!pendingCheckpoints.isEmpty()) {
+    for (int i=0; i < posInMap; i++) {
+      pendingCheckpoints.remove(0);
     }
   }
+  setOffsetsInZooKeeper(checkpointOffsets);
 }
