@@ -1,11 +1,14 @@
 {
   final File tempTestOutput=new File(new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH),UUID.randomUUID().toString());
   assertTrue("Cannot create directory for temp output",tempTestOutput.mkdirs());
+  final File tempCheckpointDir=new File(new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH),UUID.randomUUID().toString());
+  assertTrue("Cannot create directory for checkpoints",tempCheckpointDir.mkdirs());
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
   env.setParallelism(PARALLELISM);
   env.getConfig().disableSysoutLogging();
   env.setNumberOfExecutionRetries(1);
   env.enableCheckpointing(200);
+  env.setStateHandleProvider(FileStateHandle.createProvider(tempCheckpointDir.getAbsolutePath()));
   DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).distribute().map(new MapFunction<Long,Long>(){
     @Override public Long map(    Long value) throws Exception {
       return value;
@@ -38,6 +41,9 @@
   finally {
     if (tempTestOutput.exists()) {
       FileUtils.deleteDirectory(tempTestOutput);
+    }
+    if (tempCheckpointDir.exists()) {
+      FileUtils.deleteDirectory(tempCheckpointDir);
     }
   }
 }
