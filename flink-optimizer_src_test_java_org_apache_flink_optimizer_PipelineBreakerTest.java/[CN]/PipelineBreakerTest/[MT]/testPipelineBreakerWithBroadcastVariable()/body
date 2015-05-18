@@ -1,6 +1,7 @@
 {
   try {
     ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    env.getConfig().setExecutionMode(ExecutionMode.PIPELINED);
     env.setParallelism(64);
     DataSet<Long> source=env.generateSequence(1,10).map(new IdentityMapper<Long>());
     DataSet<Long> result=source.map(new IdentityMapper<Long>()).map(new IdentityMapper<Long>()).withBroadcastSet(source,"bc");
@@ -9,7 +10,11 @@
     OptimizedPlan op=compileNoStats(p);
     SinkPlanNode sink=op.getDataSinks().iterator().next();
     SingleInputPlanNode mapper=(SingleInputPlanNode)sink.getInput().getSource();
-    assertTrue(mapper.getInput().getTempMode().breaksPipeline());
+    SingleInputPlanNode mapperInput=(SingleInputPlanNode)mapper.getInput().getSource();
+    assertEquals(TempMode.NONE,mapper.getInput().getTempMode());
+    assertEquals(TempMode.NONE,mapper.getBroadcastInputs().get(0).getTempMode());
+    assertEquals(DataExchangeMode.BATCH,mapperInput.getInput().getDataExchangeMode());
+    assertEquals(DataExchangeMode.BATCH,mapper.getBroadcastInputs().get(0).getDataExchangeMode());
   }
  catch (  Exception e) {
     e.printStackTrace();

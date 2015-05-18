@@ -1,0 +1,36 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(parallelism);
+  DataSet<Tuple2<Long,Long>> verticesWithId=env.generateSequence(0,1000).name("Vertices").map(new MapFunction<Long,Tuple2<Long,Long>>(){
+    @Override public Tuple2<Long,Long> map(    Long value){
+      return new Tuple2<Long,Long>(value,value);
+    }
+  }
+).name("Assign Vertex Ids");
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithId.iterateDelta(verticesWithId,iterations,0).name("Connected Components Iteration");
+  @SuppressWarnings("unchecked") DataSet<Tuple2<Long,Long>> edges=env.fromElements(new Tuple2<Long,Long>(0L,0L)).name("Edges");
+  DataSet<Tuple2<Long,Long>> minCandidateId=iteration.getWorkset().join(edges).where(0).equalTo(0).projectSecond(1).<Tuple2<Long,Long>>projectFirst(1).name("Join Candidate Id With Neighbor").groupBy(0).min(1).name("Find Minimum Candidate Id");
+  DataSet<Tuple2<Long,Long>> updateComponentId;
+  if (solutionSetFirst) {
+    updateComponentId=iteration.getSolutionSet().join(minCandidateId).where(0).equalTo(0).with(new FlatJoinFunction<Tuple2<Long,Long>,Tuple2<Long,Long>,Tuple2<Long,Long>>(){
+      @Override public void join(      Tuple2<Long,Long> current,      Tuple2<Long,Long> candidate,      Collector<Tuple2<Long,Long>> out){
+        if (candidate.f1 < current.f1) {
+          out.collect(candidate);
+        }
+      }
+    }
+).withForwardedFieldsFirst("0").withForwardedFieldsSecond("0").name("Update Component Id");
+  }
+ else {
+    updateComponentId=minCandidateId.join(iteration.getSolutionSet()).where(0).equalTo(0).with(new FlatJoinFunction<Tuple2<Long,Long>,Tuple2<Long,Long>,Tuple2<Long,Long>>(){
+      @Override public void join(      Tuple2<Long,Long> candidate,      Tuple2<Long,Long> current,      Collector<Tuple2<Long,Long>> out){
+        if (candidate.f1 < current.f1) {
+          out.collect(candidate);
+        }
+      }
+    }
+).withForwardedFieldsFirst("0").withForwardedFieldsSecond("0").name("Update Component Id");
+  }
+  iteration.closeWith(updateComponentId,updateComponentId).output(new DiscardingOutputFormat<Tuple2<Long,Long>>()).name("Result");
+  return env.createProgramPlan();
+}
