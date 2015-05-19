@@ -1,0 +1,13 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jmPort);
+  env.setParallelism(16);
+  env.getConfig().disableSysoutLogging();
+  DataSet<KMeans.Point> points=KMeansData.getDefaultPointDataSet(env).rebalance();
+  DataSet<KMeans.Centroid> centroids=KMeansData.getDefaultCentroidDataSet(env).rebalance();
+  IterativeDataSet<KMeans.Centroid> loop=centroids.iterate(20);
+  DataSet<KMeans.Centroid> newCentroids=points.map(new KMeans.SelectNearestCenter()).withBroadcastSet(loop,"centroids").map(new KMeans.CountAppender()).groupBy(0).reduce(new KMeans.CentroidAccumulator()).map(new KMeans.CentroidAverager());
+  DataSet<KMeans.Centroid> finalCentroids=loop.closeWith(newCentroids);
+  DataSet<Tuple2<Integer,KMeans.Point>> clusteredPoints=points.map(new KMeans.SelectNearestCenter()).withBroadcastSet(finalCentroids,"centroids");
+  clusteredPoints.output(new DiscardingOutputFormat<Tuple2<Integer,KMeans.Point>>());
+  env.execute("KMeans Example");
+}

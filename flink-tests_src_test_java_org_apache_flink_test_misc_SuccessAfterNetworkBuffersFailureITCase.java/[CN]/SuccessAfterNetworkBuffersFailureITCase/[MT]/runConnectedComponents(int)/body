@@ -1,0 +1,13 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",jmPort);
+  env.setParallelism(16);
+  env.getConfig().disableSysoutLogging();
+  DataSet<Long> vertices=ConnectedComponentsData.getDefaultVertexDataSet(env).rebalance();
+  DataSet<Tuple2<Long,Long>> edges=ConnectedComponentsData.getDefaultEdgeDataSet(env).rebalance().flatMap(new ConnectedComponents.UndirectEdge());
+  DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new ConnectedComponents.DuplicateValue<Long>());
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithInitialId.iterateDelta(verticesWithInitialId,100,0);
+  DataSet<Tuple2<Long,Long>> changes=iteration.getWorkset().join(edges).where(0).equalTo(0).with(new ConnectedComponents.NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).with(new ConnectedComponents.ComponentIdFilter());
+  DataSet<Tuple2<Long,Long>> result=iteration.closeWith(changes,changes);
+  result.output(new DiscardingOutputFormat<Tuple2<Long,Long>>());
+  env.execute();
+}
