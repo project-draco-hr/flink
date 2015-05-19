@@ -2,22 +2,27 @@
   while (true) {
     ExecutionState current=this.executionState;
     if (current.isTerminal() || current == ExecutionState.CANCELING) {
-      return false;
+      LOG.info("Task " + taskNameWithSubtask + " is already in state "+ current);
+      return;
     }
     if (current == ExecutionState.DEPLOYING || current == ExecutionState.CREATED) {
       if (STATE_UPDATER.compareAndSet(this,current,targetState)) {
-        return true;
+        this.failureCause=cause;
+        notifyObservers(targetState,cause);
+        return;
       }
     }
  else     if (current == ExecutionState.RUNNING) {
       if (STATE_UPDATER.compareAndSet(this,ExecutionState.RUNNING,targetState)) {
         if (invokable != null && invokableHasBeenCanceled.compareAndSet(false,true)) {
+          this.failureCause=cause;
+          notifyObservers(targetState,cause);
           LOG.info("Triggering cancellation of task code {} ({}).",taskNameWithSubtask,executionId);
           Runnable canceler=new TaskCanceler(LOG,invokable,executingThread,taskNameWithSubtask);
           Thread cancelThread=new Thread(executingThread.getThreadGroup(),canceler,"Canceler for " + taskNameWithSubtask);
           cancelThread.start();
         }
-        return true;
+        return;
       }
     }
  else {
