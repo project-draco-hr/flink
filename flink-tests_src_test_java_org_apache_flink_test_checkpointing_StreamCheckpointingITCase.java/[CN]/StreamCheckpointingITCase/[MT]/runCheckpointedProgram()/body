@@ -1,12 +1,12 @@
 {
+  final long NUM_STRINGS=10000000L;
   assertTrue("Broken test setup",NUM_STRINGS % 40 == 0);
-  final String COUNT_ACCUMULATOR="count-acc";
   try {
     StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
     env.setParallelism(PARALLELISM);
     env.enableCheckpointing(500);
     env.getConfig().disableSysoutLogging();
-    DataStream<String> stream=env.addSource(new StringGeneratingSourceFunction());
+    DataStream<String> stream=env.addSource(new StringGeneratingSourceFunction(NUM_STRINGS));
     stream.filter(new FilterFunction<String>(){
       @Override public boolean filter(      String value){
         return value.length() < 100;
@@ -17,23 +17,7 @@
         return new PrefixCount(value.substring(0,1),value,1L);
       }
     }
-).startNewChain().map(new RichMapFunction<PrefixCount,PrefixCount>(){
-      private long count=0;
-      @Override public PrefixCount map(      PrefixCount value){
-        count++;
-        return value;
-      }
-      @Override public void close(){
-        getRuntimeContext().getLongCounter(COUNT_ACCUMULATOR).add(count);
-      }
-    }
-).groupBy("prefix").reduce(new ReduceFunction<PrefixCount>(){
-      @Override public PrefixCount reduce(      PrefixCount value1,      PrefixCount value2){
-        value1.count+=value2.count;
-        return value1;
-      }
-    }
-).addSink(new RichSinkFunction<PrefixCount>(){
+).startNewChain().map(new StatefulCounterFunction()).groupBy("prefix").reduce(new OnceFailingReducer(NUM_STRINGS)).addSink(new RichSinkFunction<PrefixCount>(){
       private Map<Character,Long> counts=new HashMap<Character,Long>();
       @Override public void invoke(      PrefixCount value){
         Character first=value.prefix.charAt(0);
@@ -45,17 +29,13 @@
           counts.put(first,Math.max(previous,value.count));
         }
       }
-      @Override public void close(){
-        for (        Long count : counts.values()) {
-          assertEquals(NUM_STRINGS / 40,count.longValue());
-        }
-      }
     }
 );
-    JobExecutionResult result=env.execute();
-    Long totalCount=(Long)result.getAllAccumulatorResults().get(COUNT_ACCUMULATOR);
-    assertNotNull("TotalCount accumulator not set",totalCount);
-    assertEquals(NUM_STRINGS,totalCount.longValue());
+    env.execute();
+    long countSum=0;
+    for (    long l : StatefulCounterFunction.counts) {
+      countSum+=l;
+    }
   }
  catch (  Exception e) {
     e.printStackTrace();
