@@ -1,35 +1,12 @@
 {
   assertTrue("Broken test setup",NUM_STRINGS % 40 == 0);
+  final String COUNT_ACCUMULATOR="count-acc";
   try {
     StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
     env.setParallelism(PARALLELISM);
-    env.enableCheckpointing(1000);
+    env.enableCheckpointing(500);
     env.getConfig().disableSysoutLogging();
-    DataStream<String> stream=env.addSource(new RichParallelSourceFunction<String>(){
-      private Random rnd;
-      private StringBuilder stringBuilder;
-      private int index;
-      private int step;
-      private boolean running=true;
-      @Override public void open(      Configuration parameters){
-        rnd=new Random();
-        stringBuilder=new StringBuilder();
-        step=getRuntimeContext().getNumberOfParallelSubtasks();
-        index=getRuntimeContext().getIndexOfThisSubtask();
-      }
-      @Override public boolean reachedEnd() throws Exception {
-        return index >= NUM_STRINGS;
-      }
-      @Override public String next() throws Exception {
-        char first=(char)((index % 40) + 40);
-        stringBuilder.setLength(0);
-        stringBuilder.append(first);
-        String result=randomString(stringBuilder,rnd);
-        index+=step;
-        return result;
-      }
-    }
-);
+    DataStream<String> stream=env.addSource(new StringGeneratingSourceFunction());
     stream.filter(new FilterFunction<String>(){
       @Override public boolean filter(      String value){
         return value.length() < 100;
@@ -38,6 +15,16 @@
 ).map(new MapFunction<String,PrefixCount>(){
       @Override public PrefixCount map(      String value){
         return new PrefixCount(value.substring(0,1),value,1L);
+      }
+    }
+).startNewChain().map(new RichMapFunction<PrefixCount,PrefixCount>(){
+      private long count=0;
+      @Override public PrefixCount map(      PrefixCount value){
+        count++;
+        return value;
+      }
+      @Override public void close(){
+        getRuntimeContext().getLongCounter(COUNT_ACCUMULATOR).add(count);
       }
     }
 ).groupBy("prefix").reduce(new ReduceFunction<PrefixCount>(){
@@ -65,7 +52,10 @@
       }
     }
 );
-    env.execute();
+    JobExecutionResult result=env.execute();
+    Long totalCount=(Long)result.getAllAccumulatorResults().get(COUNT_ACCUMULATOR);
+    assertNotNull("TotalCount accumulator not set",totalCount);
+    assertEquals(NUM_STRINGS,totalCount.longValue());
   }
  catch (  Exception e) {
     e.printStackTrace();

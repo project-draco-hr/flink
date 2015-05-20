@@ -4,22 +4,16 @@
     if (interval < 1) {
       throw new IllegalArgumentException("The checkpoint interval must be positive");
     }
-    HashSet<JobVertexID> sourceIds=new HashSet<JobVertexID>();
-    HashSet<JobVertexID> sinkIds=new HashSet<JobVertexID>();
+    List<JobVertexID> triggerVertices=new ArrayList<JobVertexID>();
+    List<JobVertexID> ackVertices=new ArrayList<JobVertexID>(jobVertices.size());
+    List<JobVertexID> commitVertices=new ArrayList<JobVertexID>();
     for (    AbstractJobVertex vertex : jobVertices.values()) {
       if (vertex.isInputVertex()) {
-        sourceIds.add(vertex.getID());
+        triggerVertices.add(vertex.getID());
+        commitVertices.add(vertex.getID());
       }
-      if (vertex.isOutputVertex()) {
-        sinkIds.add(vertex.getID());
-      }
+      ackVertices.add(vertex.getID());
     }
-    HashSet<JobVertexID> sourceorSink=new HashSet<JobVertexID>();
-    sourceorSink.addAll(sourceIds);
-    sourceorSink.addAll(sinkIds);
-    List<JobVertexID> triggerVertices=new ArrayList<JobVertexID>(sourceIds);
-    List<JobVertexID> ackVertices=new ArrayList<JobVertexID>(sourceorSink);
-    List<JobVertexID> commitVertices=new ArrayList<JobVertexID>(sourceIds);
     JobSnapshottingSettings settings=new JobSnapshottingSettings(triggerVertices,ackVertices,commitVertices,interval);
     jobGraph.setSnapshotSettings(settings);
     int executionRetries=streamGraph.getExecutionConfig().getNumberOfExecutionRetries();
