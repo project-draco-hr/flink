@@ -1,0 +1,31 @@
+{
+  if (sharedSlot.isAlive() | !sharedSlot.getSubSlots().isEmpty()) {
+    throw new IllegalArgumentException();
+  }
+  final SharedSlot parent=sharedSlot.getParent();
+  final AbstractID groupID=sharedSlot.getGroupID();
+  if (parent == null) {
+    sharedSlot.getInstance().returnAllocatedSlot(sharedSlot);
+    allSlots.remove(sharedSlot);
+    removeSlotFromAllEntries(availableSlotsPerJid,sharedSlot);
+  }
+ else   if (groupID != null) {
+    if (sharedSlot.markReleased()) {
+      int parentRemaining=parent.removeDisposedChildSlot(sharedSlot);
+      if (parentRemaining > 0) {
+        Map<Instance,List<SharedSlot>> slotsForGroup=availableSlotsPerJid.get(groupID);
+        if (slotsForGroup == null) {
+          throw new IllegalStateException("Trying to return a slot for group " + groupID + " when available slots indicated that all slots were available.");
+        }
+        putIntoMultiMap(slotsForGroup,parent.getInstance(),parent);
+      }
+ else {
+        parent.markCancelled();
+        internalDisposeEmptySharedSlot(parent);
+      }
+    }
+  }
+ else {
+    throw new IllegalStateException("Found a shared slot that is neither a root slot, nor associated with a vertex group.");
+  }
+}

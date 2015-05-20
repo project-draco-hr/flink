@@ -1,12 +1,12 @@
 {
   try {
-    final Instance instance=getInstance(ActorRef.noSender());
-    final SimpleSlot slot=instance.allocateSimpleSlot(new JobID());
-    slot.cancel();
-    assertFalse(slot.isReleased());
-    final SlotAllocationFuture future=new SlotAllocationFuture();
     final ExecutionJobVertex ejv=getExecutionVertex(new JobVertexID());
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0],AkkaUtils.getDefaultTimeout());
+    final Instance instance=getInstance(ActorRef.noSender());
+    final SimpleSlot slot=instance.allocateSimpleSlot(ejv.getJobId());
+    slot.releaseSlot();
+    assertTrue(slot.isReleased());
+    final SlotAllocationFuture future=new SlotAllocationFuture();
     Scheduler scheduler=mock(Scheduler.class);
     when(scheduler.scheduleQueued(Matchers.any(ScheduledUnit.class))).thenReturn(future);
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
@@ -14,7 +14,6 @@
     assertEquals(ExecutionState.SCHEDULED,vertex.getExecutionState());
     future.setSlot(slot);
     assertEquals(ExecutionState.FAILED,vertex.getExecutionState());
-    assertTrue(slot.isReleased());
   }
  catch (  Exception e) {
     e.printStackTrace();

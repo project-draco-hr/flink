@@ -1,37 +1,31 @@
 {
-  if (this.instancesWithAvailableResources.isEmpty()) {
+  while (this.newlyAvailableInstances.size() > 0) {
     Instance queuedInstance=this.newlyAvailableInstances.poll();
-    if (queuedInstance == null) {
-      return null;
-    }
- else {
+    if (queuedInstance != null) {
       this.instancesWithAvailableResources.add(queuedInstance);
     }
   }
+  if (this.instancesWithAvailableResources.isEmpty()) {
+    return null;
+  }
   Iterator<Instance> locations=requestedLocations == null ? null : requestedLocations.iterator();
-  Instance instanceToUse=null;
-  Locality locality=Locality.UNCONSTRAINED;
   if (locations != null && locations.hasNext()) {
     while (locations.hasNext()) {
       Instance location=locations.next();
       if (location != null && this.instancesWithAvailableResources.remove(location)) {
-        instanceToUse=location;
-        locality=Locality.LOCAL;
-        break;
+        return new ImmutablePair<Instance,Locality>(location,Locality.LOCAL);
       }
     }
-    if (instanceToUse == null) {
-      if (localOnly) {
-        return null;
-      }
+    if (localOnly) {
+      return null;
+    }
  else {
-        instanceToUse=this.instancesWithAvailableResources.poll();
-        locality=Locality.NON_LOCAL;
-      }
+      Instance instanceToUse=this.instancesWithAvailableResources.poll();
+      return new ImmutablePair<Instance,Locality>(instanceToUse,Locality.NON_LOCAL);
     }
   }
  else {
-    instanceToUse=this.instancesWithAvailableResources.poll();
+    Instance instanceToUse=this.instancesWithAvailableResources.poll();
+    return new ImmutablePair<Instance,Locality>(instanceToUse,Locality.UNCONSTRAINED);
   }
-  return new ImmutablePair<Instance,Locality>(instanceToUse,locality);
 }

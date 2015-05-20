@@ -1,0 +1,43 @@
+{
+  try {
+    JobVertexID sourceId=new JobVertexID();
+    JobVertexID headId=new JobVertexID();
+    JobVertexID tailId=new JobVertexID();
+    JobVertexID sinkId=new JobVertexID();
+    AbstractJobVertex headVertex=new AbstractJobVertex("head",headId);
+    AbstractJobVertex tailVertex=new AbstractJobVertex("tail",tailId);
+    SlotSharingGroup sharingGroup=new SlotSharingGroup(sourceId,headId,tailId,sinkId);
+    SlotSharingGroupAssignment assignment=sharingGroup.getTaskAssignment();
+    assertEquals(0,assignment.getNumberOfSlots());
+    CoLocationGroup coLocationGroup=new CoLocationGroup(headVertex,tailVertex);
+    CoLocationConstraint constraint=coLocationGroup.getLocationConstraint(0);
+    assertFalse(constraint.isAssigned());
+    Instance instance=SchedulerTestUtils.getRandomInstance(1);
+    SharedSlot sharedSlot=instance.allocateSharedSlot(new JobID(),assignment);
+    SimpleSlot sourceSlot=assignment.addSharedSlotAndAllocateSubSlot(sharedSlot,Locality.LOCAL,sourceId);
+    SimpleSlot headSlot=assignment.getSlotForTask(constraint,Collections.<Instance>emptySet());
+    constraint.lockLocation();
+    SimpleSlot tailSlot=assignment.getSlotForTask(constraint,Collections.<Instance>emptySet());
+    SimpleSlot sinkSlot=assignment.getSlotForTask(sinkId,Collections.<Instance>emptySet());
+    assertEquals(4,sharedSlot.getNumberLeaves());
+    sourceSlot.releaseSlot();
+    headSlot.releaseSlot();
+    tailSlot.releaseSlot();
+    sinkSlot.releaseSlot();
+    assertTrue(sharedSlot.isReleased());
+    assertTrue(sourceSlot.isReleased());
+    assertTrue(headSlot.isReleased());
+    assertTrue(tailSlot.isReleased());
+    assertTrue(sinkSlot.isReleased());
+    assertTrue(constraint.getSharedSlot().isReleased());
+    assertTrue(constraint.isAssigned());
+    assertFalse(constraint.isAssignedAndAlive());
+    assertEquals(1,instance.getNumberOfAvailableSlots());
+    assertEquals(0,instance.getNumberOfAllocatedSlots());
+    assertEquals(0,assignment.getNumberOfSlots());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

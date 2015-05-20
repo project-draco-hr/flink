@@ -1,0 +1,58 @@
+{
+  if (!sharedSlot.isRootAndEmpty()) {
+    throw new IllegalArgumentException("The given slot is not an empty root slot.");
+  }
+  final Instance location=sharedSlot.getInstance();
+synchronized (lock) {
+    if (!sharedSlot.isAlive()) {
+      return null;
+    }
+    if (!allSlots.add(sharedSlot)) {
+      throw new IllegalArgumentException("Slot was already contained in the assignment group");
+    }
+    SimpleSlot subSlot;
+    AbstractID groupIdForMap;
+    if (constraint == null) {
+      subSlot=sharedSlot.allocateSubSlot(groupId);
+      groupIdForMap=groupId;
+    }
+ else {
+      if (constraint.isAssignedAndAlive()) {
+        throw new IllegalStateException("Trying to add a shared slot to a co-location constraint that has a life slot.");
+      }
+      SharedSlot constraintGroupSlot=sharedSlot.allocateSharedSlot(constraint.getGroupId());
+      groupIdForMap=constraint.getGroupId();
+      if (constraintGroupSlot != null) {
+        subSlot=constraintGroupSlot.allocateSubSlot(null);
+        if (subSlot != null) {
+          constraint.setSharedSlot(constraintGroupSlot);
+        }
+ else {
+          constraintGroupSlot.releaseSlot();
+        }
+      }
+ else {
+        subSlot=null;
+      }
+    }
+    if (subSlot != null) {
+      subSlot.setLocality(locality);
+      boolean entryForNewJidExists=false;
+      for (      Map.Entry<AbstractID,Map<Instance,List<SharedSlot>>> entry : availableSlotsPerJid.entrySet()) {
+        if (entry.getKey().equals(groupIdForMap)) {
+          entryForNewJidExists=true;
+          continue;
+        }
+        Map<Instance,List<SharedSlot>> available=entry.getValue();
+        putIntoMultiMap(available,location,sharedSlot);
+      }
+      if (!entryForNewJidExists) {
+        availableSlotsPerJid.put(groupIdForMap,new LinkedHashMap<Instance,List<SharedSlot>>());
+      }
+      return subSlot;
+    }
+ else {
+      return null;
+    }
+  }
+}
