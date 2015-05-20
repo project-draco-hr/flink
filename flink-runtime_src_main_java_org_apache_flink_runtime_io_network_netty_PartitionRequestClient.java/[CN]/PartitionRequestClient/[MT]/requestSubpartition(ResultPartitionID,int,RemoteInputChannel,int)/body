@@ -6,20 +6,25 @@
     @Override public void operationComplete(    ChannelFuture future) throws Exception {
       if (!future.isSuccess()) {
         partitionRequestHandler.removeInputChannel(inputChannel);
-        inputChannel.onError(future.cause());
+        inputChannel.onError(new LocalTransportException("Sending the partition request failed.",future.channel().localAddress(),future.cause()));
       }
     }
   }
 ;
   if (delayMs == 0) {
-    tcpChannel.writeAndFlush(request).addListener(listener);
+    ChannelFuture f=tcpChannel.writeAndFlush(request);
+    f.addListener(listener);
+    return f;
   }
  else {
+    final ChannelFuture[] f=new ChannelFuture[1];
     tcpChannel.eventLoop().schedule(new Runnable(){
       @Override public void run(){
-        tcpChannel.writeAndFlush(request).addListener(listener);
+        f[0]=tcpChannel.writeAndFlush(request);
+        f[0].addListener(listener);
       }
     }
 ,delayMs,TimeUnit.MILLISECONDS);
+    return f[0];
   }
 }

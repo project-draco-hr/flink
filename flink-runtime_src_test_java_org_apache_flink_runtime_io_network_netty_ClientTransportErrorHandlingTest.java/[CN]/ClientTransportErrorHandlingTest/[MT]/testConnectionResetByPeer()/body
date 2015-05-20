@@ -1,0 +1,24 @@
+{
+  EmbeddedChannel ch=createEmbeddedChannel();
+  PartitionRequestClientHandler handler=getClientHandler(ch);
+  RemoteInputChannel rich=addInputChannel(handler);
+  final Throwable[] error=new Throwable[1];
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      Throwable cause=(Throwable)invocation.getArguments()[0];
+      try {
+        assertEquals(RemoteTransportException.class,cause.getClass());
+        assertNotEquals("Connection reset by peer",cause.getMessage());
+        assertEquals(IOException.class,cause.getCause().getClass());
+        assertEquals("Connection reset by peer",cause.getCause().getMessage());
+      }
+ catch (      Throwable t) {
+        error[0]=t;
+      }
+      return null;
+    }
+  }
+).when(rich).onError(any(Throwable.class));
+  ch.pipeline().fireExceptionCaught(new IOException("Connection reset by peer"));
+  assertNull(error[0]);
+}

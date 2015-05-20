@@ -5,14 +5,16 @@
     RemoteInputChannel inputChannel=inputChannels.get(bufferOrEvent.receiverId);
     if (inputChannel == null) {
       bufferOrEvent.releaseBuffer();
+      cancelRequestFor(bufferOrEvent.receiverId);
       return true;
     }
     return decodeBufferOrEvent(inputChannel,bufferOrEvent);
   }
  else   if (msgClazz == NettyMessage.ErrorResponse.class) {
     NettyMessage.ErrorResponse error=(NettyMessage.ErrorResponse)msg;
+    SocketAddress remoteAddr=ctx.channel().remoteAddress();
     if (error.isFatalError()) {
-      notifyAllChannelsOfErrorAndClose(error.error);
+      notifyAllChannelsOfErrorAndClose(new RemoteTransportException("Fatal error at remote task manager '" + remoteAddr + "'.",remoteAddr,error.error));
     }
  else {
       RemoteInputChannel inputChannel=inputChannels.get(error.receiverId);
@@ -21,7 +23,7 @@
           inputChannel.onFailedPartitionRequest();
         }
  else {
-          inputChannel.onError(error.error);
+          inputChannel.onError(new RemoteTransportException("Error at remote task manager '" + remoteAddr + "'.",remoteAddr,error.error));
         }
       }
     }

@@ -1,0 +1,20 @@
+{
+  NettyServerAndClient serverAndClient=null;
+  try {
+    TestPooledBufferProvider outboundBuffers=new TestPooledBufferProvider(16);
+    ResultPartitionManager partitions=mock(ResultPartitionManager.class);
+    ResultPartitionID pid=new ResultPartitionID();
+    CountDownLatch sync=new CountDownLatch(1);
+    when(partitions.createSubpartitionView(eq(pid),eq(0),any(BufferProvider.class))).thenReturn(new InfiniteSubpartitionView(outboundBuffers,sync));
+    PartitionRequestProtocol protocol=new PartitionRequestProtocol(partitions,mock(TaskEventDispatcher.class),mock(NetworkBufferPool.class));
+    serverAndClient=initServerAndClient(protocol);
+    Channel ch=connect(serverAndClient);
+    ch.writeAndFlush(new PartitionRequest(pid,0,new InputChannelID())).await();
+    if (!sync.await(TestingUtils.TESTING_DURATION().toMillis(),TimeUnit.MILLISECONDS)) {
+      fail("Timed out after waiting for " + TestingUtils.TESTING_DURATION().toMillis() + " ms to be notified about cancelled partition.");
+    }
+  }
+  finally {
+    shutdown(serverAndClient);
+  }
+}

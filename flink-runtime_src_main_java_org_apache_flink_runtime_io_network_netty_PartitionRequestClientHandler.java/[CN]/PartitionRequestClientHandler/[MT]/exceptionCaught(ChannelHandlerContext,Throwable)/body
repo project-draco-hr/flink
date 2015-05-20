@@ -1,7 +1,16 @@
 {
-  if (logOutputTask != null) {
-    logOutputTask.cancel(true);
+  if (cause instanceof TransportException) {
+    notifyAllChannelsOfErrorAndClose(cause);
   }
-  notifyAllChannelsOfErrorAndClose(cause);
-  super.exceptionCaught(ctx,cause);
+ else {
+    final SocketAddress remoteAddr=ctx.channel().remoteAddress();
+    final TransportException tex;
+    if (cause instanceof IOException && cause.getMessage().equals("Connection reset by peer")) {
+      tex=new RemoteTransportException("Lost connection to task manager '" + remoteAddr + "'. This indicates "+ "that the remote task manager was lost.",remoteAddr,cause);
+    }
+ else {
+      tex=new LocalTransportException(cause.getMessage(),ctx.channel().localAddress(),cause);
+    }
+    notifyAllChannelsOfErrorAndClose(tex);
+  }
 }
