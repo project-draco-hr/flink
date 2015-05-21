@@ -1,0 +1,22 @@
+{
+  final FlinkTopologyBuilder builder=new FlinkTopologyBuilder();
+  if (fileInputOutput) {
+    final String[] tokens=textPath.split(":");
+    final String inputFile=tokens[tokens.length - 1];
+    builder.setSpout(spoutId,new StormFileSpout(inputFile));
+  }
+ else {
+    builder.setSpout(spoutId,new StormInMemorySpout(WordCountData.WORDS));
+  }
+  builder.setBolt(firstBoltId,new ExclamationBolt(),3).shuffleGrouping(spoutId);
+  builder.setBolt(secondBoltId,new ExclamationBolt(),2).shuffleGrouping(firstBoltId);
+  if (fileInputOutput) {
+    final String[] tokens=outputPath.split(":");
+    final String outputFile=tokens[tokens.length - 1];
+    builder.setBolt(sinkId,new StormBoltFileSink(outputFile,formatter)).shuffleGrouping(secondBoltId);
+  }
+ else {
+    builder.setBolt(sinkId,new StormBoltPrintSink(formatter),4).shuffleGrouping(secondBoltId);
+  }
+  return builder;
+}

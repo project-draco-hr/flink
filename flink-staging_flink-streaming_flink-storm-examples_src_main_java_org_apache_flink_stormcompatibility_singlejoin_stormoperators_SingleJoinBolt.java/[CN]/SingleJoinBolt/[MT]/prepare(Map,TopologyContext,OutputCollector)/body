@@ -1,0 +1,28 @@
+{
+  fieldLocations=new HashMap<String,GlobalStreamId>();
+  this.collector=collector;
+  int timeout=100;
+  pending=new TimeCacheMap<List<Object>,Map<GlobalStreamId,Tuple>>(timeout,new ExpireCallback());
+  Set<String> idFields=null;
+  for (  GlobalStreamId source : context.getThisSources().keySet()) {
+    Fields fields=context.getComponentOutputFields(source.get_componentId(),source.get_streamId());
+    Set<String> setFields=new HashSet<String>(fields.toList());
+    if (idFields == null) {
+      idFields=setFields;
+    }
+ else {
+      idFields.retainAll(setFields);
+    }
+    for (    String outfield : outFields) {
+      for (      String sourcefield : fields) {
+        if (outfield.equals(sourcefield)) {
+          fieldLocations.put(outfield,source);
+        }
+      }
+    }
+  }
+  this.idFields=new Fields(new ArrayList<String>(idFields));
+  if (fieldLocations.size() != outFields.size()) {
+    throw new RuntimeException("Cannot find all outfields among sources");
+  }
+}
