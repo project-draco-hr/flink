@@ -1,0 +1,27 @@
+{
+  final CodeAnalysisMode mode=operator.getExecutionEnvironment().getConfig().getCodeAnalysisMode();
+  if (mode != CodeAnalysisMode.DISABLE && !udf.getClass().isAnnotationPresent(FunctionAnnotation.SkipCodeAnalysis.class)) {
+    final String operatorName=operator.getName() != null ? operator.getName() : udfBaseClass.getSimpleName() + " at " + defaultName;
+    try {
+      final UdfAnalyzer analyzer=new UdfAnalyzer(udfBaseClass,udf.getClass(),operatorName,operator.getInput1Type(),operator.getInput2Type(),operator.getResultType(),key1,key2,mode == CodeAnalysisMode.OPTIMIZE);
+      final boolean success=analyzer.analyze();
+      if (success) {
+        if (mode == CodeAnalysisMode.OPTIMIZE && !(operator.udfWithForwardedFieldsFirstAnnotation(udf.getClass()) || operator.udfWithForwardedFieldsSecondAnnotation(udf.getClass()))) {
+          analyzer.addSemanticPropertiesHints();
+          operator.setSemanticProperties((DualInputSemanticProperties)analyzer.getSemanticProperties());
+          operator.setAnalyzedUdfSemanticsFlag();
+        }
+ else         if (mode == CodeAnalysisMode.HINT) {
+          analyzer.addSemanticPropertiesHints();
+        }
+        analyzer.printToLogger(LOG);
+      }
+    }
+ catch (    InvalidTypesException e) {
+      LOG.debug("Unable to do code analysis due to missing type information.",e);
+    }
+catch (    CodeAnalyzerException e) {
+      LOG.debug("Code analysis failed.",e);
+    }
+  }
+}

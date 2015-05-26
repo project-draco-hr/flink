@@ -1,0 +1,109 @@
+{
+  final List<BasicValue> values=(List<BasicValue>)rawValues;
+  boolean isStatic=false;
+switch (insn.getOpcode()) {
+case INVOKESTATIC:
+    isStatic=true;
+case INVOKESPECIAL:
+case INVOKEVIRTUAL:
+case INVOKEINTERFACE:
+  final MethodInsnNode method=(MethodInsnNode)insn;
+String methodOwner=method.owner;
+if (method.name.equals("getField") || method.name.equals("setField")) {
+try {
+  final String newMethodOwner=(String)findMethodNode(methodOwner,method.name,method.desc)[1];
+  if (newMethodOwner.startsWith("org/apache/flink/api/java/tuple/Tuple")) {
+    methodOwner=newMethodOwner;
+  }
+}
+ catch (IllegalStateException e) {
+}
+}
+if (method.name.equals("collect") && methodOwner.equals("org/apache/flink/util/Collector") && isTagged(values.get(0))&& tagged(values.get(0)).isCollector()) {
+if (isTagged(values.get(1)) && tagged(values.get(1)).isNull()) {
+analyzer.handleNullReturn();
+}
+ else if (hasImportantDependencies(values.get(1))) {
+analyzer.getCollectorValues().add(tagged(values.get(1)));
+analyzer.getCollectorValues().add(tagged(values.get(1)).copy());
+}
+ else {
+analyzer.getCollectorValues().add(null);
+}
+}
+ else if (method.name.equals("iterator") && methodOwner.equals("java/lang/Iterable") && isTagged(values.get(0))&& tagged(values.get(0)).isInputIterable()) {
+return new TaggedValue(Type.getObjectType("java/util/Iterator"),(tagged(values.get(0)).isInput1Iterable()) ? Tag.INPUT_1_ITERATOR : Tag.INPUT_2_ITERATOR);
+}
+ else if (method.name.equals("hasNext") && methodOwner.equals("java/util/Iterator") && isTagged(values.get(0))&& tagged(values.get(0)).isInputIterator()&& !analyzer.isUdfBinary()&& !analyzer.isIteratorTrueAssumptionApplied()) {
+return new TaggedValue(Type.BOOLEAN_TYPE,Tag.ITERATOR_TRUE_ASSUMPTION);
+}
+ else if (method.name.equals("next") && methodOwner.equals("java/util/Iterator") && isTagged(values.get(0))&& tagged(values.get(0)).isInputIterator()) {
+analyzer.applyIteratorTrueAssumption();
+if (tagged(values.get(0)).isInput1Iterator()) {
+return analyzer.getInput1AsTaggedValue();
+}
+ else {
+return analyzer.getInput2AsTaggedValue();
+}
+}
+ else if (!isStatic && isTagged(values.get(0)) && tagged(values.get(0)).isThis()&& hasImportantDependencies(values.get(0))&& !isGetRuntimeContext(method)) {
+TaggedValue tv=invokeNestedMethod(values,method);
+if (tv != null) {
+return tv;
+}
+}
+ else if ((!isStatic && isTagged(values.get(0)) && tagged(values.get(0)).isThis()&& hasImportantDependencies(values,true)) || (!isStatic && (!isTagged(values.get(0)) || !tagged(values.get(0)).isThis()) && hasImportantDependencies(values,false)) || (isStatic && hasImportantDependencies(values,false))) {
+Type newType;
+if (isTagged(values.get(0)) && tagged(values.get(0)).isInput() && (!isStatic && (newType=checkForUnboxing(method.name,methodOwner)) != null || (isStatic && (newType=checkForBoxing(method.name,method.desc,methodOwner)) != null))) {
+return tagged(values.get(0)).copy(newType);
+}
+ else if (method.name.equals("setField") && methodOwner.startsWith("org/apache/flink/api/java/tuple/Tuple") && isTagged(values.get(0))) {
+final TaggedValue tuple=tagged(values.get(0));
+tuple.setTag(Tag.CONTAINER);
+if (!isTagged(values.get(2)) || !tagged(values.get(2)).isIntConstant()) {
+  tuple.makeRegular();
+}
+ else {
+  final int constant=tagged(values.get(2)).getIntConstant();
+  if (constant < 0 || Integer.valueOf(methodOwner.split("Tuple")[1]) <= constant) {
+    analyzer.handleInvalidTupleAccess();
+  }
+  if (isTagged(values.get(1))) {
+    tuple.addContainerMapping("f" + constant,tagged(values.get(1)),currentFrame);
+  }
+ else {
+    tuple.addContainerMapping("f" + constant,null,currentFrame);
+  }
+}
+}
+ else if (method.name.equals("getField") && methodOwner.startsWith("org/apache/flink/api/java/tuple/Tuple")) {
+final TaggedValue tuple=tagged(values.get(0));
+if (isTagged(values.get(1)) && tagged(values.get(1)).isIntConstant()) {
+  final int constant=tagged(values.get(1)).getIntConstant();
+  if (constant < 0 || Integer.valueOf(methodOwner.split("Tuple")[1]) <= constant) {
+    analyzer.handleInvalidTupleAccess();
+  }
+  if (tuple.containerContains("f" + constant)) {
+    final TaggedValue tupleField=tuple.getContainerMapping().get("f" + constant);
+    if (tupleField != null) {
+      return tupleField;
+    }
+  }
+}
+ else {
+  tuple.makeRegular();
+  return new TaggedValue(Type.getObjectType("java/lang/Object"));
+}
+}
+ else {
+TaggedValue tv=invokeNestedMethod(values,method);
+if (tv != null) {
+  return tv;
+}
+}
+}
+return super.naryOperation(insn,values);
+default :
+return super.naryOperation(insn,values);
+}
+}

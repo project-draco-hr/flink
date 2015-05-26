@@ -1,0 +1,57 @@
+{
+  try {
+    if (jumpModificationState == PRE_STATE) {
+      jumpModificationState=MOD_STATE;
+    }
+ else     if (jumpModificationState == MOD_STATE) {
+      if (jumpModification == IFEQ_MOD) {
+        final int top=accessField(Analyzer.class,"top").getInt(this);
+        final int[] queue=(int[])accessField(Analyzer.class,"queue").get(this);
+        final int tmp=queue[top - 2];
+        queue[top - 2]=queue[top - 1];
+        queue[top - 1]=tmp;
+        eventInsn=queue[top - 2] - 1;
+        final InsnList insns=(InsnList)accessField(Analyzer.class,"insns").get(this);
+        if (insns.get(eventInsn) instanceof JumpInsnNode) {
+          jumpModificationState=WAIT_FOR_INSN_STATE;
+        }
+ else {
+          jumpModificationState=DO_NOTHING;
+        }
+      }
+ else       if (jumpModification == IFNE_MOD) {
+        final Frame[] frames=(Frame[])accessField(Analyzer.class,"frames").get(this);
+        final Field indexField=accessField(AbstractInsnNode.class,"index");
+        final InsnList insns=(InsnList)accessField(Analyzer.class,"insns").get(this);
+        final AbstractInsnNode gotoInsnn=insns.get(successor - 1);
+        if (gotoInsnn instanceof JumpInsnNode) {
+          jumpModificationState=WAIT_FOR_INSN_STATE;
+          final int idx=indexField.getInt(accessField(JumpInsnNode.class,"label").get(gotoInsnn));
+          for (int i=idx; i <= insn; i++) {
+            ((ModifiedASMFrame)frames[i]).mergePriority=true;
+          }
+          eventInsn=idx - 2;
+        }
+ else {
+          jumpModificationState=DO_NOTHING;
+        }
+      }
+    }
+ else     if (jumpModificationState == WAIT_FOR_INSN_STATE && insn == eventInsn) {
+      jumpModificationState=DO_NOTHING;
+      final Frame[] frames=(Frame[])accessField(Analyzer.class,"frames").get(this);
+      if (jumpModification == IFEQ_MOD) {
+        interpreter.rightMergePriority=true;
+        final Field top=accessField(Frame.class,"top");
+        top.setInt(frames[eventInsn],top.getInt(frames[eventInsn + 1]));
+        frames[eventInsn + 1].merge(frames[eventInsn],interpreter);
+      }
+ else       if (jumpModification == IFNE_MOD) {
+        ((ModifiedASMFrame)frames[eventInsn + 1]).mergePriority=true;
+      }
+    }
+  }
+ catch (  Exception e) {
+    throw new CodeAnalyzerException("Unable to do jump modifications.",e);
+  }
+}

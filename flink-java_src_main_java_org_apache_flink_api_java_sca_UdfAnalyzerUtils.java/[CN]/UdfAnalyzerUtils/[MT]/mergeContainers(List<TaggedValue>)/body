@@ -1,0 +1,53 @@
+{
+  if (returnValues.size() == 0) {
+    return null;
+  }
+  Type returnType=null;
+  Set<String> keys=null;
+  for (  TaggedValue tv : returnValues) {
+    if (keys == null) {
+      keys=new HashSet<String>(tv.getContainerMapping().keySet());
+      returnType=tv.getType();
+    }
+ else {
+      keys.retainAll(tv.getContainerMapping().keySet());
+    }
+  }
+  final HashMap<String,TaggedValue> resultMapping=new HashMap<String,TaggedValue>(keys.size());
+  final List<String> filteredMappings=new ArrayList<String>(keys.size());
+  for (  TaggedValue tv : returnValues) {
+    final Map<String,TaggedValue> cm=tv.getContainerMapping();
+    for (    String key : keys) {
+      if (cm.containsKey(key)) {
+        if (!filteredMappings.contains(key) && cm.get(key) == null) {
+          filteredMappings.add(key);
+        }
+ else         if (!resultMapping.containsKey(key) && !filteredMappings.contains(key)) {
+          resultMapping.put(key,cm.get(key));
+        }
+ else         if (resultMapping.containsKey(key) && filteredMappings.contains(key)) {
+          resultMapping.remove(key);
+        }
+ else         if (resultMapping.containsKey(key) && !filteredMappings.contains(key) && !cm.get(key).equals(resultMapping.get(key))) {
+          filteredMappings.add(key);
+          resultMapping.remove(key);
+        }
+      }
+    }
+  }
+  Iterator<String> it=resultMapping.keySet().iterator();
+  while (it.hasNext()) {
+    String key=it.next();
+    TaggedValue value=mergeReturnValues(Collections.singletonList(resultMapping.get(key)));
+    if (value == null) {
+      it.remove();
+    }
+ else {
+      resultMapping.put(key,value);
+    }
+  }
+  if (resultMapping.size() > 0) {
+    return new TaggedValue(returnType,resultMapping);
+  }
+  return null;
+}

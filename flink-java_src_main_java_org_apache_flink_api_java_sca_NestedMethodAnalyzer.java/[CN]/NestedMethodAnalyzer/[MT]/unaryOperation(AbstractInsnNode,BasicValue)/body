@@ -1,0 +1,53 @@
+{
+switch (insn.getOpcode()) {
+case IFEQ:
+    if (isTagged(value) && tagged(value).isIteratorTrueAssumption()) {
+      modifiedAsmAnalyzer.requestIFEQLoopModification();
+    }
+  return super.unaryOperation(insn,value);
+case IFNE:
+if (isTagged(value) && tagged(value).isIteratorTrueAssumption()) {
+  modifiedAsmAnalyzer.requestIFNELoopModification();
+}
+return super.unaryOperation(insn,value);
+case CHECKCAST:
+return value;
+case PUTSTATIC:
+analyzer.handlePutStatic();
+return super.unaryOperation(insn,value);
+case GETFIELD:
+final FieldInsnNode field=(FieldInsnNode)insn;
+if (!isTagged(value)) {
+return super.unaryOperation(insn,value);
+}
+final TaggedValue taggedValue=(TaggedValue)value;
+if (taggedValue.isInput()) {
+return super.unaryOperation(insn,value);
+}
+ else if (taggedValue.canContainFields() && taggedValue.containerContains(field.name)) {
+final TaggedValue tv=taggedValue.getContainerMapping().get(field.name);
+if (tv != null) {
+return tv;
+}
+}
+ else if (taggedValue.isThis() && !taggedValue.containerContains(field.name)) {
+final TaggedValue tv=new TaggedValue(Type.getType(field.desc));
+taggedValue.addContainerMapping(field.name,tv,currentFrame);
+return tv;
+}
+ else if (taggedValue.isRegular()) {
+taggedValue.setTag(Tag.CONTAINER);
+final TaggedValue tv=new TaggedValue(Type.getType(field.desc));
+taggedValue.addContainerMapping(field.name,tv,currentFrame);
+return tv;
+}
+return super.unaryOperation(insn,value);
+case IINC:
+if (isTagged(value) && (tagged(value).isIntConstant() || tagged(value).isInput())) {
+tagged(value).makeRegular();
+}
+return super.unaryOperation(insn,value);
+default :
+return super.unaryOperation(insn,value);
+}
+}

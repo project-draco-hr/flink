@@ -1,0 +1,37 @@
+{
+  if (typeInfo instanceof TupleTypeInfoBase) {
+    final TupleTypeInfoBase<?> tupleTypeInfo=(TupleTypeInfoBase<?>)typeInfo;
+    HashMap<String,TaggedValue> containerMapping=new HashMap<String,TaggedValue>();
+    for (int i=0; i < tupleTypeInfo.getArity(); i++) {
+      final String fieldName;
+      if (typeInfo instanceof TupleTypeInfo) {
+        fieldName="f" + i;
+      }
+ else {
+        fieldName="_" + (i + 1);
+      }
+      containerMapping.put(fieldName,convertTypeInfoToTaggedValue(input,tupleTypeInfo.getTypeAt(i),(flatFieldExpr.length() > 0 ? flatFieldExpr + "." : "") + fieldName,tupleTypeInfo.getFlatFields(fieldName),groupedKeys));
+    }
+    return new TaggedValue(Type.getObjectType("java/lang/Object"),containerMapping);
+  }
+ else   if (typeInfo instanceof PojoTypeInfo) {
+    final PojoTypeInfo<?> pojoTypeInfo=(PojoTypeInfo<?>)typeInfo;
+    HashMap<String,TaggedValue> containerMapping=new HashMap<String,TaggedValue>();
+    for (int i=0; i < pojoTypeInfo.getArity(); i++) {
+      final String fieldName=pojoTypeInfo.getPojoFieldAt(i).field.getName();
+      containerMapping.put(fieldName,convertTypeInfoToTaggedValue(input,pojoTypeInfo.getTypeAt(i),(flatFieldExpr.length() > 0 ? flatFieldExpr + "." : "") + fieldName,pojoTypeInfo.getFlatFields(fieldName),groupedKeys));
+    }
+    return new TaggedValue(Type.getObjectType("java/lang/Object"),containerMapping);
+  }
+  boolean groupedField=false;
+  if (groupedKeys != null && flatFieldDesc != null) {
+    int flatFieldPos=flatFieldDesc.get(0).getPosition();
+    for (    int groupedKey : groupedKeys) {
+      if (groupedKey == flatFieldPos) {
+        groupedField=true;
+        break;
+      }
+    }
+  }
+  return new TaggedValue(Type.getType(typeInfo.getTypeClass()),input,flatFieldExpr,groupedField,typeInfo.isBasicType() && typeInfo != BasicTypeInfo.DATE_TYPE_INFO);
+}

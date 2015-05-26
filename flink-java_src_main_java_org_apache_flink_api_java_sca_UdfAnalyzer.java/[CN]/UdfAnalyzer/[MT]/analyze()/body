@@ -1,0 +1,56 @@
+{
+  if (state == STATE_END_OF_ANALYZING) {
+    throw new IllegalStateException("Analyzing is already done.");
+  }
+  boolean discardReturnValues=false;
+  if (isIterableInput) {
+    if (keys1 == null || (keys2 == null && isBinary)) {
+      throw new IllegalArgumentException("This type of function requires key information for analysis.");
+    }
+ else     if (!(keys1 instanceof ExpressionKeys) || (!(keys2 instanceof ExpressionKeys) && isBinary)) {
+      discardReturnValues=true;
+    }
+  }
+  try {
+    final Object[] mn=findMethodNode(internalUdfClassName,baseClassMethod);
+    final NestedMethodAnalyzer nma=new NestedMethodAnalyzer(this,(String)mn[1],(MethodNode)mn[0],null,MAX_NESTING,true);
+    final TaggedValue result=nma.analyze();
+    setState(STATE_END_OF_ANALYZING);
+    if (isFilterFunction) {
+      discardReturnValues=true;
+      if (!filterInputCopy.equals(filterInputRef)) {
+        addHintOrThrowException("Function modifies the input. This can lead to unexpected behaviour during runtime.");
+      }
+    }
+    if (!discardReturnValues) {
+      if (hasCollector) {
+        returnValue=mergeReturnValues(collectorValues);
+      }
+ else {
+        returnValue=result;
+      }
+      if ((isIterableInput || isReduceFunction) && returnValue != null) {
+        if (returnValue.canContainFields()) {
+          removeUngroupedInputsFromContainer(returnValue);
+        }
+ else         if (returnValue.isInput() && !returnValue.isGrouped()) {
+          returnValue=null;
+        }
+      }
+    }
+ else {
+      returnValue=null;
+    }
+  }
+ catch (  Exception e) {
+    Throwable cause=e.getCause();
+    while (cause != null && !(cause instanceof CodeErrorException)) {
+      cause=cause.getCause();
+    }
+    if ((cause != null && cause instanceof CodeErrorException) || e instanceof CodeErrorException) {
+      throw new CodeErrorException("Function code contains obvious errors. " + "If you think the code analysis is wrong at this point you can " + "disable the entire code analyzer in ExecutionConfig or add"+ " @SkipCodeAnalysis to your function to disable the analysis.",(cause != null) ? cause : e);
+    }
+    throw new CodeAnalyzerException("Exception occurred during code analysis.",e);
+  }
+  return true;
+}

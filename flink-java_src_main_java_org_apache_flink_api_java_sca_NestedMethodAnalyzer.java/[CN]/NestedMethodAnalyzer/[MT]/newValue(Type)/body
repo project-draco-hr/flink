@@ -1,0 +1,64 @@
+{
+  TaggedValue tv;
+switch (analyzer.getState()) {
+case UdfAnalyzer.STATE_CAPTURE_RETURN:
+    analyzer.setState(UdfAnalyzer.STATE_CAPTURE_THIS);
+  curArgIndex++;
+return super.newValue(type);
+case UdfAnalyzer.STATE_CAPTURE_THIS:
+analyzer.setState(UdfAnalyzer.STATE_CAPTURE_INPUT1);
+tv=new TaggedValue(type,Tag.THIS);
+curArgIndex++;
+return tv;
+case UdfAnalyzer.STATE_CAPTURE_INPUT1:
+if (analyzer.isUdfBinary() || analyzer.isUdfReduceFunction()) {
+analyzer.setState(UdfAnalyzer.STATE_CAPTURE_INPUT2);
+}
+ else if (analyzer.hasUdfCollector()) {
+analyzer.setState(UdfAnalyzer.STATE_CAPTURE_COLLECTOR);
+}
+ else {
+analyzer.setState(UdfAnalyzer.STATE_END_OF_CAPTURING);
+}
+if (analyzer.hasUdfIterableInput()) {
+tv=new TaggedValue(type,Tag.INPUT_1_ITERABLE);
+}
+ else {
+tv=analyzer.getInput1AsTaggedValue();
+}
+curArgIndex++;
+return tv;
+case UdfAnalyzer.STATE_CAPTURE_INPUT2:
+if (analyzer.hasUdfCollector()) {
+analyzer.setState(UdfAnalyzer.STATE_CAPTURE_COLLECTOR);
+}
+ else {
+analyzer.setState(UdfAnalyzer.STATE_END_OF_CAPTURING);
+}
+if (analyzer.hasUdfIterableInput()) {
+tv=new TaggedValue(type,Tag.INPUT_2_ITERABLE);
+}
+ else if (analyzer.isUdfReduceFunction()) {
+tv=analyzer.getInput1AsTaggedValue();
+}
+ else {
+tv=analyzer.getInput2AsTaggedValue();
+}
+curArgIndex++;
+return tv;
+case UdfAnalyzer.STATE_CAPTURE_COLLECTOR:
+analyzer.setState(UdfAnalyzer.STATE_END_OF_CAPTURING);
+tv=new TaggedValue(type,Tag.COLLECTOR);
+curArgIndex++;
+return tv;
+case UdfAnalyzer.STATE_END_OF_CAPTURING:
+default :
+if (curArgIndex < 0) {
+curArgIndex++;
+}
+ else if (argumentValues != null && curArgIndex < argumentValues.size()) {
+return argumentValues.get(curArgIndex++);
+}
+return super.newValue(type);
+}
+}
