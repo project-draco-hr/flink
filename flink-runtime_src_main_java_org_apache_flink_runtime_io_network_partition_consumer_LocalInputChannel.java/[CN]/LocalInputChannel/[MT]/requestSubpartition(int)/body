@@ -1,10 +1,23 @@
 {
-  if (subpartitionView == null) {
-    LOG.debug("{}: Requesting LOCAL subpartition {} of partition {}.",this,subpartitionIndex,partitionId);
-    subpartitionView=partitionManager.createSubpartitionView(partitionId,subpartitionIndex,inputGate.getBufferProvider());
+synchronized (requestLock) {
     if (subpartitionView == null) {
-      throw new IOException("Error requesting subpartition.");
+      LOG.debug("{}: Requesting LOCAL subpartition {} of partition {}.",this,subpartitionIndex,partitionId);
+      try {
+        subpartitionView=partitionManager.createSubpartitionView(partitionId,subpartitionIndex,inputGate.getBufferProvider());
+      }
+ catch (      PartitionNotFoundException notFound) {
+        if (increaseBackoff()) {
+          inputGate.retriggerPartitionRequest(partitionId.getPartitionId());
+          return;
+        }
+ else {
+          throw notFound;
+        }
+      }
+      if (subpartitionView == null) {
+        throw new IOException("Error requesting subpartition.");
+      }
+      getNextLookAhead();
     }
-    getNextLookAhead();
   }
 }

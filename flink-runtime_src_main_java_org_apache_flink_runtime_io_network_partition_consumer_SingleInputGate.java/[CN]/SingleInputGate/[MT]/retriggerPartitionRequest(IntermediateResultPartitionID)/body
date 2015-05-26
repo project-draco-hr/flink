@@ -3,12 +3,21 @@ synchronized (requestLock) {
     if (!isReleased) {
       final InputChannel ch=inputChannels.get(partitionId);
       checkNotNull(ch,"Unknown input channel with ID " + partitionId);
-      if (ch.getClass() != RemoteInputChannel.class) {
-        throw new IllegalArgumentException("Channel identified by " + partitionId + " is not a remote channel.");
-      }
-      final RemoteInputChannel rch=(RemoteInputChannel)ch;
       LOG.debug("Retriggering partition request {}:{}.",ch.partitionId,consumedSubpartitionIndex);
-      rch.retriggerSubpartitionRequest(consumedSubpartitionIndex);
+      if (ch.getClass() == RemoteInputChannel.class) {
+        final RemoteInputChannel rch=(RemoteInputChannel)ch;
+        rch.retriggerSubpartitionRequest(consumedSubpartitionIndex);
+      }
+ else       if (ch.getClass() == LocalInputChannel.class) {
+        final LocalInputChannel ich=(LocalInputChannel)ch;
+        if (retriggerLocalRequestTimer == null) {
+          retriggerLocalRequestTimer=new Timer(true);
+        }
+        ich.retriggerSubpartitionRequest(retriggerLocalRequestTimer,consumedSubpartitionIndex);
+      }
+ else {
+        throw new IllegalStateException("Unexpected type of channel to retrigger partition: " + ch.getClass());
+      }
     }
   }
 }
