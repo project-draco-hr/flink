@@ -1,13 +1,24 @@
 {
   boolean success=false;
   try {
-    checkNotNull(buffer,"Buffer request could not be satisfied.");
-    if (availableBuffer.compareAndSet(null,buffer)) {
-      ctx.channel().eventLoop().execute(this);
-      success=true;
+    if (buffer != null) {
+      if (availableBuffer.compareAndSet(null,buffer)) {
+        ctx.channel().eventLoop().execute(this);
+        success=true;
+      }
+ else {
+        throw new IllegalStateException("Received a buffer notification, " + " but the previous one has not been handled yet.");
+      }
     }
  else {
-      throw new IllegalStateException("Received a buffer notification, but the previous one has not been handled yet.");
+      stagedBufferResponse=null;
+      if (stagedMessages.isEmpty()) {
+        ctx.channel().config().setAutoRead(true);
+        ctx.channel().read();
+      }
+ else {
+        ctx.channel().eventLoop().execute(stagedMessagesHandler);
+      }
     }
   }
  catch (  Throwable t) {
