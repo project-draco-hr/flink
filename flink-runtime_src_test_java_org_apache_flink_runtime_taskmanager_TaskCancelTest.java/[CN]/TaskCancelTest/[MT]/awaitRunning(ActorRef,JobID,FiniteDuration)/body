@@ -1,0 +1,27 @@
+{
+  checkNotNull(jobManager);
+  checkNotNull(jobId);
+  checkNotNull(timeout);
+  while (true) {
+    Future<Object> ask=Patterns.ask(jobManager,new RequestJobStatus(jobId),new Timeout(timeout));
+    Object result=Await.result(ask,timeout);
+    if (result instanceof CurrentJobStatus) {
+      CurrentJobStatus status=(CurrentJobStatus)result;
+      if (!status.jobID().equals(jobId)) {
+        throw new Exception("JobManager responded for wrong job ID. Request: " + jobId + ", response: "+ status.jobID()+ ".");
+      }
+      if (status.status() == JobStatus.RUNNING) {
+        return;
+      }
+ else       if (status.status().isTerminalState()) {
+        throw new Exception("JobStatus changed to " + status.status() + " while waiting for job to start running.");
+      }
+    }
+ else     if (result instanceof JobNotFound) {
+      throw new Exception("Cannot find job with ID " + jobId + ".");
+    }
+ else {
+      throw new Exception("Unexpected response to cancel request: " + result);
+    }
+  }
+}

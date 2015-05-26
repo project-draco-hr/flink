@@ -1,0 +1,47 @@
+{
+  int numberOfSources=8;
+  int sourceParallelism=4;
+  TestingCluster flink=null;
+  try {
+    final Configuration config=new Configuration();
+    config.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,2);
+    config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,sourceParallelism);
+    config.setString(ConfigConstants.AKKA_ASK_TIMEOUT,TestingUtils.DEFAULT_AKKA_ASK_TIMEOUT());
+    config.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,4096);
+    config.setInteger(ConfigConstants.TASK_MANAGER_NETWORK_NUM_BUFFERS_KEY,2048);
+    flink=new TestingCluster(config,false);
+    final JobGraph jobGraph=new JobGraph("Cancel Big Union");
+    AbstractJobVertex[] sources=new AbstractJobVertex[numberOfSources];
+    SlotSharingGroup group=new SlotSharingGroup();
+    for (int i=0; i < sources.length; i++) {
+      sources[i]=new AbstractJobVertex("Source " + i);
+      sources[i].setInvokableClass(InfiniteSource.class);
+      sources[i].setParallelism(sourceParallelism);
+      sources[i].setSlotSharingGroup(group);
+      jobGraph.addVertex(sources[i]);
+      group.addVertexToGroup(sources[i].getID());
+    }
+    AbstractJobVertex union=new AbstractJobVertex("Union");
+    union.setInvokableClass(AgnosticUnion.class);
+    union.setParallelism(sourceParallelism);
+    jobGraph.addVertex(union);
+    for (    AbstractJobVertex source : sources) {
+      union.connectNewDataSetAsInput(source,DistributionPattern.POINTWISE,ResultPartitionType.PIPELINED);
+    }
+    JobClient.submitJobDetached(flink.jobManagerActor(),jobGraph,TestingUtils.TESTING_DURATION());
+    awaitRunning(flink.jobManagerActor(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    Thread.sleep(5000);
+    cancelJob(flink.jobManagerActor(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    JobStatus status=awaitTermination(flink.jobManagerActor(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    if (status == JobStatus.CANCELED) {
+    }
+ else {
+      fail("The job finished with unexpected terminal state " + status + ". "+ "This indicates that there is a bug in the task cancellation.");
+    }
+  }
+  finally {
+    if (flink != null) {
+      flink.shutdown();
+    }
+  }
+}
