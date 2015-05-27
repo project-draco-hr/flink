@@ -1,0 +1,54 @@
+{
+  ExecutorService executor=null;
+  try {
+    executor=Executors.newSingleThreadExecutor();
+    final CountDownLatch sync=new CountDownLatch(2);
+    final Buffer buffer=spy(TestBufferFactory.createBuffer(4));
+    Answer<Buffer> request=new Answer<Buffer>(){
+      @Override public Buffer answer(      InvocationOnMock invocation) throws Throwable {
+        sync.countDown();
+        if (sync.getCount() == 1) {
+          return buffer;
+        }
+        final Object o=new Object();
+synchronized (o) {
+          while (true) {
+            o.wait();
+          }
+        }
+      }
+    }
+;
+    BufferProvider bufferProvider=mock(BufferProvider.class);
+    when(bufferProvider.requestBufferBlocking()).thenAnswer(request);
+    ResultPartitionWriter partitionWriter=createResultPartitionWriter(bufferProvider);
+    final RecordWriter<IntValue> recordWriter=new RecordWriter<IntValue>(partitionWriter);
+    Future<?> result=executor.submit(new Callable<Void>(){
+      @Override public Void call() throws Exception {
+        IntValue val=new IntValue(0);
+        try {
+          recordWriter.emit(val);
+          recordWriter.flush();
+          recordWriter.emit(val);
+        }
+ catch (        InterruptedException e) {
+          recordWriter.clearBuffers();
+        }
+        return null;
+      }
+    }
+);
+    sync.await();
+    result.cancel(true);
+    recordWriter.clearBuffers();
+    verify(bufferProvider,times(2)).requestBufferBlocking();
+    verify(partitionWriter,times(1)).writeBuffer(any(Buffer.class),anyInt());
+    assertTrue("Buffer not recycled.",buffer.isRecycled());
+    verify(buffer,times(1)).recycle();
+  }
+  finally {
+    if (executor != null) {
+      executor.shutdown();
+    }
+  }
+}
