@@ -1,0 +1,19 @@
+{
+  List<String> out=new ArrayList<String>();
+  StreamMap<Integer,String> map=createOperatorWithContext(out,null,null);
+  StreamingRuntimeContext context=map.getRuntimeContext();
+  processInputs(map,Arrays.asList(1,2,3,4,5));
+  assertEquals(Arrays.asList("1","2","3","4","5"),out);
+  assertEquals((Integer)5,context.getOperatorState("counter",0).getState());
+  assertEquals("12345",context.getOperatorState("concat","").getState());
+  byte[] serializedState=InstantiationUtil.serializeObject(map.getStateSnapshotFromFunction(1,1));
+  StreamMap<Integer,String> restoredMap=createOperatorWithContext(out,null,serializedState);
+  StreamingRuntimeContext restoredContext=restoredMap.getRuntimeContext();
+  assertEquals((Integer)5,restoredContext.getOperatorState("counter",0).getState());
+  assertEquals("12345",restoredContext.getOperatorState("concat","").getState());
+  out.clear();
+  processInputs(restoredMap,Arrays.asList(7,8));
+  assertEquals(Arrays.asList("7","8"),out);
+  assertEquals((Integer)7,restoredContext.getOperatorState("counter",0).getState());
+  assertEquals("1234578",restoredContext.getOperatorState("concat","").getState());
+}
