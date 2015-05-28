@@ -10,10 +10,14 @@
     PartitionRequestProtocol protocol=new PartitionRequestProtocol(partitions,mock(TaskEventDispatcher.class),mock(NetworkBufferPool.class));
     serverAndClient=initServerAndClient(protocol);
     Channel ch=connect(serverAndClient);
-    ch.writeAndFlush(new PartitionRequest(pid,0,new InputChannelID())).await();
+    InputChannelID inputChannelId=new InputChannelID();
+    ch.writeAndFlush(new PartitionRequest(pid,0,inputChannelId)).await();
     if (!sync.await(TestingUtils.TESTING_DURATION().toMillis(),TimeUnit.MILLISECONDS)) {
       fail("Timed out after waiting for " + TestingUtils.TESTING_DURATION().toMillis() + " ms to be notified about cancelled partition.");
     }
+    ch.writeAndFlush(new CancelPartitionRequest(inputChannelId)).await();
+    ch.close();
+    NettyTestUtil.awaitClose(ch);
     verify(view,times(1)).releaseAllResources();
     verify(view,times(0)).notifySubpartitionConsumed();
   }
