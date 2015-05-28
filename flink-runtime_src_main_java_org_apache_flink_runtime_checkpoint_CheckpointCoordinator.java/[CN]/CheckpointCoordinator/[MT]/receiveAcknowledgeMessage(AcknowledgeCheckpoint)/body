@@ -8,11 +8,12 @@
   }
   final long checkpointId=message.getCheckpointId();
   SuccessfulCheckpoint completed=null;
+  PendingCheckpoint checkpoint;
 synchronized (lock) {
     if (shutdown) {
       return;
     }
-    PendingCheckpoint checkpoint=pendingCheckpoints.get(checkpointId);
+    checkpoint=pendingCheckpoints.get(checkpointId);
     if (checkpoint != null && !checkpoint.isDiscarded()) {
       if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState())) {
         if (checkpoint.isFullyAcknowledged()) {
@@ -49,7 +50,7 @@ synchronized (lock) {
       Execution ee=ev.getCurrentExecutionAttempt();
       if (ee != null) {
         ExecutionAttemptID attemptId=ee.getAttemptId();
-        ConfirmCheckpoint confirmMessage=new ConfirmCheckpoint(job,attemptId,checkpointId,timestamp);
+        ConfirmCheckpoint confirmMessage=new ConfirmCheckpoint(job,attemptId,checkpointId,timestamp,completed.getState(ev.getJobvertexId()).getState());
         ev.sendMessageToCurrentExecution(confirmMessage,ee.getAttemptId());
       }
     }
