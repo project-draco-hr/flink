@@ -4,6 +4,7 @@
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
   DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(topic,new JavaDefaultStringSchema(),standardCC));
   consuming.addSink(new SinkFunction<String>(){
+    private static final long serialVersionUID=1L;
     int elCnt=0;
     int start=-1;
     BitSet validator=new BitSet(101);
@@ -30,13 +31,21 @@
   DataStream<String> stream=env.addSource(new SourceFunction<String>(){
     private static final long serialVersionUID=1L;
     boolean running=true;
-    int cnt=0;
-    @Override public boolean reachedEnd() throws Exception {
-      return false;
+    @Override public void run(    Object checkpointLock,    Collector<String> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      while (running) {
+        collector.collect("kafka-" + cnt++);
+        try {
+          Thread.sleep(100);
+        }
+ catch (        InterruptedException ignored) {
+        }
+      }
     }
-    @Override public String next() throws Exception {
-      Thread.sleep(100);
-      return "kafka-" + cnt++;
+    @Override public void cancel(){
+      LOG.info("Source got cancel()");
+      running=false;
     }
   }
 );

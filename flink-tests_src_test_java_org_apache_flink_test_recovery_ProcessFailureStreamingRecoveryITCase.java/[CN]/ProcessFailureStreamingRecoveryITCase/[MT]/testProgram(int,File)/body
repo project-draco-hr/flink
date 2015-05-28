@@ -1,6 +1,4 @@
 {
-  final File tempTestOutput=new File(new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH),UUID.randomUUID().toString());
-  assertTrue("Cannot create directory for temp output",tempTestOutput.mkdirs());
   final File tempCheckpointDir=new File(new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH),UUID.randomUUID().toString());
   assertTrue("Cannot create directory for checkpoints",tempCheckpointDir.mkdirs());
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",jobManagerPort);
@@ -9,39 +7,17 @@
   env.setNumberOfExecutionRetries(1);
   env.enableCheckpointing(200);
   env.setStateHandleProvider(FileStateHandle.createProvider(tempCheckpointDir.getAbsolutePath()));
-  DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).rebalance().map(new MapFunction<Long,Long>(){
+  DataStream<Long> result=env.addSource(new SleepyDurableGenerateSequence(coordinateDir,DATA_COUNT)).map(new MapFunction<Long,Long>(){
     @Override public Long map(    Long value) throws Exception {
       return value;
     }
   }
-).map(new StatefulMapper(coordinateDir));
-  result.addSink(new RichSinkFunction<Long>(){
-    private transient FileChannel writer;
-    @Override public void open(    Configuration parameters) throws IOException {
-      int taskIndex=getRuntimeContext().getIndexOfThisSubtask();
-      File output=new File(tempTestOutput,"task-" + taskIndex + "-"+ UUID.randomUUID().toString());
-      RandomAccessFile outputFile=new RandomAccessFile(output,"rws");
-      this.writer=outputFile.getChannel();
-    }
-    @Override public void invoke(    Long value) throws Exception {
-      String text=value + "\n";
-      byte[] bytes=text.getBytes(Charset.defaultCharset());
-      ByteBuffer buffer=ByteBuffer.wrap(bytes);
-      writer.write(buffer);
-    }
-    @Override public void close() throws Exception {
-      writer.close();
-    }
-  }
-);
+).startNewChain().map(new StatefulMapper(coordinateDir));
+  result.addSink(new CheckpointedSink(DATA_COUNT));
   try {
     env.execute();
-    fileBatchHasEveryNumberLower(PARALLELISM,DATA_COUNT,tempTestOutput);
   }
   finally {
-    if (tempTestOutput.exists()) {
-      FileUtils.deleteDirectory(tempTestOutput);
-    }
     if (tempCheckpointDir.exists()) {
       FileUtils.deleteDirectory(tempCheckpointDir);
     }

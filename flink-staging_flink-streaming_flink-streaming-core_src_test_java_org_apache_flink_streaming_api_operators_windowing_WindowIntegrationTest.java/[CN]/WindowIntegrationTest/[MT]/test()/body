@@ -49,28 +49,29 @@
   source.every(Count.of(4)).sum(0).getDiscretizedStream().addSink(new TestSink11());
   source.window(FullStream.window()).every(Count.of(4)).groupBy(key).sum(0).getDiscretizedStream().addSink(new TestSink12());
   DataStream<Integer> source2=env.addSource(new ParallelSourceFunction<Integer>(){
-    private int i=1;
-    @Override public boolean reachedEnd() throws Exception {
-      return i > 10;
+    private static final long serialVersionUID=1L;
+    @Override public void run(    Object checkpointLock,    Collector<Integer> out) throws Exception {
+      for (int i=1; i <= 10; i++) {
+        out.collect(i);
+      }
     }
-    @Override public Integer next() throws Exception {
-      return i++;
+    @Override public void cancel(){
     }
   }
 );
   DataStream<Integer> source3=env.addSource(new RichParallelSourceFunction<Integer>(){
+    private static final long serialVersionUID=1L;
     private int i=1;
     @Override public void open(    Configuration parameters) throws Exception {
       super.open(parameters);
       i=1 + getRuntimeContext().getIndexOfThisSubtask();
     }
-    @Override public boolean reachedEnd() throws Exception {
-      return i > 11;
+    @Override public void cancel(){
     }
-    @Override public Integer next() throws Exception {
-      int result=i;
-      i+=2;
-      return result;
+    @Override public void run(    Object checkpointLock,    Collector<Integer> out) throws Exception {
+      for (; i < 11; i+=2) {
+        out.collect(i);
+      }
     }
   }
 );

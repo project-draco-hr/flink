@@ -2,20 +2,24 @@
   LOG.info("Writing sequence from {} to {} to topic {}",from,to,topicName);
   DataStream<Tuple2<Integer,Integer>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Integer,Integer>>(){
     private static final long serialVersionUID=1L;
-    int cnt=from;
-    int partition;
-    @Override public void open(    Configuration parameters) throws Exception {
-      super.open(parameters);
-      partition=getRuntimeContext().getIndexOfThisSubtask();
+    boolean running=true;
+    @Override public void run(    Object checkpointLock,    Collector<Tuple2<Integer,Integer>> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=from;
+      int partition=getRuntimeContext().getIndexOfThisSubtask();
+      while (running) {
+        LOG.info("Writing " + cnt + " to partition "+ partition);
+        collector.collect(new Tuple2<Integer,Integer>(getRuntimeContext().getIndexOfThisSubtask(),cnt));
+        if (cnt == to) {
+          LOG.info("Writer reached end.");
+          return;
+        }
+        cnt++;
+      }
     }
-    @Override public boolean reachedEnd() throws Exception {
-      return cnt > to;
-    }
-    @Override public Tuple2<Integer,Integer> next() throws Exception {
-      LOG.info("Writing " + cnt + " to partition "+ partition);
-      Tuple2<Integer,Integer> result=new Tuple2<Integer,Integer>(getRuntimeContext().getIndexOfThisSubtask(),cnt);
-      cnt++;
-      return result;
+    @Override public void cancel(){
+      LOG.info("Source got cancel()");
+      running=false;
     }
   }
 ).setParallelism(3);

@@ -4,17 +4,27 @@
   LOG.info("Writing data to topic {}",topic);
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
   DataStream<String> stream=env.addSource(new SourceFunction<String>(){
-    private int cnt=0;
-    @Override public boolean reachedEnd() throws Exception {
-      return cnt == 200;
-    }
-    @Override public String next() throws Exception {
-      String msg="kafka-" + cnt++;
-      LOG.info("sending message = " + msg);
-      if ((cnt - 1) % 20 == 0) {
-        LOG.debug("Sending message #{}",cnt - 1);
+    private static final long serialVersionUID=1L;
+    boolean running=true;
+    @Override public void run(    Object checkpointLock,    Collector<String> collector) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      while (running) {
+        String msg="kafka-" + cnt++;
+        collector.collect(msg);
+        LOG.info("sending message = " + msg);
+        if ((cnt - 1) % 20 == 0) {
+          LOG.debug("Sending message #{}",cnt - 1);
+        }
+        if (cnt == 200) {
+          LOG.info("Stopping to produce after 200 msgs");
+          break;
+        }
       }
-      return msg;
+    }
+    @Override public void cancel(){
+      LOG.info("Source got chancel()");
+      running=false;
     }
   }
 );
@@ -59,6 +69,7 @@
   DataStreamSource<String> consuming=env.addSource(new PersistentKafkaSource<String>(topic,new JavaDefaultStringSchema(),standardCC));
   consuming.setParallelism(1);
   consuming.addSink(new SinkFunction<String>(){
+    private static final long serialVersionUID=1L;
     int elCnt=0;
     int start=0;
     int numOfMessagesToBeCorrect=100;

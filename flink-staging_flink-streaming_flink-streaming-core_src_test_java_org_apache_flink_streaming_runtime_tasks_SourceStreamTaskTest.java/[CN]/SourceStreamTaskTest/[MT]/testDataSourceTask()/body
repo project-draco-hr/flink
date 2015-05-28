@@ -1,0 +1,51 @@
+{
+  final int NUM_ELEMENTS=100;
+  final int NUM_CHECKPOINTS=100;
+  final int NUM_CHECKPOINTERS=1;
+  final int CHECKPOINT_INTERVAL=5;
+  final int SOURCE_CHECKPOINT_DELAY=1000;
+  final int SOURCE_READ_DELAY=1;
+  List<Tuple2<Long,Integer>> outList=new ArrayList<Tuple2<Long,Integer>>();
+  super.initEnvironment(MEMORY_MANAGER_SIZE,NETWORK_BUFFER_SIZE);
+  StreamSource<Tuple2<Long,Integer>> sourceOperator=new StreamSource<Tuple2<Long,Integer>>(new MockSource(NUM_ELEMENTS,SOURCE_CHECKPOINT_DELAY,SOURCE_READ_DELAY));
+  final SourceStreamTask<Tuple2<Long,Integer>> sourceTask=new SourceStreamTask<Tuple2<Long,Integer>>();
+  TupleTypeInfo<Tuple2<Long,Integer>> typeInfo=new TupleTypeInfo<Tuple2<Long,Integer>>(BasicTypeInfo.LONG_TYPE_INFO,BasicTypeInfo.INT_TYPE_INFO);
+  TypeSerializer<Tuple2<Long,Integer>> serializer=typeInfo.createSerializer(new ExecutionConfig());
+  StreamRecordSerializer<Tuple2<Long,Integer>> streamSerializer=new StreamRecordSerializer<Tuple2<Long,Integer>>(typeInfo,new ExecutionConfig());
+  super.addOutput(outList,serializer);
+  StreamConfig streamConfig=super.getStreamConfig();
+  streamConfig.setStreamOperator(sourceOperator);
+  streamConfig.setChainStart();
+  streamConfig.setOutputSelectorWrapper(new BroadcastOutputSelectorWrapper<Object>());
+  streamConfig.setNumberOfOutputs(1);
+  List<StreamEdge> outEdgesInOrder=new LinkedList<StreamEdge>();
+  StreamNode sourceVertex=new StreamNode(null,0,sourceOperator,"source",new LinkedList<OutputSelector<?>>(),SourceStreamTask.class);
+  StreamNode targetVertexDummy=new StreamNode(null,1,sourceOperator,"target dummy",new LinkedList<OutputSelector<?>>(),SourceStreamTask.class);
+  outEdgesInOrder.add(new StreamEdge(sourceVertex,targetVertexDummy,0,new LinkedList<String>(),new BroadcastPartitioner<Object>()));
+  streamConfig.setOutEdgesInOrder(outEdgesInOrder);
+  streamConfig.setNonChainedOutputs(outEdgesInOrder);
+  streamConfig.setTypeSerializerOut1(streamSerializer);
+  streamConfig.setVertexID(0);
+  super.registerTask(sourceTask);
+  ExecutorService executor=Executors.newFixedThreadPool(10);
+  Future[] checkpointerResults=new Future[NUM_CHECKPOINTERS];
+  for (int i=0; i < NUM_CHECKPOINTERS; i++) {
+    checkpointerResults[i]=executor.submit(new Checkpointer(NUM_CHECKPOINTS,CHECKPOINT_INTERVAL,sourceTask));
+  }
+  try {
+    sourceTask.invoke();
+  }
+ catch (  Exception e) {
+    System.err.println(StringUtils.stringifyException(e));
+    Assert.fail("Invoke method caused exception.");
+  }
+  for (int i=0; i < NUM_CHECKPOINTERS; i++) {
+    if (!checkpointerResults[i].isDone()) {
+      checkpointerResults[i].cancel(true);
+    }
+    if (!checkpointerResults[i].isCancelled()) {
+      checkpointerResults[i].get();
+    }
+  }
+  Assert.assertEquals(NUM_ELEMENTS,outList.size());
+}
