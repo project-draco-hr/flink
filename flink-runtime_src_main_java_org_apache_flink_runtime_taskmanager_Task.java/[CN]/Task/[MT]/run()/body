@@ -99,18 +99,20 @@
       while (true) {
         ExecutionState current=this.executionState;
         if (current == ExecutionState.RUNNING || current == ExecutionState.DEPLOYING) {
-          if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.FAILED)) {
-            failureCause=t;
-            notifyObservers(ExecutionState.FAILED,t);
-            if (invokable != null && this.invokable != null && invokableHasBeenCanceled.compareAndSet(false,true)) {
-              try {
-                invokable.cancel();
-              }
- catch (              Throwable t2) {
-                LOG.error("Error while canceling task " + taskNameWithSubtask,t2);
-              }
+          if (t instanceof CancelTaskException) {
+            if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.CANCELED)) {
+              cancelInvokable();
+              notifyObservers(ExecutionState.CANCELED,null);
+              break;
             }
-            break;
+          }
+ else {
+            if (STATE_UPDATER.compareAndSet(this,current,ExecutionState.FAILED)) {
+              failureCause=t;
+              cancelInvokable();
+              notifyObservers(ExecutionState.FAILED,t);
+              break;
+            }
           }
         }
  else         if (current == ExecutionState.CANCELING) {
