@@ -1,17 +1,23 @@
 {
-  if (!parseParameters(args)) {
+  if (args.length < 3) {
+    System.err.println("Usage: KafkaProducerExample <host> <port> <topic>");
     return;
   }
+  final String host=args[0];
+  final int port=Integer.parseInt(args[1]);
+  final String topic=args[2];
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment().setParallelism(4);
-  @SuppressWarnings({"unused","serial"}) DataStream<String> stream1=env.addSource(new SourceFunction<String>(){
+  env.addSource(new SourceFunction<String>(){
+    private volatile boolean running=true;
     @Override public void run(    Object checkpointLock,    Collector<String> collector) throws Exception {
-      for (int i=0; i < 20; i++) {
+      for (int i=0; i < 20 && running; i++) {
         collector.collect("message #" + i);
         Thread.sleep(100L);
       }
       collector.collect("q");
     }
     @Override public void cancel(){
+      running=false;
     }
   }
 ).addSink(new KafkaSink<String>(host + ":" + port,topic,new JavaDefaultStringSchema())).setParallelism(3);
