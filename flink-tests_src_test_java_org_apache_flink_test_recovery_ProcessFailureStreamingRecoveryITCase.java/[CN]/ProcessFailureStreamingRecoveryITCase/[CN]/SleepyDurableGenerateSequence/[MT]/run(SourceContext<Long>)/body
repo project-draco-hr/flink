@@ -1,0 +1,23 @@
+{
+  final Object checkpointLock=sourceCtx.getCheckpointLock();
+  StreamingRuntimeContext runtimeCtx=(StreamingRuntimeContext)getRuntimeContext();
+  final long stepSize=runtimeCtx.getNumberOfParallelSubtasks();
+  final long congruence=runtimeCtx.getIndexOfThisSubtask();
+  final long toCollect=(end % stepSize > congruence) ? (end / stepSize + 1) : (end / stepSize);
+  final File proceedFile=new File(coordinateDir,PROCEED_MARKER_FILE);
+  boolean checkForProceedFile=true;
+  while (isRunning && collected < toCollect) {
+    if (checkForProceedFile) {
+      if (proceedFile.exists()) {
+        checkForProceedFile=false;
+      }
+ else {
+        Thread.sleep(SLEEP_TIME);
+      }
+    }
+synchronized (checkpointLock) {
+      sourceCtx.collect(collected * stepSize + congruence);
+      collected++;
+    }
+  }
+}
