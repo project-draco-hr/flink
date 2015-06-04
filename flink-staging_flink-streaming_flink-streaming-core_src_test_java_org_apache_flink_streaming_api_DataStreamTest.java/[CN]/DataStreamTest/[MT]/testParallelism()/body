@@ -1,0 +1,45 @@
+{
+  StreamExecutionEnvironment env=new TestStreamEnvironment(10,MEMORYSIZE);
+  StreamGraph graph=env.getStreamGraph();
+  DataStreamSource<Tuple2<Long,Long>> src=env.fromElements(new Tuple2<Long,Long>(0L,0L));
+  SingleOutputStreamOperator<Long,?> map=src.map(new MapFunction<Tuple2<Long,Long>,Long>(){
+    @Override public Long map(    Tuple2<Long,Long> value) throws Exception {
+      return null;
+    }
+  }
+);
+  DataStream<Long> windowed=map.window(Count.of(10)).foldWindow(0L,new FoldFunction<Long,Long>(){
+    @Override public Long fold(    Long accumulator,    Long value) throws Exception {
+      return null;
+    }
+  }
+).flatten();
+  DataStreamSink<Long> sink=map.addSink(new SinkFunction<Long>(){
+    @Override public void invoke(    Long value) throws Exception {
+    }
+  }
+);
+  assertEquals(1,graph.getStreamNode(src.getId()).getParallelism());
+  assertEquals(10,graph.getStreamNode(map.getId()).getParallelism());
+  assertEquals(10,graph.getStreamNode(windowed.getId()).getParallelism());
+  assertEquals(10,graph.getStreamNode(sink.getId()).getParallelism());
+  env.setParallelism(7);
+  assertEquals(1,graph.getStreamNode(src.getId()).getParallelism());
+  assertEquals(7,graph.getStreamNode(map.getId()).getParallelism());
+  assertEquals(7,graph.getStreamNode(windowed.getId()).getParallelism());
+  assertEquals(7,graph.getStreamNode(sink.getId()).getParallelism());
+  try {
+    src.setParallelism(3);
+    fail();
+  }
+ catch (  IllegalArgumentException success) {
+  }
+  DataStreamSource<Long> parallelSource=env.generateParallelSequence(0,0);
+  assertEquals(7,graph.getStreamNode(parallelSource.getId()).getParallelism());
+  parallelSource.setParallelism(3);
+  assertEquals(3,graph.getStreamNode(parallelSource.getId()).getParallelism());
+  map.setParallelism(2);
+  assertEquals(2,graph.getStreamNode(map.getId()).getParallelism());
+  sink.setParallelism(4);
+  assertEquals(4,graph.getStreamNode(sink.getId()).getParallelism());
+}
