@@ -1,27 +1,29 @@
 {
 synchronized (lock) {
-    if (simpleSlot.isAlive()) {
-      throw new IllegalStateException("slot is still alive");
-    }
-    if (simpleSlot.markReleased()) {
-      AbstractID groupID=simpleSlot.getGroupID();
-      SharedSlot parent=simpleSlot.getParent();
-      if (groupID != null && !allSlots.contains(parent)) {
-        throw new IllegalArgumentException("Slot was not associated with this SlotSharingGroup before.");
+    if (simpleSlot.markCancelled()) {
+      if (simpleSlot.isAlive()) {
+        throw new IllegalStateException("slot is still alive");
       }
-      int parentRemaining=parent.removeDisposedChildSlot(simpleSlot);
-      if (parentRemaining > 0) {
-        if (groupID != null) {
-          Map<Instance,List<SharedSlot>> slotsForJid=availableSlotsPerJid.get(groupID);
-          if (slotsForJid == null) {
-            throw new IllegalStateException("Trying to return a slot for group " + groupID + " when available slots indicated that all slots were available.");
-          }
-          putIntoMultiMap(slotsForJid,parent.getInstance(),parent);
+      if (simpleSlot.markReleased()) {
+        AbstractID groupID=simpleSlot.getGroupID();
+        SharedSlot parent=simpleSlot.getParent();
+        if (groupID != null && !allSlots.contains(parent)) {
+          throw new IllegalArgumentException("Slot was not associated with this SlotSharingGroup before.");
         }
-      }
+        int parentRemaining=parent.removeDisposedChildSlot(simpleSlot);
+        if (parentRemaining > 0) {
+          if (groupID != null) {
+            Map<Instance,List<SharedSlot>> slotsForJid=availableSlotsPerJid.get(groupID);
+            if (slotsForJid == null) {
+              throw new IllegalStateException("Trying to return a slot for group " + groupID + " when available slots indicated that all slots were available.");
+            }
+            putIntoMultiMap(slotsForJid,parent.getInstance(),parent);
+          }
+        }
  else {
-        parent.markCancelled();
-        internalDisposeEmptySharedSlot(parent);
+          parent.markCancelled();
+          internalDisposeEmptySharedSlot(parent);
+        }
       }
     }
   }
