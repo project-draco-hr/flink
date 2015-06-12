@@ -1,0 +1,25 @@
+{
+  DataSet<Tuple2<Integer,Long>> elementCount=countElements(input);
+  return input.mapPartition(new RichMapPartitionFunction<T,Tuple2<Long,T>>(){
+    long start=0;
+    @Override public void open(    Configuration parameters) throws Exception {
+      super.open(parameters);
+      List<Tuple2<Integer,Long>> offsets=getRuntimeContext().getBroadcastVariable("counts");
+      Collections.sort(offsets,new Comparator<Tuple2<Integer,Long>>(){
+        @Override public int compare(        Tuple2<Integer,Long> o1,        Tuple2<Integer,Long> o2){
+          return compareInts(o1.f0,o2.f0);
+        }
+      }
+);
+      for (int i=0; i < getRuntimeContext().getIndexOfThisSubtask(); i++) {
+        start+=offsets.get(i).f1;
+      }
+    }
+    @Override public void mapPartition(    Iterable<T> values,    Collector<Tuple2<Long,T>> out) throws Exception {
+      for (      T value : values) {
+        out.collect(new Tuple2<Long,T>(start++,value));
+      }
+    }
+  }
+).withBroadcastSet(elementCount,"counts");
+}
