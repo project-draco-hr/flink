@@ -3,8 +3,22 @@
   if (nonSpanningRemaining >= 4) {
     int len=this.nonSpanningWrapper.readInt();
     if (len <= nonSpanningRemaining - 4) {
-      target.read(this.nonSpanningWrapper);
-      return (this.nonSpanningWrapper.remaining() == 0) ? DeserializationResult.LAST_RECORD_FROM_BUFFER : DeserializationResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+      try {
+        target.read(this.nonSpanningWrapper);
+        int remaining=this.nonSpanningWrapper.remaining();
+        if (remaining > 0) {
+          return DeserializationResult.INTERMEDIATE_RECORD_FROM_BUFFER;
+        }
+ else         if (remaining == 0) {
+          return DeserializationResult.LAST_RECORD_FROM_BUFFER;
+        }
+ else {
+          throw new IndexOutOfBoundsException("Remaining = " + remaining);
+        }
+      }
+ catch (      IndexOutOfBoundsException e) {
+        throw new IOException(BROKEN_SERIALIZATION_ERROR_MESSAGE,e);
+      }
     }
  else {
       this.spanningWrapper.initializeWithPartialRecord(this.nonSpanningWrapper,len);

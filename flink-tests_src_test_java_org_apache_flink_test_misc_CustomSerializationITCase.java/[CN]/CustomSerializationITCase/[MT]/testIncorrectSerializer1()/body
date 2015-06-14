@@ -1,0 +1,23 @@
+{
+  try {
+    ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
+    env.setParallelism(PARLLELISM);
+    env.getConfig().disableSysoutLogging();
+    env.generateSequence(1,10 * PARLLELISM).map(new MapFunction<Long,ConsumesTooMuch>(){
+      @Override public ConsumesTooMuch map(      Long value) throws Exception {
+        return new ConsumesTooMuch();
+      }
+    }
+).rebalance().output(new DiscardingOutputFormat<ConsumesTooMuch>());
+    env.execute();
+  }
+ catch (  ProgramInvocationException e) {
+    Throwable rootCause=e.getCause().getCause();
+    assertTrue(rootCause instanceof IOException);
+    assertTrue(rootCause.getMessage().contains("broken serialization"));
+  }
+catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
