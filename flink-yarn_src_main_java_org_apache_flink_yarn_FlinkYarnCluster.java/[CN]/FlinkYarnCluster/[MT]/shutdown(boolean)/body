@@ -5,14 +5,23 @@
   if (hasBeenShutDown.getAndSet(true)) {
     return;
   }
-  if (removeShutdownHook) {
+  try {
     Runtime.getRuntime().removeShutdownHook(clientShutdownHook);
+  }
+ catch (  IllegalStateException e) {
   }
   if (actorSystem != null) {
     LOG.info("Sending shutdown request to the Application Master");
     if (applicationClient != ActorRef.noSender()) {
       try {
-        Future<Object> response=Patterns.ask(applicationClient,new Messages.StopYarnSession(FinalApplicationStatus.SUCCEEDED,"Flink YARN Client requested shutdown"),new Timeout(akkaDuration));
+        FinalApplicationStatus finalStatus;
+        if (failApplication) {
+          finalStatus=FinalApplicationStatus.FAILED;
+        }
+ else {
+          finalStatus=FinalApplicationStatus.SUCCEEDED;
+        }
+        Future<Object> response=Patterns.ask(applicationClient,new Messages.StopYarnSession(finalStatus,"Flink YARN Client requested shutdown"),new Timeout(akkaDuration));
         Await.ready(response,akkaDuration);
       }
  catch (      Exception e) {
