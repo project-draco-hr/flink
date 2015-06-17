@@ -3,34 +3,31 @@
     return;
   }
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Vertex<Long,Double>> vertices=getVerticesDataSet(env);
-  DataSet<Edge<Long,Double>> edges=getEdgesDataSet(env);
-  DataSet<Edge<Long,Double>> edgesInSSSP=getEdgesinSSSPDataSet(env);
   Edge<Long,Double> edgeToBeRemoved=getEdgeToBeRemoved();
-  Graph<Long,Double,Double> graph=Graph.fromDataSet(vertices,edges,env);
-  Graph<Long,Double,Double> ssspGraph=Graph.fromDataSet(vertices,edgesInSSSP,env);
+  Graph<Long,Double,Double> graph=IncrementalSSSP.getGraph(env);
+  Graph<Long,Double,Double> ssspGraph=IncrementalSSSP.getSSSPGraph(env);
   graph.removeEdge(edgeToBeRemoved);
   VertexCentricConfiguration parameters=new VertexCentricConfiguration();
-  if (isInSSSP(edgeToBeRemoved,edgesInSSSP)) {
+  if (isInSSSP(edgeToBeRemoved,ssspGraph.getEdges())) {
     parameters.setDirection(EdgeDirection.IN);
     parameters.setOptDegrees(true);
     Graph<Long,Double,Double> result=ssspGraph.runVertexCentricIteration(new VertexDistanceUpdater(),new InvalidateMessenger(edgeToBeRemoved),maxIterations,parameters);
     DataSet<Vertex<Long,Double>> resultedVertices=result.getVertices();
     if (fileOutput) {
       resultedVertices.writeAsCsv(outputPath,"\n",",");
-      env.execute("Incremental SSSP Example");
     }
  else {
       resultedVertices.print();
     }
+    env.execute("Incremental SSSP Example");
   }
  else {
     if (fileOutput) {
-      vertices.writeAsCsv(outputPath,"\n",",");
-      env.execute("Incremental SSSP Example");
+      graph.getVertices().writeAsCsv(outputPath,"\n",",");
     }
  else {
-      vertices.print();
+      graph.getVertices().print();
     }
+    env.execute("Incremental SSSP Example");
   }
 }
