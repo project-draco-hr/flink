@@ -3,33 +3,30 @@ synchronized (checkpointLock) {
     if (isRunning) {
       try {
         LOG.debug("Starting checkpoint {} on task {}",checkpointId,getName());
-        StateHandle<Serializable> state;
+        List<Map<String,PartitionedStateHandle>> chainedStates=new ArrayList<Map<String,PartitionedStateHandle>>();
+        StateHandle<Serializable> stateHandle;
         try {
-          Serializable userState=null;
           if (streamOperator instanceof StatefulStreamOperator) {
-            userState=((StatefulStreamOperator<?>)streamOperator).getStateSnapshotFromFunction(checkpointId,timestamp);
+            chainedStates.add(((StatefulStreamOperator<?>)streamOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
           }
           if (hasChainedOperators) {
-            List<Serializable> chainedStates=new ArrayList<Serializable>();
-            chainedStates.add(userState);
             for (            OneInputStreamOperator<?,?> chainedOperator : outputHandler.getChainedOperators()) {
               if (chainedOperator instanceof StatefulStreamOperator) {
                 chainedStates.add(((StatefulStreamOperator<?>)chainedOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
               }
             }
-            userState=CollectionUtils.exists(chainedStates,NotNullPredicate.INSTANCE) ? (Serializable)chainedStates : null;
           }
-          state=userState == null ? null : stateHandleProvider.createStateHandle(userState);
+          stateHandle=CollectionUtils.exists(chainedStates,NotNullPredicate.INSTANCE) ? new WrapperStateHandle(chainedStates) : null;
         }
  catch (        Exception e) {
           throw new Exception("Error while drawing snapshot of the user state.",e);
         }
         outputHandler.broadcastBarrier(checkpointId,timestamp);
-        if (state == null) {
+        if (stateHandle == null) {
           getEnvironment().acknowledgeCheckpoint(checkpointId);
         }
  else {
-          getEnvironment().acknowledgeCheckpoint(checkpointId,state);
+          getEnvironment().acknowledgeCheckpoint(checkpointId,stateHandle);
         }
       }
  catch (      Exception e) {

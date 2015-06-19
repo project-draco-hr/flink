@@ -1,12 +1,26 @@
 {
 synchronized (checkpointLock) {
-    if (streamOperator instanceof StatefulStreamOperator) {
-      ((StatefulStreamOperator)streamOperator).confirmCheckpointCompleted(checkpointId,state.deserializeValue(getUserCodeClassLoader()));
+    List<Map<String,PartitionedStateHandle>> chainedStates=(List<Map<String,PartitionedStateHandle>>)stateHandle.deserializeValue(getUserCodeClassLoader()).getState();
+    Map<String,PartitionedStateHandle> headState=chainedStates.get(0);
+    if (headState != null) {
+      if (streamOperator instanceof StatefulStreamOperator) {
+        for (        Entry<String,PartitionedStateHandle> stateEntry : headState.entrySet()) {
+          for (          StateHandle<Serializable> handle : stateEntry.getValue().getState().values()) {
+            ((StatefulStreamOperator)streamOperator).confirmCheckpointCompleted(checkpointId,stateEntry.getKey(),handle);
+          }
+        }
+      }
     }
-    if (hasChainedOperators) {
-      for (      OneInputStreamOperator<?,?> chainedOperator : outputHandler.getChainedOperators()) {
+    for (int i=1; i < chainedStates.size(); i++) {
+      Map<String,PartitionedStateHandle> chainedState=chainedStates.get(i);
+      if (chainedState != null) {
+        StreamOperator<?> chainedOperator=outputHandler.getChainedOperators().get(i - 1);
         if (chainedOperator instanceof StatefulStreamOperator) {
-          ((StatefulStreamOperator)chainedOperator).confirmCheckpointCompleted(checkpointId,state.deserializeValue(getUserCodeClassLoader()));
+          for (          Entry<String,PartitionedStateHandle> stateEntry : chainedState.entrySet()) {
+            for (            StateHandle<Serializable> handle : stateEntry.getValue().getState().values()) {
+              ((StatefulStreamOperator)chainedOperator).confirmCheckpointCompleted(checkpointId,stateEntry.getKey(),handle);
+            }
+          }
         }
       }
     }
