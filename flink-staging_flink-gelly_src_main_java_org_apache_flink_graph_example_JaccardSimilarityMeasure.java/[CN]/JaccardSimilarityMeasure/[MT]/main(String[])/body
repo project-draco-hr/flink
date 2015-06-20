@@ -4,21 +4,27 @@
   }
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
   DataSet<Edge<Long,Double>> edges=getEdgesDataSet(env);
-  Graph<Long,NullValue,Double> graph=Graph.fromDataSet(edges,env);
-  DataSet<Vertex<Long,HashSet<Long>>> verticesWithNeighbors=graph.groupReduceOnEdges(new GatherNeighbors(),EdgeDirection.ALL);
-  Graph<Long,HashSet<Long>,Double> graphWithVertexValues=Graph.fromDataSet(verticesWithNeighbors,edges,env);
-  DataSet<Tuple3<Long,Long,Double>> edgesWithJaccardWeight=graphWithVertexValues.getTriplets().map(new WeighEdgesMapper());
-  DataSet<Edge<Long,Double>> result=graphWithVertexValues.joinWithEdges(edgesWithJaccardWeight,new MapFunction<Tuple2<Double,Double>,Double>(){
-    @Override public Double map(    Tuple2<Double,Double> value) throws Exception {
-      return value.f1;
+  Graph<Long,HashSet<Long>,Double> graph=Graph.fromDataSet(edges,new MapFunction<Long,HashSet<Long>>(){
+    @Override public HashSet<Long> map(    Long id) throws Exception {
+      HashSet<Long> neighbors=new HashSet<Long>();
+      neighbors.add(id);
+      return new HashSet<Long>(neighbors);
     }
   }
-).getEdges();
+,env);
+  DataSet<Tuple2<Long,HashSet<Long>>> computedNeighbors=graph.reduceOnNeighbors(new GatherNeighbors(),EdgeDirection.ALL);
+  Graph<Long,HashSet<Long>,Double> graphWithVertexValues=graph.joinWithVertices(computedNeighbors,new MapFunction<Tuple2<HashSet<Long>,HashSet<Long>>,HashSet<Long>>(){
+    @Override public HashSet<Long> map(    Tuple2<HashSet<Long>,HashSet<Long>> tuple2) throws Exception {
+      return tuple2.f1;
+    }
+  }
+);
+  DataSet<Edge<Long,Double>> edgesWithJaccardValues=graphWithVertexValues.getTriplets().map(new ComputeJaccard());
   if (fileOutput) {
-    result.writeAsCsv(outputPath,"\n",",");
+    edgesWithJaccardValues.writeAsCsv(outputPath,"\n",",");
     env.execute("Executing Jaccard Similarity Measure");
   }
  else {
-    result.print();
+    edgesWithJaccardValues.print();
   }
 }
