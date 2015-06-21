@@ -4,16 +4,14 @@ synchronized (checkpointLock) {
       try {
         LOG.debug("Starting checkpoint {} on task {}",checkpointId,getName());
         List<Map<String,PartitionedStateHandle>> chainedStates=new ArrayList<Map<String,PartitionedStateHandle>>();
-        StateHandle<Serializable> stateHandle;
+        WrapperStateHandle stateHandle;
         try {
-          if (streamOperator instanceof StatefulStreamOperator) {
-            chainedStates.add(((StatefulStreamOperator<?>)streamOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
-          }
-          if (hasChainedOperators) {
-            for (            OneInputStreamOperator<?,?> chainedOperator : outputHandler.getChainedOperators()) {
-              if (chainedOperator instanceof StatefulStreamOperator) {
-                chainedStates.add(((StatefulStreamOperator<?>)chainedOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
-              }
+          for (          StreamOperator<?> chainedOperator : outputHandler.getChainedOperators()) {
+            if (chainedOperator instanceof StatefulStreamOperator) {
+              chainedStates.add(((StatefulStreamOperator<?>)chainedOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
+            }
+ else {
+              chainedStates.add(null);
             }
           }
           stateHandle=CollectionUtils.exists(chainedStates,NotNullPredicate.INSTANCE) ? new WrapperStateHandle(chainedStates) : null;
