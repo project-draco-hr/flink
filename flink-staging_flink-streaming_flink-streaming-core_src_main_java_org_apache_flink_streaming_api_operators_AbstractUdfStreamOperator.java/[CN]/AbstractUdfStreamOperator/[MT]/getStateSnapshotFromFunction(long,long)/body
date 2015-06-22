@@ -1,13 +1,25 @@
 {
   Map<String,StreamOperatorState> operatorStates=runtimeContext.getOperatorStates();
+  Map<String,PartitionedStateHandle> operatorStateSnapshots;
   if (operatorStates.isEmpty()) {
-    return null;
+    operatorStateSnapshots=null;
   }
  else {
     Map<String,PartitionedStateHandle> snapshots=new HashMap<String,PartitionedStateHandle>();
     for (    Entry<String,StreamOperatorState> state : operatorStates.entrySet()) {
       snapshots.put(state.getKey(),new PartitionedStateHandle(state.getValue().snapshotState(checkpointId,timestamp)));
     }
-    return snapshots;
+    operatorStateSnapshots=snapshots;
+  }
+  StateHandle<Serializable> checkpointedSnapshot=null;
+  if (userFunction instanceof Checkpointed) {
+    StateHandleProvider<Serializable> provider=runtimeContext.getStateHandleProvider();
+    checkpointedSnapshot=provider.createStateHandle(((Checkpointed)userFunction).snapshotState(checkpointId,timestamp));
+  }
+  if (operatorStateSnapshots != null || checkpointedSnapshot != null) {
+    return new Tuple2<StateHandle<Serializable>,Map<String,PartitionedStateHandle>>(checkpointedSnapshot,operatorStateSnapshots);
+  }
+ else {
+    return null;
   }
 }
