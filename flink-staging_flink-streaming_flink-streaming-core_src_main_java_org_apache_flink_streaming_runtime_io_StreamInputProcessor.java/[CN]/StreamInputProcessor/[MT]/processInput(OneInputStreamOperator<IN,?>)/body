@@ -1,0 +1,70 @@
+{
+  if (isFinished) {
+    return false;
+  }
+  while (true) {
+    if (currentRecordDeserializer != null) {
+      DeserializationResult result=currentRecordDeserializer.getNextRecord(deserializationDelegate);
+      if (result.isBufferConsumed()) {
+        currentRecordDeserializer.getCurrentBuffer().recycle();
+        currentRecordDeserializer=null;
+      }
+      if (result.isFullRecord()) {
+        Object recordOrWatermark=deserializationDelegate.getInstance();
+        if (recordOrWatermark instanceof Watermark) {
+          Watermark mark=(Watermark)recordOrWatermark;
+          long watermarkMillis=mark.getTimestamp();
+          if (watermarkMillis > watermarks[currentChannel]) {
+            watermarks[currentChannel]=watermarkMillis;
+            long newMinWatermark=Long.MAX_VALUE;
+            for (            long watermark : watermarks) {
+              if (watermark < newMinWatermark) {
+                newMinWatermark=watermark;
+              }
+            }
+            if (newMinWatermark > lastEmittedWatermark) {
+              lastEmittedWatermark=newMinWatermark;
+              streamOperator.processWatermark(new Watermark(lastEmittedWatermark));
+            }
+          }
+          continue;
+        }
+ else {
+          StreamRecord<IN> record=(StreamRecord<IN>)deserializationDelegate.getInstance();
+          StreamingRuntimeContext ctx=streamOperator.getRuntimeContext();
+          if (ctx != null) {
+            ctx.setNextInput(record);
+          }
+          streamOperator.processElement(record);
+          return true;
+        }
+      }
+    }
+    final BufferOrEvent bufferOrEvent=barrierBuffer.getNextNonBlocked();
+    if (bufferOrEvent.isBuffer()) {
+      currentChannel=bufferOrEvent.getChannelIndex();
+      currentRecordDeserializer=recordDeserializers[currentChannel];
+      currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+    }
+ else {
+      final AbstractEvent event=bufferOrEvent.getEvent();
+      if (event instanceof CheckpointBarrier) {
+        barrierBuffer.processBarrier(bufferOrEvent);
+      }
+ else {
+        if (handleEvent(event)) {
+          if (inputGate.isFinished()) {
+            if (!barrierBuffer.isEmpty()) {
+              throw new RuntimeException("BarrierBuffer should be empty at this point");
+            }
+            isFinished=true;
+            return false;
+          }
+ else           if (hasReachedEndOfSuperstep()) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+}

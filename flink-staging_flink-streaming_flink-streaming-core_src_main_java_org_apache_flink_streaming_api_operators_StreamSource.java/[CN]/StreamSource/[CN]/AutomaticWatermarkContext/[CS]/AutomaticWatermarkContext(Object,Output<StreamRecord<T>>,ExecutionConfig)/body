@@ -1,0 +1,22 @@
+{
+  this.lockingObject=lockingObjectParam;
+  this.output=outputParam;
+  this.reuse=new StreamRecord<T>(null);
+  watermarkInterval=executionConfig.getAutoWatermarkInterval();
+  ScheduledExecutorService service=Executors.newScheduledThreadPool(2);
+  watermarkTimer=service.scheduleAtFixedRate(new Runnable(){
+    @Override public void run(){
+      long currentTime=System.currentTimeMillis();
+      long watermarkTime=currentTime - (currentTime % watermarkInterval);
+      if (watermarkTime - lastWatermarkTime >= watermarkInterval) {
+synchronized (lockingObject) {
+          if (watermarkTime - lastWatermarkTime >= watermarkInterval) {
+            output.emitWatermark(new Watermark(watermarkTime));
+            lastWatermarkTime=watermarkTime;
+          }
+        }
+      }
+    }
+  }
+,0,watermarkInterval,TimeUnit.MILLISECONDS);
+}

@@ -1,0 +1,18 @@
+{
+  final OneInputStreamTask<String,String> mapTask=new OneInputStreamTask<String,String>();
+  final OneInputStreamTaskTestHarness<String,String> testHarness=new OneInputStreamTaskTestHarness<String,String>(mapTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  StreamMap<String,String> mapOperator=new StreamMap<String,String>(new TestOpenCloseMapFunction());
+  streamConfig.setStreamOperator(mapOperator);
+  long initialTime=0L;
+  ConcurrentLinkedQueue expectedOutput=new ConcurrentLinkedQueue();
+  testHarness.invoke();
+  testHarness.processElement(new StreamRecord<String>("Hello",initialTime + 1));
+  testHarness.processElement(new StreamRecord<String>("Ciao",initialTime + 2));
+  expectedOutput.add(new StreamRecord<String>("Hello",initialTime + 1));
+  expectedOutput.add(new StreamRecord<String>("Ciao",initialTime + 2));
+  testHarness.endInput();
+  testHarness.waitForTaskCompletion();
+  Assert.assertTrue("RichFunction methods where not called.",TestOpenCloseMapFunction.closeCalled);
+  TestHarnessUtil.assertOutputEquals("Output was not correct.",expectedOutput,testHarness.getOutput());
+}

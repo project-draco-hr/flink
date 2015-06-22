@@ -1,0 +1,70 @@
+{
+  if (isFinished) {
+    return false;
+  }
+  while (true) {
+    if (currentRecordDeserializer != null) {
+      DeserializationResult result;
+      if (currentChannel < numInputChannels1) {
+        result=currentRecordDeserializer.getNextRecord(deserializationDelegate1);
+      }
+ else {
+        result=currentRecordDeserializer.getNextRecord(deserializationDelegate2);
+      }
+      if (result.isBufferConsumed()) {
+        currentRecordDeserializer.getCurrentBuffer().recycle();
+        currentRecordDeserializer=null;
+      }
+      if (result.isFullRecord()) {
+        if (currentChannel < numInputChannels1) {
+          Object recordOrWatermark=deserializationDelegate1.getInstance();
+          if (recordOrWatermark instanceof Watermark) {
+            handleWatermark(streamOperator,(Watermark)recordOrWatermark,currentChannel);
+            continue;
+          }
+ else {
+            streamOperator.processElement1((StreamRecord<IN1>)deserializationDelegate1.getInstance());
+            return true;
+          }
+        }
+ else {
+          Object recordOrWatermark=deserializationDelegate2.getInstance();
+          if (recordOrWatermark instanceof Watermark) {
+            handleWatermark(streamOperator,(Watermark)recordOrWatermark,currentChannel);
+            continue;
+          }
+ else {
+            streamOperator.processElement2((StreamRecord<IN2>)deserializationDelegate2.getInstance());
+            return true;
+          }
+        }
+      }
+    }
+    final BufferOrEvent bufferOrEvent=barrierBuffer.getNextNonBlocked();
+    if (bufferOrEvent.isBuffer()) {
+      currentChannel=bufferOrEvent.getChannelIndex();
+      currentRecordDeserializer=recordDeserializers[currentChannel];
+      currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+    }
+ else {
+      final AbstractEvent event=bufferOrEvent.getEvent();
+      if (event instanceof CheckpointBarrier) {
+        barrierBuffer.processBarrier(bufferOrEvent);
+      }
+ else {
+        if (handleEvent(event)) {
+          if (inputGate.isFinished()) {
+            if (!barrierBuffer.isEmpty()) {
+              throw new RuntimeException("BarrierBuffer should be empty at this point");
+            }
+            isFinished=true;
+            return false;
+          }
+ else           if (hasReachedEndOfSuperstep()) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  final long NUM_STRINGS=10000000L;
+  assertTrue("Broken test setup",NUM_STRINGS % 40 == 0);
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getJobManagerRPCPort());
+    env.setParallelism(PARALLELISM);
+    env.enableCheckpointing(500);
+    env.getConfig().disableSysoutLogging();
+    DataStream<String> stream=env.addSource(new StringGeneratingSourceFunction(NUM_STRINGS));
+    stream.filter(new StringRichFilterFunction()).connect(stream).flatMap(new LeftIdentityCoRichFlatMapFunction()).map(new StringPrefixCountRichMapFunction()).startNewChain().map(new StatefulCounterFunction()).groupBy("prefix").reduce(new OnceFailingReducer(NUM_STRINGS)).addSink(new RichSinkFunction<PrefixCount>(){
+      private Map<Character,Long> counts=new HashMap<Character,Long>();
+      @Override public void invoke(      PrefixCount value){
+        Character first=value.prefix.charAt(0);
+        Long previous=counts.get(first);
+        if (previous == null) {
+          counts.put(first,value.count);
+        }
+ else {
+          counts.put(first,Math.max(previous,value.count));
+        }
+      }
+    }
+);
+    env.execute();
+    long filterSum=0;
+    for (    long l : StringRichFilterFunction.counts) {
+      filterSum+=l;
+    }
+    long coMapSum=0;
+    for (    long l : LeftIdentityCoRichFlatMapFunction.counts) {
+      coMapSum+=l;
+    }
+    long mapSum=0;
+    for (    long l : StringPrefixCountRichMapFunction.counts) {
+      mapSum+=l;
+    }
+    long countSum=0;
+    for (    long l : StatefulCounterFunction.counts) {
+      countSum+=l;
+    }
+    if (!StringPrefixCountRichMapFunction.restoreCalledAtLeastOnce) {
+      Assert.fail("Restore was never called on counting Map function.");
+    }
+    if (!LeftIdentityCoRichFlatMapFunction.restoreCalledAtLeastOnce) {
+      Assert.fail("Restore was never called on counting CoMap function.");
+    }
+    assertEquals(NUM_STRINGS,filterSum);
+    assertEquals(NUM_STRINGS,coMapSum);
+    assertEquals(NUM_STRINGS,mapSum);
+    assertEquals(NUM_STRINGS,countSum);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

@@ -1,0 +1,26 @@
+{
+  StreamGroupedReduce<Integer> operator=new StreamGroupedReduce<Integer>(new MyReducer(),new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+);
+  OneInputStreamOperatorTestHarness<Integer,Integer> testHarness=new OneInputStreamOperatorTestHarness<Integer,Integer>(operator);
+  long initialTime=0L;
+  ConcurrentLinkedQueue expectedOutput=new ConcurrentLinkedQueue();
+  testHarness.open();
+  testHarness.processElement(new StreamRecord<Integer>(1,initialTime + 1));
+  testHarness.processElement(new StreamRecord<Integer>(1,initialTime + 2));
+  testHarness.processWatermark(new Watermark(initialTime + 2));
+  testHarness.processElement(new StreamRecord<Integer>(2,initialTime + 3));
+  testHarness.processElement(new StreamRecord<Integer>(2,initialTime + 4));
+  testHarness.processElement(new StreamRecord<Integer>(3,initialTime + 5));
+  expectedOutput.add(new StreamRecord<Integer>(1,initialTime + 1));
+  expectedOutput.add(new StreamRecord<Integer>(2,initialTime + 2));
+  expectedOutput.add(new Watermark(initialTime + 2));
+  expectedOutput.add(new StreamRecord<Integer>(2,initialTime + 3));
+  expectedOutput.add(new StreamRecord<Integer>(4,initialTime + 4));
+  expectedOutput.add(new StreamRecord<Integer>(3,initialTime + 5));
+  TestHarnessUtil.assertOutputEquals("Output was not correct.",expectedOutput,testHarness.getOutput());
+}
