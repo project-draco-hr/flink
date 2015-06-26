@@ -2,17 +2,18 @@
   LocalFlinkMiniCluster cluster=null;
   try {
     cluster=new LocalFlinkMiniCluster(new Configuration(),true);
+    cluster.start();
     JobVertex vertex=new JobVertex("Test Vertex");
     vertex.setInvokableClass(Tasks.NoOpInvokable.class);
     List<JobVertexID> vertexIdList=Collections.singletonList(vertex.getID());
     JobGraph testGraph=new JobGraph("test job",vertex);
     testGraph.setSnapshotSettings(new JobSnapshottingSettings(vertexIdList,vertexIdList,vertexIdList,5000));
-    ActorGateway jobManager=cluster.getJobManagerGateway();
+    ActorGateway jmGateway=cluster.getLeaderGateway(TestingUtils.TESTING_DURATION());
     FiniteDuration timeout=new FiniteDuration(60,TimeUnit.SECONDS);
-    JobManagerMessages.SubmitJob submitMessage=new JobManagerMessages.SubmitJob(testGraph,false);
-    Future<Object> submitFuture=jobManager.ask(submitMessage,timeout);
+    JobManagerMessages.SubmitJob submitMessage=new JobManagerMessages.SubmitJob(testGraph,ListeningBehaviour.EXECUTION_RESULT);
+    Future<Object> submitFuture=jmGateway.ask(submitMessage,timeout);
     Await.result(submitFuture,timeout);
-    Future<Object> jobRequestFuture=jobManager.ask(new JobManagerMessages.RequestJob(testGraph.getJobID()),timeout);
+    Future<Object> jobRequestFuture=jmGateway.ask(new JobManagerMessages.RequestJob(testGraph.getJobID()),timeout);
     ExecutionGraph graph=((JobManagerMessages.JobFound)Await.result(jobRequestFuture,timeout)).executionGraph();
     assertNotNull(graph);
     graph.waitUntilFinished();

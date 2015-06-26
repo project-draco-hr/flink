@@ -1,5 +1,6 @@
 {
   final FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
+  final FiniteDuration lookupTimeout=AkkaUtils.getLookupTimeout(configuration);
   ActorSystem actorSystem;
   try {
     actorSystem=JobClient.startJobClientActorSystem(configuration);
@@ -7,22 +8,28 @@
  catch (  Exception e) {
     throw new Exception("Could start client actor system.",e);
   }
-  ActorRef jobManager;
   try {
-    jobManager=JobManager.getJobManagerRemoteReference(jobManagerAddress,actorSystem,timeout);
-  }
- catch (  Exception e) {
-    throw new Exception("Error getting the remote actor reference for the job manager.",e);
-  }
-  Future<Object> response;
-  try {
-    ActorGateway jobManagerGateway=JobManager.getJobManagerGateway(jobManager,timeout);
-    response=jobManagerGateway.ask(new RequestAccumulatorResults(jobID),timeout);
-  }
- catch (  Exception e) {
-    throw new Exception("Failed to query the job manager gateway for accumulators.",e);
-  }
-  try {
+    ActorGateway jobManagerGateway;
+    LeaderRetrievalService leaderRetrievalService;
+    try {
+      leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(configuration);
+    }
+ catch (    Exception e) {
+      throw new ProgramInvocationException("Could not create the leader retrieval service.",e);
+    }
+    try {
+      jobManagerGateway=LeaderRetrievalUtils.retrieveLeaderGateway(leaderRetrievalService,actorSystem,lookupTimeout);
+    }
+ catch (    LeaderRetrievalException e) {
+      throw new ProgramInvocationException("Failed to retrieve JobManager gateway",e);
+    }
+    Future<Object> response;
+    try {
+      response=jobManagerGateway.ask(new RequestAccumulatorResults(jobID),timeout);
+    }
+ catch (    Exception e) {
+      throw new Exception("Failed to query the job manager gateway for accumulators.",e);
+    }
     Object result=Await.result(response,timeout);
     if (result instanceof AccumulatorResultsFound) {
       Map<String,SerializedValue<Object>> serializedAccumulators=((AccumulatorResultsFound)result).result();
@@ -32,11 +39,11 @@
       throw ((AccumulatorResultsErroneous)result).cause();
     }
  else {
-      LOG.warn("Failed to fetch accumulators for job {}.",jobID);
+      throw new Exception("Failed to fetch accumulators for the job " + jobID + ".");
     }
   }
- catch (  Exception e) {
-    LOG.error("Error occurred while fetching accumulators for {}",jobID,e);
+  finally {
+    actorSystem.shutdown();
+    actorSystem.awaitTermination();
   }
-  return Collections.emptyMap();
 }

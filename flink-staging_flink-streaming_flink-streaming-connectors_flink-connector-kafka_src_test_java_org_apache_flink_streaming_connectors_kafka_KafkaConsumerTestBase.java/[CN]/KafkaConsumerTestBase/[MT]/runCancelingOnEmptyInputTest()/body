@@ -1,38 +1,32 @@
 {
-  try {
-    final String topic="cancelingOnEmptyInputTopic";
-    final int parallelism=3;
-    createTestTopic(topic,parallelism,1);
-    final AtomicReference<Throwable> error=new AtomicReference<>();
-    final Runnable jobRunner=new Runnable(){
-      @Override public void run(){
-        try {
-          final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-          env.setParallelism(parallelism);
-          env.enableCheckpointing(100);
-          env.getConfig().disableSysoutLogging();
-          FlinkKafkaConsumer<String> source=getConsumer(topic,new JavaDefaultStringSchema(),standardProps);
-          env.addSource(source).addSink(new DiscardingSink<String>());
-          env.execute();
-        }
- catch (        Throwable t) {
-          error.set(t);
-        }
+  final String topic="cancelingOnEmptyInputTopic";
+  final int parallelism=3;
+  createTestTopic(topic,parallelism,1);
+  final AtomicReference<Throwable> error=new AtomicReference<>();
+  final Runnable jobRunner=new Runnable(){
+    @Override public void run(){
+      try {
+        final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+        env.setParallelism(parallelism);
+        env.enableCheckpointing(100);
+        env.getConfig().disableSysoutLogging();
+        FlinkKafkaConsumer<String> source=getConsumer(topic,new JavaDefaultStringSchema(),standardProps);
+        env.addSource(source).addSink(new DiscardingSink<String>());
+        env.execute();
+      }
+ catch (      Throwable t) {
+        error.set(t);
       }
     }
+  }
 ;
-    Thread runnerThread=new Thread(jobRunner,"program runner thread");
-    runnerThread.start();
-    Thread.sleep(2000);
-    JobManagerCommunicationUtils.cancelCurrentJob(flink.getJobManagerGateway());
-    runnerThread.join();
-    Throwable failueCause=error.get();
-    assertNotNull("program did not fail properly due to canceling",failueCause);
-    assertTrue(failueCause.getMessage().contains("Job was cancelled"));
-    deleteTestTopic(topic);
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
+  Thread runnerThread=new Thread(jobRunner,"program runner thread");
+  runnerThread.start();
+  Thread.sleep(2000);
+  JobManagerCommunicationUtils.cancelCurrentJob(flink.getLeaderGateway(timeout));
+  runnerThread.join();
+  Throwable failueCause=error.get();
+  assertNotNull("program did not fail properly due to canceling",failueCause);
+  assertTrue(failueCause.getMessage().contains("Job was cancelled"));
+  deleteTestTopic(topic);
 }

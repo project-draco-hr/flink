@@ -1,65 +1,59 @@
 {
-  try {
-    LOG.info("Starting runSimpleConcurrentProducerConsumerTopology()");
-    final String topic="concurrentProducerConsumerTopic";
-    final int parallelism=3;
-    final int elementsPerPartition=100;
-    final int totalElements=parallelism * elementsPerPartition;
-    createTestTopic(topic,parallelism,2);
-    final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-    env.setParallelism(parallelism);
-    env.setNumberOfExecutionRetries(0);
-    env.getConfig().disableSysoutLogging();
-    TypeInformation<Tuple2<Long,String>> longStringType=TypeInfoParser.parse("Tuple2<Long, String>");
-    TypeInformationSerializationSchema<Tuple2<Long,String>> sourceSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
-    TypeInformationSerializationSchema<Tuple2<Long,String>> sinkSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
-    DataStream<Tuple2<Long,String>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Long,String>>(){
-      private boolean running=true;
-      @Override public void run(      SourceContext<Tuple2<Long,String>> ctx){
-        int cnt=getRuntimeContext().getIndexOfThisSubtask() * elementsPerPartition;
-        int limit=cnt + elementsPerPartition;
-        while (running && cnt < limit) {
-          ctx.collect(new Tuple2<Long,String>(1000L + cnt,"kafka-" + cnt));
-          cnt++;
-        }
-      }
-      @Override public void cancel(){
-        running=false;
+  LOG.info("Starting runSimpleConcurrentProducerConsumerTopology()");
+  final String topic="concurrentProducerConsumerTopic";
+  final int parallelism=3;
+  final int elementsPerPartition=100;
+  final int totalElements=parallelism * elementsPerPartition;
+  createTestTopic(topic,parallelism,2);
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(parallelism);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  TypeInformation<Tuple2<Long,String>> longStringType=TypeInfoParser.parse("Tuple2<Long, String>");
+  TypeInformationSerializationSchema<Tuple2<Long,String>> sourceSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
+  TypeInformationSerializationSchema<Tuple2<Long,String>> sinkSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
+  DataStream<Tuple2<Long,String>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Long,String>>(){
+    private boolean running=true;
+    @Override public void run(    SourceContext<Tuple2<Long,String>> ctx){
+      int cnt=getRuntimeContext().getIndexOfThisSubtask() * elementsPerPartition;
+      int limit=cnt + elementsPerPartition;
+      while (running && cnt < limit) {
+        ctx.collect(new Tuple2<Long,String>(1000L + cnt,"kafka-" + cnt));
+        cnt++;
       }
     }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
 );
-    stream.addSink(new KafkaSink<Tuple2<Long,String>>(brokerConnectionStrings,topic,sinkSchema));
-    FlinkKafkaConsumer<Tuple2<Long,String>> source=getConsumer(topic,sourceSchema,standardProps);
-    DataStreamSource<Tuple2<Long,String>> consuming=env.addSource(source).setParallelism(parallelism);
-    consuming.addSink(new RichSinkFunction<Tuple2<Long,String>>(){
-      private int elCnt=0;
-      private BitSet validator=new BitSet(totalElements);
-      @Override public void invoke(      Tuple2<Long,String> value) throws Exception {
-        String[] sp=value.f1.split("-");
-        int v=Integer.parseInt(sp[1]);
-        assertEquals(value.f0 - 1000,(long)v);
-        assertFalse("Received tuple twice",validator.get(v));
-        validator.set(v);
-        elCnt++;
-        if (elCnt == totalElements) {
-          int nc;
-          if ((nc=validator.nextClearBit(0)) != totalElements) {
-            fail("The bitset was not set to 1 on all elements. Next clear:" + nc + " Set: "+ validator);
-          }
-          throw new SuccessException();
+  stream.addSink(new KafkaSink<Tuple2<Long,String>>(brokerConnectionStrings,topic,sinkSchema));
+  FlinkKafkaConsumer<Tuple2<Long,String>> source=getConsumer(topic,sourceSchema,standardProps);
+  DataStreamSource<Tuple2<Long,String>> consuming=env.addSource(source).setParallelism(parallelism);
+  consuming.addSink(new RichSinkFunction<Tuple2<Long,String>>(){
+    private int elCnt=0;
+    private BitSet validator=new BitSet(totalElements);
+    @Override public void invoke(    Tuple2<Long,String> value) throws Exception {
+      String[] sp=value.f1.split("-");
+      int v=Integer.parseInt(sp[1]);
+      assertEquals(value.f0 - 1000,(long)v);
+      assertFalse("Received tuple twice",validator.get(v));
+      validator.set(v);
+      elCnt++;
+      if (elCnt == totalElements) {
+        int nc;
+        if ((nc=validator.nextClearBit(0)) != totalElements) {
+          fail("The bitset was not set to 1 on all elements. Next clear:" + nc + " Set: "+ validator);
         }
-      }
-      @Override public void close() throws Exception {
-        super.close();
+        throw new SuccessException();
       }
     }
+    @Override public void close() throws Exception {
+      super.close();
+    }
+  }
 ).setParallelism(1);
-    tryExecute(env,"runSimpleConcurrentProducerConsumerTopology");
-    LOG.info("Finished runSimpleConcurrentProducerConsumerTopology()");
-    deleteTestTopic(topic);
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
+  tryExecute(env,"runSimpleConcurrentProducerConsumerTopology");
+  LOG.info("Finished runSimpleConcurrentProducerConsumerTopology()");
+  deleteTestTopic(topic);
 }

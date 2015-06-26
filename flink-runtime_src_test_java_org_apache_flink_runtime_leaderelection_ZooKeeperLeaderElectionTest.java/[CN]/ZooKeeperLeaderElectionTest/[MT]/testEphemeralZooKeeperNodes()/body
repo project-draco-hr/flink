@@ -1,0 +1,50 @@
+{
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  ZooKeeperLeaderElectionService leaderElectionService;
+  ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  TestingContender testingContender;
+  TestingListener listener;
+  CuratorFramework client=null;
+  NodeCache cache=null;
+  try {
+    leaderElectionService=ZooKeeperUtils.createLeaderElectionService(configuration);
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    testingContender=new TestingContender(TEST_URL,leaderElectionService);
+    listener=new TestingListener();
+    client=ZooKeeperUtils.startCuratorFramework(configuration);
+    final String leaderPath=configuration.getString(ConfigConstants.ZOOKEEPER_LEADER_PATH,ConfigConstants.DEFAULT_ZOOKEEPER_LEADER_PATH);
+    cache=new NodeCache(client,leaderPath);
+    ExistsCacheListener existsListener=new ExistsCacheListener(cache);
+    DeletedCacheListener deletedCacheListener=new DeletedCacheListener(cache);
+    cache.getListenable().addListener(existsListener);
+    cache.start();
+    leaderElectionService.start(testingContender);
+    testingContender.waitForLeader(timeout.toMillis());
+    Future<Boolean> existsFuture=existsListener.nodeExists();
+    Await.result(existsFuture,timeout);
+    cache.getListenable().addListener(deletedCacheListener);
+    leaderElectionService.stop();
+    Future<Boolean> deletedFuture=deletedCacheListener.nodeDeleted();
+    Await.result(deletedFuture,timeout);
+    leaderRetrievalService.start(listener);
+    try {
+      listener.waitForLeader(1000);
+      fail("TimeoutException was expected because there is no leader registered and " + "thus there shouldn't be any leader information in ZooKeeper.");
+    }
+ catch (    TimeoutException e) {
+    }
+  }
+  finally {
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+    if (cache != null) {
+      cache.close();
+    }
+    if (client != null) {
+      client.close();
+    }
+  }
+}

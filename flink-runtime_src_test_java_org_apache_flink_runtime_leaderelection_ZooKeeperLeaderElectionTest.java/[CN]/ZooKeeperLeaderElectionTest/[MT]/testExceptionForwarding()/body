@@ -1,0 +1,49 @@
+{
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  ZooKeeperLeaderElectionService leaderElectionService=null;
+  ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  TestingListener listener=new TestingListener();
+  TestingContender testingContender;
+  CuratorFramework client;
+  final CreateBuilder mockCreateBuilder=mock(CreateBuilder.class);
+  final ProtectACLCreateModePathAndBytesable<String> mockCreateParentsIfNeeded=mock(ProtectACLCreateModePathAndBytesable.class);
+  final Exception testException=new Exception("Test exception");
+  try {
+    client=spy(ZooKeeperUtils.startCuratorFramework(configuration));
+    Answer<CreateBuilder> answer=new Answer<CreateBuilder>(){
+      private int counter=0;
+      @Override public CreateBuilder answer(      InvocationOnMock invocation) throws Throwable {
+        counter++;
+        if (counter < 2) {
+          return (CreateBuilder)invocation.callRealMethod();
+        }
+ else {
+          return mockCreateBuilder;
+        }
+      }
+    }
+;
+    doAnswer(answer).when(client).create();
+    when(mockCreateBuilder.creatingParentsIfNeeded()).thenReturn(mockCreateParentsIfNeeded);
+    when(mockCreateParentsIfNeeded.withMode(Matchers.any(CreateMode.class))).thenReturn(mockCreateParentsIfNeeded);
+    when(mockCreateParentsIfNeeded.forPath(Matchers.any(String.class),Matchers.any(byte[].class))).thenThrow(testException);
+    leaderElectionService=new ZooKeeperLeaderElectionService(client,"/latch","/leader");
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    testingContender=new TestingContender(TEST_URL,leaderElectionService);
+    leaderElectionService.start(testingContender);
+    leaderRetrievalService.start(listener);
+    testingContender.waitForError(timeout.toMillis());
+    assertNotNull(testingContender.getError());
+    assertEquals(testException,testingContender.getError().getCause());
+  }
+  finally {
+    if (leaderElectionService != null) {
+      leaderElectionService.stop();
+    }
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+  }
+}

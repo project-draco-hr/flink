@@ -1,0 +1,88 @@
+{
+  long startTime=System.currentTimeMillis();
+  long currentSleepTime=MIN_SLEEP_TIME;
+  long elapsedTime=0;
+  InetSocketAddress targetAddress=null;
+  try {
+    while (elapsedTime < timeout.toMillis()) {
+      long maxTimeout=timeout.toMillis() - elapsedTime;
+synchronized (retrievalLock) {
+        if (exception != null) {
+          throw exception;
+        }
+        if (retrievalState == LeaderRetrievalState.NOT_RETRIEVED) {
+          try {
+            retrievalLock.wait(maxTimeout);
+          }
+ catch (          InterruptedException e) {
+            throw new Exception("Finding connecting address was interrupted" + "while waiting for the leader retrieval.");
+          }
+        }
+ else         if (retrievalState == LeaderRetrievalState.NEWLY_RETRIEVED) {
+          targetAddress=AkkaUtils.getInetSockeAddressFromAkkaURL(akkaURL);
+          LOG.info("Retrieved new target address {}.",targetAddress);
+          retrievalState=LeaderRetrievalState.RETRIEVED;
+          currentSleepTime=MIN_SLEEP_TIME;
+        }
+ else {
+          currentSleepTime=Math.min(2 * currentSleepTime,MAX_SLEEP_TIME);
+        }
+      }
+      if (targetAddress != null) {
+        AddressDetectionState strategy=AddressDetectionState.ADDRESS;
+        boolean logging=elapsedTime >= startLoggingAfter.toMillis();
+        if (logging) {
+          LOG.info("Trying to connect to address {}." + targetAddress);
+        }
+        do {
+          InetAddress address=NetUtils.findAddressUsingStrategy(strategy,targetAddress,logging);
+          if (address != null) {
+            return address;
+          }
+switch (strategy) {
+case ADDRESS:
+            strategy=AddressDetectionState.FAST_CONNECT;
+          break;
+case FAST_CONNECT:
+        strategy=AddressDetectionState.SLOW_CONNECT;
+      break;
+case SLOW_CONNECT:
+    strategy=null;
+  break;
+default :
+throw new RuntimeException("Unsupported strategy: " + strategy);
+}
+}
+ while (strategy != null);
+}
+elapsedTime=System.currentTimeMillis() - startTime;
+long timeToWait=Math.min(Math.max(timeout.toMillis() - elapsedTime,0),currentSleepTime);
+if (timeToWait > 0) {
+synchronized (retrievalLock) {
+try {
+retrievalLock.wait(timeToWait);
+}
+ catch (InterruptedException e) {
+throw new Exception("Finding connecting address was interrupted while pausing.");
+}
+}
+elapsedTime=System.currentTimeMillis() - startTime;
+}
+}
+InetAddress heuristic=null;
+if (targetAddress != null) {
+LOG.warn("Could not connect to {}. Selecting a local address using heuristics.",targetAddress);
+heuristic=findAddressUsingStrategy(AddressDetectionState.HEURISTIC,targetAddress,true);
+}
+if (heuristic != null) {
+return heuristic;
+}
+ else {
+LOG.warn("Could not find any IPv4 address that is not loopback or link-local. Using localhost address.");
+return InetAddress.getLocalHost();
+}
+}
+ catch (Exception e) {
+throw new LeaderRetrievalException("Could not retrieve the connecting address to the " + "current leader with the akka URL " + akkaURL + ".",e);
+}
+}

@@ -1,76 +1,70 @@
 {
-  try {
-    LOG.info("Starting runBigRecordTestTopology()");
-    final String topic="bigRecordTestTopic";
-    final int parallelism=1;
-    createTestTopic(topic,parallelism,1);
-    final TypeInformation<Tuple2<Long,byte[]>> longBytesInfo=TypeInfoParser.parse("Tuple2<Long, byte[]>");
-    final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> serSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
-    final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> deserSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
-    final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-    env.setNumberOfExecutionRetries(0);
-    env.getConfig().disableSysoutLogging();
-    env.enableCheckpointing(100);
-    env.setParallelism(parallelism);
-    Properties consumerProps=new Properties();
-    consumerProps.putAll(standardProps);
-    consumerProps.setProperty("fetch.message.max.bytes",Integer.toString(1024 * 1024 * 40));
-    consumerProps.setProperty("max.partition.fetch.bytes",Integer.toString(1024 * 1024 * 40));
-    consumerProps.setProperty("queued.max.message.chunks","1");
-    FlinkKafkaConsumer<Tuple2<Long,byte[]>> source=getConsumer(topic,serSchema,consumerProps);
-    DataStreamSource<Tuple2<Long,byte[]>> consuming=env.addSource(source);
-    consuming.addSink(new SinkFunction<Tuple2<Long,byte[]>>(){
-      private int elCnt=0;
-      @Override public void invoke(      Tuple2<Long,byte[]> value) throws Exception {
-        elCnt++;
-        if (value.f0 == -1) {
-          if (elCnt == 11) {
-            throw new SuccessException();
-          }
+  LOG.info("Starting runBigRecordTestTopology()");
+  final String topic="bigRecordTestTopic";
+  final int parallelism=1;
+  createTestTopic(topic,parallelism,1);
+  final TypeInformation<Tuple2<Long,byte[]>> longBytesInfo=TypeInfoParser.parse("Tuple2<Long, byte[]>");
+  final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> serSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
+  final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> deserSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  env.enableCheckpointing(100);
+  env.setParallelism(parallelism);
+  Properties consumerProps=new Properties();
+  consumerProps.putAll(standardProps);
+  consumerProps.setProperty("fetch.message.max.bytes",Integer.toString(1024 * 1024 * 40));
+  consumerProps.setProperty("max.partition.fetch.bytes",Integer.toString(1024 * 1024 * 40));
+  consumerProps.setProperty("queued.max.message.chunks","1");
+  FlinkKafkaConsumer<Tuple2<Long,byte[]>> source=getConsumer(topic,serSchema,consumerProps);
+  DataStreamSource<Tuple2<Long,byte[]>> consuming=env.addSource(source);
+  consuming.addSink(new SinkFunction<Tuple2<Long,byte[]>>(){
+    private int elCnt=0;
+    @Override public void invoke(    Tuple2<Long,byte[]> value) throws Exception {
+      elCnt++;
+      if (value.f0 == -1) {
+        if (elCnt == 11) {
+          throw new SuccessException();
+        }
  else {
-            throw new RuntimeException("There have been " + elCnt + " elements");
-          }
+          throw new RuntimeException("There have been " + elCnt + " elements");
         }
-        if (elCnt > 10) {
-          throw new RuntimeException("More than 10 elements seen: " + elCnt);
+      }
+      if (elCnt > 10) {
+        throw new RuntimeException("More than 10 elements seen: " + elCnt);
+      }
+    }
+  }
+);
+  Properties producerProps=new Properties();
+  producerProps.setProperty("max.message.size",Integer.toString(1024 * 1024 * 30));
+  DataStream<Tuple2<Long,byte[]>> stream=env.addSource(new RichSourceFunction<Tuple2<Long,byte[]>>(){
+    private boolean running;
+    @Override public void open(    Configuration parameters) throws Exception {
+      super.open(parameters);
+      running=true;
+    }
+    @Override public void run(    SourceContext<Tuple2<Long,byte[]>> ctx) throws Exception {
+      Random rnd=new Random();
+      long cnt=0;
+      int fifteenMb=1024 * 1024 * 15;
+      while (running) {
+        byte[] wl=new byte[fifteenMb + rnd.nextInt(fifteenMb)];
+        ctx.collect(new Tuple2<Long,byte[]>(cnt++,wl));
+        Thread.sleep(100);
+        if (cnt == 10) {
+          ctx.collect(new Tuple2<Long,byte[]>(-1L,new byte[]{1}));
+          break;
         }
       }
     }
-);
-    Properties producerProps=new Properties();
-    producerProps.setProperty("max.message.size",Integer.toString(1024 * 1024 * 30));
-    DataStream<Tuple2<Long,byte[]>> stream=env.addSource(new RichSourceFunction<Tuple2<Long,byte[]>>(){
-      private boolean running;
-      @Override public void open(      Configuration parameters) throws Exception {
-        super.open(parameters);
-        running=true;
-      }
-      @Override public void run(      SourceContext<Tuple2<Long,byte[]>> ctx) throws Exception {
-        Random rnd=new Random();
-        long cnt=0;
-        int fifteenMb=1024 * 1024 * 15;
-        while (running) {
-          byte[] wl=new byte[fifteenMb + rnd.nextInt(fifteenMb)];
-          ctx.collect(new Tuple2<Long,byte[]>(cnt++,wl));
-          Thread.sleep(100);
-          if (cnt == 10) {
-            ctx.collect(new Tuple2<Long,byte[]>(-1L,new byte[]{1}));
-            break;
-          }
-        }
-      }
-      @Override public void cancel(){
-        running=false;
-      }
+    @Override public void cancel(){
+      running=false;
     }
+  }
 );
-    stream.addSink(new KafkaSink<Tuple2<Long,byte[]>>(brokerConnectionStrings,topic,producerProps,deserSchema));
-    tryExecute(env,"big topology test");
-    deleteTestTopic(topic);
-    LOG.info("Finished runBigRecordTestTopology()");
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
+  stream.addSink(new KafkaSink<Tuple2<Long,byte[]>>(brokerConnectionStrings,topic,producerProps,deserSchema));
+  tryExecute(env,"big topology test");
+  deleteTestTopic(topic);
+  LOG.info("Finished runBigRecordTestTopology()");
 }

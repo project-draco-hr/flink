@@ -1,32 +1,38 @@
 {
   new JavaTestKit(actorSystem){
 {
+      ActorGateway taskManagerGateway=null;
       try {
-        final ActorRef taskManager=startTaskManager(getTestActor());
+        taskManagerGateway=createTaskManager(actorSystem,getTestActor(),config,true,false);
+        final ActorRef taskManager=taskManagerGateway.actor();
         final UUID falseLeaderSessionID=UUID.randomUUID();
-        final UUID trueLeaderSessionID=UUID.randomUUID();
+        final UUID trueLeaderSessionID=null;
         new Within(new FiniteDuration(20,TimeUnit.SECONDS)){
           @Override protected void run(){
             taskManager.tell(TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),getTestActor());
-            RegisterTaskManager registerTaskManager=expectMsgClass(RegisterTaskManager.class);
+            LeaderSessionMessage lsm=expectMsgClass(LeaderSessionMessage.class);
+            assertTrue(lsm.leaderSessionID() == trueLeaderSessionID);
+            assertTrue(lsm.message() instanceof RegisterTaskManager);
             final ActorRef tm=getLastSender();
-            tm.tell(new AcknowledgeRegistration(UUID.randomUUID(),falseLeaderSessionID,getTestActor(),new InstanceID(),1),getTestActor());
-            tm.tell(new AcknowledgeRegistration(registerTaskManager.registrationSessionID(),trueLeaderSessionID,getTestActor(),new InstanceID(),1),getTestActor());
+            tm.tell(new LeaderSessionMessage(falseLeaderSessionID,new AcknowledgeRegistration(new InstanceID(),1)),getTestActor());
+            tm.tell(new LeaderSessionMessage(trueLeaderSessionID,new AcknowledgeRegistration(new InstanceID(),1)),getTestActor());
             Object message=null;
             Object confirmMessageClass=TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass();
             while (message == null || !(message.getClass().equals(confirmMessageClass))) {
-              message=expectMsgAnyClassOf(TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass(),RegisterTaskManager.class,TaskManagerMessages.Heartbeat.class);
+              message=receiveOne(TestingUtils.TESTING_DURATION());
             }
             tm.tell(JobManagerMessages.getRequestLeaderSessionID(),getTestActor());
-            expectMsgEquals(new JobManagerMessages.ResponseLeaderSessionID(Option.apply(trueLeaderSessionID)));
+            expectMsgEquals(new JobManagerMessages.ResponseLeaderSessionID(trueLeaderSessionID));
           }
         }
 ;
-        stopActor(taskManager);
       }
  catch (      Throwable e) {
         e.printStackTrace();
         fail(e.getMessage());
+      }
+ finally {
+        stopActor(taskManagerGateway);
       }
     }
   }

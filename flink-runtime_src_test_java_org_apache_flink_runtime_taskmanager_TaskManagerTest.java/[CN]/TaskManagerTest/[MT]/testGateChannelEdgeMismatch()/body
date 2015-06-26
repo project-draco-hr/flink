@@ -2,12 +2,14 @@
   LOG.info("--------------------------------------------------------------------\n" + "     Starting testGateChannelEdgeMismatch() \n" + "--------------------------------------------------------------------");
   new JavaTestKit(system){
 {
-      ActorRef jobManager=null;
-      ActorRef taskManager=null;
+      ActorGateway jobManager=null;
+      ActorGateway taskManager=null;
+      final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),leaderSessionID);
       try {
-        jobManager=system.actorOf(Props.create(SimpleJobManager.class,leaderSessionID.get()));
-        taskManager=createTaskManager(jobManager,true);
-        final ActorRef tm=taskManager;
+        ActorRef jm=system.actorOf(Props.create(SimpleJobManager.class,leaderSessionID));
+        jobManager=new AkkaActorGateway(jm,leaderSessionID);
+        taskManager=TestingUtils.createTaskManager(system,jobManager,new Configuration(),true,true);
+        final ActorGateway tm=taskManager;
         final JobID jid=new JobID();
         JobVertexID vid1=new JobVertexID();
         JobVertexID vid2=new JobVertexID();
@@ -18,15 +20,15 @@
         new Within(d){
           @Override protected void run(){
             try {
-              tm.tell(decorator.decorate(new SubmitTask(tdd1)),getRef());
-              tm.tell(decorator.decorate(new SubmitTask(tdd2)),getRef());
+              tm.tell(new SubmitTask(tdd1),testActorGateway);
+              tm.tell(new SubmitTask(tdd2),testActorGateway);
               expectMsgEquals(Messages.getAcknowledge());
               expectMsgEquals(Messages.getAcknowledge());
-              tm.tell(new TestingTaskManagerMessages.NotifyWhenTaskRemoved(eid1),getRef());
-              tm.tell(new TestingTaskManagerMessages.NotifyWhenTaskRemoved(eid2),getRef());
+              tm.tell(new TestingTaskManagerMessages.NotifyWhenTaskRemoved(eid1),testActorGateway);
+              tm.tell(new TestingTaskManagerMessages.NotifyWhenTaskRemoved(eid2),testActorGateway);
               expectMsgEquals(true);
               expectMsgEquals(true);
-              tm.tell(TestingTaskManagerMessages.getRequestRunningTasksMessage(),getRef());
+              tm.tell(TestingTaskManagerMessages.getRequestRunningTasksMessage(),testActorGateway);
               Map<ExecutionAttemptID,Task> tasks=expectMsgClass(TestingTaskManagerMessages.ResponseRunningTasks.class).asJava();
               assertEquals(0,tasks.size());
             }
@@ -43,12 +45,8 @@
         fail(e.getMessage());
       }
  finally {
-        if (taskManager != null) {
-          taskManager.tell(Kill.getInstance(),ActorRef.noSender());
-        }
-        if (jobManager != null) {
-          jobManager.tell(Kill.getInstance(),ActorRef.noSender());
-        }
+        TestingUtils.stopActor(taskManager);
+        TestingUtils.stopActor(jobManager);
       }
     }
   }

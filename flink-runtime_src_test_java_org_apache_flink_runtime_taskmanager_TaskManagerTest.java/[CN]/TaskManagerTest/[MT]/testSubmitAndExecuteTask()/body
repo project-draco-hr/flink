@@ -2,16 +2,17 @@
   LOG.info("--------------------------------------------------------------------\n" + "     Starting testSubmitAndExecuteTask() \n" + "--------------------------------------------------------------------");
   new JavaTestKit(system){
 {
-      ActorRef taskManager=null;
+      ActorGateway taskManager=null;
+      final ActorGateway jobManager=TestingUtils.createForwardingJobManager(system,getTestActor(),Option.<String>empty());
       try {
-        taskManager=createTaskManager(getTestActor(),false);
-        final ActorRef tm=taskManager;
+        taskManager=TestingUtils.createTaskManager(system,jobManager,new Configuration(),true,false);
+        final ActorGateway tm=taskManager;
         new Within(d){
           @Override protected void run(){
-            RegistrationMessages.RegisterTaskManager registrationMessage=expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
+            expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
             final InstanceID iid=new InstanceID();
-            assertEquals(tm,getLastSender());
-            tm.tell(new RegistrationMessages.AcknowledgeRegistration(registrationMessage.registrationSessionID(),leaderSessionID.get(),getTestActor(),iid,12345),getTestActor());
+            assertEquals(tm.actor(),getLastSender());
+            tm.tell(new RegistrationMessages.AcknowledgeRegistration(iid,12345),jobManager);
           }
         }
 ;
@@ -21,7 +22,7 @@
         final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"TestTask",2,7,new Configuration(),new Configuration(),TestInvokableCorrect.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
         new Within(d){
           @Override protected void run(){
-            tm.tell(decorator.decorate(new SubmitTask(tdd)),getRef());
+            tm.tell(new SubmitTask(tdd),jobManager);
             long deadline=System.currentTimeMillis() + 10000;
             do {
               Object message=receiveOne(d);
@@ -30,8 +31,8 @@
               }
             }
  while (System.currentTimeMillis() < deadline);
-            Object toRunning=decorator.decorate(new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.RUNNING)));
-            Object toFinished=decorator.decorate(new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.FINISHED)));
+            Object toRunning=new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.RUNNING));
+            Object toFinished=new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.FINISHED));
             deadline=System.currentTimeMillis() + 10000;
             do {
               Object message=receiveOne(d);
@@ -63,9 +64,8 @@
         fail(e.getMessage());
       }
  finally {
-        if (taskManager != null) {
-          taskManager.tell(Kill.getInstance(),ActorRef.noSender());
-        }
+        TestingUtils.stopActor(taskManager);
+        TestingUtils.stopActor(jobManager);
       }
     }
   }

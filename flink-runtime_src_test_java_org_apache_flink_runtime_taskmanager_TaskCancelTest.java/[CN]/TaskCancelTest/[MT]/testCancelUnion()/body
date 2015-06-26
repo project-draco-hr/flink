@@ -4,12 +4,13 @@
   TestingCluster flink=null;
   try {
     final Configuration config=new Configuration();
-    config.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,2);
+    config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,2);
     config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,sourceParallelism);
     config.setString(ConfigConstants.AKKA_ASK_TIMEOUT,TestingUtils.DEFAULT_AKKA_ASK_TIMEOUT());
     config.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,4096);
     config.setInteger(ConfigConstants.TASK_MANAGER_NETWORK_NUM_BUFFERS_KEY,2048);
     flink=new TestingCluster(config,false);
+    flink.start();
     final JobGraph jobGraph=new JobGraph("Cancel Big Union");
     JobVertex[] sources=new JobVertex[numberOfSources];
     SlotSharingGroup group=new SlotSharingGroup();
@@ -28,11 +29,11 @@
     for (    JobVertex source : sources) {
       union.connectNewDataSetAsInput(source,DistributionPattern.POINTWISE,ResultPartitionType.PIPELINED);
     }
-    JobClient.submitJobDetached(flink.getJobManagerGateway(),jobGraph,TestingUtils.TESTING_DURATION(),getClass().getClassLoader());
-    awaitRunning(flink.jobManagerActor(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    flink.submitJobDetached(jobGraph);
+    awaitRunning(flink.getLeaderGateway(TestingUtils.TESTING_DURATION()),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
     Thread.sleep(5000);
-    cancelJob(flink.getJobManagerGateway(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
-    JobStatus status=awaitTermination(flink.jobManagerActor(),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    cancelJob(flink.getLeaderGateway(TestingUtils.TESTING_DURATION()),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    JobStatus status=awaitTermination(flink.getLeaderGateway(TestingUtils.TESTING_DURATION()),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
     if (status == JobStatus.CANCELED) {
     }
  else {

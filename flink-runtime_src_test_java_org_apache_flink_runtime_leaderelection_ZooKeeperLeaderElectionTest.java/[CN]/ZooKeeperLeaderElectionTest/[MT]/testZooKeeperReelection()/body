@@ -1,0 +1,46 @@
+{
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  int num=100;
+  ZooKeeperLeaderElectionService[] leaderElectionService=new ZooKeeperLeaderElectionService[num];
+  TestingContender[] contenders=new TestingContender[num];
+  ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  TestingListener listener=new TestingListener();
+  try {
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    leaderRetrievalService.start(listener);
+    for (int i=0; i < num; i++) {
+      leaderElectionService[i]=ZooKeeperUtils.createLeaderElectionService(configuration);
+      contenders[i]=new TestingContender(TEST_URL + "_" + i,leaderElectionService[i]);
+      leaderElectionService[i].start(contenders[i]);
+    }
+    String pattern=TEST_URL + "_" + "(\\d+)";
+    Pattern regex=Pattern.compile(pattern);
+    for (int i=0; i < num; i++) {
+      listener.waitForNewLeader(timeout.toMillis());
+      String address=listener.getAddress();
+      Matcher m=regex.matcher(address);
+      if (m.find()) {
+        int index=Integer.parseInt(m.group(1));
+        assertEquals(listener.getLeaderSessionID(),contenders[index].getLeaderSessionID());
+        assertEquals(TEST_URL + "_" + index,listener.getAddress());
+        leaderElectionService[index].stop();
+        leaderElectionService[index]=null;
+      }
+ else {
+        fail("Did not find the leader's index.");
+      }
+    }
+  }
+  finally {
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+    for (    ZooKeeperLeaderElectionService electionService : leaderElectionService) {
+      if (electionService != null) {
+        electionService.stop();
+      }
+    }
+  }
+}

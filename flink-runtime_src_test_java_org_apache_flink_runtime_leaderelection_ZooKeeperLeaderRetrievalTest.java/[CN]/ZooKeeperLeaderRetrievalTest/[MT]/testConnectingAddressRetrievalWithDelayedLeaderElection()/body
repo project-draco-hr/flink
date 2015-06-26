@@ -1,0 +1,57 @@
+{
+  FiniteDuration timeout=new FiniteDuration(1,TimeUnit.MINUTES);
+  Configuration config=new Configuration();
+  long sleepingTime=1000;
+  config.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  config.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  LeaderElectionService leaderElectionService=null;
+  LeaderElectionService faultyLeaderElectionService;
+  ServerSocket serverSocket;
+  InetAddress localHost;
+  Thread thread;
+  try {
+    InetSocketAddress wrongInetSocketAddress=new InetSocketAddress(InetAddress.getByName("1.1.1.1"),1234);
+    String wrongAddress=JobManager.getRemoteJobManagerAkkaURL(wrongInetSocketAddress,Option.<String>empty());
+    try {
+      localHost=InetAddress.getLocalHost();
+      serverSocket=new ServerSocket(0,50,localHost);
+    }
+ catch (    UnknownHostException e) {
+      System.err.println("Skipping 'testNetworkInterfaceSelection' test.");
+      return;
+    }
+catch (    IOException e) {
+      System.err.println("Skipping 'testNetworkInterfaceSelection' test.");
+      return;
+    }
+    InetSocketAddress correctInetSocketAddress=new InetSocketAddress(localHost,serverSocket.getLocalPort());
+    String correctAddress=JobManager.getRemoteJobManagerAkkaURL(correctInetSocketAddress,Option.<String>empty());
+    faultyLeaderElectionService=LeaderElectionUtils.createLeaderElectionService(config);
+    TestingContender wrongLeaderAddressContender=new TestingContender(wrongAddress,faultyLeaderElectionService);
+    faultyLeaderElectionService.start(wrongLeaderAddressContender);
+    FindConnectingAddress findConnectingAddress=new FindConnectingAddress(config,timeout);
+    thread=new Thread(findConnectingAddress);
+    thread.start();
+    leaderElectionService=LeaderElectionUtils.createLeaderElectionService(config);
+    TestingContender correctLeaderAddressContender=new TestingContender(correctAddress,leaderElectionService);
+    Thread.sleep(sleepingTime);
+    faultyLeaderElectionService.stop();
+    leaderElectionService.start(correctLeaderAddressContender);
+    thread.join();
+    InetAddress result=findConnectingAddress.getInetAddress();
+    Socket socket=new Socket();
+    try {
+      SocketAddress bindP=new InetSocketAddress(result,0);
+      socket.bind(bindP);
+      socket.connect(correctInetSocketAddress,1000);
+    }
+  finally {
+      socket.close();
+    }
+  }
+  finally {
+    if (leaderElectionService != null) {
+      leaderElectionService.stop();
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  int numJMs=10;
+  int numTMs=3;
+  int numSlotsPerTM=3;
+  int parallelism=numTMs * numSlotsPerTM;
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  configuration.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,numJMs);
+  configuration.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,numTMs);
+  configuration.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,numSlotsPerTM);
+  Tasks.BlockingOnceReceiver$.MODULE$.blocking_$eq(true);
+  JobVertex sender=new JobVertex("sender");
+  JobVertex receiver=new JobVertex("receiver");
+  sender.setInvokableClass(Tasks.Sender.class);
+  receiver.setInvokableClass(Tasks.BlockingOnceReceiver.class);
+  sender.setParallelism(parallelism);
+  receiver.setParallelism(parallelism);
+  receiver.connectNewDataSetAsInput(sender,DistributionPattern.POINTWISE);
+  SlotSharingGroup slotSharingGroup=new SlotSharingGroup();
+  sender.setSlotSharingGroup(slotSharingGroup);
+  receiver.setSlotSharingGroup(slotSharingGroup);
+  final JobGraph graph=new JobGraph("Blocking test job",sender,receiver);
+  final ForkableFlinkMiniCluster cluster=new ForkableFlinkMiniCluster(configuration);
+  ActorSystem clientActorSystem=null;
+  Thread thread=null;
+  JobSubmitterRunnable jobSubmission=null;
+  try {
+    cluster.start();
+    clientActorSystem=cluster.startJobClientActorSystem(graph.getJobID());
+    final ActorSystem clientAS=clientActorSystem;
+    jobSubmission=new JobSubmitterRunnable(clientAS,cluster,graph);
+    thread=new Thread(jobSubmission);
+    thread.start();
+    for (int i=0; i < numJMs - 2; i++) {
+      ActorGateway jm=cluster.getLeaderGateway(timeout);
+      cluster.waitForTaskManagersToBeRegisteredAtJobManager(jm.actor());
+      Future<Object> future=jm.ask(new WaitForAllVerticesToBeRunningOrFinished(graph.getJobID()),timeout);
+      Await.ready(future,timeout);
+      cluster.clearLeader();
+      jm.tell(Kill.getInstance());
+    }
+    ActorGateway jm=cluster.getLeaderGateway(timeout);
+    cluster.waitForTaskManagersToBeRegisteredAtJobManager(jm.actor());
+    Future<Object> future=jm.ask(new WaitForAllVerticesToBeRunningOrFinished(graph.getJobID()),timeout);
+    Await.ready(future,timeout);
+    cluster.clearLeader();
+    Tasks.BlockingOnceReceiver$.MODULE$.blocking_$eq(false);
+    jm.tell(PoisonPill.getInstance());
+    thread.join(timeout.toMillis());
+    if (thread.isAlive()) {
+      jobSubmission.finished=true;
+      fail("The job submission thread did not stop (meaning it did not succeeded in" + "executing the test job.");
+    }
+  }
+  finally {
+    if (clientActorSystem != null) {
+      cluster.shutdownJobClientActorSystem(clientActorSystem);
+    }
+    if (thread != null && thread.isAlive() && jobSubmission != null) {
+      jobSubmission.finished=true;
+    }
+    cluster.stop();
+  }
+}

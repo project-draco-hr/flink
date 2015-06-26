@@ -1,14 +1,18 @@
 {
   new JavaTestKit(system){
 {
-      ActorRef jobManager=null;
-      ActorRef taskManager=null;
+      ActorGateway jobManager=null;
+      ActorGateway taskManager=null;
+      final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),leaderSessionID);
       try {
         final IntermediateDataSetID resultId=new IntermediateDataSetID();
-        jobManager=system.actorOf(Props.create(new SimplePartitionStateLookupJobManagerCreator(leaderSessionID.get(),getTestActor())));
+        ActorRef jm=system.actorOf(Props.create(new SimplePartitionStateLookupJobManagerCreator(leaderSessionID,getTestActor())));
+        jobManager=new AkkaActorGateway(jm,leaderSessionID);
         final int dataPort=NetUtils.getAvailablePort();
-        taskManager=createTaskManager(jobManager,true,true,dataPort);
-        final ActorRef tm=taskManager;
+        final Configuration config=new Configuration();
+        config.setInteger(ConfigConstants.TASK_MANAGER_DATA_PORT_KEY,dataPort);
+        taskManager=TestingUtils.createTaskManager(system,jobManager,config,true,true);
+        final ActorGateway tm=taskManager;
         final JobID jid=new JobID();
         final JobVertexID vid=new JobVertexID();
         final ExecutionAttemptID eid=new ExecutionAttemptID();
@@ -19,7 +23,7 @@
         final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"Receiver",0,1,new Configuration(),new Configuration(),Tasks.AgnosticReceiver.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.singletonList(igdd),Collections.<BlobKey>emptyList(),0);
         new Within(d){
           @Override protected void run(){
-            tm.tell(decorator.decorate(new SubmitTask(tdd)),getTestActor());
+            tm.tell(new SubmitTask(tdd),testActorGateway);
             expectMsgClass(Messages.getAcknowledge().getClass());
             TaskExecutionState msg=expectMsgClass(TaskExecutionState.class);
             assertEquals(msg.getExecutionState(),ExecutionState.FAILED);
@@ -33,12 +37,8 @@
         fail(e.getMessage());
       }
  finally {
-        if (taskManager != null) {
-          taskManager.tell(Kill.getInstance(),ActorRef.noSender());
-        }
-        if (jobManager != null) {
-          jobManager.tell(Kill.getInstance(),ActorRef.noSender());
-        }
+        TestingUtils.stopActor(taskManager);
+        TestingUtils.stopActor(jobManager);
       }
     }
   }

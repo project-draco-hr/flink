@@ -1,0 +1,43 @@
+{
+  try {
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    ObjectOutputStream oos=new ObjectOutputStream(baos);
+    oos.writeUTF(leaderContender.getAddress());
+    oos.writeObject(leaderSessionID);
+    oos.close();
+    boolean dataWritten=false;
+    while (!dataWritten && leaderLatch.hasLeadership()) {
+      Stat stat=client.checkExists().forPath(leaderPath);
+      if (stat != null) {
+        long owner=stat.getEphemeralOwner();
+        long sessionID=client.getZookeeperClient().getZooKeeper().getSessionId();
+        if (owner == sessionID) {
+          try {
+            client.setData().forPath(leaderPath,baos.toByteArray());
+            dataWritten=true;
+          }
+ catch (          KeeperException.NoNodeException noNode) {
+          }
+        }
+ else {
+          try {
+            client.delete().forPath(leaderPath);
+          }
+ catch (          KeeperException.NoNodeException noNode) {
+          }
+        }
+      }
+ else {
+        try {
+          client.create().creatingParentsIfNeeded().withMode(CreateMode.EPHEMERAL).forPath(leaderPath,baos.toByteArray());
+          dataWritten=true;
+        }
+ catch (        KeeperException.NodeExistsException nodeExists) {
+        }
+      }
+    }
+  }
+ catch (  Exception e) {
+    leaderContender.handleError(new Exception("Could not write leader address and leader session ID to " + "ZooKeeper.",e));
+  }
+}

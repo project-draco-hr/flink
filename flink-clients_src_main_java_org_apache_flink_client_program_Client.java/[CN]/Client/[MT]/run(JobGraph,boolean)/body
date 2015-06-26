@@ -1,6 +1,5 @@
 {
   this.lastJobId=jobGraph.getJobID();
-  LOG.info("JobManager actor system address is " + jobManagerAddress);
   LOG.info("Starting client actor system");
   final ActorSystem actorSystem;
   try {
@@ -9,47 +8,51 @@
  catch (  Exception e) {
     throw new ProgramInvocationException("Could start client actor system.",e);
   }
-  FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
-  LOG.info("Looking up JobManager");
-  ActorGateway jobManagerGateway;
-  ActorRef jobManagerActorRef;
   try {
-    jobManagerActorRef=JobManager.getJobManagerRemoteReference(jobManagerAddress,actorSystem,configuration);
-  }
- catch (  IOException e) {
-    throw new ProgramInvocationException("Failed to resolve JobManager",e);
-  }
-  try {
-    jobManagerGateway=JobManager.getJobManagerGateway(jobManagerActorRef,timeout);
-  }
- catch (  Exception e) {
-    throw new ProgramInvocationException("Failed to retrieve the JobManager gateway.",e);
-  }
-  LOG.info("JobManager runs at " + jobManagerGateway.path());
-  LOG.info("Communication between client and JobManager will have a timeout of " + timeout);
-  LOG.info("Checking and uploading JAR files");
-  try {
-    JobClient.uploadJarFiles(jobGraph,jobManagerGateway,timeout);
-  }
- catch (  IOException e) {
-    throw new ProgramInvocationException("Could not upload the program's JAR files to the JobManager.",e);
-  }
-  try {
-    if (wait) {
-      return JobClient.submitJobAndWait(actorSystem,jobManagerGateway,jobGraph,timeout,printStatusDuringExecution,userCodeClassLoader);
+    FiniteDuration lookupTimeout=AkkaUtils.getLookupTimeout(configuration);
+    FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
+    LOG.info("Looking up JobManager");
+    ActorGateway jobManagerGateway;
+    LeaderRetrievalService leaderRetrievalService;
+    try {
+      leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(configuration);
     }
+ catch (    Exception e) {
+      throw new ProgramInvocationException("Could not create the leader retrieval service.",e);
+    }
+    try {
+      jobManagerGateway=LeaderRetrievalUtils.retrieveLeaderGateway(leaderRetrievalService,actorSystem,lookupTimeout);
+    }
+ catch (    LeaderRetrievalException e) {
+      throw new ProgramInvocationException("Failed to retrieve JobManager gateway",e);
+    }
+    LOG.info("Leading JobManager actor system address is " + jobManagerGateway.path());
+    LOG.info("JobManager runs at " + jobManagerGateway.path());
+    LOG.info("Communication between client and JobManager will have a timeout of " + timeout);
+    LOG.info("Checking and uploading JAR files");
+    try {
+      JobClient.uploadJarFiles(jobGraph,jobManagerGateway,timeout);
+    }
+ catch (    IOException e) {
+      throw new ProgramInvocationException("Could not upload the program's JAR files to the JobManager.",e);
+    }
+    try {
+      if (wait) {
+        return JobClient.submitJobAndWait(actorSystem,jobManagerGateway,jobGraph,timeout,printStatusDuringExecution,userCodeClassLoader);
+      }
  else {
-      JobClient.submitJobDetached(jobManagerGateway,jobGraph,timeout,userCodeClassLoader);
-      return new JobSubmissionResult(jobGraph.getJobID());
+        JobClient.submitJobDetached(jobManagerGateway,jobGraph,timeout,userCodeClassLoader);
+        return new JobSubmissionResult(jobGraph.getJobID());
+      }
+    }
+ catch (    JobExecutionException e) {
+      throw new ProgramInvocationException("The program execution failed: " + e.getMessage(),e);
+    }
+catch (    Exception e) {
+      throw new ProgramInvocationException("Exception during program execution.",e);
     }
   }
- catch (  JobExecutionException e) {
-    throw new ProgramInvocationException("The program execution failed: " + e.getMessage(),e);
-  }
-catch (  Exception e) {
-    throw new ProgramInvocationException("Exception during program execution.",e);
-  }
- finally {
+  finally {
     actorSystem.shutdown();
     actorSystem.awaitTermination(new FiniteDuration(30,TimeUnit.SECONDS));
   }

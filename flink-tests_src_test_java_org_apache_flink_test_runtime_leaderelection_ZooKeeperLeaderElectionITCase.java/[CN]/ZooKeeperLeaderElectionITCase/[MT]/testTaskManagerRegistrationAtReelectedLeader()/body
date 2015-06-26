@@ -1,0 +1,24 @@
+{
+  Configuration configuration=new Configuration();
+  int numJMs=10;
+  int numTMs=3;
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  configuration.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,numJMs);
+  configuration.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,numTMs);
+  ForkableFlinkMiniCluster cluster=new ForkableFlinkMiniCluster(configuration);
+  try {
+    cluster.start();
+    for (int i=0; i < numJMs; i++) {
+      ActorGateway leadingJM=cluster.getLeaderGateway(timeout);
+      cluster.waitForTaskManagersToBeRegisteredAtJobManager(leadingJM.actor());
+      Future<Object> registeredTMs=leadingJM.ask(JobManagerMessages.getRequestNumberRegisteredTaskManager(),timeout);
+      int numRegisteredTMs=(Integer)Await.result(registeredTMs,timeout);
+      assertEquals(numTMs,numRegisteredTMs);
+      cluster.clearLeader();
+      leadingJM.tell(PoisonPill.getInstance());
+    }
+  }
+  finally {
+    cluster.stop();
+  }
+}

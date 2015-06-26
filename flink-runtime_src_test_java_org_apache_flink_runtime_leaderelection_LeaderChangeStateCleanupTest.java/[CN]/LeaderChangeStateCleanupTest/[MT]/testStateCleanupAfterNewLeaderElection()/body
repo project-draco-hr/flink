@@ -1,0 +1,14 @@
+{
+  UUID leaderSessionID=UUID.randomUUID();
+  UUID newLeaderSessionID=UUID.randomUUID();
+  cluster.grantLeadership(0,leaderSessionID);
+  cluster.notifyRetrievalListeners(0,leaderSessionID);
+  cluster.waitForTaskManagersToBeRegistered();
+  cluster.submitJobDetached(job);
+  ActorGateway jm=cluster.getLeaderGateway(timeout);
+  Future<Object> wait=jm.ask(new WaitForAllVerticesToBeRunningOrFinished(job.getJobID()),timeout);
+  Await.ready(wait,timeout);
+  Future<Object> jobRemoval=jm.ask(new NotifyWhenJobRemoved(job.getJobID()),timeout);
+  cluster.grantLeadership(1,newLeaderSessionID);
+  Await.ready(jobRemoval,timeout);
+}

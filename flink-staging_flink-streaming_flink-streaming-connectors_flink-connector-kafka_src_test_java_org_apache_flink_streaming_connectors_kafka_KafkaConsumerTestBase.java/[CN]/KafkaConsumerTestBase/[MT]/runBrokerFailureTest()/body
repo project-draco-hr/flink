@@ -1,41 +1,35 @@
 {
-  try {
-    LOG.info("starting runBrokerFailureTest()");
-    final String topic="brokerFailureTestTopic";
-    final int parallelism=2;
-    final int numElementsPerPartition=1000;
-    final int totalElements=parallelism * numElementsPerPartition;
-    final int failAfterElements=numElementsPerPartition / 3;
-    createTestTopic(topic,parallelism,2);
-    DataGenerators.generateRandomizedIntegerSequence(StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort),brokerConnectionStrings,topic,parallelism,numElementsPerPartition,true);
-    ZkClient zkClient=createZookeeperClient();
-    PartitionMetadata firstPart=null;
-    do {
-      if (firstPart != null) {
-        LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
-        Thread.sleep(150);
-      }
-      Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
-      firstPart=partitionMetadata.head();
+  LOG.info("starting runBrokerFailureTest()");
+  final String topic="brokerFailureTestTopic";
+  final int parallelism=2;
+  final int numElementsPerPartition=1000;
+  final int totalElements=parallelism * numElementsPerPartition;
+  final int failAfterElements=numElementsPerPartition / 3;
+  createTestTopic(topic,parallelism,2);
+  DataGenerators.generateRandomizedIntegerSequence(StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort),brokerConnectionStrings,topic,parallelism,numElementsPerPartition,true);
+  ZkClient zkClient=createZookeeperClient();
+  PartitionMetadata firstPart=null;
+  do {
+    if (firstPart != null) {
+      LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
+      Thread.sleep(150);
     }
+    Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
+    firstPart=partitionMetadata.head();
+  }
  while (firstPart.errorCode() != 0);
-    zkClient.close();
-    final String leaderToShutDown=firstPart.leader().get().connectionString();
-    LOG.info("Leader to shutdown {}",leaderToShutDown);
-    DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
-    StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-    env.setParallelism(parallelism);
-    env.enableCheckpointing(500);
-    env.setNumberOfExecutionRetries(3);
-    env.getConfig().disableSysoutLogging();
-    FlinkKafkaConsumer<Integer> kafkaSource=getConsumer(topic,schema,standardProps);
-    env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderToShutDown,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
-    BrokerKillingMapper.killedLeaderBefore=false;
-    tryExecute(env,"One-to-one exactly once test");
-    LOG.info("finished runBrokerFailureTest()");
-  }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
+  zkClient.close();
+  final String leaderToShutDown=firstPart.leader().get().connectionString();
+  LOG.info("Leader to shutdown {}",leaderToShutDown);
+  DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(parallelism);
+  env.enableCheckpointing(500);
+  env.setNumberOfExecutionRetries(3);
+  env.getConfig().disableSysoutLogging();
+  FlinkKafkaConsumer<Integer> kafkaSource=getConsumer(topic,schema,standardProps);
+  env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderToShutDown,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
+  BrokerKillingMapper.killedLeaderBefore=false;
+  tryExecute(env,"One-to-one exactly once test");
+  LOG.info("finished runBrokerFailureTest()");
 }

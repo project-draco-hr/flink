@@ -1,21 +1,25 @@
 {
   new JavaTestKit(actorSystem){
 {
+      ActorGateway fakeJobManager1Gateway=null;
+      ActorGateway fakeJobManager2Gateway=null;
+      ActorGateway taskManagerGateway=null;
+      final String JOB_MANAGER_NAME="ForwardingJobManager";
       try {
-        final Props fakeJmProps=Props.create(ForwardingActor.class,getTestActor());
-        final String jobManagerName="FAKE_JOB_MANAGER";
-        final ActorRef fakeJobManager1=actorSystem.actorOf(fakeJmProps,jobManagerName);
-        final ActorRef taskManager=startTaskManager(fakeJobManager1);
-        final UUID leaderSessionID=UUID.randomUUID();
+        fakeJobManager1Gateway=createForwardingJobManager(actorSystem,getTestActor(),Option.apply(JOB_MANAGER_NAME));
+        final ActorGateway fakeJM1Gateway=fakeJobManager1Gateway;
+        taskManagerGateway=createTaskManager(actorSystem,fakeJobManager1Gateway,config,true,false);
+        final ActorGateway tm=taskManagerGateway;
         new Within(new FiniteDuration(2,TimeUnit.SECONDS)){
           @Override protected void run(){
-            RegisterTaskManager message=expectMsgClass(RegisterTaskManager.class);
-            taskManager.tell(new AcknowledgeRegistration(message.registrationSessionID(),leaderSessionID,fakeJobManager1,new InstanceID(),45234),fakeJobManager1);
+            expectMsgClass(RegisterTaskManager.class);
+            tm.tell(new AcknowledgeRegistration(new InstanceID(),45234),fakeJM1Gateway);
           }
         }
 ;
-        watch(fakeJobManager1);
-        stopActor(fakeJobManager1);
+        watch(fakeJobManager1Gateway.actor());
+        stopActor(fakeJobManager1Gateway.actor());
+        final ActorGateway gateway=fakeJobManager1Gateway;
         final FiniteDuration timeout=new FiniteDuration(2,TimeUnit.SECONDS);
         new Within(timeout){
           @Override protected void run(){
@@ -24,35 +28,38 @@
               message=receiveOne(timeout);
             }
             Terminated terminatedMessage=(Terminated)message;
-            assertEquals(fakeJobManager1,terminatedMessage.actor());
+            assertEquals(gateway.actor(),terminatedMessage.actor());
           }
         }
 ;
-        ActorRef fakeJobManager2=null;
+        fakeJobManager1Gateway=null;
         long deadline=20000000000L + System.nanoTime();
         do {
           try {
-            fakeJobManager2=actorSystem.actorOf(fakeJmProps,jobManagerName);
+            fakeJobManager2Gateway=createForwardingJobManager(actorSystem,getTestActor(),Option.apply(JOB_MANAGER_NAME));
           }
  catch (          InvalidActorNameException e) {
             Thread.sleep(100);
           }
         }
- while (fakeJobManager2 == null && System.nanoTime() < deadline);
-        final ActorRef jm2Closure=fakeJobManager2;
+ while (fakeJobManager2Gateway == null && System.nanoTime() < deadline);
+        final ActorGateway fakeJM2GatewayClosure=fakeJobManager2Gateway;
         new Within(new FiniteDuration(10,TimeUnit.SECONDS)){
           @Override protected void run(){
-            RegisterTaskManager message=expectMsgClass(RegisterTaskManager.class);
-            taskManager.tell(new AcknowledgeRegistration(message.registrationSessionID(),leaderSessionID,jm2Closure,new InstanceID(),45234),jm2Closure);
+            expectMsgClass(RegisterTaskManager.class);
+            tm.tell(new AcknowledgeRegistration(new InstanceID(),45234),fakeJM2GatewayClosure);
           }
         }
 ;
-        stopActor(taskManager);
-        stopActor(fakeJobManager2);
       }
  catch (      Throwable e) {
         e.printStackTrace();
         fail(e.getMessage());
+      }
+ finally {
+        stopActor(taskManagerGateway);
+        stopActor(fakeJobManager1Gateway);
+        stopActor(fakeJobManager2Gateway);
       }
     }
   }

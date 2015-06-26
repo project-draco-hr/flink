@@ -1,0 +1,54 @@
+{
+  final String FAULTY_CONTENDER_URL="faultyContender";
+  final String leaderPath="/leader";
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  configuration.setString(ConfigConstants.ZOOKEEPER_LEADER_PATH,leaderPath);
+  ZooKeeperLeaderElectionService leaderElectionService=null;
+  ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  TestingListener listener=new TestingListener();
+  TestingContender contender;
+  try {
+    leaderElectionService=ZooKeeperUtils.createLeaderElectionService(configuration);
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    contender=new TestingContender(TEST_URL,leaderElectionService);
+    leaderElectionService.start(contender);
+    leaderRetrievalService.start(listener);
+    listener.waitForLeader(timeout.toMillis());
+    assertEquals(listener.getLeaderSessionID(),contender.getLeaderSessionID());
+    assertEquals(TEST_URL,listener.getAddress());
+    listener.clear();
+    CuratorFramework client=ZooKeeperUtils.startCuratorFramework(configuration);
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    ObjectOutputStream oos=new ObjectOutputStream(baos);
+    oos.writeUTF(FAULTY_CONTENDER_URL);
+    oos.writeObject(null);
+    oos.close();
+    boolean dataWritten=false;
+    while (!dataWritten) {
+      client.delete().forPath(leaderPath);
+      try {
+        client.create().forPath(leaderPath,baos.toByteArray());
+        dataWritten=true;
+      }
+ catch (      KeeperException.NodeExistsException e) {
+      }
+    }
+    listener.waitForLeader(timeout.toMillis());
+    if (FAULTY_CONTENDER_URL.equals(listener.getAddress())) {
+      listener.clear();
+      listener.waitForLeader(timeout.toMillis());
+    }
+    assertEquals(listener.getLeaderSessionID(),contender.getLeaderSessionID());
+    assertEquals(listener.getAddress(),contender.getAddress());
+  }
+  finally {
+    if (leaderElectionService != null) {
+      leaderElectionService.stop();
+    }
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+  }
+}

@@ -1,20 +1,24 @@
 {
   new JavaTestKit(actorSystem){
 {
+      ActorGateway jobManager=null;
+      ActorGateway taskManager=null;
       try {
-        final ActorRef taskManager=startTaskManager(JobManager.getLocalJobManagerAkkaURL(),new Configuration());
+        taskManager=createTaskManager(actorSystem,JobManager.getLocalJobManagerAkkaURL(Option.<String>empty()),new Configuration(),true,false);
         Thread.sleep(6000);
-        final ActorRef jobManager=JobManager.startJobManagerActors(new Configuration(),actorSystem,StreamingMode.BATCH_ONLY)._1();
-        Future<Object> responseFuture=Patterns.ask(taskManager,TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),30000);
+        jobManager=createJobManager(actorSystem,new Configuration());
+        Future<Object> responseFuture=taskManager.ask(TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),new FiniteDuration(30000,TimeUnit.MILLISECONDS));
         Object response=Await.result(responseFuture,new FiniteDuration(30,TimeUnit.SECONDS));
         Class<?> confirmClass=TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass();
         assertTrue(response != null && confirmClass.isAssignableFrom(response.getClass()));
-        stopActor(taskManager);
-        stopActor(jobManager);
       }
  catch (      Exception e) {
         e.printStackTrace();
         fail(e.getMessage());
+      }
+ finally {
+        stopActor(taskManager);
+        stopActor(jobManager);
       }
     }
   }

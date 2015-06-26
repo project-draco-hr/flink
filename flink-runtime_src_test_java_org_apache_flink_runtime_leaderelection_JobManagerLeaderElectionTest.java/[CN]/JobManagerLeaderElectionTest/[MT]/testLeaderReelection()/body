@@ -1,0 +1,21 @@
+{
+  final Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  ActorRef jm;
+  ActorRef jm2=null;
+  try {
+    Props jmProps=createJobManagerProps(configuration);
+    jm=actorSystem.actorOf(jmProps);
+    Future<Object> leaderFuture=Patterns.ask(jm,TestingJobManagerMessages.getNotifyWhenLeader(),timeout);
+    Await.ready(leaderFuture,duration);
+    Props jmProps2=createJobManagerProps(configuration);
+    jm2=actorSystem.actorOf(jmProps2);
+    jm.tell(PoisonPill.getInstance(),ActorRef.noSender());
+    Future<Object> leader2Future=Patterns.ask(jm2,TestingJobManagerMessages.getNotifyWhenLeader(),timeout);
+    Await.ready(leader2Future,duration);
+  }
+  finally {
+    TestingUtils.stopActor(jm2);
+  }
+}

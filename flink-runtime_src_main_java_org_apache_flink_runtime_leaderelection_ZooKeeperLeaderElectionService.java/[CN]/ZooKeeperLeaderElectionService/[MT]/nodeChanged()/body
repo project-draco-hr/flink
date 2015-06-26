@@ -1,0 +1,33 @@
+{
+  try {
+    if (leaderLatch.hasLeadership()) {
+synchronized (lock) {
+        if (confirmedLeaderSessionID != null) {
+          ChildData childData=cache.getCurrentData();
+          if (childData == null) {
+            writeLeaderInformation(confirmedLeaderSessionID);
+          }
+ else {
+            byte[] data=childData.getData();
+            if (data == null || data.length == 0) {
+              writeLeaderInformation(confirmedLeaderSessionID);
+            }
+ else {
+              ByteArrayInputStream bais=new ByteArrayInputStream(data);
+              ObjectInputStream ois=new ObjectInputStream(bais);
+              String leaderAddress=ois.readUTF();
+              UUID leaderSessionID=(UUID)ois.readObject();
+              if (!leaderAddress.equals(this.leaderContender.getAddress()) || (leaderSessionID == null || !leaderSessionID.equals(confirmedLeaderSessionID))) {
+                writeLeaderInformation(confirmedLeaderSessionID);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+ catch (  Exception e) {
+    leaderContender.handleError(new Exception("Could not handle node changed event.",e));
+    throw e;
+  }
+}

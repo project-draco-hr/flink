@@ -1,0 +1,29 @@
+{
+  Configuration configuration=new Configuration();
+  configuration.setString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,testingCluster.getConnectString());
+  configuration.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+  ZooKeeperLeaderElectionService leaderElectionService=null;
+  ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  try {
+    leaderElectionService=ZooKeeperUtils.createLeaderElectionService(configuration);
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    TestingContender contender=new TestingContender(TEST_URL,leaderElectionService);
+    TestingListener listener=new TestingListener();
+    leaderElectionService.start(contender);
+    leaderRetrievalService.start(listener);
+    contender.waitForLeader(timeout.toMillis());
+    assertTrue(contender.isLeader());
+    assertEquals(leaderElectionService.getLeaderSessionID(),contender.getLeaderSessionID());
+    listener.waitForLeader(timeout.toMillis());
+    assertEquals(TEST_URL,listener.getAddress());
+    assertEquals(leaderElectionService.getLeaderSessionID(),listener.getLeaderSessionID());
+  }
+  finally {
+    if (leaderElectionService != null) {
+      leaderElectionService.stop();
+    }
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+  }
+}
