@@ -3,10 +3,16 @@
   StreamLoop iteration=new StreamLoop(iterationID,getStreamNode(sourceID),timeOut);
   streamLoops.put(iterationID,iteration);
   vertexIDtoLoop.put(sourceID,iteration);
-  setSerializersFrom(iterationHead,sourceID);
   itSource.setOperatorName("IterationSource-" + sourceID);
   itSource.setParallelism(getStreamNode(iterationHead).getParallelism());
-  addEdge(sourceID,iterationHead,new RebalancePartitioner(true),0,new ArrayList<String>());
+  if (feedbackType == null) {
+    setSerializersFrom(iterationHead,sourceID);
+    addEdge(sourceID,iterationHead,new RebalancePartitioner(true),0,new ArrayList<String>());
+  }
+ else {
+    itSource.setSerializerOut(new StreamRecordSerializer(feedbackType,executionConfig));
+    addEdge(sourceID,iterationHead,new RebalancePartitioner(true),2,new ArrayList<String>());
+  }
   if (LOG.isDebugEnabled()) {
     LOG.debug("ITERATION SOURCE: {}",sourceID);
   }
