@@ -8,6 +8,7 @@
     final IRichSpout userSpout=spout.getValue();
     final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
     userSpout.declareOutputFields(declarer);
+    this.outputSchemas.put(spoutId,declarer.outputSchema);
     final DataStreamSource source=env.addSource(new StormSpoutWrapper(userSpout),declarer.getOutputType());
     availableOperators.put(spoutId,source);
     int dop=1;
@@ -29,6 +30,7 @@
       final IRichBolt userBolt=bolt.getValue();
       final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
       userBolt.declareOutputFields(declarer);
+      this.outputSchemas.put(boltId,declarer.outputSchema);
       final ComponentCommon common=stormTopolgoy.get_bolts().get(boltId).get_common();
       Set<Entry<GlobalStreamId,Grouping>> unprocessedInputs=unprocessdInputsPerBolt.get(boltId);
       if (unprocessedInputs == null) {
@@ -62,7 +64,7 @@
             throw new UnsupportedOperationException("Flink only supports (local-or-)shuffle, fields, all, and global grouping");
           }
           final TypeInformation<?> outType=declarer.getOutputType();
-          final SingleOutputStreamOperator operator=inputDataStream.transform(boltId,outType,new StormBoltWrapper(userBolt));
+          final SingleOutputStreamOperator operator=inputDataStream.transform(boltId,outType,new StormBoltWrapper(userBolt,this.outputSchemas.get(producerId)));
           if (outType != null) {
             availableOperators.put(boltId,operator);
           }
