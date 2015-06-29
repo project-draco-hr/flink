@@ -19,18 +19,20 @@
   zkClient=new ZkClient(consumerConfig.zkConnect(),consumerConfig.zkSessionTimeoutMs(),consumerConfig.zkConnectionTimeoutMs(),new KafkaZKStringSerializer());
   int numPartitions=getNumberOfPartitions();
   LOG.debug("The topic {} has {} partitions",topicName,numPartitions);
-  this.lastOffsets=getRuntimeContext().getOperatorState("offset",new long[numPartitions],false);
+  this.lastOffsets=new long[numPartitions];
   this.commitedOffsets=new long[numPartitions];
-  if (!Arrays.equals(lastOffsets.value(),new long[numPartitions])) {
-    if (lastOffsets.value().length != numPartitions) {
-      throw new IllegalStateException("There are " + lastOffsets.value().length + " offsets to restore for topic "+ topicName+ " but "+ "there are only "+ numPartitions+ " in the topic");
+  if (restoreState != null) {
+    if (restoreState.length != numPartitions) {
+      throw new IllegalStateException("There are " + restoreState.length + " offsets to restore for topic "+ topicName+ " but "+ "there are only "+ numPartitions+ " in the topic");
     }
-    LOG.info("Setting restored offsets {} in ZooKeeper",Arrays.toString(lastOffsets.value()));
-    setOffsetsInZooKeeper(lastOffsets.value());
+    LOG.info("Setting restored offsets {} in ZooKeeper",Arrays.toString(restoreState));
+    setOffsetsInZooKeeper(restoreState);
+    this.lastOffsets=restoreState;
   }
  else {
-    Arrays.fill(this.lastOffsets.value(),-1);
+    Arrays.fill(this.lastOffsets,-1);
   }
   Arrays.fill(this.commitedOffsets,0);
+  pendingCheckpoints.clear();
   running=true;
 }
