@@ -34,30 +34,47 @@
  else {
     iteration.name("Gather-sum-apply iteration (" + gather + " | "+ sum+ " | "+ apply+ ")");
   }
-  DataSet<Tuple2<K,Neighbor<VV,EV>>> neighbors=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(0).with(new ProjectKeyWithNeighbor<K,VV,EV>());
-  MapOperator<Tuple2<K,Neighbor<VV,EV>>,Tuple2<K,M>> gatherMapOperator=neighbors.map(gatherUdf);
-  gatherMapOperator=gatherMapOperator.name("Gather");
   if (this.configuration != null) {
-    for (    Tuple2<String,DataSet<?>> e : this.configuration.getGatherBcastVars()) {
-      gatherMapOperator=gatherMapOperator.withBroadcastSet(e.f1,e.f0);
-    }
+    direction=this.configuration.getDirection();
   }
-  DataSet<Tuple2<K,M>> gatheredSet=gatherMapOperator;
-  ReduceOperator<Tuple2<K,M>> sumReduceOperator=gatheredSet.groupBy(0).reduce(sumUdf);
-  sumReduceOperator=sumReduceOperator.name("Sum");
-  if (this.configuration != null) {
-    for (    Tuple2<String,DataSet<?>> e : this.configuration.getSumBcastVars()) {
-      sumReduceOperator=sumReduceOperator.withBroadcastSet(e.f1,e.f0);
-    }
-  }
-  DataSet<Tuple2<K,M>> summedSet=sumReduceOperator;
-  JoinOperator<?,?,Vertex<K,VV>> appliedSet=summedSet.join(iteration.getSolutionSet()).where(0).equalTo(0).with(applyUdf);
-  appliedSet=appliedSet.name("Apply");
-  if (this.configuration != null) {
-    for (    Tuple2<String,DataSet<?>> e : this.configuration.getApplyBcastVars()) {
-      appliedSet=appliedSet.withBroadcastSet(e.f1,e.f0);
-    }
-  }
-  appliedSet.withForwardedFieldsFirst("0").withForwardedFieldsSecond("0");
-  return iteration.closeWith(appliedSet,appliedSet);
+  DataSet<Tuple2<K,Neighbor<VV,EV>>> neighbors;
+switch (direction) {
+case OUT:
+    neighbors=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(0).with(new ProjectKeyWithNeighborOUT<K,VV,EV>());
+  break;
+case IN:
+neighbors=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(1).with(new ProjectKeyWithNeighborIN<K,VV,EV>());
+break;
+case ALL:
+neighbors=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(0).with(new ProjectKeyWithNeighborOUT<K,VV,EV>()).union(iteration.getWorkset().join(edgeDataSet).where(0).equalTo(1).with(new ProjectKeyWithNeighborIN<K,VV,EV>()));
+break;
+default :
+neighbors=iteration.getWorkset().join(edgeDataSet).where(0).equalTo(0).with(new ProjectKeyWithNeighborOUT<K,VV,EV>());
+break;
+}
+MapOperator<Tuple2<K,Neighbor<VV,EV>>,Tuple2<K,M>> gatherMapOperator=neighbors.map(gatherUdf);
+gatherMapOperator=gatherMapOperator.name("Gather");
+if (this.configuration != null) {
+for (Tuple2<String,DataSet<?>> e : this.configuration.getGatherBcastVars()) {
+gatherMapOperator=gatherMapOperator.withBroadcastSet(e.f1,e.f0);
+}
+}
+DataSet<Tuple2<K,M>> gatheredSet=gatherMapOperator;
+ReduceOperator<Tuple2<K,M>> sumReduceOperator=gatheredSet.groupBy(0).reduce(sumUdf);
+sumReduceOperator=sumReduceOperator.name("Sum");
+if (this.configuration != null) {
+for (Tuple2<String,DataSet<?>> e : this.configuration.getSumBcastVars()) {
+sumReduceOperator=sumReduceOperator.withBroadcastSet(e.f1,e.f0);
+}
+}
+DataSet<Tuple2<K,M>> summedSet=sumReduceOperator;
+JoinOperator<?,?,Vertex<K,VV>> appliedSet=summedSet.join(iteration.getSolutionSet()).where(0).equalTo(0).with(applyUdf);
+appliedSet=appliedSet.name("Apply");
+if (this.configuration != null) {
+for (Tuple2<String,DataSet<?>> e : this.configuration.getApplyBcastVars()) {
+appliedSet=appliedSet.withBroadcastSet(e.f1,e.f0);
+}
+}
+appliedSet.withForwardedFieldsFirst("0").withForwardedFieldsSecond("0");
+return iteration.closeWith(appliedSet,appliedSet);
 }
