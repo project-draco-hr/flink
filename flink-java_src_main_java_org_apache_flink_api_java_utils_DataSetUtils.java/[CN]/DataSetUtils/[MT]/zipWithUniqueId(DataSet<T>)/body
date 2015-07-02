@@ -1,0 +1,26 @@
+{
+  return input.mapPartition(new RichMapPartitionFunction<T,Tuple2<Long,T>>(){
+    long shifter=0;
+    long start=0;
+    long taskId=0;
+    long label=0;
+    @Override public void open(    Configuration parameters) throws Exception {
+      super.open(parameters);
+      shifter=log2(getRuntimeContext().getNumberOfParallelSubtasks());
+      taskId=getRuntimeContext().getIndexOfThisSubtask();
+    }
+    @Override public void mapPartition(    Iterable<T> values,    Collector<Tuple2<Long,T>> out) throws Exception {
+      for (      T value : values) {
+        label=start << shifter + taskId;
+        if (log2(start) + shifter < log2(Long.MAX_VALUE)) {
+          out.collect(new Tuple2<Long,T>(label,value));
+          start++;
+        }
+ else {
+          throw new Exception("Exceeded Long value range while generating labels");
+        }
+      }
+    }
+  }
+);
+}
