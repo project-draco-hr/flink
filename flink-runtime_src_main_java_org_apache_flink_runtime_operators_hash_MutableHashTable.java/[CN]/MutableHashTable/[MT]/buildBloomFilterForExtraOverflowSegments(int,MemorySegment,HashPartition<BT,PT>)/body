@@ -1,0 +1,28 @@
+{
+  int totalCount=0;
+  boolean skip=false;
+  long forwardPointer=bucket.getLong(bucketInSegmentPos + HEADER_FORWARD_OFFSET);
+  while (forwardPointer != BUCKET_FORWARD_POINTER_NOT_SET) {
+    final int overflowSegNum=(int)(forwardPointer >>> 32);
+    if (overflowSegNum < 0 || overflowSegNum >= p.numOverflowSegments) {
+      skip=true;
+      break;
+    }
+    MemorySegment overflowSegment=p.overflowSegments[overflowSegNum];
+    int bucketInOverflowSegmentOffset=(int)(forwardPointer & 0xffffffff);
+    final int count=overflowSegment.getShort(bucketInOverflowSegmentOffset + HEADER_COUNT_OFFSET);
+    totalCount+=count;
+    if (totalCount > 2048) {
+      skip=true;
+      break;
+    }
+    for (int i=0; i < count; i++) {
+      int hashCode=overflowSegment.getInt(bucketInOverflowSegmentOffset + BUCKET_HEADER_LENGTH + i * HASH_CODE_LEN);
+      this.bloomFilter.addHash(hashCode);
+    }
+    forwardPointer=overflowSegment.getLong(bucketInOverflowSegmentOffset + HEADER_FORWARD_OFFSET);
+  }
+  if (!skip) {
+    bucket.put(bucketInSegmentPos + HEADER_STATUS_OFFSET,BUCKET_STATUS_IN_FILTER);
+  }
+}
