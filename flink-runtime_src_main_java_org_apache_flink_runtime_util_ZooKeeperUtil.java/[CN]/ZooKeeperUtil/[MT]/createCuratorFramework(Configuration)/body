@@ -1,0 +1,20 @@
+{
+  String zkQuorum=ZooKeeperUtil.getZooKeeperEnsemble(configuration);
+  if (zkQuorum == null || zkQuorum.equals("")) {
+    throw new RuntimeException("No valid ZooKeeper quorum has been specified.");
+  }
+  int sessionTimeout=configuration.getInteger(ConfigConstants.ZOOKEEPER_SESSION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_SESSION_TIMEOUT);
+  int connectionTimeout=configuration.getInteger(ConfigConstants.ZOOKEEPER_CONNECTION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_CONNECTION_TIMEOUT);
+  int retryWait=configuration.getInteger(ConfigConstants.ZOOKEEPER_RETRY_WAIT,ConfigConstants.DEFAULT_ZOOKEEPER_RETRY_WAIT);
+  int maxRetryAttempts=configuration.getInteger(ConfigConstants.ZOOKEEPER_MAX_RETRY_ATTEMPTS,ConfigConstants.DEFAULT_ZOOKEEPER_MAX_RETRY_ATTEMPTS);
+  String root=configuration.getString(ConfigConstants.ZOOKEEPER_DIR_KEY,ConfigConstants.DEFAULT_ZOOKEEPER_ZNODE_ROOT);
+  LOG.info("Using '{}' as root namespace.",root);
+  CuratorFramework cf=CuratorFrameworkFactory.builder().connectString(zkQuorum).sessionTimeoutMs(sessionTimeout).connectionTimeoutMs(connectionTimeout).retryPolicy(new ExponentialBackoffRetry(retryWait,maxRetryAttempts)).namespace(root.startsWith("/") ? root.substring(1) : root).build();
+  try {
+    cf.start();
+  }
+ catch (  Exception e) {
+    throw new Exception("Could not start CuratorFramework.",e);
+  }
+  return cf;
+}

@@ -1,0 +1,41 @@
+{
+  if (zkProps.getProperty("clientPort") == null) {
+    int clientPort=ConfigConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT;
+    zkProps.setProperty("clientPort",String.valueOf(clientPort));
+    LOG.warn("No 'clientPort' configured. Set to '{}'.",clientPort);
+  }
+  if (zkProps.getProperty("initLimit") == null) {
+    int initLimit=ConfigConstants.DEFAULT_ZOOKEEPER_INIT_LIMIT;
+    zkProps.setProperty("initLimit",String.valueOf(initLimit));
+    LOG.warn("No 'initLimit' configured. Set to '{}'.",initLimit);
+  }
+  if (zkProps.getProperty("syncLimit") == null) {
+    int syncLimit=ConfigConstants.DEFAULT_ZOOKEEPER_SYNC_LIMIT;
+    zkProps.setProperty("syncLimit",String.valueOf(syncLimit));
+    LOG.warn("No 'syncLimit' configured. Set to '{}'.",syncLimit);
+  }
+  if (zkProps.getProperty("dataDir") == null) {
+    String dataDir=String.format("%s/%s/zookeeper",System.getProperty("java.io.tmpdir"),UUID.randomUUID().toString());
+    zkProps.setProperty("dataDir",dataDir);
+    LOG.warn("No 'dataDir' configured. Set to '{}'.",dataDir);
+  }
+  int peerPort=ConfigConstants.DEFAULT_ZOOKEEPER_PEER_PORT;
+  int leaderPort=ConfigConstants.DEFAULT_ZOOKEEPER_LEADER_PORT;
+  for (  Map.Entry<Object,Object> entry : zkProps.entrySet()) {
+    String key=(String)entry.getKey();
+    if (entry.getKey().toString().startsWith("server.")) {
+      String value=(String)entry.getValue();
+      String[] parts=value.split(":");
+      if (parts.length == 1) {
+        String address=String.format("%s:%d:%d",parts[0],peerPort,leaderPort);
+        zkProps.setProperty(key,address);
+        LOG.info("Set peer and leader port of '{}': '{}' => '{}'.",key,value,address);
+      }
+ else       if (parts.length == 2) {
+        String address=String.format("%s:%d:%d",parts[0],Integer.valueOf(parts[1]),leaderPort);
+        zkProps.setProperty(key,address);
+        LOG.info("Set peer port of '{}': '{}' => '{}'.",key,value,address);
+      }
+    }
+  }
+}
