@@ -1,6 +1,5 @@
 {
   try {
-    TestingUtils.setCallingThreadDispatcher(system);
     final JobID jobId=new JobID();
     final JobVertexID jid1=new JobVertexID();
     final JobVertexID jid2=new JobVertexID();
@@ -21,19 +20,18 @@
     v2.connectNewDataSetAsInput(v1,DistributionPattern.ALL_TO_ALL);
     v3.connectNewDataSetAsInput(v2,DistributionPattern.ALL_TO_ALL);
     v4.connectNewDataSetAsInput(v2,DistributionPattern.ALL_TO_ALL);
-    ExecutionGraph eg=new ExecutionGraph(jobId,"some job",new Configuration(),AkkaUtils.getDefaultTimeout());
+    ExecutionGraph eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),jobId,"some job",new Configuration(),AkkaUtils.getDefaultTimeout());
     List<JobVertex> ordered=Arrays.asList(v1,v2,v3,v4);
     eg.attachJobGraph(ordered);
     ExecutionJobVertex ejv=eg.getAllVertices().get(jid2);
     ExecutionVertex vertex=ejv.getTaskVertices()[3];
-    final TestActorRef<? extends Actor> simpleTaskManager=TestActorRef.create(system,Props.create(ExecutionGraphTestUtils.SimpleAcknowledgingTaskManager.class));
-    ExecutionGraphTestUtils.SimpleAcknowledgingTaskManager tm=(ExecutionGraphTestUtils.SimpleAcknowledgingTaskManager)simpleTaskManager.underlyingActor();
-    final Instance instance=getInstance(simpleTaskManager);
+    ExecutionGraphTestUtils.SimpleInstanceGateway instanceGateway=new ExecutionGraphTestUtils.SimpleInstanceGateway(TestingUtils.directExecutionContext());
+    final Instance instance=getInstance(instanceGateway);
     final SimpleSlot slot=instance.allocateSimpleSlot(jobId);
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
     assertEquals(ExecutionState.DEPLOYING,vertex.getExecutionState());
-    TaskDeploymentDescriptor descr=tm.lastTDD;
+    TaskDeploymentDescriptor descr=instanceGateway.lastTDD;
     assertNotNull(descr);
     assertEquals(jobId,descr.getJobID());
     assertEquals(jid2,descr.getVertexID());
@@ -52,8 +50,5 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    TestingUtils.setGlobalExecutionContext();
   }
 }

@@ -1,14 +1,12 @@
 {
   try {
-    ActionQueue queue=new ActionQueue();
-    TestingUtils.QueuedActionExecutionContext context=new TestingUtils.QueuedActionExecutionContext(queue);
-    TestingUtils.setExecutionContext(context);
+    final TestingUtils.QueuedActionExecutionContext context=TestingUtils.queuedActionExecutionContext();
+    final TestingUtils.ActionQueue queue=context.actionQueue();
     final JobVertexID jid=new JobVertexID();
-    final ExecutionJobVertex ejv=getExecutionVertex(jid);
+    final ExecutionJobVertex ejv=getExecutionVertex(jid,context);
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0],AkkaUtils.getDefaultTimeout());
     final ExecutionAttemptID eid=vertex.getCurrentExecutionAttempt().getAttemptId();
-    final TestActorRef<? extends Actor> simpleTaskManager=TestActorRef.create(system,Props.create(new ExecutionVertexCancelTest.CancelSequenceTaskManagerCreator(new TaskOperationResult(eid,false),new TaskOperationResult(eid,true))));
-    final Instance instance=getInstance(simpleTaskManager);
+    final Instance instance=getInstance(new ExecutionVertexCancelTest.CancelSequenceInstanceGateway(context,new TaskOperationResult(eid,false),new TaskOperationResult(eid,true)));
     final SimpleSlot slot=instance.allocateSimpleSlot(ejv.getJobId());
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
@@ -21,6 +19,7 @@
     cancel1.run();
     queue.triggerNextAction();
     deploy.run();
+    queue.triggerNextAction();
     assertEquals(ExecutionState.FAILED,vertex.getExecutionState());
     assertEquals(testError,vertex.getFailureCause());
     assertTrue(vertex.getStateTimestamp(ExecutionState.CREATED) > 0);
@@ -31,8 +30,5 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    TestingUtils.setGlobalExecutionContext();
   }
 }

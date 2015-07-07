@@ -1,29 +1,24 @@
 {
-  new JavaTestKit(system){
-{
-      try {
-        final JobVertexID jid=new JobVertexID();
-        final ExecutionJobVertex ejv=getExecutionVertex(jid);
-        final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0],AkkaUtils.getDefaultTimeout());
-        final ExecutionAttemptID execID=vertex.getCurrentExecutionAttempt().getAttemptId();
-        final ActorRef taskManager=system.actorOf(Props.create(new CancelSequenceTaskManagerCreator(new TaskOperationResult(execID,true))));
-        Instance instance=getInstance(taskManager);
-        SimpleSlot slot=instance.allocateSimpleSlot(new JobID());
-        setVertexState(vertex,ExecutionState.RUNNING);
-        setVertexResource(vertex,slot);
-        assertEquals(ExecutionState.RUNNING,vertex.getExecutionState());
-        vertex.cancel();
-        assertTrue(vertex.getExecutionState() == ExecutionState.CANCELING || vertex.getExecutionState() == ExecutionState.FAILED);
-        vertex.getCurrentExecutionAttempt().markFailed(new Throwable("test"));
-        assertTrue(vertex.getExecutionState() == ExecutionState.CANCELED || vertex.getExecutionState() == ExecutionState.FAILED);
-        assertTrue(slot.isReleased());
-        assertEquals(0,vertex.getExecutionGraph().getRegisteredExecutions().size());
-      }
- catch (      Exception e) {
-        e.printStackTrace();
-        fail(e.getMessage());
-      }
-    }
+  try {
+    final JobVertexID jid=new JobVertexID();
+    final ExecutionJobVertex ejv=getExecutionVertex(jid);
+    final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0],AkkaUtils.getDefaultTimeout());
+    final ExecutionAttemptID execID=vertex.getCurrentExecutionAttempt().getAttemptId();
+    final InstanceGateway gateway=new CancelSequenceInstanceGateway(TestingUtils.defaultExecutionContext(),new TaskOperationResult(execID,true));
+    Instance instance=getInstance(gateway);
+    SimpleSlot slot=instance.allocateSimpleSlot(new JobID());
+    setVertexState(vertex,ExecutionState.RUNNING);
+    setVertexResource(vertex,slot);
+    assertEquals(ExecutionState.RUNNING,vertex.getExecutionState());
+    vertex.cancel();
+    assertTrue(vertex.getExecutionState() == ExecutionState.CANCELING || vertex.getExecutionState() == ExecutionState.FAILED);
+    vertex.getCurrentExecutionAttempt().markFailed(new Throwable("test"));
+    assertTrue(vertex.getExecutionState() == ExecutionState.CANCELED || vertex.getExecutionState() == ExecutionState.FAILED);
+    assertTrue(slot.isReleased());
+    assertEquals(0,vertex.getExecutionGraph().getRegisteredExecutions().size());
   }
-;
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
 }

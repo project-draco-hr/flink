@@ -1,11 +1,9 @@
 {
   try {
-    TestingUtils.setCallingThreadDispatcher(system);
     final JobVertexID jid=new JobVertexID();
-    final ExecutionJobVertex ejv=getExecutionVertex(jid);
+    final ExecutionJobVertex ejv=getExecutionVertex(jid,TestingUtils.directExecutionContext());
     final ExecutionVertex vertex=new ExecutionVertex(ejv,0,new IntermediateResult[0],AkkaUtils.getDefaultTimeout());
-    final TestActorRef<? extends Actor> simpleTaskManager=TestActorRef.create(system,Props.create(SimpleFailingTaskManager.class));
-    final Instance instance=getInstance(simpleTaskManager);
+    final Instance instance=getInstance(new SimpleFailingInstanceGateway(TestingUtils.directExecutionContext()));
     final SimpleSlot slot=instance.allocateSimpleSlot(ejv.getJobId());
     assertEquals(ExecutionState.CREATED,vertex.getExecutionState());
     vertex.deployToSlot(slot);
@@ -19,8 +17,5 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    TestingUtils.setGlobalExecutionContext();
   }
 }
