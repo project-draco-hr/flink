@@ -1,8 +1,21 @@
 {
   ByteArrayInputStream bais=new ByteArrayInputStream(elementsSerialized);
-  DataInputView input=new InputViewDataInputStreamWrapper(new DataInputStream(bais));
-  int numEmitted=0;
-  while (isRunning && numEmitted++ < numElements) {
+  final DataInputView input=new InputViewDataInputStreamWrapper(new DataInputStream(bais));
+  int toSkip=numElementsToSkip;
+  if (toSkip > 0) {
+    try {
+      while (toSkip > 0) {
+        serializer.deserialize(input);
+        toSkip--;
+      }
+    }
+ catch (    Exception e) {
+      throw new IOException("Failed to deserialize an element from the source. " + "If you are using user-defined serialization (Value and Writable types), check the " + "serialization functions.\nSerializer is "+ serializer);
+    }
+    this.numElementsEmitted=this.numElementsToSkip;
+  }
+  final Object lock=ctx.getCheckpointLock();
+  while (isRunning && numElementsEmitted < numElements) {
     T next;
     try {
       next=serializer.deserialize(input);
@@ -10,6 +23,9 @@
  catch (    Exception e) {
       throw new IOException("Failed to deserialize an element from the source. " + "If you are using user-defined serialization (Value and Writable types), check the " + "serialization functions.\nSerializer is "+ serializer);
     }
-    ctx.collect(next);
+synchronized (lock) {
+      ctx.collect(next);
+      numElementsEmitted++;
+    }
   }
 }
