@@ -2,9 +2,13 @@
   this.userClassLoader=getUserCodeClassLoader();
   this.configuration=new StreamConfig(getTaskConfiguration());
   streamOperator=configuration.getStreamOperator(userClassLoader);
-  outputHandler=new OutputHandler<OUT>(this);
+  Environment env=getEnvironment();
+  AccumulatorRegistry accumulatorRegistry=env.getAccumulatorRegistry();
+  Map<String,Accumulator<?,?>> accumulatorMap=accumulatorRegistry.getUserMap();
+  AccumulatorRegistry.Reporter reporter=accumulatorRegistry.getReadWriteReporter();
+  outputHandler=new OutputHandler<OUT>(this,accumulatorMap,reporter);
   if (streamOperator != null) {
-    headContext=createRuntimeContext(configuration);
+    headContext=createRuntimeContext(configuration,accumulatorMap);
     this.contexts.add(headContext);
     streamOperator.setup(outputHandler.getOutput(),headContext);
   }

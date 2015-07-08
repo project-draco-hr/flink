@@ -1,0 +1,41 @@
+{
+  new JavaTestKit(system){
+{
+      ExecutionEnvironment env=new PlanExtractor();
+      DataSet<String> input=env.fromCollection(inputData);
+      input.flatMap(new Tokenizer()).flatMap(new WaitingUDF()).output(new WaitingOutputFormat());
+      env.execute();
+      JobGraph jobGraph=getOptimizedPlan(((PlanExtractor)env).plan);
+      jobManager.tell(new JobManagerMessages.SubmitJob(jobGraph,false),getRef());
+      expectMsgClass(Status.Success.class);
+      int i=0, retries=0;
+      int expectedAccVal=0;
+      while (i <= NUM_ITERATIONS) {
+        if (retries > 0) {
+          Thread.sleep(WAIT_TIME / NUM_RETRIES);
+        }
+ else {
+          Thread.sleep(WAIT_TIME);
+        }
+        jobManager.tell(new RequestAccumulatorValues(jobGraph.getJobID()),getRef());
+        RequestAccumulatorValuesResponse response=expectMsgClass(RequestAccumulatorValuesResponse.class);
+        Map<String,Accumulator<?,?>> userAccumulators=response.userAccumulators();
+        Map<ExecutionAttemptID,Map<AccumulatorRegistry.Metric,Accumulator<?,?>>> flinkAccumulators=response.flinkAccumulators();
+        if (checkUserAccumulators(expectedAccVal,userAccumulators) && checkFlinkAccumulators(i == NUM_ITERATIONS,i,i * 4,flinkAccumulators)) {
+          i+=1;
+          expectedAccVal+=i;
+          retries=0;
+        }
+ else {
+          if (retries < NUM_RETRIES) {
+            retries+=1;
+          }
+ else {
+            fail("Failed in round #" + i + " after "+ retries+ " retries.");
+          }
+        }
+      }
+    }
+  }
+;
+}

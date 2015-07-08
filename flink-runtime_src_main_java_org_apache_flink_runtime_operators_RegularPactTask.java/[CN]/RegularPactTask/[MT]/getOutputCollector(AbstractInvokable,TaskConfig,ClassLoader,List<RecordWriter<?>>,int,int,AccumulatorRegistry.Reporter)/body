@@ -1,0 +1,58 @@
+{
+  if (numOutputs == 0) {
+    return null;
+  }
+  final TypeSerializerFactory<T> serializerFactory=config.getOutputSerializer(cl);
+  if (serializerFactory.getDataType().equals(Record.class)) {
+    final List<RecordWriter<Record>> writers=new ArrayList<RecordWriter<Record>>(numOutputs);
+    for (int i=0; i < numOutputs; i++) {
+      final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+      final TypeComparatorFactory<?> compFact=config.getOutputComparator(i,cl);
+      final RecordOutputEmitter oe;
+      if (compFact == null) {
+        oe=new RecordOutputEmitter(strategy);
+      }
+ else {
+        @SuppressWarnings("unchecked") TypeComparator<Record> comparator=(TypeComparator<Record>)compFact.createComparator();
+        if (!comparator.supportsCompareAgainstReference()) {
+          throw new Exception("Incompatibe serializer-/comparator factories.");
+        }
+        final DataDistribution distribution=config.getOutputDataDistribution(i,cl);
+        final Partitioner<?> partitioner=config.getOutputPartitioner(i,cl);
+        oe=new RecordOutputEmitter(strategy,comparator,partitioner,distribution);
+      }
+      final RecordWriter<Record> recordWriter=new RecordWriter<Record>(task.getEnvironment().getWriter(outputOffset + i),oe);
+      recordWriter.setReporter(reporter);
+      writers.add(recordWriter);
+    }
+    if (eventualOutputs != null) {
+      eventualOutputs.addAll(writers);
+    }
+    @SuppressWarnings("unchecked") final Collector<T> outColl=(Collector<T>)new RecordOutputCollector(writers);
+    return outColl;
+  }
+ else {
+    final List<RecordWriter<SerializationDelegate<T>>> writers=new ArrayList<RecordWriter<SerializationDelegate<T>>>(numOutputs);
+    for (int i=0; i < numOutputs; i++) {
+      final ShipStrategyType strategy=config.getOutputShipStrategy(i);
+      final TypeComparatorFactory<T> compFactory=config.getOutputComparator(i,cl);
+      final ChannelSelector<SerializationDelegate<T>> oe;
+      if (compFactory == null) {
+        oe=new OutputEmitter<T>(strategy);
+      }
+ else {
+        final DataDistribution dataDist=config.getOutputDataDistribution(i,cl);
+        final Partitioner<?> partitioner=config.getOutputPartitioner(i,cl);
+        final TypeComparator<T> comparator=compFactory.createComparator();
+        oe=new OutputEmitter<T>(strategy,comparator,partitioner,dataDist);
+      }
+      final RecordWriter<SerializationDelegate<T>> recordWriter=new RecordWriter<SerializationDelegate<T>>(task.getEnvironment().getWriter(outputOffset + i),oe);
+      recordWriter.setReporter(reporter);
+      writers.add(recordWriter);
+    }
+    if (eventualOutputs != null) {
+      eventualOutputs.addAll(writers);
+    }
+    return new OutputCollector<T>(writers,serializerFactory.getSerializer());
+  }
+}
