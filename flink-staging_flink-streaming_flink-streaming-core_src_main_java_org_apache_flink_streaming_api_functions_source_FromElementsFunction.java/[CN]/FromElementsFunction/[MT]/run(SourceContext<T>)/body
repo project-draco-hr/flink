@@ -1,9 +1,15 @@
 {
-  T value=serializer.createInstance();
-  ByteArrayInputStream bais=new ByteArrayInputStream(elements);
+  ByteArrayInputStream bais=new ByteArrayInputStream(elementsSerialized);
   DataInputView input=new InputViewDataInputStreamWrapper(new DataInputStream(bais));
-  while (isRunning && bais.available() > 0) {
-    value=serializer.deserialize(value,input);
-    ctx.collect(value);
+  int numEmitted=0;
+  while (isRunning && numEmitted++ < numElements) {
+    T next;
+    try {
+      next=serializer.deserialize(input);
+    }
+ catch (    Exception e) {
+      throw new IOException("Failed to deserialize an element from the source. " + "If you are using user-defined serialization (Value and Writable types), check the " + "serialization functions.\nSerializer is "+ serializer);
+    }
+    ctx.collect(next);
   }
 }

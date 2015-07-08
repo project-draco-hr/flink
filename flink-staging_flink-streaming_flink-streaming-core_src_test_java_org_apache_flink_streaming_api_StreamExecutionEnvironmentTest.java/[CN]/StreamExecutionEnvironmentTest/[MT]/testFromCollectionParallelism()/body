@@ -1,16 +1,21 @@
 {
-  TypeInformation<Object> typeInfo=TypeExtractor.getForClass(Object.class);
-  StreamExecutionEnvironment env=new TestStreamEnvironment(PARALLELISM,MEMORYSIZE);
-  boolean seenExpectedException=false;
   try {
-    DataStream<Object> dataStream1=env.fromCollection(new DummySplittableIterator(),typeInfo).setParallelism(4);
+    TypeInformation<Integer> typeInfo=BasicTypeInfo.INT_TYPE_INFO;
+    StreamExecutionEnvironment env=new TestStreamEnvironment(PARALLELISM,MEMORYSIZE);
+    DataStreamSource<Integer> dataStream1=env.fromCollection(new DummySplittableIterator<Integer>(),typeInfo);
+    try {
+      dataStream1.setParallelism(4);
+      fail("should throw an exception");
+    }
+ catch (    IllegalArgumentException e) {
+    }
+    env.fromParallelCollection(new DummySplittableIterator<Integer>(),typeInfo).setParallelism(4);
+    String plan=env.getExecutionPlan();
+    assertTrue("Parallelism for dataStream1 is not right.",plan.contains("\"contents\":\"Collection Source\",\"parallelism\":1"));
+    assertTrue("Parallelism for dataStream2 is not right.",plan.contains("\"contents\":\"Parallel Collection Source\",\"parallelism\":4"));
   }
- catch (  IllegalArgumentException e) {
-    seenExpectedException=true;
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
   }
-  DataStream<Object> dataStream2=env.fromParallelCollection(new DummySplittableIterator(),typeInfo).setParallelism(4);
-  String plan=env.getExecutionPlan();
-  assertTrue("Expected Exception for setting parallelism was not thrown.",seenExpectedException);
-  assertTrue("Parallelism for dataStream1 is not right.",plan.contains("\"contents\":\"Collection Source\",\"parallelism\":1"));
-  assertTrue("Parallelism for dataStream2 is not right.",plan.contains("\"contents\":\"Parallel Collection Source\",\"parallelism\":4"));
 }
