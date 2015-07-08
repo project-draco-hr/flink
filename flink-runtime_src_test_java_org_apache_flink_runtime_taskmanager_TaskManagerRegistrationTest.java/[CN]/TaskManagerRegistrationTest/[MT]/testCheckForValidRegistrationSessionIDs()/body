@@ -1,0 +1,34 @@
+{
+  new JavaTestKit(actorSystem){
+{
+      try {
+        final ActorRef taskManager=startTaskManager(getTestActor());
+        final UUID falseLeaderSessionID=UUID.randomUUID();
+        final UUID trueLeaderSessionID=UUID.randomUUID();
+        new Within(new FiniteDuration(20,TimeUnit.SECONDS)){
+          @Override protected void run(){
+            taskManager.tell(TaskManagerMessages.getNotifyWhenRegisteredAtJobManagerMessage(),getTestActor());
+            RegisterTaskManager registerTaskManager=expectMsgClass(RegisterTaskManager.class);
+            final ActorRef tm=getLastSender();
+            tm.tell(new AcknowledgeRegistration(UUID.randomUUID(),falseLeaderSessionID,getTestActor(),new InstanceID(),1),getTestActor());
+            tm.tell(new AcknowledgeRegistration(registerTaskManager.registrationSessionID(),trueLeaderSessionID,getTestActor(),new InstanceID(),1),getTestActor());
+            Object message=null;
+            Object confirmMessageClass=TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass();
+            while (message == null || !(message.getClass().equals(confirmMessageClass))) {
+              message=expectMsgAnyClassOf(TaskManagerMessages.getRegisteredAtJobManagerMessage().getClass(),RegisterTaskManager.class,TaskManagerMessages.Heartbeat.class);
+            }
+            tm.tell(JobManagerMessages.getRequestLeaderSessionID(),getTestActor());
+            expectMsgEquals(new JobManagerMessages.ResponseLeaderSessionID(Option.apply(trueLeaderSessionID)));
+          }
+        }
+;
+        stopActor(taskManager);
+      }
+ catch (      Throwable e) {
+        e.printStackTrace();
+        fail(e.getMessage());
+      }
+    }
+  }
+;
+}

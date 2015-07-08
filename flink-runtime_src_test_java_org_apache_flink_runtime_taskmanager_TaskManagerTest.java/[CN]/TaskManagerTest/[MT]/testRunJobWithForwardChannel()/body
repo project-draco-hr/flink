@@ -10,7 +10,7 @@
         JobVertexID vid2=new JobVertexID();
         final ExecutionAttemptID eid1=new ExecutionAttemptID();
         final ExecutionAttemptID eid2=new ExecutionAttemptID();
-        jobManager=system.actorOf(Props.create(new SimpleLookupJobManagerCreator()));
+        jobManager=system.actorOf(Props.create(new SimpleLookupJobManagerCreator(leaderSessionID.get())));
         taskManager=createTaskManager(jobManager,true);
         final ActorRef tm=taskManager;
         IntermediateResultPartitionID partitionId=new IntermediateResultPartitionID();
@@ -24,10 +24,10 @@
             try {
               Future<Object> t1Running=Patterns.ask(tm,new TestingTaskManagerMessages.NotifyWhenTaskIsRunning(eid1),timeout);
               Future<Object> t2Running=Patterns.ask(tm,new TestingTaskManagerMessages.NotifyWhenTaskIsRunning(eid2),timeout);
-              tm.tell(new SubmitTask(tdd1),getRef());
+              tm.tell(decorator.decorate(new SubmitTask(tdd1)),getRef());
               expectMsgEquals(Messages.getAcknowledge());
               Await.ready(t1Running,d);
-              tm.tell(new SubmitTask(tdd2),getRef());
+              tm.tell(decorator.decorate(new SubmitTask(tdd2)),getRef());
               expectMsgEquals(Messages.getAcknowledge());
               Await.ready(t2Running,d);
               tm.tell(TestingTaskManagerMessages.getRequestRunningTasksMessage(),getRef());

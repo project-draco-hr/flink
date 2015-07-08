@@ -1,0 +1,27 @@
+{
+  Preconditions.checkNotNull(jobManagerGateway,"The jobManagerGateway must not be null.");
+  Preconditions.checkNotNull(jobGraph,"The jobGraph must not be null.");
+  Preconditions.checkNotNull(timeout,"The timeout must not be null.");
+  Future<Object> future=jobManagerGateway.ask(new JobManagerMessages.SubmitJob(jobGraph,false),timeout);
+  try {
+    Object result=Await.result(future,timeout);
+    if (result instanceof JobID) {
+      JobID respondedID=(JobID)result;
+      if (!respondedID.equals(jobGraph.getJobID())) {
+        throw new Exception("JobManager responded for wrong Job. This Job: " + jobGraph.getJobID() + ", response: "+ respondedID);
+      }
+    }
+ else {
+      throw new Exception("Unexpected response: " + result);
+    }
+  }
+ catch (  JobExecutionException e) {
+    throw e;
+  }
+catch (  TimeoutException e) {
+    throw new JobTimeoutException(jobGraph.getJobID(),"JobManager did not respond within " + timeout.toString(),e);
+  }
+catch (  Throwable t) {
+    throw new JobExecutionException(jobGraph.getJobID(),"Failed to send job to JobManager: " + t.getMessage(),t.getCause());
+  }
+}

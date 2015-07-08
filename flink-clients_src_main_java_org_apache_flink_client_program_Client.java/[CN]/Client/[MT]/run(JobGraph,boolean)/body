@@ -9,27 +9,34 @@
  catch (  Exception e) {
     throw new ProgramInvocationException("Could start client actor system.",e);
   }
+  FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
   LOG.info("Looking up JobManager");
-  ActorRef jobManager;
+  ActorGateway jobManagerGateway;
+  ActorRef jobManagerActorRef;
   try {
-    jobManager=JobManager.getJobManagerRemoteReference(jobManagerAddress,actorSystem,configuration);
+    jobManagerActorRef=JobManager.getJobManagerRemoteReference(jobManagerAddress,actorSystem,configuration);
   }
  catch (  IOException e) {
     throw new ProgramInvocationException("Failed to resolve JobManager",e);
   }
-  LOG.info("JobManager runs at " + jobManager.path());
-  FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
+  try {
+    jobManagerGateway=JobManager.getJobManagerGateway(jobManagerActorRef,timeout);
+  }
+ catch (  Exception e) {
+    throw new ProgramInvocationException("Failed to retrieve the JobManager gateway.",e);
+  }
+  LOG.info("JobManager runs at " + jobManagerGateway.path());
   LOG.info("Communication between client and JobManager will have a timeout of " + timeout);
   LOG.info("Checking and uploading JAR files");
   try {
-    JobClient.uploadJarFiles(jobGraph,jobManager,timeout);
+    JobClient.uploadJarFiles(jobGraph,jobManagerGateway,timeout);
   }
  catch (  IOException e) {
     throw new ProgramInvocationException("Could not upload the program's JAR files to the JobManager.",e);
   }
   try {
     if (wait) {
-      SerializedJobExecutionResult result=JobClient.submitJobAndWait(actorSystem,jobManager,jobGraph,timeout,printStatusDuringExecution);
+      SerializedJobExecutionResult result=JobClient.submitJobAndWait(actorSystem,jobManagerGateway,jobGraph,timeout,printStatusDuringExecution);
       try {
         return result.toJobExecutionResult(this.userCodeClassLoader);
       }
@@ -38,7 +45,7 @@
       }
     }
  else {
-      JobClient.submitJobDetached(jobManager,jobGraph,timeout);
+      JobClient.submitJobDetached(jobManagerGateway,jobGraph,timeout);
       return new JobSubmissionResult(jobGraph.getJobID());
     }
   }

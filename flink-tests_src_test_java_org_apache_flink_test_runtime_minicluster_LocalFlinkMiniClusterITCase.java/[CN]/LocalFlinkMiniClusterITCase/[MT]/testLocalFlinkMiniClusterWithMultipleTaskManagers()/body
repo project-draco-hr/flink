@@ -7,14 +7,15 @@
     config.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER,numTMs);
     config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,numSlots);
     miniCluster=new LocalFlinkMiniCluster(config,true);
-    final ActorRef jm=miniCluster.getJobManager();
+    final ActorGateway jmGateway=miniCluster.getJobManagerGateway();
     new JavaTestKit(system){
 {
+        final ActorGateway selfGateway=new AkkaActorGateway(getRef(),Option.<UUID>empty());
         new Within(TestingUtils.TESTING_DURATION()){
           @Override protected void run(){
-            jm.tell(JobManagerMessages.getRequestNumberRegisteredTaskManager(),getRef());
+            jmGateway.tell(JobManagerMessages.getRequestNumberRegisteredTaskManager(),selfGateway);
             expectMsgEquals(TestingUtils.TESTING_DURATION(),numTMs);
-            jm.tell(JobManagerMessages.getRequestTotalNumberOfSlots(),getRef());
+            jmGateway.tell(JobManagerMessages.getRequestTotalNumberOfSlots(),selfGateway);
             expectMsgEquals(TestingUtils.TESTING_DURATION(),numTMs * numSlots);
           }
         }

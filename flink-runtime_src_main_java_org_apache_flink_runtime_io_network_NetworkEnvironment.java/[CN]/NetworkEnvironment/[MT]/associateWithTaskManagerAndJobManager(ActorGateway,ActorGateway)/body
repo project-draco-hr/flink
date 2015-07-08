@@ -1,0 +1,28 @@
+{
+  checkNotNull(jobManagerGateway);
+  checkNotNull(taskManagerGateway);
+synchronized (lock) {
+    if (isShutdown) {
+      throw new IllegalStateException("environment is shut down");
+    }
+    if (this.partitionConsumableNotifier == null && this.partitionManager == null && this.taskEventDispatcher == null && this.connectionManager == null) {
+      LOG.debug("Starting result partition manager and network connection manager");
+      this.partitionManager=new ResultPartitionManager();
+      this.taskEventDispatcher=new TaskEventDispatcher();
+      this.partitionConsumableNotifier=new JobManagerResultPartitionConsumableNotifier(executionContext,jobManagerGateway,taskManagerGateway,jobManagerTimeout);
+      this.partitionStateChecker=new JobManagerPartitionStateChecker(jobManagerGateway,taskManagerGateway);
+      final Option<NettyConfig> nettyConfig=configuration.nettyConfig();
+      connectionManager=nettyConfig.isDefined() ? new NettyConnectionManager(nettyConfig.get()) : new LocalConnectionManager();
+      try {
+        LOG.debug("Starting network connection manager");
+        connectionManager.start(partitionManager,taskEventDispatcher,networkBufferPool);
+      }
+ catch (      Throwable t) {
+        throw new IOException("Failed to instantiate network connection manager: " + t.getMessage(),t);
+      }
+    }
+ else {
+      throw new IllegalStateException("Network Environment is already associated with a JobManager/TaskManager");
+    }
+  }
+}

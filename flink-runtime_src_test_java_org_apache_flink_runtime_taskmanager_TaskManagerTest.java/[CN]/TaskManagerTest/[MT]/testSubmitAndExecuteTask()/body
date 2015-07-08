@@ -5,13 +5,13 @@
       ActorRef taskManager=null;
       try {
         taskManager=createTaskManager(getTestActor(),false);
-        final ActorRef tmClosure=taskManager;
+        final ActorRef tm=taskManager;
         new Within(d){
           @Override protected void run(){
-            expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
+            RegistrationMessages.RegisterTaskManager registrationMessage=expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
             final InstanceID iid=new InstanceID();
-            assertEquals(tmClosure,getLastSender());
-            tmClosure.tell(new RegistrationMessages.AcknowledgeRegistration(getTestActor(),iid,12345),getTestActor());
+            assertEquals(tm,getLastSender());
+            tm.tell(new RegistrationMessages.AcknowledgeRegistration(registrationMessage.registrationSessionID(),leaderSessionID.get(),getTestActor(),iid,12345),getTestActor());
           }
         }
 ;
@@ -21,7 +21,7 @@
         final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(jid,vid,eid,"TestTask",2,7,new Configuration(),new Configuration(),TestInvokableCorrect.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),new ArrayList<BlobKey>(),0);
         new Within(d){
           @Override protected void run(){
-            tmClosure.tell(new SubmitTask(tdd),getRef());
+            tm.tell(decorator.decorate(new SubmitTask(tdd)),getRef());
             long deadline=System.currentTimeMillis() + 10000;
             do {
               Object message=receiveOne(d);
@@ -30,8 +30,8 @@
               }
             }
  while (System.currentTimeMillis() < deadline);
-            Object toRunning=new UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.RUNNING));
-            Object toFinished=new UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.FINISHED));
+            Object toRunning=decorator.decorate(new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.RUNNING)));
+            Object toFinished=decorator.decorate(new TaskMessages.UpdateTaskExecutionState(new TaskExecutionState(jid,eid,ExecutionState.FINISHED)));
             deadline=System.currentTimeMillis() + 10000;
             do {
               Object message=receiveOne(d);
