@@ -1,5 +1,26 @@
 {
-  Thread thread=new Thread(runnable,callName);
-  thread.setDaemon(true);
-  thread.start();
+synchronized (this) {
+    if (isCanceledOrFailed()) {
+      return;
+    }
+    ExecutorService executor=this.asyncCallDispatcher;
+    if (executor == null) {
+      executor=Executors.newSingleThreadExecutor(new DispatherThreadFactory(TASK_THREADS_GROUP,"Async calls on " + taskNameWithSubtask));
+      this.asyncCallDispatcher=executor;
+      if (isCanceledOrFailed()) {
+        executor.shutdown();
+        asyncCallDispatcher=null;
+        return;
+      }
+    }
+    LOG.debug("Invoking async call {} on task {}",callName,taskNameWithSubtask);
+    try {
+      executor.submit(runnable);
+    }
+ catch (    RejectedExecutionException e) {
+      if (!isCanceledOrFailed()) {
+        throw new RuntimeException("Async call was rejected, even though the task was not canceled.",e);
+      }
+    }
+  }
 }
