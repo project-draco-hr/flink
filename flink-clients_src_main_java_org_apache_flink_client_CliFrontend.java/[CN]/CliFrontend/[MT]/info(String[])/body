@@ -29,23 +29,30 @@ catch (  Throwable t) {
     int parallelism=options.getParallelism();
     LOG.info("Creating program plan dump");
     Client client=getClient(options,program.getUserCodeClassLoader(),program.getMainClassName(),parallelism);
-    String jsonPlan=client.getOptimizedPlanAsJson(program,parallelism);
-    if (jsonPlan != null) {
-      System.out.println("----------------------- Execution Plan -----------------------");
-      System.out.println(jsonPlan);
-      System.out.println("--------------------------------------------------------------");
+    FlinkPlan flinkPlan=client.getOptimizedPlan(program,parallelism);
+    if (webFrontend) {
+      this.optimizedPlan=flinkPlan;
+      this.jobGraph=client.getJobGraph(program,flinkPlan);
     }
  else {
-      System.out.println("JSON plan could not be generated.");
-    }
-    String description=program.getDescription();
-    if (description != null) {
-      System.out.println();
-      System.out.println(description);
-    }
+      String jsonPlan=new PlanJSONDumpGenerator().getOptimizerPlanAsJSON((OptimizedPlan)flinkPlan);
+      if (jsonPlan != null) {
+        System.out.println("----------------------- Execution Plan -----------------------");
+        System.out.println(jsonPlan);
+        System.out.println("--------------------------------------------------------------");
+      }
  else {
-      System.out.println();
-      System.out.println("No description provided.");
+        System.out.println("JSON plan could not be generated.");
+      }
+      String description=program.getDescription();
+      if (description != null) {
+        System.out.println();
+        System.out.println(description);
+      }
+ else {
+        System.out.println();
+        System.out.println("No description provided.");
+      }
     }
     return 0;
   }

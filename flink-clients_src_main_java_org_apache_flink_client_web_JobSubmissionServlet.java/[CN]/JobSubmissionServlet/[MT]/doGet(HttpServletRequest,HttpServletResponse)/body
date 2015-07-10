@@ -4,93 +4,85 @@
     return;
   }
   if (action.equals(ACTION_SUBMIT_VALUE)) {
+    String options=req.getParameter(OPTIONS_PARAM_NAME);
     String jobName=req.getParameter(JOB_PARAM_NAME);
     String assemblerClass=req.getParameter(CLASS_PARAM_NAME);
-    String args=req.getParameter(ARGUMENTS_PARAM_NAME);
+    String arguments=req.getParameter(ARGUMENTS_PARAM_NAME);
     String showPlan=req.getParameter(SHOW_PLAN_PARAM_NAME);
     String suspendPlan=req.getParameter(SUSPEND_PARAM_NAME);
-    if (checkParameterSet(resp,jobName,JOB_PARAM_NAME) || checkParameterSet(resp,args,ARGUMENTS_PARAM_NAME) || checkParameterSet(resp,showPlan,SHOW_PLAN_PARAM_NAME)|| checkParameterSet(resp,suspendPlan,SUSPEND_PARAM_NAME)) {
+    if (checkParameterSet(resp,jobName,JOB_PARAM_NAME) || checkParameterSet(resp,arguments,ARGUMENTS_PARAM_NAME) || checkParameterSet(resp,showPlan,SHOW_PLAN_PARAM_NAME)|| checkParameterSet(resp,suspendPlan,SUSPEND_PARAM_NAME)) {
       return;
     }
     boolean show=Boolean.parseBoolean(showPlan);
     boolean suspend=Boolean.parseBoolean(suspendPlan);
-    File jarFile=new File(jobStoreDirectory,jobName);
-    if (!jarFile.exists()) {
-      showErrorPage(resp,"The jar file + '" + jarFile.getPath() + "' does not exist.");
-      return;
-    }
-    List<String> params;
+    List<String> cliOptions;
     try {
-      params=tokenizeArguments(args);
+      cliOptions=tokenizeArguments(options);
     }
  catch (    IllegalArgumentException iaex) {
-      showErrorPage(resp,"The arguments contain an unterminated quoted string.");
+      showErrorPage(resp,"Flink options contain an unterminated quoted string.");
       return;
     }
-    int parallelism=-1;
-    while (params.size() >= 2) {
-      if (params.get(0).equals("-c")) {
-        assemblerClass=params.get(1);
-        params.remove(0);
-        params.remove(0);
-      }
- else       if (params.get(0).equals("-p")) {
-        parallelism=Integer.parseInt(params.get(1));
-        params.remove(0);
-        params.remove(0);
-      }
- else {
-        break;
-      }
-    }
-    String[] options=params.isEmpty() ? new String[0] : params.toArray(new String[params.size()]);
-    PackagedProgram program;
-    FlinkPlan optPlan;
-    Client client;
+    List<String> cliArguments;
     try {
-      if (assemblerClass == null) {
-        program=new PackagedProgram(jarFile,options);
-      }
- else {
-        program=new PackagedProgram(jarFile,assemblerClass,options);
-      }
-      client=new Client(config,program.getUserCodeClassLoader());
-      optPlan=client.getOptimizedPlan(program,parallelism);
+      cliArguments=tokenizeArguments(arguments);
+    }
+ catch (    IllegalArgumentException iaex) {
+      showErrorPage(resp,"Program arguments contain an unterminated quoted string.");
+      return;
+    }
+    String[] args=new String[1 + (assemblerClass == null ? 0 : 2) + cliOptions.size()+ 1+ cliArguments.size()];
+    List<String> parameters=new ArrayList<String>(args.length);
+    parameters.add(CliFrontend.ACTION_INFO);
+    parameters.addAll(cliOptions);
+    if (assemblerClass != null) {
+      parameters.add("-" + CliFrontendParser.CLASS_OPTION.getOpt());
+      parameters.add(assemblerClass);
+    }
+    parameters.add(jobStoreDirectory + File.separator + jobName);
+    parameters.addAll(cliArguments);
+    FlinkPlan optPlan;
+    try {
+      this.cli.parseParameters(parameters.toArray(args));
+      optPlan=this.cli.getFlinkPlan();
       if (optPlan == null) {
-        throw new Exception("The optimized plan could not be produced.");
+        throw new RuntimeException(new Exception("The optimized plan could not be produced."));
       }
     }
- catch (    ProgramInvocationException e) {
-      StringWriter sw=new StringWriter();
-      PrintWriter w=new PrintWriter(sw);
-      if (e.getCause() == null) {
-        e.printStackTrace(w);
+ catch (    RuntimeException e) {
+      Throwable t=e.getCause();
+      if (t instanceof ProgramInvocationException) {
+        StringWriter sw=new StringWriter();
+        PrintWriter w=new PrintWriter(sw);
+        if (t.getCause() == null) {
+          t.printStackTrace(w);
+        }
+ else {
+          t.getCause().printStackTrace(w);
+        }
+        String message=sw.toString();
+        message=StringEscapeUtils.escapeHtml4(message);
+        showErrorPage(resp,"An error occurred while invoking the program:<br/><br/>" + t.getMessage() + "<br/>"+ "<br/><br/><pre>"+ message+ "</pre>");
+        return;
+      }
+ else       if (t instanceof CompilerException) {
+        StringWriter sw=new StringWriter();
+        PrintWriter w=new PrintWriter(sw);
+        t.printStackTrace(w);
+        String message=sw.toString();
+        message=StringEscapeUtils.escapeHtml4(message);
+        showErrorPage(resp,"An error occurred in the compiler:<br/><br/>" + t.getMessage() + "<br/>"+ (t.getCause() != null ? "Caused by: " + t.getCause().getMessage() : "")+ "<br/><br/><pre>"+ message+ "</pre>");
+        return;
       }
  else {
-        e.getCause().printStackTrace(w);
+        StringWriter sw=new StringWriter();
+        PrintWriter w=new PrintWriter(sw);
+        t.printStackTrace(w);
+        String message=sw.toString();
+        message=StringEscapeUtils.escapeHtml4(message);
+        showErrorPage(resp,"An unexpected error occurred:<br/><br/>" + t.getMessage() + "<br/><br/><pre>"+ message+ "</pre>");
+        return;
       }
-      String message=sw.toString();
-      message=StringEscapeUtils.escapeHtml4(message);
-      showErrorPage(resp,"An error occurred while invoking the program:<br/><br/>" + e.getMessage() + "<br/>"+ "<br/><br/><pre>"+ message+ "</pre>");
-      return;
-    }
-catch (    CompilerException cex) {
-      StringWriter sw=new StringWriter();
-      PrintWriter w=new PrintWriter(sw);
-      cex.printStackTrace(w);
-      String message=sw.toString();
-      message=StringEscapeUtils.escapeHtml4(message);
-      showErrorPage(resp,"An error occurred in the compiler:<br/><br/>" + cex.getMessage() + "<br/>"+ (cex.getCause() != null ? "Caused by: " + cex.getCause().getMessage() : "")+ "<br/><br/><pre>"+ message+ "</pre>");
-      return;
-    }
-catch (    Throwable t) {
-      StringWriter sw=new StringWriter();
-      PrintWriter w=new PrintWriter(sw);
-      t.printStackTrace(w);
-      String message=sw.toString();
-      message=StringEscapeUtils.escapeHtml4(message);
-      showErrorPage(resp,"An unexpected error occurred:<br/><br/>" + t.getMessage() + "<br/><br/><pre>"+ message+ "</pre>");
-      return;
     }
     if (show) {
       Long uid;
@@ -109,52 +101,31 @@ catch (    Throwable t) {
         jsonGen.dumpOptimizerPlanAsJSON((OptimizedPlan)optPlan,jsonFile);
       }
       if (!suspend) {
-        if (optPlan instanceof OptimizedPlan) {
-          try {
-            client.run(program,(OptimizedPlan)optPlan,false);
-          }
- catch (          Throwable t) {
-            LOG.error("Error submitting job to the job-manager.",t);
-            showErrorPage(resp,t.getMessage());
-            return;
-          }
- finally {
-            program.deleteExtractedLibraries();
-          }
+        parameters.set(0,CliFrontend.ACTION_RUN);
+        try {
+          this.cli.parseParameters(parameters.toArray(args));
         }
- else {
-          throw new RuntimeException("Not implemented for Streaming Job plans");
+ catch (        RuntimeException e) {
+          LOG.error("Error submitting job to the job-manager.",e.getCause());
+          showErrorPage(resp,e.getCause().getMessage());
+          return;
         }
       }
  else {
-        try {
-          this.submittedJobs.put(uid,client.getJobGraph(program,optPlan));
-        }
- catch (        ProgramInvocationException piex) {
-          LOG.error("Error creating JobGraph from optimized plan.",piex);
-          showErrorPage(resp,piex.getMessage());
-          return;
-        }
-catch (        Throwable t) {
-          LOG.error("Error creating JobGraph from optimized plan.",t);
-          showErrorPage(resp,t.getMessage());
-          return;
-        }
+        this.submittedJobs.put(uid,this.cli.getJobGraph());
       }
       resp.sendRedirect("showPlan?id=" + uid + "&suspended="+ (suspend ? "true" : "false"));
     }
  else {
+      parameters.set(0,CliFrontend.ACTION_RUN);
       try {
-        client.run(program,parallelism,false);
+        this.cli.parseParameters(parameters.toArray(args));
       }
- catch (      Exception ex) {
-        LOG.error("Error submitting job to the job-manager.",ex);
-        String errorMessage=ex.getMessage().split("\n")[0];
+ catch (      RuntimeException e) {
+        LOG.error("Error submitting job to the job-manager.",e.getCause());
+        String errorMessage=e.getCause().getMessage().split("\n")[0];
         showErrorPage(resp,errorMessage);
         return;
-      }
- finally {
-        program.deleteExtractedLibraries();
       }
       resp.sendRedirect(START_PAGE_URL);
     }
@@ -178,7 +149,7 @@ catch (        Throwable t) {
       return;
     }
     try {
-      Client client=new Client(config,getClass().getClassLoader());
+      Client client=new Client(GlobalConfiguration.getConfiguration(),getClass().getClassLoader());
       client.run(job,false);
     }
  catch (    Exception ex) {
