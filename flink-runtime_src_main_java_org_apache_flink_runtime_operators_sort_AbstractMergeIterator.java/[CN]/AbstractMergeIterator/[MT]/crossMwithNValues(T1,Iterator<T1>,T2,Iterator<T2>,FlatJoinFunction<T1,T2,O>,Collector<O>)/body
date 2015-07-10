@@ -1,0 +1,66 @@
+{
+  T1 copy1=this.createCopy(serializer1,firstV1,this.copy1);
+  T2 blockHeadCopy=this.createCopy(serializer2,firstV2,this.blockHeadCopy);
+  T1 spillHeadCopy=null;
+  matchFunction.join(copy1,firstV2,collector);
+  SpillingResettableIterator<T1> spillIt=null;
+  try {
+    this.blockIt.reopen(blockVals);
+    while (this.blockIt.hasNext()) {
+      final T2 nextBlockRec=this.blockIt.next();
+      copy1=this.createCopy(serializer1,firstV1,this.copy1);
+      matchFunction.join(copy1,nextBlockRec,collector);
+    }
+    this.blockIt.reset();
+    final Iterator<T1> leftSideIter;
+    final boolean spillingRequired=this.blockIt.hasFurtherInput();
+    if (spillingRequired) {
+      spillIt=new SpillingResettableIterator<T1>(spillVals,this.serializer1,this.memoryManager,this.ioManager,this.memoryForSpillingIterator);
+      leftSideIter=spillIt;
+      spillIt.open();
+      spillHeadCopy=this.createCopy(serializer1,firstV1,this.spillHeadCopy);
+    }
+ else {
+      leftSideIter=spillVals;
+    }
+    while (leftSideIter.hasNext()) {
+      final T1 nextSpillVal=leftSideIter.next();
+      copy1=this.createCopy(serializer1,nextSpillVal,this.copy1);
+      T2 copy2=this.createCopy(serializer2,blockHeadCopy,this.copy2);
+      matchFunction.join(copy1,copy2,collector);
+      while (this.blockIt.hasNext()) {
+        T2 nextBlockRec=this.blockIt.next();
+        copy1=this.createCopy(serializer1,nextSpillVal,this.copy1);
+        matchFunction.join(copy1,nextBlockRec,collector);
+      }
+      this.blockIt.reset();
+    }
+    if (!spillingRequired) {
+      return;
+    }
+    while (this.blockIt.nextBlock()) {
+      spillIt.reset();
+      while (this.blockIt.hasNext()) {
+        copy1=this.createCopy(serializer1,spillHeadCopy,this.copy1);
+        final T2 nextBlockVal=blockIt.next();
+        matchFunction.join(copy1,nextBlockVal,collector);
+      }
+      this.blockIt.reset();
+      while (spillIt.hasNext()) {
+        final T1 nextSpillVal=spillIt.next();
+        while (this.blockIt.hasNext()) {
+          final T2 nextBlockVal=this.blockIt.next();
+          copy1=this.createCopy(serializer1,nextSpillVal,this.copy1);
+          matchFunction.join(copy1,nextBlockVal,collector);
+        }
+        this.blockIt.reset();
+      }
+      spillIt.reset();
+    }
+  }
+  finally {
+    if (spillIt != null) {
+      this.memoryForSpillingIterator.addAll(spillIt.close());
+    }
+  }
+}
