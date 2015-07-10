@@ -1,0 +1,34 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(3);
+  KeySelector<Integer,Integer> key=new KeySelector<Integer,Integer>(){
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value % 3;
+    }
+  }
+;
+  DataStream<Integer> source=env.fromElements(1,2,3);
+  IterativeDataStream<Integer> it=source.groupBy(key).iterate(3000);
+  DataStream<Integer> head=it.flatMap(new RichFlatMapFunction<Integer,Integer>(){
+    int received=0;
+    int key=-1;
+    @Override public void flatMap(    Integer value,    Collector<Integer> out) throws Exception {
+      received++;
+      if (key == -1) {
+        key=value % 3;
+      }
+ else {
+        assertEquals(key,value % 3);
+      }
+      if (value > 0) {
+        out.collect(value - 1);
+      }
+    }
+    @Override public void close(){
+      assertTrue(received > 1);
+    }
+  }
+);
+  it.closeWith(head.groupBy(key).union(head.map(NoOpIntMap).setParallelism(2).groupBy(key)),true).addSink(new NoOpSink<Integer>());
+  env.execute();
+}

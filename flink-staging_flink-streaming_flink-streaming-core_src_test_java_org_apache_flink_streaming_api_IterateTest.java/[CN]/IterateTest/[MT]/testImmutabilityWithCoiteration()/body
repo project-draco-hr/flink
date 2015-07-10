@@ -1,0 +1,16 @@
+{
+  StreamExecutionEnvironment env=new TestStreamEnvironment(PARALLELISM,MEMORYSIZE);
+  DataStream<Integer> source=env.fromElements(1,10);
+  IterativeDataStream<Integer> iter1=source.iterate();
+  ConnectedIterativeDataStream<Integer,String> iter2=iter1.withFeedbackType(String.class);
+  iter1.closeWith(iter1.map(NoOpIntMap));
+  iter2.closeWith(iter2.map(NoOpCoMap));
+  StreamGraph graph=env.getStreamGraph();
+  graph.getJobGraph();
+  assertEquals(2,graph.getStreamLoops().size());
+  for (  StreamLoop loop : graph.getStreamLoops()) {
+    assertEquals(loop.getHeads(),loop.getTails());
+    List<Tuple2<StreamNode,StreamNode>> sourceSinkPairs=loop.getSourceSinkPairs();
+    assertEquals(1,sourceSinkPairs.size());
+  }
+}
