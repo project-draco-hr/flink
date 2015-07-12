@@ -1,13 +1,13 @@
 {
 synchronized (this) {
-    if (isCanceledOrFailed()) {
+    if (executionState != ExecutionState.RUNNING) {
       return;
     }
     ExecutorService executor=this.asyncCallDispatcher;
     if (executor == null) {
       executor=Executors.newSingleThreadExecutor(new DispatherThreadFactory(TASK_THREADS_GROUP,"Async calls on " + taskNameWithSubtask));
       this.asyncCallDispatcher=executor;
-      if (isCanceledOrFailed()) {
+      if (executionState != ExecutionState.RUNNING) {
         executor.shutdown();
         asyncCallDispatcher=null;
         return;
@@ -18,8 +18,8 @@ synchronized (this) {
       executor.submit(runnable);
     }
  catch (    RejectedExecutionException e) {
-      if (!isCanceledOrFailed()) {
-        throw new RuntimeException("Async call was rejected, even though the task was not canceled.",e);
+      if (executionState == ExecutionState.RUNNING) {
+        throw new RuntimeException("Async call was rejected, even though the task is running.",e);
       }
     }
   }
