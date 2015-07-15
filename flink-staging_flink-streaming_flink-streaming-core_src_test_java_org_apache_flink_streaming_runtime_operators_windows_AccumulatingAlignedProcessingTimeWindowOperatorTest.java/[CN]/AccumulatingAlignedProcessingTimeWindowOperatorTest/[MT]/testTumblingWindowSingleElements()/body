@@ -1,19 +1,44 @@
 {
+  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
     final CollectingOutput<Integer> out=new CollectingOutput<>(50);
     final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
     when(mockContext.getTaskName()).thenReturn("Test task name");
+    final Object lock=new Object();
+    doAnswer(new Answer(){
+      @Override public Object answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        final Long timestamp=(Long)invocationOnMock.getArguments()[0];
+        final Triggerable target=(Triggerable)invocationOnMock.getArguments()[1];
+        timerService.schedule(new Callable<Object>(){
+          @Override public Object call() throws Exception {
+synchronized (lock) {
+              target.trigger(timestamp);
+            }
+            return null;
+          }
+        }
+,timestamp - System.currentTimeMillis(),TimeUnit.MILLISECONDS);
+        return null;
+      }
+    }
+).when(mockContext).registerTimer(anyLong(),any(Triggerable.class));
     AbstractAlignedProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,50,50);
     op.setup(out,mockContext);
     op.open(new Configuration());
-    op.processElement(new StreamRecord<Integer>(1));
-    op.processElement(new StreamRecord<Integer>(2));
+synchronized (lock) {
+      op.processElement(new StreamRecord<Integer>(1));
+      op.processElement(new StreamRecord<Integer>(2));
+    }
     out.waitForNElements(2,60000);
-    op.processElement(new StreamRecord<Integer>(3));
-    op.processElement(new StreamRecord<Integer>(4));
-    op.processElement(new StreamRecord<Integer>(5));
+synchronized (lock) {
+      op.processElement(new StreamRecord<Integer>(3));
+      op.processElement(new StreamRecord<Integer>(4));
+      op.processElement(new StreamRecord<Integer>(5));
+    }
     out.waitForNElements(5,60000);
-    op.processElement(new StreamRecord<Integer>(6));
+synchronized (lock) {
+      op.processElement(new StreamRecord<Integer>(6));
+    }
     out.waitForNElements(6,60000);
     List<Integer> result=out.getElements();
     assertEquals(6,result.size());
@@ -25,5 +50,8 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    timerService.shutdown();
   }
 }

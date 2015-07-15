@@ -1,0 +1,66 @@
+{
+  if (isFinished) {
+    return false;
+  }
+  while (true) {
+    if (currentRecordDeserializer != null) {
+      DeserializationResult result=currentRecordDeserializer.getNextRecord(deserializationDelegate);
+      if (result.isBufferConsumed()) {
+        currentRecordDeserializer.getCurrentBuffer().recycle();
+        currentRecordDeserializer=null;
+      }
+      if (result.isFullRecord()) {
+        StreamElement recordOrWatermark=deserializationDelegate.getInstance();
+        if (recordOrWatermark.isWatermark()) {
+          long watermarkMillis=recordOrWatermark.asWatermark().getTimestamp();
+          if (watermarkMillis > watermarks[currentChannel]) {
+            watermarks[currentChannel]=watermarkMillis;
+            long newMinWatermark=Long.MAX_VALUE;
+            for (            long watermark : watermarks) {
+              newMinWatermark=Math.min(watermark,newMinWatermark);
+            }
+            if (newMinWatermark > lastEmittedWatermark) {
+              lastEmittedWatermark=newMinWatermark;
+synchronized (lock) {
+                streamOperator.processWatermark(new Watermark(lastEmittedWatermark));
+              }
+            }
+          }
+          continue;
+        }
+ else {
+          StreamRecord<IN> record=recordOrWatermark.asRecord();
+          StreamingRuntimeContext ctx=streamOperator.getRuntimeContext();
+synchronized (lock) {
+            if (ctx != null) {
+              ctx.setNextInput(record);
+            }
+            streamOperator.processElement(record);
+          }
+          return true;
+        }
+      }
+    }
+    final BufferOrEvent bufferOrEvent=barrierHandler.getNextNonBlocked();
+    if (bufferOrEvent != null) {
+      if (bufferOrEvent.isBuffer()) {
+        currentChannel=bufferOrEvent.getChannelIndex();
+        currentRecordDeserializer=recordDeserializers[currentChannel];
+        currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+      }
+ else {
+        final AbstractEvent event=bufferOrEvent.getEvent();
+        if (event.getClass() != EndOfPartitionEvent.class) {
+          throw new IOException("Unexpected event: " + event);
+        }
+      }
+    }
+ else {
+      isFinished=true;
+      if (!barrierHandler.isEmpty()) {
+        throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
+      }
+      return false;
+    }
+  }
+}

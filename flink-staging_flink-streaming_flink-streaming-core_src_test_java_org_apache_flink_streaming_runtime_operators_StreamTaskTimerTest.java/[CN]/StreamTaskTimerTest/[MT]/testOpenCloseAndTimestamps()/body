@@ -1,0 +1,21 @@
+{
+  final OneInputStreamTask<String,String> mapTask=new OneInputStreamTask<>();
+  final OneInputStreamTaskTestHarness<String,String> testHarness=new OneInputStreamTaskTestHarness<>(mapTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  StreamMap<String,String> mapOperator=new StreamMap<>(null);
+  streamConfig.setStreamOperator(mapOperator);
+  testHarness.invoke();
+  mapTask.registerTimer(System.currentTimeMillis(),new Triggerable(){
+    @Override public void trigger(    long timestamp){
+    }
+  }
+);
+  assertEquals(1,StreamTask.TRIGGER_THREAD_GROUP.activeCount());
+  testHarness.endInput();
+  testHarness.waitForTaskCompletion();
+  long deadline=System.currentTimeMillis() + 4000;
+  while (StreamTask.TRIGGER_THREAD_GROUP.activeCount() > 0 && System.currentTimeMillis() < deadline) {
+    Thread.sleep(10);
+  }
+  assertEquals("Trigger timer thread did not properly shut down",0,StreamTask.TRIGGER_THREAD_GROUP.activeCount());
+}
