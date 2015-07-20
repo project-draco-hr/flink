@@ -1,0 +1,19 @@
+{
+  super(new Struct(CURRENT_SCHEMA));
+  Map<String,Map<Integer,PartitionResponse>> responseByTopic=CollectionUtils.groupDataByTopic(responses);
+  List<Struct> topicDatas=new ArrayList<Struct>(responseByTopic.size());
+  for (  Map.Entry<String,Map<Integer,PartitionResponse>> entry : responseByTopic.entrySet()) {
+    Struct topicData=struct.instance(RESPONSES_KEY_NAME);
+    topicData.set(TOPIC_KEY_NAME,entry.getKey());
+    List<Struct> partitionArray=new ArrayList<Struct>();
+    for (    Map.Entry<Integer,PartitionResponse> partitionEntry : entry.getValue().entrySet()) {
+      PartitionResponse part=partitionEntry.getValue();
+      Struct partStruct=topicData.instance(PARTITION_RESPONSES_KEY_NAME).set(PARTITION_KEY_NAME,partitionEntry.getKey()).set(ERROR_CODE_KEY_NAME,part.errorCode).set(BASE_OFFSET_KEY_NAME,part.baseOffset);
+      partitionArray.add(partStruct);
+    }
+    topicData.set(PARTITION_RESPONSES_KEY_NAME,partitionArray.toArray());
+    topicDatas.add(topicData);
+  }
+  struct.set(RESPONSES_KEY_NAME,topicDatas.toArray());
+  this.responses=responses;
+}

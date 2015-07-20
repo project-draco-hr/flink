@@ -1,0 +1,24 @@
+{
+  super(new Struct(CURRENT_SCHEMA));
+  Map<String,Map<Integer,PartitionData>> topicsData=CollectionUtils.groupDataByTopic(offsetData);
+  struct.set(REPLICA_ID_KEY_NAME,replicaId);
+  List<Struct> topicArray=new ArrayList<Struct>();
+  for (  Map.Entry<String,Map<Integer,PartitionData>> topicEntry : topicsData.entrySet()) {
+    Struct topicData=struct.instance(TOPICS_KEY_NAME);
+    topicData.set(TOPIC_KEY_NAME,topicEntry.getKey());
+    List<Struct> partitionArray=new ArrayList<Struct>();
+    for (    Map.Entry<Integer,PartitionData> partitionEntry : topicEntry.getValue().entrySet()) {
+      PartitionData offsetPartitionData=partitionEntry.getValue();
+      Struct partitionData=topicData.instance(PARTITIONS_KEY_NAME);
+      partitionData.set(PARTITION_KEY_NAME,partitionEntry.getKey());
+      partitionData.set(TIMESTAMP_KEY_NAME,offsetPartitionData.timestamp);
+      partitionData.set(MAX_NUM_OFFSETS_KEY_NAME,offsetPartitionData.maxNumOffsets);
+      partitionArray.add(partitionData);
+    }
+    topicData.set(PARTITIONS_KEY_NAME,partitionArray.toArray());
+    topicArray.add(topicData);
+  }
+  struct.set(TOPICS_KEY_NAME,topicArray.toArray());
+  this.replicaId=replicaId;
+  this.offsetData=offsetData;
+}

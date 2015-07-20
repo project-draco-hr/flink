@@ -1,0 +1,71 @@
+{
+  if (partitionsToRead == null || partitionsToRead.size() == 0) {
+    throw new IllegalArgumentException("No partitions set");
+  }
+  LOG.info("Reading from partitions " + partitionsToRead + " using the legacy fetcher");
+  List<PartitionInfo> allPartitionsInTopic=FlinkKafkaConsumerBase.getPartitionsForTopic(topic,config);
+  int fetchPartitionsCount=0;
+  Map<Node,List<FetchPartition>> fetchBrokers=new HashMap<Node,List<FetchPartition>>();
+  for (  PartitionInfo partitionInfo : allPartitionsInTopic) {
+    if (partitionInfo.leader() == null) {
+      throw new RuntimeException("Unable to consume partition " + partitionInfo.partition() + " from topic "+ partitionInfo.topic()+ " because it does not have a leader");
+    }
+    for (    Map.Entry<TopicPartition,Long> partitionToRead : partitionsToRead.entrySet()) {
+      if (partitionToRead.getKey().partition() == partitionInfo.partition()) {
+        List<FetchPartition> partitions=fetchBrokers.get(partitionInfo.leader());
+        if (partitions == null) {
+          partitions=new ArrayList<FetchPartition>();
+        }
+        FetchPartition fp=new FetchPartition();
+        fp.nextOffsetToRead=partitionToRead.getValue();
+        fp.partition=partitionToRead.getKey().partition();
+        partitions.add(fp);
+        fetchPartitionsCount++;
+        fetchBrokers.put(partitionInfo.leader(),partitions);
+      }
+    }
+  }
+  if (partitionsToRead.size() != fetchPartitionsCount) {
+    throw new RuntimeException(partitionsToRead.size() + " partitions to read, but got only " + fetchPartitionsCount+ " partition infos with lead brokers.");
+  }
+  int queueSize=Integer.valueOf(config.getProperty(QUEUE_SIZE_KEY,DEFAULT_QUEUE_SIZE));
+  LinkedBlockingQueue<Tuple2<MessageAndOffset,Integer>> messageQueue=new LinkedBlockingQueue<Tuple2<MessageAndOffset,Integer>>(queueSize);
+  List<SimpleConsumerThread> consumers=new ArrayList<SimpleConsumerThread>(fetchBrokers.size());
+  for (  Map.Entry<Node,List<FetchPartition>> brokerInfo : fetchBrokers.entrySet()) {
+    SimpleConsumerThread thread=new SimpleConsumerThread(this.config,topic,brokerInfo.getKey(),brokerInfo.getValue(),messageQueue);
+    thread.setDaemon(true);
+    thread.setName("KafkaConsumer-SimpleConsumer-" + brokerInfo.getKey().idString());
+    thread.start();
+    consumers.add(thread);
+    LOG.info("Starting thread " + thread.getName() + " for fetching from broker "+ brokerInfo.getKey().host());
+  }
+  while (running) {
+    try {
+      Tuple2<MessageAndOffset,Integer> msg=messageQueue.take();
+      ByteBuffer payload=msg.f0.message().payload();
+      byte[] valueByte=new byte[payload.limit()];
+      payload.get(valueByte);
+      T value=valueDeserializer.deserialize(valueByte);
+synchronized (sourceContext.getCheckpointLock()) {
+        lastOffsets[msg.f1]=msg.f0.offset();
+        sourceContext.collect(value);
+      }
+    }
+ catch (    InterruptedException e) {
+      LOG.info("Queue consumption thread got interrupted. Stopping consumption and interrupting other threads");
+      running=false;
+      for (      SimpleConsumerThread t : consumers) {
+        t.interrupt();
+      }
+    }
+    for (    SimpleConsumerThread t : consumers) {
+      if (t.getError() != null) {
+        throw new RuntimeException("Consumer thread " + t.getName() + " had an exception",t.getError());
+      }
+    }
+  }
+  for (  SimpleConsumerThread t : consumers) {
+    t.close();
+  }
+  sourceContext.close();
+}

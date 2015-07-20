@@ -1,0 +1,42 @@
+{
+  LOG.info("Starting testFlinkKafkaConsumerWithOffsetUpdates()");
+  ZkClient zk=new ZkClient(standardCC.zkConnect(),standardCC.zkSessionTimeoutMs(),standardCC.zkConnectionTimeoutMs(),new FlinkKafkaConsumer081.KafkaZKStringSerializer());
+  final String topicName="testOffsetHacking";
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(3);
+  env.getConfig().disableSysoutLogging();
+  env.enableCheckpointing(50);
+  env.setNumberOfExecutionRetries(0);
+  Properties topicConfig=new Properties();
+  LOG.info("Creating topic {}",topicName);
+  AdminUtils.createTopic(zk,topicName,3,2,topicConfig);
+  writeSequence(env,topicName,0,99);
+  resetOffsets();
+  readSequence(env,standardProps,topicName,0,100,300);
+  long[] finalOffsets=getFinalOffsets();
+  LOG.info("State in persistent kafka sources {}",finalOffsets);
+  long o1=-1, o2=-1, o3=-1;
+  if (finalOffsets[0] > 0) {
+    o1=FlinkKafkaConsumer081.getOffset(zk,standardCC.groupId(),topicName,0);
+    Assert.assertTrue("The offset seems incorrect, got " + o1,o1 == finalOffsets[0]);
+  }
+  if (finalOffsets[1] > 0) {
+    o2=FlinkKafkaConsumer081.getOffset(zk,standardCC.groupId(),topicName,1);
+    Assert.assertTrue("The offset seems incorrect, got " + o2,o2 == finalOffsets[1]);
+  }
+  if (finalOffsets[2] > 0) {
+    o3=FlinkKafkaConsumer081.getOffset(zk,standardCC.groupId(),topicName,2);
+    Assert.assertTrue("The offset seems incorrect, got " + o3,o3 == finalOffsets[2]);
+  }
+  Assert.assertFalse("no offset has been set",finalOffsets[0] == 0 && finalOffsets[1] == 0 && finalOffsets[2] == 0);
+  LOG.info("Got final offsets from zookeeper o1={}, o2={}, o3={}",o1,o2,o3);
+  LOG.info("Manipulating offsets");
+  FlinkKafkaConsumer081.setOffset(zk,standardCC.groupId(),topicName,0,49);
+  FlinkKafkaConsumer081.setOffset(zk,standardCC.groupId(),topicName,1,49);
+  FlinkKafkaConsumer081.setOffset(zk,standardCC.groupId(),topicName,2,49);
+  env=StreamExecutionEnvironment.createLocalEnvironment(3);
+  env.getConfig().disableSysoutLogging();
+  env.setNumberOfExecutionRetries(0);
+  readSequence(env,standardProps,topicName,50,50,150);
+  zk.close();
+  LOG.info("Finished testFlinkKafkaConsumerWithOffsetUpdates()");
+}

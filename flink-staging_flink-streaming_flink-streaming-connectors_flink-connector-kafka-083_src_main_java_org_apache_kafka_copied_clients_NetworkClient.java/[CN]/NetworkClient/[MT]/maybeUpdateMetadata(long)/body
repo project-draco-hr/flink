@@ -1,0 +1,24 @@
+{
+  Node node=this.leastLoadedNode(now);
+  if (node == null) {
+    log.debug("Give up sending metadata request since no node is available");
+    this.lastNoNodeAvailableMs=now;
+    return;
+  }
+  String nodeConnectionId=node.idString();
+  if (connectionStates.isConnected(nodeConnectionId) && inFlightRequests.canSendMore(nodeConnectionId)) {
+    Set<String> topics=metadata.topics();
+    this.metadataFetchInProgress=true;
+    ClientRequest metadataRequest=metadataRequest(now,nodeConnectionId,topics);
+    log.debug("Sending metadata request {} to node {}",metadataRequest,node.id());
+    this.selector.send(metadataRequest.request());
+    this.inFlightRequests.add(metadataRequest);
+  }
+ else   if (connectionStates.canConnect(nodeConnectionId,now)) {
+    log.debug("Initialize connection to node {} for sending metadata request",node.id());
+    initiateConnect(node,now);
+  }
+ else {
+    this.lastNoNodeAvailableMs=now;
+  }
+}

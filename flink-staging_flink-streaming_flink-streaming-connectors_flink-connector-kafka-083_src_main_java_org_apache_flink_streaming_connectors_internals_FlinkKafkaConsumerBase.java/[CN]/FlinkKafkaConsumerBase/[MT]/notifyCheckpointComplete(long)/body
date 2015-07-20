@@ -1,0 +1,40 @@
+{
+  if (fetcher == null) {
+    LOG.info("notifyCheckpointComplete() called on uninitialized source");
+    return;
+  }
+  if (closed) {
+    LOG.info("notifyCheckpointComplete() called on closed source");
+    return;
+  }
+  LOG.info("Commit checkpoint {}",checkpointId);
+  long[] checkpointOffsets;
+synchronized (pendingCheckpoints) {
+    final int posInMap=pendingCheckpoints.indexOf(checkpointId);
+    if (posInMap == -1) {
+      LOG.warn("Unable to find pending checkpoint for id {}",checkpointId);
+      return;
+    }
+    checkpointOffsets=(long[])pendingCheckpoints.remove(posInMap);
+    if (!pendingCheckpoints.isEmpty()) {
+      for (int i=0; i < posInMap; i++) {
+        pendingCheckpoints.remove(0);
+      }
+    }
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Committing offsets {} to offset store: {}",Arrays.toString(checkpointOffsets),offsetStore);
+  }
+  if (offsetStore == OffsetStore.FLINK_ZOOKEEPER) {
+    setOffsetsInZooKeeper(checkpointOffsets);
+  }
+ else {
+    Map<TopicPartition,Long> offsetsToCommit=new HashMap<TopicPartition,Long>();
+    for (int i=0; i < checkpointOffsets.length; i++) {
+      if (checkpointOffsets[i] != OFFSET_NOT_SET) {
+        offsetsToCommit.put(new TopicPartition(topic,i),checkpointOffsets[i]);
+      }
+    }
+    fetcher.commit(offsetsToCommit);
+  }
+}

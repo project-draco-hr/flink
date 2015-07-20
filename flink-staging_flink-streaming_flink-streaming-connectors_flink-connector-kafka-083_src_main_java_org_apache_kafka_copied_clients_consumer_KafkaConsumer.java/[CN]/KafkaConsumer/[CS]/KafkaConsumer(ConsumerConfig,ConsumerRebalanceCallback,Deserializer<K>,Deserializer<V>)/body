@@ -1,0 +1,50 @@
+{
+  try {
+    log.debug("Starting the Kafka consumer");
+    if (callback == null)     callback=config.getConfiguredInstance(ConsumerConfig.CONSUMER_REBALANCE_CALLBACK_CLASS_CONFIG,ConsumerRebalanceCallback.class);
+    this.time=new SystemTime();
+    this.autoCommit=config.getBoolean(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG);
+    this.autoCommitIntervalMs=config.getLong(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG);
+    MetricConfig metricConfig=new MetricConfig().samples(config.getInt(ConsumerConfig.METRICS_NUM_SAMPLES_CONFIG)).timeWindow(config.getLong(ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG),TimeUnit.MILLISECONDS);
+    String clientId=config.getString(ConsumerConfig.CLIENT_ID_CONFIG);
+    String jmxPrefix="kafka.consumer";
+    if (clientId.length() <= 0)     clientId="consumer-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement();
+    List<MetricsReporter> reporters=config.getConfiguredInstances(ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG,MetricsReporter.class);
+    reporters.add(new JmxReporter(jmxPrefix));
+    this.metrics=new Metrics(metricConfig,reporters,time);
+    this.retryBackoffMs=config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
+    this.metadata=new Metadata(retryBackoffMs,config.getLong(ConsumerConfig.METADATA_MAX_AGE_CONFIG));
+    List<InetSocketAddress> addresses=ClientUtils.parseAndValidateAddresses(config.getList(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG));
+    this.metadata.update(Cluster.bootstrap(addresses),0);
+    String metricGrpPrefix="consumer";
+    Map<String,String> metricsTags=new LinkedHashMap<String,String>();
+    metricsTags.put("client-id",clientId);
+    NetworkClient netClient=new NetworkClient(new Selector(config.getLong(ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG),metrics,time,metricGrpPrefix,metricsTags),this.metadata,clientId,100,config.getLong(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG),config.getInt(ConsumerConfig.SEND_BUFFER_CONFIG),config.getInt(ConsumerConfig.RECEIVE_BUFFER_CONFIG));
+    this.client=new ConsumerNetworkClient(netClient,metadata,time,retryBackoffMs);
+    OffsetResetStrategy offsetResetStrategy=OffsetResetStrategy.valueOf(config.getString(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).toUpperCase());
+    this.subscriptions=new SubscriptionState(offsetResetStrategy);
+    this.coordinator=new Coordinator(this.client,config.getString(ConsumerConfig.GROUP_ID_CONFIG),config.getInt(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG),config.getString(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG),this.subscriptions,metrics,metricGrpPrefix,metricsTags,this.time,requestTimeoutMs,retryBackoffMs,wrapRebalanceCallback(callback));
+    if (keyDeserializer == null) {
+      this.keyDeserializer=config.getConfiguredInstance(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,Deserializer.class);
+      this.keyDeserializer.configure(config.originals(),true);
+    }
+ else {
+      this.keyDeserializer=keyDeserializer;
+    }
+    if (valueDeserializer == null) {
+      this.valueDeserializer=config.getConfiguredInstance(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,Deserializer.class);
+      this.valueDeserializer.configure(config.originals(),false);
+    }
+ else {
+      this.valueDeserializer=valueDeserializer;
+    }
+    this.fetcher=new Fetcher<K,V>(this.client,config.getInt(ConsumerConfig.FETCH_MIN_BYTES_CONFIG),config.getInt(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG),config.getInt(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG),config.getBoolean(ConsumerConfig.CHECK_CRCS_CONFIG),this.keyDeserializer,this.valueDeserializer,this.metadata,this.subscriptions,metrics,metricGrpPrefix,metricsTags,this.time,this.retryBackoffMs);
+    config.logUnused();
+    if (autoCommit)     scheduleAutoCommitTask(autoCommitIntervalMs);
+    log.debug("Kafka consumer created");
+  }
+ catch (  Throwable t) {
+    close(true);
+    throw new KafkaException("Failed to construct kafka consumer",t);
+  }
+}

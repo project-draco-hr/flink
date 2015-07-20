@@ -1,0 +1,26 @@
+{
+  if (!subscriptions.partitionsAutoAssigned() || subscriptions.partitionAssignmentNeeded() || coordinatorUnknown())   return;
+  if (heartbeat.sessionTimeoutExpired(now)) {
+    coordinatorDead();
+    return;
+  }
+  if (!heartbeat.shouldHeartbeat(now)) {
+    client.schedule(this,now + heartbeat.timeToNextHeartbeat(now));
+  }
+ else {
+    heartbeat.sentHeartbeat(now);
+    RequestFuture<Void> future=sendHeartbeatRequest();
+    future.addListener(new RequestFutureListener<Void>(){
+      @Override public void onSuccess(      Void value){
+        long now=time.milliseconds();
+        heartbeat.receiveHeartbeat(now);
+        long nextHeartbeatTime=now + heartbeat.timeToNextHeartbeat(now);
+        client.schedule(HeartbeatTask.this,nextHeartbeatTime);
+      }
+      @Override public void onFailure(      RuntimeException e){
+        client.schedule(HeartbeatTask.this,time.milliseconds() + retryBackoffMs);
+      }
+    }
+);
+  }
+}

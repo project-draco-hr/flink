@@ -1,0 +1,31 @@
+{
+  LOG.info("Reading sequence for verification until final count {}",finalCount);
+  DeserializationSchema<Tuple2<Integer,Integer>> deser=new Utils.TypeInformationSerializationSchema<Tuple2<Integer,Integer>>(new Tuple2<Integer,Integer>(1,1),env.getConfig());
+  FlinkKafkaConsumerBase<Tuple2<Integer,Integer>> pks=getConsumer(topicName,deser,cc);
+  DataStream<Tuple2<Integer,Integer>> source=env.addSource(pks).map(new ThrottleMap<Tuple2<Integer,Integer>>(100));
+  DataStream<Integer> validIndexes=source.flatMap(new RichFlatMapFunction<Tuple2<Integer,Integer>,Integer>(){
+    private static final long serialVersionUID=1L;
+    int[] values=new int[valuesCount];
+    int count=0;
+    @Override public void flatMap(    Tuple2<Integer,Integer> value,    Collector<Integer> out) throws Exception {
+      values[value.f1 - valuesStartFrom]++;
+      count++;
+      LOG.info("Reader " + getRuntimeContext().getIndexOfThisSubtask() + " got "+ value+ " count="+ count+ "/"+ finalCount);
+      if (count == finalCount) {
+        LOG.info("Received all values");
+        for (int i=0; i < values.length; i++) {
+          int v=values[i];
+          if (v != 3) {
+            LOG.warn("Test is going to fail");
+            printTopic(topicName,valuesCount,this.getRuntimeContext().getExecutionConfig());
+            throw new RuntimeException("Expected v to be 3, but was " + v + " on element "+ i+ " array="+ Arrays.toString(values));
+          }
+        }
+        throw new SuccessException();
+      }
+    }
+  }
+).setParallelism(1);
+  tryExecute(env,"Read data from Kafka");
+  LOG.info("Successfully read sequence for verification");
+}

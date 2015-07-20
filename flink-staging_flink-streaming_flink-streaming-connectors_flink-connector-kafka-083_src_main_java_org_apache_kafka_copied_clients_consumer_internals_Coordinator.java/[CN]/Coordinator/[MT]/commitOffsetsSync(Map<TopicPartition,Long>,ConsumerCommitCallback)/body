@@ -1,0 +1,18 @@
+{
+  while (true) {
+    ensureCoordinatorKnown();
+    ensurePartitionAssignment();
+    RequestFuture<Void> future=sendOffsetCommitRequest(offsets);
+    client.poll(future);
+    if (future.succeeded()) {
+      if (callback != null)       callback.onComplete(offsets,null);
+      return;
+    }
+    if (!future.isRetriable()) {
+      if (callback == null)       throw future.exception();
+ else       callback.onComplete(offsets,future.exception());
+      return;
+    }
+    Utils.sleep(retryBackoffMs);
+  }
+}

@@ -1,0 +1,24 @@
+{
+  Map<TopicPartition,ListOffsetRequest.PartitionData> partitions=new HashMap<TopicPartition,ListOffsetRequest.PartitionData>(1);
+  partitions.put(topicPartition,new ListOffsetRequest.PartitionData(timestamp,1));
+  PartitionInfo info=metadata.fetch().partition(topicPartition);
+  if (info == null) {
+    metadata.add(topicPartition.topic());
+    log.debug("Partition {} is unknown for fetching offset, wait for metadata refresh",topicPartition);
+    return RequestFuture.staleMetadata();
+  }
+ else   if (info.leader() == null) {
+    log.debug("Leader for partition {} unavailable for fetching offset, wait for metadata refresh",topicPartition);
+    return RequestFuture.leaderNotAvailable();
+  }
+ else {
+    Node node=info.leader();
+    ListOffsetRequest request=new ListOffsetRequest(-1,partitions);
+    return client.send(node,ApiKeys.LIST_OFFSETS,request).compose(new RequestFutureAdapter<ClientResponse,Long>(){
+      @Override public void onSuccess(      ClientResponse response,      RequestFuture<Long> future){
+        handleListOffsetResponse(topicPartition,response,future);
+      }
+    }
+);
+  }
+}

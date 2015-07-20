@@ -1,0 +1,18 @@
+{
+  if (currentTimeNanos > nextIdleCloseCheckTime) {
+    if (lruConnections.isEmpty()) {
+      nextIdleCloseCheckTime=currentTimeNanos + connectionsMaxIdleNanos;
+    }
+ else {
+      Map.Entry<String,Long> oldestConnectionEntry=lruConnections.entrySet().iterator().next();
+      Long connectionLastActiveTime=oldestConnectionEntry.getValue();
+      nextIdleCloseCheckTime=connectionLastActiveTime + connectionsMaxIdleNanos;
+      if (currentTimeNanos > nextIdleCloseCheckTime) {
+        String connectionId=oldestConnectionEntry.getKey();
+        if (log.isTraceEnabled())         log.trace("About to close the idle connection from " + connectionId + " due to being idle for "+ (currentTimeNanos - connectionLastActiveTime) / 1000 / 1000 + " millis");
+        disconnected.add(connectionId);
+        close(connectionId);
+      }
+    }
+  }
+}

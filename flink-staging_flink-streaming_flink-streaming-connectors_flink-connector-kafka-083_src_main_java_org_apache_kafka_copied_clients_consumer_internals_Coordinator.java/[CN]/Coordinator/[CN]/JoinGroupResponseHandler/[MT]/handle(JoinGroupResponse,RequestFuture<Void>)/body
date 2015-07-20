@@ -1,0 +1,31 @@
+{
+  short errorCode=joinResponse.errorCode();
+  if (errorCode == Errors.NONE.code()) {
+    Coordinator.this.consumerId=joinResponse.consumerId();
+    Coordinator.this.generation=joinResponse.generationId();
+    subscriptions.needRefreshCommits();
+    log.debug("Joined group: {}",joinResponse.toStruct());
+    sensors.partitionReassignments.record(response.requestLatencyMs());
+    subscriptions.changePartitionAssignment(joinResponse.assignedPartitions());
+    heartbeatTask.reset();
+    future.complete(null);
+  }
+ else   if (errorCode == Errors.UNKNOWN_CONSUMER_ID.code()) {
+    Coordinator.this.consumerId=JoinGroupRequest.UNKNOWN_CONSUMER_ID;
+    log.info("Attempt to join group {} failed due to unknown consumer id, resetting and retrying.",groupId);
+    future.raise(Errors.UNKNOWN_CONSUMER_ID);
+  }
+ else   if (errorCode == Errors.CONSUMER_COORDINATOR_NOT_AVAILABLE.code() || errorCode == Errors.NOT_COORDINATOR_FOR_CONSUMER.code()) {
+    coordinatorDead();
+    log.info("Attempt to join group {} failed due to obsolete coordinator information, retrying.",groupId);
+    future.raise(Errors.forCode(errorCode));
+  }
+ else   if (errorCode == Errors.UNKNOWN_PARTITION_ASSIGNMENT_STRATEGY.code() || errorCode == Errors.INCONSISTENT_PARTITION_ASSIGNMENT_STRATEGY.code() || errorCode == Errors.INVALID_SESSION_TIMEOUT.code()) {
+    Errors error=Errors.forCode(errorCode);
+    log.error("Attempt to join group {} failed due to: {}",groupId,error.exception().getMessage());
+    future.raise(error);
+  }
+ else {
+    future.raise(new KafkaException("Unexpected error in join group response: " + Errors.forCode(joinResponse.errorCode()).exception().getMessage()));
+  }
+}

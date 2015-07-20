@@ -1,0 +1,27 @@
+{
+  sensors.heartbeatLatency.record(response.requestLatencyMs());
+  short error=heartbeatResponse.errorCode();
+  if (error == Errors.NONE.code()) {
+    log.debug("Received successful heartbeat response.");
+    future.complete(null);
+  }
+ else   if (error == Errors.CONSUMER_COORDINATOR_NOT_AVAILABLE.code() || error == Errors.NOT_COORDINATOR_FOR_CONSUMER.code()) {
+    log.info("Attempt to heart beat failed since coordinator is either not started or not valid, marking it as dead.");
+    coordinatorDead();
+    future.raise(Errors.forCode(error));
+  }
+ else   if (error == Errors.ILLEGAL_GENERATION.code()) {
+    log.info("Attempt to heart beat failed since generation id is not legal, try to re-join group.");
+    subscriptions.needReassignment();
+    future.raise(Errors.ILLEGAL_GENERATION);
+  }
+ else   if (error == Errors.UNKNOWN_CONSUMER_ID.code()) {
+    log.info("Attempt to heart beat failed since consumer id is not valid, reset it and try to re-join group.");
+    consumerId=JoinGroupRequest.UNKNOWN_CONSUMER_ID;
+    subscriptions.needReassignment();
+    future.raise(Errors.UNKNOWN_CONSUMER_ID);
+  }
+ else {
+    future.raise(new KafkaException("Unexpected error in heartbeat response: " + Errors.forCode(error).exception().getMessage()));
+  }
+}

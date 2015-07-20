@@ -1,0 +1,69 @@
+{
+  String topic="brokerFailureTestTopic";
+  createTestTopic(topic,2,2);
+  LOG.info("Writing data to topic {}",topic);
+  Configuration conf=new Configuration();
+  conf.setString(ConfigConstants.DEFAULT_EXECUTION_RETRY_DELAY_KEY,"0 s");
+  conf.setString(ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,"4096");
+  conf.setString(ConfigConstants.TASK_MANAGER_NETWORK_NUM_BUFFERS_KEY,"32");
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(4,conf);
+  env.setParallelism(4);
+  env.getConfig().disableSysoutLogging();
+  env.setNumberOfExecutionRetries(0);
+  env.setBufferTimeout(0);
+  DataStreamSource<String> stream=env.addSource(new SourceFunction<String>(){
+    private static final long serialVersionUID=1L;
+    boolean running=true;
+    @Override public void run(    SourceContext<String> ctx) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=0;
+      String payload="";
+      for (int i=0; i < 160; i++) {
+        payload+="A";
+      }
+      while (running) {
+        String msg="kafka-" + (cnt++) + "-"+ payload;
+        ctx.collect(msg);
+        if (cnt == NUM_MESSAGES) {
+          LOG.info("Stopping to produce after 200 msgs");
+          break;
+        }
+      }
+    }
+    @Override public void cancel(){
+      LOG.info("Source got chancel()");
+      running=false;
+    }
+  }
+);
+  stream.setParallelism(1);
+  stream.addSink(new KafkaSink<String>(brokerConnectionStrings,topic,new JavaDefaultStringSchema())).setParallelism(1);
+  tryExecute(env,"broker failure test - writer");
+  env.setNumberOfExecutionRetries(1);
+  env.enableCheckpointing(150);
+  LOG.info("Reading data from topic {} and let a broker fail",topic);
+  PartitionMetadata firstPart=null;
+  do {
+    if (firstPart != null) {
+      LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
+      Thread.sleep(150);
+    }
+    Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
+    firstPart=partitionMetadata.head();
+  }
+ while (firstPart.errorCode() != 0);
+  final String leaderToShutDown=firstPart.leader().get().connectionString();
+  LOG.info("Leader to shutdown {}",leaderToShutDown);
+  FlinkKafkaConsumerBase<String> src=getConsumer(topic,new JavaDefaultStringSchema(),standardProps);
+  DataStreamSource<String> consuming=env.addSource(src);
+  consuming.setParallelism(2).map(new ThrottleMap<String>(10)).setParallelism(2);
+  DataStream<String> mapped=consuming.map(new PassThroughCheckpointed()).setParallelism(4);
+  mapped.addSink(new ExactlyOnceSink(leaderToShutDown)).setParallelism(1);
+  tryExecute(env,"broker failure test - reader");
+  Assert.assertEquals("Count was not correct",4,finalCount.size());
+  int count=0;
+  for (int i=0; i < 4; i++) {
+    count+=finalCount.get(i);
+  }
+  Assert.assertEquals("Count was not correct",NUM_MESSAGES,count);
+}

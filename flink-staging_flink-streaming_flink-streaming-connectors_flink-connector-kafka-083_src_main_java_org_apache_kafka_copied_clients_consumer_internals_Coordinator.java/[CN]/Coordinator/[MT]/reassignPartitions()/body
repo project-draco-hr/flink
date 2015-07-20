@@ -1,0 +1,15 @@
+{
+  while (subscriptions.partitionAssignmentNeeded()) {
+    ensureCoordinatorKnown();
+    if (client.pendingRequestCount(this.consumerCoordinator) > 0) {
+      client.awaitPendingRequests(this.consumerCoordinator);
+      continue;
+    }
+    RequestFuture<Void> future=sendJoinGroupRequest();
+    client.poll(future);
+    if (future.failed()) {
+      if (!future.isRetriable())       throw future.exception();
+      Utils.sleep(retryBackoffMs);
+    }
+  }
+}

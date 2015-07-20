@@ -1,0 +1,53 @@
+{
+  try {
+    while (running) {
+      FetchRequestBuilder frb=new FetchRequestBuilder();
+      frb.clientId(this.clientId);
+      frb.maxWait(maxWait);
+      frb.minBytes(minBytes);
+      for (      FetchPartition fp : partitions) {
+        frb.addFetch(topic,fp.partition,fp.nextOffsetToRead,this.fetchSize);
+      }
+      kafka.api.FetchRequest fetchRequest=frb.build();
+      LOG.debug("Issuing fetch request {}",fetchRequest);
+      FetchResponse fetchResponse=null;
+      fetchResponse=consumer.fetch(fetchRequest);
+      if (fetchResponse.hasError()) {
+        String exception="";
+        for (        FetchPartition fp : partitions) {
+          short code;
+          if ((code=fetchResponse.errorCode(topic,fp.partition)) != ErrorMapping.NoError()) {
+            exception+="\nException for partition " + fp.partition + ": "+ StringUtils.stringifyException(ErrorMapping.exceptionFor(code));
+          }
+        }
+        throw new RuntimeException("Error while fetching from broker: " + exception);
+      }
+      int messagesInFetch=0;
+      for (      FetchPartition fp : partitions) {
+        ByteBufferMessageSet messageSet=fetchResponse.messageSet(topic,fp.partition);
+        for (        MessageAndOffset msg : messageSet) {
+          messagesInFetch++;
+          try {
+            if (msg.offset() < fp.nextOffsetToRead) {
+              LOG.info("Skipping message with offset " + msg.offset() + " because we have seen messages until "+ fp.nextOffsetToRead+ " from partition "+ fp.partition+ " already");
+              continue;
+            }
+            messageQueue.put(new Tuple2<MessageAndOffset,Integer>(msg,fp.partition));
+            fp.nextOffsetToRead=msg.offset() + 1;
+          }
+ catch (          InterruptedException e) {
+            LOG.debug("Consumer thread got interrupted. Stopping consumption");
+            running=false;
+          }
+        }
+      }
+      LOG.debug("This fetch contained {} messages",messagesInFetch);
+    }
+  }
+ catch (  Throwable cause) {
+    this.error=new RuntimeException("Error while reading data in thread " + this.getName(),cause);
+  }
+ finally {
+    consumer.close();
+  }
+}

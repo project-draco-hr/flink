@@ -1,0 +1,29 @@
+{
+  String[] sp=value.split("-");
+  int recordId=Integer.parseInt(sp[1]);
+  Assert.assertFalse("Received tuple with value " + recordId + " twice",validator.get(recordId));
+  validator.set(recordId);
+  elCnt++;
+  if (elCnt == 15 && !shutdownKafkaBroker) {
+    shutdownKafkaBroker=true;
+    LOG.info("Stopping lead broker");
+    for (    KafkaServer kafkaServer : brokers) {
+      if (leaderToShutDown.equals(kafkaServer.config().advertisedHostName() + ":" + kafkaServer.config().advertisedPort())) {
+        LOG.info("Stopping broker {}",leaderToShutDown);
+        kafkaServer.shutdown();
+        leaderHasShutDown=true;
+        break;
+      }
+    }
+    Assert.assertTrue("unable to find leader",leaderHasShutDown);
+  }
+  if (leaderHasShutDown) {
+    if (elCnt >= NUM_MESSAGES) {
+      int nc;
+      if ((nc=validator.nextClearBit(0)) != NUM_MESSAGES) {
+        throw new RuntimeException("The bitset was not set to 1 on all elements to be checked. Next clear:" + nc + " Set: "+ validator);
+      }
+      throw new SuccessException();
+    }
+  }
+}

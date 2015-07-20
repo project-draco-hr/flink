@@ -1,0 +1,29 @@
+{
+  LOG.info("Writing sequence from {} to {} to topic {}",from,to,topicName);
+  DataStream<Tuple2<Integer,Integer>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Integer,Integer>>(){
+    private static final long serialVersionUID=1L;
+    boolean running=true;
+    @Override public void run(    SourceContext<Tuple2<Integer,Integer>> ctx) throws Exception {
+      LOG.info("Starting source.");
+      int cnt=from;
+      int partition=getRuntimeContext().getIndexOfThisSubtask();
+      while (running) {
+        LOG.info("Writing " + cnt + " to partition "+ partition);
+        ctx.collect(new Tuple2<Integer,Integer>(partition,cnt));
+        if (cnt == to) {
+          LOG.info("Writer reached end.");
+          return;
+        }
+        cnt++;
+      }
+    }
+    @Override public void cancel(){
+      LOG.info("Source got cancel()");
+      running=false;
+    }
+  }
+).setParallelism(3);
+  stream.addSink(new KafkaSink<Tuple2<Integer,Integer>>(brokerConnectionStrings,topicName,new Utils.TypeInformationSerializationSchema<Tuple2<Integer,Integer>>(new Tuple2<Integer,Integer>(1,1),env.getConfig()),new T2Partitioner())).setParallelism(3);
+  env.execute("Write sequence from " + from + " to "+ to+ " to topic "+ topicName);
+  LOG.info("Finished writing sequence");
+}

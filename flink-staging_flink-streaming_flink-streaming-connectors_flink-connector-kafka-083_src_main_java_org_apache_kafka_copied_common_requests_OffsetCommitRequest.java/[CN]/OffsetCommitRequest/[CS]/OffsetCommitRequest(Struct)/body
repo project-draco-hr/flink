@@ -1,0 +1,30 @@
+{
+  super(struct);
+  groupId=struct.getString(GROUP_ID_KEY_NAME);
+  if (struct.hasField(GENERATION_ID_KEY_NAME))   generationId=struct.getInt(GENERATION_ID_KEY_NAME);
+ else   generationId=DEFAULT_GENERATION_ID;
+  if (struct.hasField(CONSUMER_ID_KEY_NAME))   consumerId=struct.getString(CONSUMER_ID_KEY_NAME);
+ else   consumerId=DEFAULT_CONSUMER_ID;
+  if (struct.hasField(RETENTION_TIME_KEY_NAME))   retentionTime=struct.getLong(RETENTION_TIME_KEY_NAME);
+ else   retentionTime=DEFAULT_RETENTION_TIME;
+  offsetData=new HashMap<TopicPartition,PartitionData>();
+  for (  Object topicDataObj : struct.getArray(TOPICS_KEY_NAME)) {
+    Struct topicData=(Struct)topicDataObj;
+    String topic=topicData.getString(TOPIC_KEY_NAME);
+    for (    Object partitionDataObj : topicData.getArray(PARTITIONS_KEY_NAME)) {
+      Struct partitionDataStruct=(Struct)partitionDataObj;
+      int partition=partitionDataStruct.getInt(PARTITION_KEY_NAME);
+      long offset=partitionDataStruct.getLong(COMMIT_OFFSET_KEY_NAME);
+      String metadata=partitionDataStruct.getString(METADATA_KEY_NAME);
+      PartitionData partitionOffset;
+      if (partitionDataStruct.hasField(TIMESTAMP_KEY_NAME)) {
+        long timestamp=partitionDataStruct.getLong(TIMESTAMP_KEY_NAME);
+        partitionOffset=new PartitionData(offset,timestamp,metadata);
+      }
+ else {
+        partitionOffset=new PartitionData(offset,metadata);
+      }
+      offsetData.put(new TopicPartition(topic,partition),partitionOffset);
+    }
+  }
+}

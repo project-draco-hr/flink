@@ -1,0 +1,23 @@
+{
+  super(new Struct(CURRENT_SCHEMA));
+  Map<String,Map<Integer,ByteBuffer>> recordsByTopic=CollectionUtils.groupDataByTopic(partitionRecords);
+  struct.set(ACKS_KEY_NAME,acks);
+  struct.set(TIMEOUT_KEY_NAME,timeout);
+  List<Struct> topicDatas=new ArrayList<Struct>(recordsByTopic.size());
+  for (  Map.Entry<String,Map<Integer,ByteBuffer>> entry : recordsByTopic.entrySet()) {
+    Struct topicData=struct.instance(TOPIC_DATA_KEY_NAME);
+    topicData.set(TOPIC_KEY_NAME,entry.getKey());
+    List<Struct> partitionArray=new ArrayList<Struct>();
+    for (    Map.Entry<Integer,ByteBuffer> partitionEntry : entry.getValue().entrySet()) {
+      ByteBuffer buffer=partitionEntry.getValue().duplicate();
+      Struct part=topicData.instance(PARTITION_DATA_KEY_NAME).set(PARTITION_KEY_NAME,partitionEntry.getKey()).set(RECORD_SET_KEY_NAME,buffer);
+      partitionArray.add(part);
+    }
+    topicData.set(PARTITION_DATA_KEY_NAME,partitionArray.toArray());
+    topicDatas.add(topicData);
+  }
+  struct.set(TOPIC_DATA_KEY_NAME,topicDatas.toArray());
+  this.acks=acks;
+  this.timeout=timeout;
+  this.partitionRecords=partitionRecords;
+}

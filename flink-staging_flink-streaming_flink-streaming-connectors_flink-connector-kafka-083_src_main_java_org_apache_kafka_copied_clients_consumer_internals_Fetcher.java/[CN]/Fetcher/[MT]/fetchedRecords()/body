@@ -1,0 +1,27 @@
+{
+  if (this.subscriptions.partitionAssignmentNeeded()) {
+    return Collections.emptyMap();
+  }
+ else {
+    Map<TopicPartition,List<ConsumerRecord<K,V>>> drained=new HashMap<TopicPartition,List<ConsumerRecord<K,V>>>();
+    for (    PartitionRecords<K,V> part : this.records) {
+      Long consumed=subscriptions.consumed(part.partition);
+      if (this.subscriptions.assignedPartitions().contains(part.partition) && (consumed == null || part.fetchOffset == consumed)) {
+        List<ConsumerRecord<K,V>> records=drained.get(part.partition);
+        if (records == null) {
+          records=part.records;
+          drained.put(part.partition,records);
+        }
+ else {
+          records.addAll(part.records);
+        }
+        subscriptions.consumed(part.partition,part.records.get(part.records.size() - 1).offset() + 1);
+      }
+ else {
+        log.debug("Ignoring fetched records for {} at offset {}",part.partition,part.fetchOffset);
+      }
+    }
+    this.records.clear();
+    return drained;
+  }
+}

@@ -1,0 +1,29 @@
+{
+  long timeToNextMetadataUpdate=metadata.timeToNextUpdate(now);
+  long timeToNextReconnectAttempt=Math.max(this.lastNoNodeAvailableMs + metadata.refreshBackoff() - now,0);
+  long waitForMetadataFetch=this.metadataFetchInProgress ? Integer.MAX_VALUE : 0;
+  long metadataTimeout=Math.max(Math.max(timeToNextMetadataUpdate,timeToNextReconnectAttempt),waitForMetadataFetch);
+  if (metadataTimeout == 0)   maybeUpdateMetadata(now);
+  try {
+    this.selector.poll(Math.min(timeout,metadataTimeout));
+  }
+ catch (  IOException e) {
+    log.error("Unexpected error during I/O in producer network thread",e);
+  }
+  List<ClientResponse> responses=new ArrayList<ClientResponse>();
+  handleCompletedSends(responses,now);
+  handleCompletedReceives(responses,now);
+  handleDisconnections(responses,now);
+  handleConnections();
+  for (  ClientResponse response : responses) {
+    if (response.request().hasCallback()) {
+      try {
+        response.request().callback().onComplete(response);
+      }
+ catch (      Exception e) {
+        log.error("Uncaught error in request completion:",e);
+      }
+    }
+  }
+  return responses;
+}

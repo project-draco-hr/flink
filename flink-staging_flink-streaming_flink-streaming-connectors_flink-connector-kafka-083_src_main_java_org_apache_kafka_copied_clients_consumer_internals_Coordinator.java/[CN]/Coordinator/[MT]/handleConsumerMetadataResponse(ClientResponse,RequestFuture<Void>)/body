@@ -1,0 +1,20 @@
+{
+  log.debug("Consumer metadata response {}",resp);
+  if (resp.wasDisconnected()) {
+    future.raise(new DisconnectException());
+  }
+ else   if (!coordinatorUnknown()) {
+    future.complete(null);
+  }
+ else {
+    ConsumerMetadataResponse consumerMetadataResponse=new ConsumerMetadataResponse(resp.responseBody());
+    if (consumerMetadataResponse.errorCode() == Errors.NONE.code()) {
+      this.consumerCoordinator=new Node(Integer.MAX_VALUE - consumerMetadataResponse.node().id(),consumerMetadataResponse.node().host(),consumerMetadataResponse.node().port());
+      heartbeatTask.reset();
+      future.complete(null);
+    }
+ else {
+      future.raise(Errors.forCode(consumerMetadataResponse.errorCode()));
+    }
+  }
+}

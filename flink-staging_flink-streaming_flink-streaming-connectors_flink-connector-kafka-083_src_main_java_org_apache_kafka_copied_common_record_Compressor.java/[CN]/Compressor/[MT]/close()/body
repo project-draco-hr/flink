@@ -1,0 +1,23 @@
+{
+  try {
+    appendStream.close();
+  }
+ catch (  IOException e) {
+    throw new KafkaException(e);
+  }
+  if (type != CompressionType.NONE) {
+    ByteBuffer buffer=bufferStream.buffer();
+    int pos=buffer.position();
+    buffer.position(initPos);
+    buffer.putLong(numRecords - 1);
+    buffer.putInt(pos - initPos - Records.LOG_OVERHEAD);
+    Record.write(buffer,null,null,type,0,-1);
+    int valueSize=pos - initPos - Records.LOG_OVERHEAD- Record.RECORD_OVERHEAD;
+    buffer.putInt(initPos + Records.LOG_OVERHEAD + Record.KEY_OFFSET,valueSize);
+    long crc=Record.computeChecksum(buffer,initPos + Records.LOG_OVERHEAD + Record.MAGIC_OFFSET,pos - initPos - Records.LOG_OVERHEAD- Record.MAGIC_OFFSET);
+    Utils.writeUnsignedInt(buffer,initPos + Records.LOG_OVERHEAD + Record.CRC_OFFSET,crc);
+    buffer.position(pos);
+    float compressionRate=(float)buffer.position() / this.writtenUncompressed;
+    TYPE_TO_RATE[type.id]=TYPE_TO_RATE[type.id] * COMPRESSION_RATE_DAMPING_FACTOR + compressionRate * (1 - COMPRESSION_RATE_DAMPING_FACTOR);
+  }
+}
