@@ -1,24 +1,25 @@
 {
   new JavaTestKit(system){
 {
-      ExecutionEnvironment env=new PlanExtractor();
-      DataSet<String> input=env.fromCollection(inputData);
-      input.flatMap(new WaitingUDF()).output(new WaitingOutputFormat());
-      env.execute();
-      JobGraph jobGraph=getOptimizedPlan(((PlanExtractor)env).plan);
-      jobID=jobGraph.getJobID();
       ActorGateway selfGateway=new AkkaActorGateway(getRef(),jobManagerGateway.leaderSessionID());
       jobManagerGateway.tell(new TestingJobManagerMessages.NotifyWhenAccumulatorChange(jobID),selfGateway);
       expectMsgEquals(TIMEOUT,true);
       jobManagerGateway.tell(new JobManagerMessages.SubmitJob(jobGraph,false),selfGateway);
       expectMsgClass(TIMEOUT,Status.Success.class);
-      ExecutionAttemptID mapperTaskID=null;
       TestingJobManagerMessages.UpdatedAccumulators msg=(TestingJobManagerMessages.UpdatedAccumulators)receiveOne(TIMEOUT);
       Map<ExecutionAttemptID,Map<AccumulatorRegistry.Metric,Accumulator<?,?>>> flinkAccumulators=msg.flinkAccumulators();
       Map<String,Accumulator<?,?>> userAccumulators=msg.userAccumulators();
+      ExecutionAttemptID mapperTaskID=null;
       for (      Map.Entry<ExecutionAttemptID,?> entry : flinkAccumulators.entrySet()) {
         if (entry.getValue() != null) {
           mapperTaskID=entry.getKey();
+          break;
+        }
+      }
+      ExecutionAttemptID sinkTaskID=null;
+      for (      ExecutionAttemptID key : flinkAccumulators.keySet()) {
+        if (key != mapperTaskID) {
+          sinkTaskID=key;
           break;
         }
       }
@@ -29,7 +30,6 @@
         fail("Wrong accumulator results when map task begins execution.");
       }
       int expectedAccVal=0;
-      ExecutionAttemptID sinkTaskID=null;
       for (int i=1; i <= NUM_ITERATIONS; i++) {
         expectedAccVal+=i;
         msg=(TestingJobManagerMessages.UpdatedAccumulators)receiveOne(TIMEOUT);
@@ -38,7 +38,13 @@
         LOG.info("{}",flinkAccumulators);
         LOG.info("{}",userAccumulators);
         if (checkUserAccumulators(expectedAccVal,userAccumulators) && checkFlinkAccumulators(mapperTaskID,0,i,0,i * 4,flinkAccumulators)) {
-          LOG.info("Passed round " + i);
+          LOG.info("Passed round #" + i);
+        }
+ else         if (checkUserAccumulators(expectedAccVal,userAccumulators) && checkFlinkAccumulators(sinkTaskID,0,i,0,i * 4,flinkAccumulators)) {
+          ExecutionAttemptID temp=mapperTaskID;
+          mapperTaskID=sinkTaskID;
+          sinkTaskID=temp;
+          LOG.info("Passed round #" + i);
         }
  else {
           fail("Failed in round #" + i);
@@ -47,12 +53,6 @@
       msg=(TestingJobManagerMessages.UpdatedAccumulators)receiveOne(TIMEOUT);
       flinkAccumulators=msg.flinkAccumulators();
       userAccumulators=msg.userAccumulators();
-      for (      ExecutionAttemptID key : flinkAccumulators.keySet()) {
-        if (key != mapperTaskID) {
-          sinkTaskID=key;
-          break;
-        }
-      }
       if (checkUserAccumulators(expectedAccVal,userAccumulators) && checkFlinkAccumulators(sinkTaskID,0,0,0,0,flinkAccumulators)) {
         LOG.info("Passed initial check for sink task.");
       }
@@ -66,7 +66,7 @@
         LOG.info("{}",flinkAccumulators);
         LOG.info("{}",userAccumulators);
         if (checkUserAccumulators(expectedAccVal,userAccumulators) && checkFlinkAccumulators(sinkTaskID,i,0,i * 4,0,flinkAccumulators)) {
-          LOG.info("Passed round " + i);
+          LOG.info("Passed round #" + i);
         }
  else {
           fail("Failed in round #" + i);
