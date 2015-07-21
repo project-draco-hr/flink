@@ -5,5 +5,34 @@ def execute(self, local=False, debug=False):
     self._parameters.append(('mode', local))
     self._parameters.append(('debug', debug))
     self._optimize_plan()
-    self._send_plan()
-    self._connection._write_buffer()
+    plan_mode = (sys.stdin.readline().rstrip('\n') == 'plan')
+    if plan_mode:
+        output_path = sys.stdin.readline().rstrip('\n')
+        self._connection = Connection.OneWayBusyBufferingMappedFileConnection(output_path)
+        self._collector = Collector.TypedCollector(self._connection)
+        self._send_plan()
+        self._connection._write_buffer()
+    else:
+        import struct
+        operator = None
+        try:
+            port = int(sys.stdin.readline().rstrip('\n'))
+            id = int(sys.stdin.readline().rstrip('\n'))
+            input_path = sys.stdin.readline().rstrip('\n')
+            output_path = sys.stdin.readline().rstrip('\n')
+            operator = None
+            for set in self._sets:
+                if (set[_Fields.ID] == id):
+                    operator = set[_Fields.OPERATOR]
+                if (set[_Fields.ID] == (- id)):
+                    operator = set[_Fields.COMBINEOP]
+            operator._configure(input_path, output_path, port)
+            operator._go()
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            if (operator is not None):
+                operator._connection._socket.send(struct.pack('>i', (-2)))
+            raise
