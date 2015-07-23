@@ -1,0 +1,29 @@
+{
+  final CountDownLatch doneLatch=new CountDownLatch(1);
+  final CountDownLatch blockLatch=new CountDownLatch(1);
+  AsynchronousBufferFileWriter spillWriter=mock(AsynchronousBufferFileWriter.class);
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      blockLatch.countDown();
+      doneLatch.await();
+      return null;
+    }
+  }
+).when(spillWriter).close();
+  IOManager ioManager=mock(IOManager.class);
+  when(ioManager.createBufferFileWriter(any(FileIOChannel.ID.class))).thenReturn(spillWriter);
+  final SpillableSubpartition partition=new SpillableSubpartition(0,mock(ResultPartition.class),ioManager,SYNC);
+  partition.releaseMemory();
+  ExecutorService executor=Executors.newSingleThreadExecutor();
+  Future<Void> blockingFinish=executor.submit(new Callable<Void>(){
+    @Override public Void call() throws Exception {
+      partition.finish();
+      return null;
+    }
+  }
+);
+  blockLatch.await();
+  partition.releaseMemory();
+  doneLatch.countDown();
+  blockingFinish.get();
+}
