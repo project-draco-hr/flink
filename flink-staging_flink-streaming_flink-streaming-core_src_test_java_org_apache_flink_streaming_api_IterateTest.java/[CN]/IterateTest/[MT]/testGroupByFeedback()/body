@@ -1,13 +1,13 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  env.setParallelism(3);
+  env.setParallelism(DEFAULT_PARALLELISM - 1);
   KeySelector<Integer,Integer> key=new KeySelector<Integer,Integer>(){
     @Override public Integer getKey(    Integer value) throws Exception {
       return value % 3;
     }
   }
 ;
-  DataStream<Integer> source=env.fromElements(1,2,3);
+  DataStream<Integer> source=env.fromElements(1,2,3).map(NoOpIntMap).name("ParallelizeMap");
   IterativeDataStream<Integer> it=source.groupBy(key).iterate(3000);
   DataStream<Integer> head=it.flatMap(new RichFlatMapFunction<Integer,Integer>(){
     int received=0;
@@ -29,6 +29,6 @@
     }
   }
 );
-  it.closeWith(head.groupBy(key).union(head.map(NoOpIntMap).setParallelism(2).groupBy(key)),true).addSink(new NoOpSink<Integer>());
+  it.closeWith(head.groupBy(key).union(head.map(NoOpIntMap).groupBy(key))).addSink(new ReceiveCheckNoOpSink<Integer>());
   env.execute();
 }

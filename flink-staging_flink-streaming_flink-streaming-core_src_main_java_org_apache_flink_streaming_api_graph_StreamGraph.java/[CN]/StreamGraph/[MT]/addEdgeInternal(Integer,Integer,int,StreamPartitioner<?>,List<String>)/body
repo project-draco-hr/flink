@@ -1,0 +1,36 @@
+{
+  if (virtualSelectNodes.containsKey(upStreamVertexID)) {
+    int virtualId=upStreamVertexID;
+    upStreamVertexID=virtualSelectNodes.get(virtualId).f0;
+    if (outputNames.isEmpty()) {
+      outputNames=virtualSelectNodes.get(virtualId).f1;
+    }
+    addEdgeInternal(upStreamVertexID,downStreamVertexID,typeNumber,partitioner,outputNames);
+  }
+ else   if (virtuaPartitionNodes.containsKey(upStreamVertexID)) {
+    int virtualId=upStreamVertexID;
+    upStreamVertexID=virtuaPartitionNodes.get(virtualId).f0;
+    if (partitioner == null) {
+      partitioner=virtuaPartitionNodes.get(virtualId).f1;
+    }
+    addEdgeInternal(upStreamVertexID,downStreamVertexID,typeNumber,partitioner,outputNames);
+  }
+ else {
+    StreamNode upstreamNode=getStreamNode(upStreamVertexID);
+    StreamNode downstreamNode=getStreamNode(downStreamVertexID);
+    if (partitioner == null && upstreamNode.getParallelism() == downstreamNode.getParallelism()) {
+      partitioner=new ForwardPartitioner<Object>();
+    }
+ else     if (partitioner == null) {
+      partitioner=new RebalancePartitioner<Object>();
+    }
+    if (partitioner instanceof ForwardPartitioner) {
+      if (upstreamNode.getParallelism() != downstreamNode.getParallelism()) {
+        throw new UnsupportedOperationException("Forward partitioning does not allow " + "change of parallelism. Upstream operation: " + upstreamNode + " parallelism: "+ upstreamNode.getParallelism()+ ", downstream operation: "+ downstreamNode+ " parallelism: "+ downstreamNode.getParallelism()+ " You must use another partitioning strategy, such as broadcast, rebalance, shuffle or global.");
+      }
+    }
+    StreamEdge edge=new StreamEdge(upstreamNode,downstreamNode,typeNumber,outputNames,partitioner);
+    getStreamNode(edge.getSourceId()).addOutEdge(edge);
+    getStreamNode(edge.getTargetId()).addInEdge(edge);
+  }
+}

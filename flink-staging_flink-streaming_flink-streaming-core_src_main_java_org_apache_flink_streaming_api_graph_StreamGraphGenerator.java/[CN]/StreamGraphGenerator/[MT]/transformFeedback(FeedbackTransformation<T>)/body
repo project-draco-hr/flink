@@ -1,0 +1,25 @@
+{
+  if (iterate.getFeedbackEdges().size() <= 0) {
+    throw new IllegalStateException("Iteration " + iterate + " does not have any feedback edges.");
+  }
+  StreamTransformation<T> input=iterate.getInput();
+  List<Integer> resultIds=Lists.newArrayList();
+  resultIds.addAll(transform(input));
+  if (alreadyTransformed.containsKey(iterate)) {
+    return alreadyTransformed.get(iterate);
+  }
+  Tuple2<StreamNode,StreamNode> itSourceAndSink=streamGraph.createIterationSourceAndSink(iterate.getId(),getNewIterationNodeId(),getNewIterationNodeId(),iterate.getWaitTime(),iterate.getParallelism());
+  StreamNode itSource=itSourceAndSink.f0;
+  StreamNode itSink=itSourceAndSink.f1;
+  streamGraph.setSerializers(itSource.getId(),null,null,iterate.getOutputType().createSerializer(env.getConfig()));
+  streamGraph.setSerializers(itSink.getId(),iterate.getOutputType().createSerializer(env.getConfig()),null,null);
+  resultIds.add(itSource.getId());
+  alreadyTransformed.put(iterate,resultIds);
+  for (  StreamTransformation<T> feedbackEdge : iterate.getFeedbackEdges()) {
+    Collection<Integer> feedbackIds=transform(feedbackEdge);
+    for (    Integer feedbackId : feedbackIds) {
+      streamGraph.addEdge(feedbackId,itSink.getId(),0);
+    }
+  }
+  return resultIds;
+}

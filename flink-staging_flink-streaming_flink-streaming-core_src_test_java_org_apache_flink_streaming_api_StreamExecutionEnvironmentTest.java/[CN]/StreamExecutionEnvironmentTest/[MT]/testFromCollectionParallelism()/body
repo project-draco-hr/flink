@@ -1,7 +1,7 @@
 {
   try {
     TypeInformation<Integer> typeInfo=BasicTypeInfo.INT_TYPE_INFO;
-    StreamExecutionEnvironment env=new TestStreamEnvironment(PARALLELISM,MEMORYSIZE);
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
     DataStreamSource<Integer> dataStream1=env.fromCollection(new DummySplittableIterator<Integer>(),typeInfo);
     try {
       dataStream1.setParallelism(4);
@@ -9,10 +9,12 @@
     }
  catch (    IllegalArgumentException e) {
     }
-    env.fromParallelCollection(new DummySplittableIterator<Integer>(),typeInfo).setParallelism(4);
+    dataStream1.addSink(new NoOpSink<Integer>());
+    DataStreamSource<Integer> dataStream2=env.fromParallelCollection(new DummySplittableIterator<Integer>(),typeInfo).setParallelism(4);
+    dataStream2.addSink(new NoOpSink<Integer>());
     String plan=env.getExecutionPlan();
-    assertTrue("Parallelism for dataStream1 is not right.",plan.contains("\"contents\":\"Collection Source\",\"parallelism\":1"));
-    assertTrue("Parallelism for dataStream2 is not right.",plan.contains("\"contents\":\"Parallel Collection Source\",\"parallelism\":4"));
+    assertEquals("Parallelism of collection source must be 1.",1,env.getStreamGraph().getStreamNode(dataStream1.getId()).getParallelism());
+    assertEquals("Parallelism of parallel collection source must be 4.",4,env.getStreamGraph().getStreamNode(dataStream2.getId()).getParallelism());
   }
  catch (  Exception e) {
     e.printStackTrace();

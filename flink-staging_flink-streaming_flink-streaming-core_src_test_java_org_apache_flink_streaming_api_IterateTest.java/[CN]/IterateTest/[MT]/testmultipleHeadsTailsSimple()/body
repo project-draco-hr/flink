@@ -1,37 +1,43 @@
 {
-  StreamExecutionEnvironment env=new TestStreamEnvironment(4,MEMORYSIZE);
-  DataStream<Integer> source1=env.fromElements(1,2,3,4,5).shuffle();
-  DataStream<Integer> source2=env.fromElements(1,2,3,4,5);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Integer> source1=env.fromElements(1,2,3,4,5).shuffle().map(NoOpIntMap).name("ParallelizeMapShuffle");
+  DataStream<Integer> source2=env.fromElements(1,2,3,4,5).map(NoOpIntMap).name("ParallelizeMapRebalance");
   IterativeDataStream<Integer> iter1=source1.union(source2).iterate();
-  DataStream<Integer> head1=iter1.map(NoOpIntMap);
-  DataStream<Integer> head2=iter1.map(NoOpIntMap).setParallelism(2);
-  DataStream<Integer> head3=iter1.map(NoOpIntMap).setParallelism(2).addSink(new NoOpSink<Integer>());
-  DataStream<Integer> head4=iter1.map(NoOpIntMap).addSink(new NoOpSink<Integer>());
-  SplitDataStream<Integer> source3=env.fromElements(1,2,3,4,5).split(new OutputSelector<Integer>(){
-    @Override public Iterable<String> select(    Integer value){
-      return value % 2 == 0 ? Arrays.asList("even") : Arrays.asList("odd");
-    }
-  }
-);
-  iter1.closeWith(source3.select("even").union(head1.map(NoOpIntMap).broadcast().setParallelism(1),head2.shuffle()));
+  DataStream<Integer> head1=iter1.map(NoOpIntMap).name("IterRebalanceMap").setParallelism(DEFAULT_PARALLELISM / 2);
+  DataStream<Integer> head2=iter1.map(NoOpIntMap).name("IterForwardMap");
+  DataStreamSink<Integer> head3=iter1.map(NoOpIntMap).setParallelism(DEFAULT_PARALLELISM / 2).addSink(new ReceiveCheckNoOpSink<Integer>());
+  DataStreamSink<Integer> head4=iter1.map(NoOpIntMap).addSink(new ReceiveCheckNoOpSink<Integer>());
+  SplitDataStream<Integer> source3=env.fromElements(1,2,3,4,5).map(NoOpIntMap).name("EvenOddSourceMap").split(new EvenOddOutputSelector());
+  iter1.closeWith(source3.select("even").union(head1.rebalance().map(NoOpIntMap).broadcast(),head2.shuffle()));
   StreamGraph graph=env.getStreamGraph();
   JobGraph jg=graph.getJobGraph();
-  assertEquals(1,graph.getStreamLoops().size());
-  StreamLoop loop=new ArrayList<StreamLoop>(graph.getStreamLoops()).get(0);
-  assertEquals(4,loop.getHeads().size());
-  assertEquals(3,loop.getTails().size());
-  assertEquals(1,loop.getSourceSinkPairs().size());
-  Tuple2<StreamNode,StreamNode> pair=loop.getSourceSinkPairs().get(0);
-  assertEquals(pair.f0.getParallelism(),pair.f1.getParallelism());
-  assertEquals(4,pair.f0.getOutEdges().size());
-  assertEquals(3,pair.f1.getInEdges().size());
-  for (  StreamEdge edge : pair.f0.getOutEdges()) {
-    assertTrue(edge.getPartitioner() instanceof ShufflePartitioner);
+  assertEquals(1,graph.getIterationSourceSinkPairs().size());
+  Tuple2<StreamNode,StreamNode> sourceSinkPair=graph.getIterationSourceSinkPairs().iterator().next();
+  StreamNode itSource=sourceSinkPair.f0;
+  StreamNode itSink=sourceSinkPair.f1;
+  assertEquals(4,itSource.getOutEdges().size());
+  assertEquals(3,itSink.getInEdges().size());
+  assertEquals(itSource.getParallelism(),itSink.getParallelism());
+  for (  StreamEdge edge : itSource.getOutEdges()) {
+    if (edge.getTargetVertex().getOperatorName().equals("IterRebalanceMap")) {
+      assertTrue(edge.getPartitioner() instanceof RebalancePartitioner);
+    }
+ else     if (edge.getTargetVertex().getOperatorName().equals("IterForwardMap")) {
+      assertTrue(edge.getPartitioner() instanceof ForwardPartitioner);
+    }
   }
-  for (  StreamEdge edge : pair.f1.getInEdges()) {
-    assertTrue(edge.getPartitioner() instanceof RebalancePartitioner);
+  for (  StreamEdge edge : itSink.getInEdges()) {
+    if (graph.getStreamNode(edge.getSourceId()).getOperatorName().equals("ParallelizeMapShuffle")) {
+      assertTrue(edge.getPartitioner() instanceof ShufflePartitioner);
+    }
+    if (graph.getStreamNode(edge.getSourceId()).getOperatorName().equals("ParallelizeMapForward")) {
+      assertTrue(edge.getPartitioner() instanceof ForwardPartitioner);
+    }
+    if (graph.getStreamNode(edge.getSourceId()).getOperatorName().equals("EvenOddSourceMap")) {
+      assertTrue(edge.getPartitioner() instanceof ForwardPartitioner);
+      assertTrue(edge.getSelectedNames().contains("even"));
+    }
   }
-  assertTrue(loop.getTailSelectedNames().contains(Arrays.asList("even")));
   JobVertex itSource1=null;
   JobVertex itSink1=null;
   for (  JobVertex vertex : jg.getVertices()) {

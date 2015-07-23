@@ -1,12 +1,11 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  env.setParallelism(PARALLELISM);
-  iterated=new boolean[PARALLELISM];
-  DataStream<Boolean> source=env.fromCollection(Collections.nCopies(PARALLELISM * 2,false));
+  iterated=new boolean[DEFAULT_PARALLELISM];
+  DataStream<Boolean> source=env.fromCollection(Collections.nCopies(DEFAULT_PARALLELISM * 2,false)).map(NoOpBoolMap).name("ParallelizeMap");
   IterativeDataStream<Boolean> iteration=source.iterate(3000);
   DataStream<Boolean> increment=iteration.flatMap(new IterationHead()).map(NoOpBoolMap);
-  iteration.map(NoOpBoolMap).addSink(new NoOpSink());
-  iteration.closeWith(increment).addSink(new NoOpSink());
+  iteration.map(NoOpBoolMap).addSink(new ReceiveCheckNoOpSink());
+  iteration.closeWith(increment).addSink(new ReceiveCheckNoOpSink());
   env.execute();
   for (  boolean iter : iterated) {
     assertTrue(iter);

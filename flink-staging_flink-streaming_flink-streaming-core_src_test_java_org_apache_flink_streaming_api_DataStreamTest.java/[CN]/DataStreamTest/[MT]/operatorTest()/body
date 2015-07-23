@@ -1,6 +1,5 @@
 {
-  StreamExecutionEnvironment env=new TestStreamEnvironment(PARALLELISM,MEMORYSIZE);
-  StreamGraph streamGraph=env.getStreamGraph();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
   DataStreamSource<Long> src=env.generateSequence(0,0);
   MapFunction<Long,Integer> mapFunction=new MapFunction<Long,Integer>(){
     @Override public Integer map(    Long value) throws Exception {
@@ -9,6 +8,7 @@
   }
 ;
   DataStream<Integer> map=src.map(mapFunction);
+  map.addSink(new NoOpSink<Integer>());
   assertEquals(mapFunction,getFunctionForDataStream(map));
   FlatMapFunction<Long,Integer> flatMapFunction=new FlatMapFunction<Long,Integer>(){
     @Override public void flatMap(    Long value,    Collector<Integer> out) throws Exception {
@@ -16,6 +16,7 @@
   }
 ;
   DataStream<Integer> flatMap=src.flatMap(flatMapFunction);
+  flatMap.addSink(new NoOpSink<Integer>());
   assertEquals(flatMapFunction,getFunctionForDataStream(flatMap));
   FilterFunction<Integer> filterFunction=new FilterFunction<Integer>(){
     @Override public boolean filter(    Integer value) throws Exception {
@@ -24,15 +25,16 @@
   }
 ;
   DataStream<Integer> unionFilter=map.union(flatMap).filter(filterFunction);
+  unionFilter.addSink(new NoOpSink<Integer>());
   assertEquals(filterFunction,getFunctionForDataStream(unionFilter));
   try {
-    streamGraph.getStreamEdge(map.getId(),unionFilter.getId());
+    env.getStreamGraph().getStreamEdge(map.getId(),unionFilter.getId());
   }
  catch (  RuntimeException e) {
     fail(e.getMessage());
   }
   try {
-    streamGraph.getStreamEdge(flatMap.getId(),unionFilter.getId());
+    env.getStreamGraph().getStreamEdge(flatMap.getId(),unionFilter.getId());
   }
  catch (  RuntimeException e) {
     fail(e.getMessage());
@@ -44,12 +46,13 @@
   }
 ;
   SplitDataStream<Integer> split=unionFilter.split(outputSelector);
-  List<OutputSelector<?>> outputSelectors=streamGraph.getStreamNode(split.getId()).getOutputSelectors();
+  split.select("dummy").addSink(new NoOpSink<Integer>());
+  List<OutputSelector<?>> outputSelectors=env.getStreamGraph().getStreamNode(unionFilter.getId()).getOutputSelectors();
   assertEquals(1,outputSelectors.size());
   assertEquals(outputSelector,outputSelectors.get(0));
   DataStream<Integer> select=split.select("a");
   DataStreamSink<Integer> sink=select.print();
-  StreamEdge splitEdge=streamGraph.getStreamEdge(select.getId(),sink.getId());
+  StreamEdge splitEdge=env.getStreamGraph().getStreamEdge(unionFilter.getId(),sink.getTransformation().getId());
   assertEquals("a",splitEdge.getSelectedNames().get(0));
   ConnectedDataStream<Integer,Integer> connect=map.connect(flatMap);
   CoMapFunction<Integer,Integer,String> coMapper=new CoMapFunction<Integer,Integer,String>(){
@@ -62,15 +65,16 @@
   }
 ;
   DataStream<String> coMap=connect.map(coMapper);
+  coMap.addSink(new NoOpSink<String>());
   assertEquals(coMapper,getFunctionForDataStream(coMap));
   try {
-    streamGraph.getStreamEdge(map.getId(),coMap.getId());
+    env.getStreamGraph().getStreamEdge(map.getId(),coMap.getId());
   }
  catch (  RuntimeException e) {
     fail(e.getMessage());
   }
   try {
-    streamGraph.getStreamEdge(flatMap.getId(),coMap.getId());
+    env.getStreamGraph().getStreamEdge(flatMap.getId(),coMap.getId());
   }
  catch (  RuntimeException e) {
     fail(e.getMessage());
