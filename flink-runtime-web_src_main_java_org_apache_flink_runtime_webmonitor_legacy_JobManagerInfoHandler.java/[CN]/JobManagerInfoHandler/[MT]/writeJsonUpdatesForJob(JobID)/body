@@ -1,0 +1,83 @@
+{
+  final Future<Object> responseArchivedJobs=Patterns.ask(jobmanager,JobManagerMessages.getRequestRunningJobs(),new Timeout(timeout));
+  Object resultArchivedJobs;
+  try {
+    resultArchivedJobs=Await.result(responseArchivedJobs,timeout);
+  }
+ catch (  Exception ex) {
+    throw new RuntimeException("Could not retrieve archived jobs from the job manager.",ex);
+  }
+  if (!(resultArchivedJobs instanceof JobManagerMessages.RunningJobs)) {
+    throw new RuntimeException("RequestArchivedJobs requires a response of type " + "RunningJobs. Instead the response is of type " + resultArchivedJobs.getClass() + ".");
+  }
+ else {
+    final Iterable<ExecutionGraph> graphs=((JobManagerMessages.RunningJobs)resultArchivedJobs).asJavaIterable();
+    final StringBuilder bld=new StringBuilder();
+    bld.append("{");
+    bld.append("\"jobid\": \"").append(jobId).append("\",");
+    bld.append("\"timestamp\": \"").append(System.currentTimeMillis()).append("\",");
+    bld.append("\"recentjobs\": [");
+    boolean first=true;
+    for (    ExecutionGraph g : graphs) {
+      if (first) {
+        first=false;
+      }
+ else {
+        bld.append(",");
+      }
+      bld.append("\"").append(g.getJobID()).append("\"");
+    }
+    bld.append("],");
+    final Future<Object> responseJob=Patterns.ask(jobmanager,new JobManagerMessages.RequestJob(jobId),new Timeout(timeout));
+    Object resultJob;
+    try {
+      resultJob=Await.result(responseJob,timeout);
+    }
+ catch (    Exception ex) {
+      throw new RuntimeException("Could not retrieve the job with jobID " + jobId + "from the job manager.",ex);
+    }
+    if (!(resultJob instanceof JobManagerMessages.JobResponse)) {
+      throw new RuntimeException("RequestJob requires a response of type JobResponse. " + "Instead the response is of type " + resultJob.getClass() + ".");
+    }
+ else {
+      final JobManagerMessages.JobResponse response=(JobManagerMessages.JobResponse)resultJob;
+      if (response instanceof JobManagerMessages.JobFound) {
+        ExecutionGraph graph=((JobManagerMessages.JobFound)response).executionGraph();
+        bld.append("\"vertexevents\": [");
+        first=true;
+        for (        ExecutionVertex ev : graph.getAllExecutionVertices()) {
+          if (first) {
+            first=false;
+          }
+ else {
+            bld.append(",");
+          }
+          bld.append("{");
+          bld.append("\"vertexid\": \"").append(ev.getCurrentExecutionAttempt().getAttemptId()).append("\",");
+          bld.append("\"newstate\": \"").append(ev.getExecutionState()).append("\",");
+          bld.append("\"timestamp\": \"").append(ev.getStateTimestamp(ev.getExecutionState())).append("\"");
+          bld.append("}");
+        }
+        bld.append("],");
+        bld.append("\"jobevents\": [");
+        bld.append("{");
+        bld.append("\"newstate\": \"").append(graph.getState()).append("\",");
+        bld.append("\"timestamp\": \"").append(graph.getStatusTimestamp(graph.getState())).append("\"");
+        bld.append("}");
+        bld.append("]");
+        bld.append("}");
+      }
+ else {
+        bld.append("\"vertexevents\": [],");
+        bld.append("\"jobevents\": [");
+        bld.append("{");
+        bld.append("\"newstate\": \"").append(JobStatus.FINISHED.toString()).append("\",");
+        bld.append("\"timestamp\": \"").append(System.currentTimeMillis()).append("\"");
+        bld.append("}");
+        bld.append("]");
+        bld.append("}");
+      }
+    }
+    return bld.toString();
+  }
+}
