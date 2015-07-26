@@ -1,0 +1,33 @@
+{
+  final long barrierId=receivedBarrier.getId();
+  if (numReceivedBarriers > 0) {
+    if (barrierId == currentCheckpointId) {
+      onBarrier(channelIndex);
+    }
+ else     if (barrierId > currentCheckpointId) {
+      LOG.warn("Received checkpoint barrier for checkpoint {} before completing current checkpoint {}. " + "Skipping current checkpoint.",barrierId,currentCheckpointId);
+      releaseBlocks();
+      currentCheckpointId=barrierId;
+      onBarrier(channelIndex);
+    }
+ else {
+      return;
+    }
+  }
+ else   if (barrierId > currentCheckpointId) {
+    currentCheckpointId=barrierId;
+    onBarrier(channelIndex);
+  }
+ else {
+    return;
+  }
+  if (numReceivedBarriers == totalNumberOfInputChannels) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Received all barrier, triggering checkpoint {} at {}",receivedBarrier.getId(),receivedBarrier.getTimestamp());
+    }
+    if (checkpointHandler != null) {
+      checkpointHandler.onEvent(receivedBarrier);
+    }
+    releaseBlocks();
+  }
+}

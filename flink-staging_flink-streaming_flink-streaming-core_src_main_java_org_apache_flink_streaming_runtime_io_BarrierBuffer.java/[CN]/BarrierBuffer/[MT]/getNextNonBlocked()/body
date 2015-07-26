@@ -1,34 +1,25 @@
 {
-  BufferOrEvent bufferOrEvent=getNonProcessed();
-  if (bufferOrEvent != null) {
-    return bufferOrEvent;
-  }
- else   if (blockedNonProcessed.isEmpty() && inputFinished) {
-    return endOfStreamEvent;
-  }
- else {
-    while (true) {
-      if (!inputFinished) {
-        bufferOrEvent=inputGate.getNextBufferOrEvent();
-        if (!bufferOrEvent.isBuffer() && bufferOrEvent.getEvent() instanceof EndOfPartitionEvent) {
-          if (inputGate.isFinished()) {
-            endOfStreamEvent=bufferOrEvent;
-            inputFinished=true;
-          }
-        }
- else {
-          if (isBlocked(bufferOrEvent.getChannelIndex())) {
-            blockedNonProcessed.add(new SpillingBufferOrEvent(bufferOrEvent,bufferSpiller,spillReader));
-          }
- else {
-            return bufferOrEvent;
-          }
-        }
+  while (true) {
+    final SpillingBufferOrEvent nextBuffered=nonProcessed.pollFirst();
+    final BufferOrEvent next=nextBuffered == null ? inputGate.getNextBufferOrEvent() : nextBuffered.getBufferOrEvent();
+    if (next != null) {
+      if (isBlocked(next.getChannelIndex())) {
+        blockedNonProcessed.add(new SpillingBufferOrEvent(next,bufferSpiller,spillReader));
       }
- else {
-        actOnAllBlocked();
-        return getNextNonBlocked();
+ else       if (next.isBuffer() || next.getEvent().getClass() != CheckpointBarrier.class) {
+        return next;
       }
+ else       if (!endOfStream) {
+        processBarrier((CheckpointBarrier)next.getEvent(),next.getChannelIndex());
+      }
+    }
+ else     if (!endOfStream) {
+      endOfStream=true;
+      releaseBlocks();
+      return getNextNonBlocked();
+    }
+ else {
+      return null;
     }
   }
 }

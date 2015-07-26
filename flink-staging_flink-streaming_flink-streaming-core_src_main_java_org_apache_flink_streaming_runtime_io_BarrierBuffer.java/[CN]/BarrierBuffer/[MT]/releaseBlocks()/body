@@ -1,19 +1,19 @@
 {
-  if (!nonProcessed.isEmpty()) {
-    throw new RuntimeException("Error in barrier buffer logic");
-  }
-  nonProcessed=blockedNonProcessed;
-  blockedNonProcessed=new LinkedList<SpillingBufferOrEvent>();
-  try {
-    spillReader.setSpillFile(bufferSpiller.getSpillFile());
-    bufferSpiller.resetSpillFile();
-  }
- catch (  IOException e) {
-    throw new RuntimeException(e);
-  }
-  blockedChannels.clear();
-  currentBarrier=null;
   if (LOG.isDebugEnabled()) {
-    LOG.debug("All barriers received, blocks released");
+    LOG.debug("Releasing blocks");
   }
+  for (int i=0; i < blockedChannels.length; i++) {
+    blockedChannels[i]=false;
+  }
+  numReceivedBarriers=0;
+  if (nonProcessed.isEmpty()) {
+    ArrayDeque<SpillingBufferOrEvent> empty=nonProcessed;
+    nonProcessed=blockedNonProcessed;
+    blockedNonProcessed=empty;
+  }
+ else {
+    throw new IllegalStateException("Unconsumed data from previous checkpoint alignment " + "when starting next checkpoint alignment");
+  }
+  spillReader.setSpillFile(bufferSpiller.getSpillFile());
+  bufferSpiller.resetSpillFile();
 }
