@@ -1,0 +1,38 @@
+{
+  if (totalNumberOfInputChannels == 1) {
+    if (checkpointHandler != null) {
+      checkpointHandler.onEvent(receivedBarrier);
+    }
+    return;
+  }
+  final long barrierId=receivedBarrier.getId();
+  CheckpointBarrierCount cbc=null;
+  int pos=0;
+  for (  CheckpointBarrierCount next : pendingCheckpoints) {
+    if (next.checkpointId == barrierId) {
+      cbc=next;
+      break;
+    }
+    pos++;
+  }
+  if (cbc != null) {
+    int numBarriersNew=cbc.incrementBarrierCount();
+    if (numBarriersNew == totalNumberOfInputChannels) {
+      for (int i=0; i <= pos; i++) {
+        pendingCheckpoints.pollFirst();
+      }
+      if (checkpointHandler != null) {
+        checkpointHandler.onEvent(receivedBarrier);
+      }
+    }
+  }
+ else {
+    if (barrierId > latestPendingCheckpointID) {
+      latestPendingCheckpointID=barrierId;
+      pendingCheckpoints.addLast(new CheckpointBarrierCount(barrierId));
+      if (pendingCheckpoints.size() > MAX_CHECKPOINTS_TO_TRACK) {
+        pendingCheckpoints.pollFirst();
+      }
+    }
+  }
+}
