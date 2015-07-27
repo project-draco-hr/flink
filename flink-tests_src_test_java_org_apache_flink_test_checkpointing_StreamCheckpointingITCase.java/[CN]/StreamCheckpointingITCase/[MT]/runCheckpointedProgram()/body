@@ -7,17 +7,8 @@
     env.enableCheckpointing(500);
     env.getConfig().disableSysoutLogging();
     DataStream<String> stream=env.addSource(new StringGeneratingSourceFunction(NUM_STRINGS));
-    stream.filter(new StringRichFilterFunction()).map(new StringPrefixCountRichMapFunction()).startNewChain().map(new StatefulCounterFunction()).groupBy("prefix").reduce(new OnceFailingReducer(NUM_STRINGS)).addSink(new RichSinkFunction<PrefixCount>(){
-      private Map<Character,Long> counts=new HashMap<Character,Long>();
-      @Override public void invoke(      PrefixCount value){
-        Character first=value.prefix.charAt(0);
-        Long previous=counts.get(first);
-        if (previous == null) {
-          counts.put(first,value.count);
-        }
- else {
-          counts.put(first,Math.max(previous,value.count));
-        }
+    stream.filter(new StringRichFilterFunction()).shuffle().map(new StringPrefixCountRichMapFunction()).startNewChain().map(new StatefulCounterFunction()).groupBy("prefix").map(new OnceFailingPrefixCounter(NUM_STRINGS)).addSink(new SinkFunction<PrefixCount>(){
+      @Override public void invoke(      PrefixCount value) throws Exception {
       }
     }
 );
@@ -34,9 +25,17 @@
     for (    long l : StatefulCounterFunction.counts) {
       countSum+=l;
     }
+    long reduceInputCount=0;
+    for (    long l : OnceFailingPrefixCounter.counts) {
+      reduceInputCount+=l;
+    }
     assertEquals(NUM_STRINGS,filterSum);
     assertEquals(NUM_STRINGS,mapSum);
     assertEquals(NUM_STRINGS,countSum);
+    assertEquals(NUM_STRINGS,reduceInputCount);
+    for (    Long count : OnceFailingPrefixCounter.prefixCounts.values()) {
+      assertEquals(new Long(NUM_STRINGS / 40),count);
+    }
   }
  catch (  Exception e) {
     e.printStackTrace();
