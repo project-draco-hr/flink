@@ -9,6 +9,7 @@
     final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
     userSpout.declareOutputFields(declarer);
     this.outputSchemas.put(spoutId,declarer.outputSchema);
+    declarers.put(spoutId,declarer);
     final DataStreamSource source=env.addSource(new StormSpoutWrapper(userSpout),declarer.getOutputType());
     availableOperators.put(spoutId,source);
     int dop=1;
@@ -31,6 +32,7 @@
       final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
       userBolt.declareOutputFields(declarer);
       this.outputSchemas.put(boltId,declarer.outputSchema);
+      declarers.put(boltId,declarer);
       final ComponentCommon common=stormTopolgoy.get_bolts().get(boltId).get_common();
       Set<Entry<GlobalStreamId,Grouping>> unprocessedInputs=unprocessdInputsPerBolt.get(boltId);
       if (unprocessedInputs == null) {
@@ -51,7 +53,8 @@
  else           if (grouping.is_set_fields()) {
             final List<String> fields=grouping.get_fields();
             if (fields.size() > 0) {
-              inputDataStream=inputDataStream.groupBy(declarer.getGroupingFieldIndexes(grouping.get_fields()));
+              FlinkOutputFieldsDeclarer procDeclarer=this.declarers.get(producerId);
+              inputDataStream=inputDataStream.groupBy(procDeclarer.getGroupingFieldIndexes(grouping.get_fields()));
             }
  else {
               inputDataStream=inputDataStream.global();
