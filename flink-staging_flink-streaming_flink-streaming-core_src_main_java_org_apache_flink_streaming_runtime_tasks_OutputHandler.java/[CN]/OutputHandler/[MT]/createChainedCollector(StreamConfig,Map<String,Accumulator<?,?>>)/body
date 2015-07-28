@@ -1,11 +1,11 @@
 {
-  OutputSelectorWrapper<?> outputSelectorWrapper=chainedTaskConfig.getOutputSelectorWrapper(cl);
+  OutputSelectorWrapper<?> outputSelectorWrapper=chainedTaskConfig.getOutputSelectorWrapper(userCodeClassloader);
   CollectorWrapper wrapper=new CollectorWrapper(outputSelectorWrapper);
-  for (  StreamEdge outputEdge : chainedTaskConfig.getNonChainedOutputs(cl)) {
+  for (  StreamEdge outputEdge : chainedTaskConfig.getNonChainedOutputs(userCodeClassloader)) {
     Output<?> output=outputMap.get(outputEdge);
     wrapper.addCollector(output,outputEdge);
   }
-  for (  StreamEdge outputEdge : chainedTaskConfig.getChainedOutputs(cl)) {
+  for (  StreamEdge outputEdge : chainedTaskConfig.getChainedOutputs(userCodeClassloader)) {
     Integer outputId=outputEdge.getTargetId();
     Output<?> output=createChainedCollector(chainedConfigs.get(outputId),accumulatorMap);
     wrapper.addCollector(output,outputEdge);
@@ -14,7 +14,7 @@
     return (Output<StreamRecord<X>>)wrapper;
   }
  else {
-    OneInputStreamOperator chainableOperator=chainedTaskConfig.getStreamOperator(vertex.getUserCodeClassLoader());
+    OneInputStreamOperator chainableOperator=chainedTaskConfig.getStreamOperator(userCodeClassloader);
     StreamingRuntimeContext chainedContext=vertex.createRuntimeContext(chainedTaskConfig,accumulatorMap);
     vertex.contexts.add(chainedContext);
     chainableOperator.setup(wrapper,chainedContext);
@@ -23,14 +23,15 @@
       return new ChainingOutput<X>(chainableOperator);
     }
  else {
-      StreamRecordSerializer serializerIn1;
+      TypeSerializer<X> typeSer=chainedTaskConfig.getTypeSerializerIn1(userCodeClassloader);
+      TypeSerializer<StreamRecord<X>> inSerializer;
       if (vertex.getExecutionConfig().areTimestampsEnabled()) {
-        serializerIn1=new MultiplexingStreamRecordSerializer(chainedTaskConfig.getTypeSerializerIn1(vertex.getUserCodeClassLoader()));
+        inSerializer=(TypeSerializer<StreamRecord<X>>)(TypeSerializer<?>)new MultiplexingStreamRecordSerializer<X>(typeSer);
       }
  else {
-        serializerIn1=new StreamRecordSerializer(chainedTaskConfig.getTypeSerializerIn1(vertex.getUserCodeClassLoader()));
+        inSerializer=new StreamRecordSerializer<X>(typeSer);
       }
-      return new CopyingChainingOutput<X>(chainableOperator,(TypeSerializer<StreamRecord<X>>)serializerIn1);
+      return new CopyingChainingOutput<X>(chainableOperator,inSerializer);
     }
   }
 }

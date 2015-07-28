@@ -1,14 +1,14 @@
 {
   super(InputGateUtil.createInputGate(inputGates));
   barrierBuffer=new BarrierBuffer(inputGate,this);
-  StreamRecordSerializer<IN> inputRecordSerializer;
   if (enableWatermarkMultiplexing) {
-    inputRecordSerializer=new MultiplexingStreamRecordSerializer<IN>(inputSerializer);
+    MultiplexingStreamRecordSerializer<IN> ser=new MultiplexingStreamRecordSerializer<IN>(inputSerializer);
+    this.deserializationDelegate=new NonReusingDeserializationDelegate<Object>(ser);
   }
  else {
-    inputRecordSerializer=new StreamRecordSerializer<IN>(inputSerializer);
+    StreamRecordSerializer<IN> ser=new StreamRecordSerializer<IN>(inputSerializer);
+    this.deserializationDelegate=(NonReusingDeserializationDelegate<Object>)(NonReusingDeserializationDelegate<?>)new NonReusingDeserializationDelegate<StreamRecord<IN>>(ser);
   }
-  this.deserializationDelegate=new NonReusingDeserializationDelegate<Object>(inputRecordSerializer);
   this.recordDeserializers=new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
   for (int i=0; i < recordDeserializers.length; i++) {
     recordDeserializers[i]=new SpillingAdaptiveSpanningRecordDeserializer<DeserializationDelegate<Object>>();
