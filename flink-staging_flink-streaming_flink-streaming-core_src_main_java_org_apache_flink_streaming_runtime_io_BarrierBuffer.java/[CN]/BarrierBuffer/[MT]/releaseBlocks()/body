@@ -6,14 +6,17 @@
     blockedChannels[i]=false;
   }
   numReceivedBarriers=0;
-  if (nonProcessed.isEmpty()) {
-    ArrayDeque<SpillingBufferOrEvent> empty=nonProcessed;
-    nonProcessed=blockedNonProcessed;
-    blockedNonProcessed=empty;
+  if (currentBuffered == null) {
+    currentBuffered=bufferSpiller.rollOver();
+    if (currentBuffered != null) {
+      currentBuffered.open();
+    }
   }
  else {
-    throw new IllegalStateException("Unconsumed data from previous checkpoint alignment " + "when starting next checkpoint alignment");
+    queuedBuffered.addFirst(currentBuffered);
+    currentBuffered=bufferSpiller.rollOverWithNewBuffer();
+    if (currentBuffered != null) {
+      currentBuffered.open();
+    }
   }
-  spillReader.setSpillFile(bufferSpiller.getSpillFile());
-  bufferSpiller.resetSpillFile();
 }

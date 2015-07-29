@@ -1,10 +1,22 @@
 {
   while (true) {
-    final SpillingBufferOrEvent nextBuffered=nonProcessed.pollFirst();
-    final BufferOrEvent next=nextBuffered == null ? inputGate.getNextBufferOrEvent() : nextBuffered.getBufferOrEvent();
+    BufferOrEvent next;
+    if (currentBuffered != null) {
+      next=currentBuffered.getNext();
+      if (next == null) {
+        currentBuffered=queuedBuffered.pollFirst();
+        if (currentBuffered != null) {
+          currentBuffered.open();
+        }
+        return getNextNonBlocked();
+      }
+    }
+ else {
+      next=inputGate.getNextBufferOrEvent();
+    }
     if (next != null) {
       if (isBlocked(next.getChannelIndex())) {
-        blockedNonProcessed.add(new SpillingBufferOrEvent(next,bufferSpiller,spillReader));
+        bufferSpiller.add(next);
       }
  else       if (next.isBuffer() || next.getEvent().getClass() != CheckpointBarrier.class) {
         return next;

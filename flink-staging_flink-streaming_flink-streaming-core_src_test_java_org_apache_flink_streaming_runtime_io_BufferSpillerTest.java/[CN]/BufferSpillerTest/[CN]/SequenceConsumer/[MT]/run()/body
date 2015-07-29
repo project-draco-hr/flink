@@ -1,0 +1,34 @@
+{
+  try {
+    while (consumedSequences < numSequencesToConsume) {
+      SequenceToConsume nextSequence=sequences.take();
+      Thread.sleep(50);
+      BufferSpiller.SpilledBufferOrEventSequence seq=nextSequence.sequence;
+      ArrayList<BufferOrEvent> events=nextSequence.events;
+      Random bufferRnd=nextSequence.bufferRnd;
+      int numBuffersAndEvents=nextSequence.numBuffersAndEvents;
+      int numChannels=nextSequence.numChannels;
+      seq.open();
+      int numEvent=0;
+      for (int i=0; i < numBuffersAndEvents; i++) {
+        BufferOrEvent next=seq.getNext();
+        assertNotNull(next);
+        if (next.isEvent()) {
+          BufferOrEvent expected=events.get(numEvent++);
+          assertEquals(expected.getEvent(),next.getEvent());
+          assertEquals(expected.getChannelIndex(),next.getChannelIndex());
+        }
+ else {
+          validateBuffer(next,bufferRnd.nextInt(PAGE_SIZE) + 1,bufferRnd.nextInt(numChannels));
+        }
+      }
+      assertNull(seq.getNext());
+      assertEquals(events.size(),numEvent);
+      seq.cleanup();
+      consumedSequences++;
+    }
+  }
+ catch (  Throwable t) {
+    error.set(t);
+  }
+}

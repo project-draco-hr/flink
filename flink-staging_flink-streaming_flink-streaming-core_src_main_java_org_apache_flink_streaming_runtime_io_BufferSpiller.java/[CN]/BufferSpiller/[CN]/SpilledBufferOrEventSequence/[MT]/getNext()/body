@@ -1,0 +1,67 @@
+{
+  if (buffer.remaining() < HEADER_LENGTH) {
+    buffer.compact();
+    while (buffer.position() < HEADER_LENGTH) {
+      if (fileChannel.read(buffer) == -1) {
+        if (buffer.position() == 0) {
+          return null;
+        }
+ else {
+          throw new IOException("Found trailing incomplete buffer or event");
+        }
+      }
+    }
+    buffer.flip();
+  }
+  final int channel=buffer.getInt();
+  final int length=buffer.getInt();
+  final boolean isBuffer=buffer.get() == 0;
+  if (isBuffer) {
+    if (length > pageSize) {
+      throw new IOException(String.format("Spilled buffer (%d bytes) is larger than page size of (%d bytes)",length,pageSize));
+    }
+    MemorySegment seg=new MemorySegment(new byte[pageSize]);
+    int segPos=0;
+    int bytesRemaining=length;
+    while (true) {
+      int toCopy=Math.min(buffer.remaining(),bytesRemaining);
+      if (toCopy > 0) {
+        seg.put(segPos,buffer,toCopy);
+        segPos+=toCopy;
+        bytesRemaining-=toCopy;
+      }
+      if (bytesRemaining == 0) {
+        break;
+      }
+ else {
+        buffer.clear();
+        if (fileChannel.read(buffer) == -1) {
+          throw new IOException("Found trailing incomplete buffer");
+        }
+        buffer.flip();
+      }
+    }
+    Buffer buf=new Buffer(seg,FreeingBufferRecycler.INSTANCE);
+    buf.setSize(length);
+    return new BufferOrEvent(buf,channel);
+  }
+ else {
+    if (length > buffer.capacity() - HEADER_LENGTH) {
+      throw new IOException("Event is too large");
+    }
+    if (buffer.remaining() < length) {
+      buffer.compact();
+      while (buffer.position() < length) {
+        if (fileChannel.read(buffer) == -1) {
+          throw new IOException("Found trailing incomplete event");
+        }
+      }
+      buffer.flip();
+    }
+    int oldLimit=buffer.limit();
+    buffer.limit(buffer.position() + length);
+    AbstractEvent evt=EventSerializer.fromSerializedEvent(buffer,getClass().getClassLoader());
+    buffer.limit(oldLimit);
+    return new BufferOrEvent(evt,channel);
+  }
+}

@@ -1,0 +1,50 @@
+{
+  try {
+    final Random rnd=new Random();
+    final Random bufferRnd=new Random();
+    final int maxNumEventsAndBuffers=3000;
+    final int maxNumChannels=1656;
+    for (int round=0; round < 5; round++) {
+      final long bufferSeed=rnd.nextLong();
+      bufferRnd.setSeed(bufferSeed);
+      final int numEventsAndBuffers=rnd.nextInt(maxNumEventsAndBuffers) + 1;
+      final int numChannels=rnd.nextInt(maxNumChannels) + 1;
+      final ArrayList<BufferOrEvent> events=new ArrayList<BufferOrEvent>(128);
+      for (int i=0; i < numEventsAndBuffers; i++) {
+        boolean isEvent=rnd.nextDouble() < 0.05d;
+        if (isEvent) {
+          BufferOrEvent evt=generateRandomEvent(rnd,numChannels);
+          events.add(evt);
+          spiller.add(evt);
+        }
+ else {
+          BufferOrEvent evt=generateRandomBuffer(bufferRnd.nextInt(PAGE_SIZE) + 1,bufferRnd.nextInt(numChannels));
+          spiller.add(evt);
+        }
+      }
+      bufferRnd.setSeed(bufferSeed);
+      BufferSpiller.SpilledBufferOrEventSequence seq=spiller.rollOver();
+      seq.open();
+      int numEvent=0;
+      for (int i=0; i < numEventsAndBuffers; i++) {
+        BufferOrEvent next=seq.getNext();
+        assertNotNull(next);
+        if (next.isEvent()) {
+          BufferOrEvent expected=events.get(numEvent++);
+          assertEquals(expected.getEvent(),next.getEvent());
+          assertEquals(expected.getChannelIndex(),next.getChannelIndex());
+        }
+ else {
+          validateBuffer(next,bufferRnd.nextInt(PAGE_SIZE) + 1,bufferRnd.nextInt(numChannels));
+        }
+      }
+      assertNull(seq.getNext());
+      assertEquals(events.size(),numEvent);
+      seq.cleanup();
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
