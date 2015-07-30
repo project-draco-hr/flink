@@ -1,22 +1,49 @@
 {
-  try {
-    final DataInputDeserializer deserializer=new DataInputDeserializer(buffer);
-    final String className=deserializer.readUTF();
-    final Class<? extends AbstractEvent> clazz;
-    try {
-      clazz=classLoader.loadClass(className).asSubclass(AbstractEvent.class);
-    }
- catch (    ClassNotFoundException e) {
-      throw new RuntimeException("Could not load event class '" + className + "'.",e);
-    }
-catch (    ClassCastException e) {
-      throw new RuntimeException("The class '" + className + "' is not a valid subclass of '"+ AbstractEvent.class.getName()+ "'.",e);
-    }
-    final AbstractEvent event=InstantiationUtil.instantiate(clazz,AbstractEvent.class);
-    event.read(deserializer);
-    return event;
+  if (buffer.remaining() < 4) {
+    throw new RuntimeException("Incomplete event");
   }
- catch (  IOException e) {
-    throw new RuntimeException("Error while deserializing event.",e);
+  final ByteOrder bufferOrder=buffer.order();
+  buffer.order(ByteOrder.BIG_ENDIAN);
+  try {
+    int type=buffer.getInt();
+    if (type == END_OF_PARTITION_EVENT) {
+      return EndOfPartitionEvent.INSTANCE;
+    }
+ else     if (type == CHECKPOINT_BARRIER_EVENT) {
+      long id=buffer.getLong();
+      long timestamp=buffer.getLong();
+      return new CheckpointBarrier(id,timestamp);
+    }
+ else     if (type == END_OF_SUPERSTEP_EVENT) {
+      return EndOfSuperstepEvent.INSTANCE;
+    }
+ else     if (type == OTHER_EVENT) {
+      try {
+        final DataInputDeserializer deserializer=new DataInputDeserializer(buffer);
+        final String className=deserializer.readUTF();
+        final Class<? extends AbstractEvent> clazz;
+        try {
+          clazz=classLoader.loadClass(className).asSubclass(AbstractEvent.class);
+        }
+ catch (        ClassNotFoundException e) {
+          throw new RuntimeException("Could not load event class '" + className + "'.",e);
+        }
+catch (        ClassCastException e) {
+          throw new RuntimeException("The class '" + className + "' is not a valid subclass of '"+ AbstractEvent.class.getName()+ "'.",e);
+        }
+        final AbstractEvent event=InstantiationUtil.instantiate(clazz,AbstractEvent.class);
+        event.read(deserializer);
+        return event;
+      }
+ catch (      Exception e) {
+        throw new RuntimeException("Error while deserializing or instantiating event.",e);
+      }
+    }
+ else {
+      throw new RuntimeException("Corrupt byte stream for event");
+    }
+  }
+  finally {
+    buffer.order(bufferOrder);
   }
 }

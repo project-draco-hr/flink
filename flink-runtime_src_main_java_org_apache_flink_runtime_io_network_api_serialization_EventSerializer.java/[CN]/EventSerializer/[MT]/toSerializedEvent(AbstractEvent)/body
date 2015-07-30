@@ -1,11 +1,29 @@
 {
-  try {
-    final DataOutputSerializer serializer=new DataOutputSerializer(128);
-    serializer.writeUTF(event.getClass().getName());
-    event.write(serializer);
-    return serializer.wrapAsByteBuffer();
+  final Class<?> eventClass=event.getClass();
+  if (eventClass == EndOfPartitionEvent.class) {
+    return ByteBuffer.wrap(new byte[]{0,0,0,END_OF_PARTITION_EVENT});
   }
- catch (  IOException e) {
-    throw new RuntimeException("Error while serializing event.",e);
+ else   if (eventClass == CheckpointBarrier.class) {
+    CheckpointBarrier barrier=(CheckpointBarrier)event;
+    ByteBuffer buf=ByteBuffer.allocate(20);
+    buf.putInt(0,CHECKPOINT_BARRIER_EVENT);
+    buf.putLong(4,barrier.getId());
+    buf.putLong(12,barrier.getTimestamp());
+    return buf;
+  }
+ else   if (eventClass == EndOfSuperstepEvent.class) {
+    return ByteBuffer.wrap(new byte[]{0,0,0,END_OF_SUPERSTEP_EVENT});
+  }
+ else {
+    try {
+      final DataOutputSerializer serializer=new DataOutputSerializer(128);
+      serializer.writeInt(OTHER_EVENT);
+      serializer.writeUTF(event.getClass().getName());
+      event.write(serializer);
+      return serializer.wrapAsByteBuffer();
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error while serializing event.",e);
+    }
   }
 }
