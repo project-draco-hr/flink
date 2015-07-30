@@ -1,0 +1,24 @@
+{
+  MockHandle<Serializable> h1=new MockHandle<Serializable>(1);
+  MockHandle<Serializable> h2=new MockHandle<Serializable>(2);
+  StateHandle<Serializable> h3=new MockHandle<Serializable>(3);
+  OperatorStateHandle opH1=new OperatorStateHandle(h1,true);
+  OperatorStateHandle opH2=new OperatorStateHandle(h2,false);
+  Map<String,OperatorStateHandle> opHandles=ImmutableMap.of("h1",opH1,"h2",opH2);
+  Tuple2<StateHandle<Serializable>,Map<String,OperatorStateHandle>> fullState=Tuple2.of(h3,opHandles);
+  List<Tuple2<StateHandle<Serializable>,Map<String,OperatorStateHandle>>> chainedStates=ImmutableList.of(fullState);
+  WrapperStateHandle wrapperHandle=new WrapperStateHandle(chainedStates);
+  WrapperStateHandle dsWrapper=serializeDeserialize(wrapperHandle);
+  @SuppressWarnings("unchecked") Tuple2<StateHandle<Serializable>,Map<String,OperatorStateHandle>> dsFullState=((List<Tuple2<StateHandle<Serializable>,Map<String,OperatorStateHandle>>>)dsWrapper.getState()).get(0);
+  Map<String,OperatorStateHandle> dsOpHandles=dsFullState.f1;
+  assertNull(dsFullState.f0.getState());
+  assertFalse(((MockHandle<?>)dsFullState.f0).discarded);
+  assertFalse(((MockHandle<?>)dsOpHandles.get("h1").getHandle()).discarded);
+  assertNull(dsOpHandles.get("h1").getState());
+  assertFalse(((MockHandle<?>)dsOpHandles.get("h2").getHandle()).discarded);
+  assertNull(dsOpHandles.get("h2").getState());
+  dsWrapper.discardState();
+  assertTrue(((MockHandle<?>)dsFullState.f0).discarded);
+  assertTrue(((MockHandle<?>)dsOpHandles.get("h1").getHandle()).discarded);
+  assertTrue(((MockHandle<?>)dsOpHandles.get("h2").getHandle()).discarded);
+}
