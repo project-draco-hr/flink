@@ -11,18 +11,15 @@
   this.configuration.setInt("mapreduce.task.partition",taskNumber + 1);
   try {
     this.context=HadoopUtils.instantiateTaskAttemptContext(this.configuration,taskAttemptID);
+    this.outputCommitter=this.mapreduceOutputFormat.getOutputCommitter(this.context);
+    this.outputCommitter.setupJob(HadoopUtils.instantiateJobContext(this.configuration,new JobID()));
   }
  catch (  Exception e) {
     throw new RuntimeException(e);
   }
-  this.fileOutputCommitter=new FileOutputCommitter(new Path(this.configuration.get("mapred.output.dir")),context);
-  try {
-    this.fileOutputCommitter.setupJob(HadoopUtils.instantiateJobContext(this.configuration,new JobID()));
+  if (outputCommitter instanceof FileOutputCommitter) {
+    this.configuration.set("mapreduce.task.output.dir",((FileOutputCommitter)this.outputCommitter).getWorkPath().toString());
   }
- catch (  Exception e) {
-    throw new RuntimeException(e);
-  }
-  this.configuration.set("mapreduce.task.output.dir",this.fileOutputCommitter.getWorkPath().toString());
   try {
     this.recordWriter=this.mapreduceOutputFormat.getRecordWriter(this.context);
   }
