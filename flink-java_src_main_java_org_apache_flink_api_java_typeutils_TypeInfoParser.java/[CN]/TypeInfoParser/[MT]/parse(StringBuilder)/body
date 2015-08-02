@@ -14,16 +14,21 @@
   TypeInformation<?> returnType=null;
   boolean isPrimitiveType=false;
   if (tupleMatcher.find()) {
-    String className=tupleMatcher.group(1);
-    sb.delete(0,className.length() + 1);
-    int arity=Integer.parseInt(className.replaceAll("\\D",""));
-    Class<?> clazz;
-    if (className.startsWith(TUPLE_PACKAGE)) {
-      clazz=loadClass(className);
+    boolean isGenericTuple=true;
+    String className=tupleMatcher.group(3);
+    if (className == null) {
+      isGenericTuple=false;
+      className=tupleMatcher.group(2);
+      sb.delete(0,className.length());
     }
  else {
-      clazz=loadClass(TUPLE_PACKAGE + "." + className);
+      sb.delete(0,className.length() + 1);
     }
+    if (infoString.startsWith(TUPLE_PACKAGE)) {
+      sb.delete(0,TUPLE_PACKAGE.length() + 1);
+    }
+    int arity=Integer.parseInt(className.replaceAll("\\D",""));
+    Class<?> clazz=loadClass(TUPLE_PACKAGE + "." + className);
     TypeInformation<?>[] types=new TypeInformation<?>[arity];
     for (int i=0; i < arity; i++) {
       types[i]=parse(sb);
@@ -31,10 +36,12 @@
         throw new IllegalArgumentException("Tuple arity does not match given parameters.");
       }
     }
-    if (sb.charAt(0) != '>') {
-      throw new IllegalArgumentException("Tuple arity does not match given parameters.");
+    if (isGenericTuple) {
+      if (sb.charAt(0) != '>') {
+        throw new IllegalArgumentException("Tuple arity does not match given parameters.");
+      }
+      sb.deleteCharAt(0);
     }
-    sb.deleteCharAt(0);
     returnType=new TupleTypeInfo(clazz,types);
   }
  else   if (writableMatcher.find()) {
