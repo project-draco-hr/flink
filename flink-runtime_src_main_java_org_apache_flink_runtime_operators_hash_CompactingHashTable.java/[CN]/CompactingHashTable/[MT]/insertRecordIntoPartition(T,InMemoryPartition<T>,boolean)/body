@@ -1,0 +1,41 @@
+{
+  try {
+    long pointer=partition.appendRecord(record);
+    if (fragments) {
+      partition.setIsCompacted(false);
+    }
+    if ((pointer >> this.pageSizeInBits) > this.compactionMemory.getBlockCount()) {
+      this.compactionMemory.allocateSegments((int)(pointer >> this.pageSizeInBits));
+    }
+    return pointer;
+  }
+ catch (  Exception e) {
+    if (e instanceof EOFException || e instanceof IndexOutOfBoundsException) {
+      try {
+        final int partitionNumber=partition.getPartitionNumber();
+        compactPartition(partitionNumber);
+        partition=this.partitions.get(partitionNumber);
+        long newPointer=partition.appendRecord(record);
+        if ((newPointer >> this.pageSizeInBits) > this.compactionMemory.getBlockCount()) {
+          this.compactionMemory.allocateSegments((int)(newPointer >> this.pageSizeInBits));
+        }
+        return newPointer;
+      }
+ catch (      EOFException ex) {
+        throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+      }
+catch (      IndexOutOfBoundsException ex) {
+        throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
+      }
+    }
+ else     if (e instanceof IOException) {
+      throw (IOException)e;
+    }
+ else     if (e instanceof RuntimeException) {
+      throw (RuntimeException)e;
+    }
+ else {
+      throw new RuntimeException("Writing record to compacting hash table failed",e);
+    }
+  }
+}

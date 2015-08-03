@@ -1,5 +1,5 @@
 {
-  if (this.closed.get() || partitionNumber >= this.partitions.size() || this.partitions.get(partitionNumber).isCompacted()) {
+  if (this.closed || partitionNumber >= this.partitions.size() || this.partitions.get(partitionNumber).isCompacted()) {
     return;
   }
   this.compactionMemory.clearAllMemory(availableMemory);
@@ -9,9 +9,9 @@
   final int numPartitions=this.partitions.size();
   InMemoryPartition<T> partition=this.partitions.remove(partitionNumber);
   MemorySegment[] overflowSegments=partition.overflowSegments;
-  long pointer=0L;
-  int pointerOffset=0;
-  int bucketOffset=0;
+  long pointer;
+  int pointerOffset;
+  int bucketOffset;
   final int bucketsPerSegment=this.bucketsPerSegmentMask + 1;
   for (int i=0, bucket=partitionNumber; i < this.buckets.length && bucket < this.numBuckets; i++) {
     MemorySegment segment=this.buckets[i];
@@ -38,7 +38,7 @@
         }
         final int overflowSegNum=(int)(forwardPointer >>> 32);
         segment=overflowSegments[overflowSegNum];
-        bucketOffset=(int)(forwardPointer & 0xffffffff);
+        bucketOffset=(int)forwardPointer;
         countInSegment=segment.getInt(bucketOffset + HEADER_COUNT_OFFSET);
         pointerOffset=bucketOffset + BUCKET_POINTER_START_OFFSET;
         numInSegment=0;
@@ -51,7 +51,7 @@
   this.partitions.get(partitionNumber).overflowSegments=partition.overflowSegments;
   this.partitions.get(partitionNumber).numOverflowSegments=partition.numOverflowSegments;
   this.partitions.get(partitionNumber).nextOverflowBucket=partition.nextOverflowBucket;
-  this.partitions.get(partitionNumber).setCompaction(true);
+  this.partitions.get(partitionNumber).setIsCompacted(true);
   this.compactionMemory=partition;
   this.compactionMemory.resetRecordCounter();
   this.compactionMemory.setPartitionNumber(-1);

@@ -12,25 +12,23 @@
       }
     }
   }
-  if (this.availableMemory.size() < additionalSegments || this.closed.get()) {
+  if (this.availableMemory.size() < additionalSegments || this.closed) {
     return false;
   }
  else {
     this.isResizing=true;
     final int startOffset=(this.numBuckets * HASH_BUCKET_SIZE) % this.segmentSize;
-    MemorySegment[] newBuckets=new MemorySegment[additionalSegments];
     final int oldNumBuckets=this.numBuckets;
     final int oldNumSegments=this.buckets.length;
     MemorySegment[] mergedBuckets=new MemorySegment[newNumSegments];
     System.arraycopy(this.buckets,0,mergedBuckets,0,this.buckets.length);
-    System.arraycopy(newBuckets,0,mergedBuckets,this.buckets.length,newBuckets.length);
     this.buckets=mergedBuckets;
     this.numBuckets=newNumBuckets;
     boolean oldSegment=(startOffset != 0);
     final int startSegment=oldSegment ? (oldNumSegments - 1) : oldNumSegments;
     for (int i=startSegment, bucket=oldNumBuckets; i < newNumSegments && bucket < this.numBuckets; i++) {
       MemorySegment seg;
-      int bucketOffset=0;
+      int bucketOffset;
       if (oldSegment) {
         seg=this.buckets[i];
         for (int k=(oldNumBuckets % bucketsPerSegment); k < bucketsPerSegment && bucket < this.numBuckets; k++, bucket++) {
@@ -52,10 +50,10 @@
       this.buckets[i]=seg;
       oldSegment=false;
     }
-    int hashOffset=0;
-    int hash=0;
-    int pointerOffset=0;
-    long pointer=0;
+    int hashOffset;
+    int hash;
+    int pointerOffset;
+    long pointer;
     IntArrayList hashList=new IntArrayList(NUM_ENTRIES_PER_BUCKET);
     LongArrayList pointerList=new LongArrayList(NUM_ENTRIES_PER_BUCKET);
     IntArrayList overflowHashes=new IntArrayList(64);
@@ -63,7 +61,7 @@
     for (int i=0; i < numPartitions; i++) {
       InMemoryPartition<T> partition=this.partitions.get(i);
       final MemorySegment[] overflowSegments=partition.overflowSegments;
-      int posHashCode=0;
+      int posHashCode;
       for (int j=0, bucket=i; j < this.buckets.length && bucket < oldNumBuckets; j++) {
         MemorySegment segment=this.buckets[j];
         for (int k=bucket % bucketsPerSegment; k < bucketsPerSegment && bucket < oldNumBuckets; k+=numPartitions, bucket+=numPartitions) {
@@ -94,7 +92,7 @@
             }
             final int overflowSegNum=(int)(forwardPointer >>> 32);
             segment=overflowSegments[overflowSegNum];
-            bucketOffset=(int)(forwardPointer & 0xffffffff);
+            bucketOffset=(int)forwardPointer;
             countInSegment=segment.getInt(bucketOffset + HEADER_COUNT_OFFSET);
             pointerOffset=bucketOffset + BUCKET_POINTER_START_OFFSET;
             hashOffset=bucketOffset + BUCKET_HEADER_LENGTH;
@@ -117,12 +115,12 @@
             posHashCode=hash % this.numBuckets;
             if (posHashCode == bucket && oldBucketCount < NUM_ENTRIES_PER_BUCKET) {
               bucketOffset=(bucket % bucketsPerSegment) * HASH_BUCKET_SIZE;
-              insertBucketEntryFromStart(partition,segment,bucketOffset,hash,pointer);
+              insertBucketEntryFromStart(segment,bucketOffset,hash,pointer,partition.getPartitionNumber());
               oldBucketCount++;
             }
  else             if (posHashCode == (bucket + oldNumBuckets) && newBucketCount < NUM_ENTRIES_PER_BUCKET) {
               bucketOffset=((bucket + oldNumBuckets) % bucketsPerSegment) * HASH_BUCKET_SIZE;
-              insertBucketEntryFromStart(partition,newSegment,bucketOffset,hash,pointer);
+              insertBucketEntryFromStart(newSegment,bucketOffset,hash,pointer,partition.getPartitionNumber());
               newBucketCount++;
             }
  else             if (posHashCode == (bucket + oldNumBuckets) || posHashCode == bucket) {
@@ -138,9 +136,9 @@
         }
       }
       this.availableMemory.addAll(partition.resetOverflowBuckets());
-      int bucketArrayPos=0;
-      int bucketInSegmentPos=0;
-      MemorySegment bucket=null;
+      int bucketArrayPos;
+      int bucketInSegmentPos;
+      MemorySegment bucket;
       while (!overflowHashes.isEmpty()) {
         hash=overflowHashes.removeLast();
         pointer=overflowPointers.removeLong(overflowPointers.size() - 1);
@@ -148,7 +146,7 @@
         bucketArrayPos=posHashCode >>> this.bucketsPerSegmentBits;
         bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
         bucket=this.buckets[bucketArrayPos];
-        insertBucketEntryFromStart(partition,bucket,bucketInSegmentPos,hash,pointer);
+        insertBucketEntryFromStart(bucket,bucketInSegmentPos,hash,pointer,partition.getPartitionNumber());
       }
       overflowHashes.clear();
       overflowPointers.clear();

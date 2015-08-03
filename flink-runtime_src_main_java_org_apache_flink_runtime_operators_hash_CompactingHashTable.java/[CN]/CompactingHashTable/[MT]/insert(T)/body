@@ -1,5 +1,5 @@
 {
-  if (this.closed.get()) {
+  if (this.closed) {
     return;
   }
   final int hashCode=hash(this.buildSideComparator.hash(record));
@@ -9,38 +9,6 @@
   final MemorySegment bucket=this.buckets[bucketArrayPos];
   final int partitionNumber=bucket.get(bucketInSegmentPos + HEADER_PARTITION_OFFSET);
   InMemoryPartition<T> partition=this.partitions.get(partitionNumber);
-  long pointer;
-  try {
-    pointer=partition.appendRecord(record);
-    if ((pointer >> this.pageSizeInBits) > this.compactionMemory.getBlockCount()) {
-      this.compactionMemory.allocateSegments((int)(pointer >> this.pageSizeInBits));
-    }
-  }
- catch (  EOFException e) {
-    try {
-      compactPartition(partitionNumber);
-      partition=this.partitions.get(partitionNumber);
-      pointer=partition.appendRecord(record);
-    }
- catch (    EOFException ex) {
-      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
-    }
-catch (    IndexOutOfBoundsException ex) {
-      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
-    }
-  }
-catch (  IndexOutOfBoundsException e1) {
-    try {
-      compactPartition(partitionNumber);
-      partition=this.partitions.get(partitionNumber);
-      pointer=partition.appendRecord(record);
-    }
- catch (    EOFException ex) {
-      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
-    }
-catch (    IndexOutOfBoundsException ex) {
-      throw new RuntimeException("Memory ran out. Compaction failed. " + getMemoryConsumptionString() + " Message: "+ ex.getMessage());
-    }
-  }
-  insertBucketEntryFromStart(partition,bucket,bucketInSegmentPos,hashCode,pointer);
+  long pointer=insertRecordIntoPartition(record,partition,false);
+  insertBucketEntryFromStart(bucket,bucketInSegmentPos,hashCode,pointer,partitionNumber);
 }
