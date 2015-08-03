@@ -1,0 +1,83 @@
+{
+  if (!initialized) {
+    it1Empty=!this.iterator1.nextKey();
+    it2Empty=!this.iterator2.nextKey();
+    initialized=true;
+  }
+  if (it1Empty && it2Empty) {
+    return false;
+  }
+ else   if (it2Empty) {
+    if (outerJoinType == OuterJoinType.LEFT || outerJoinType == OuterJoinType.FULL) {
+      joinLeftKeyValuesWithNull(iterator1.getValues(),joinFunction,collector);
+      it1Empty=!iterator1.nextKey();
+      return true;
+    }
+ else {
+      while (iterator1.nextKey())       ;
+      it1Empty=true;
+      return false;
+    }
+  }
+ else   if (it1Empty) {
+    if (outerJoinType == OuterJoinType.RIGHT || outerJoinType == OuterJoinType.FULL) {
+      joinRightKeyValuesWithNull(iterator2.getValues(),joinFunction,collector);
+      it2Empty=!iterator2.nextKey();
+      return true;
+    }
+ else {
+      while (iterator2.nextKey())       ;
+      it2Empty=true;
+      return false;
+    }
+  }
+ else {
+    final TypePairComparator<T1,T2> comparator=super.pairComparator;
+    comparator.setReference(this.iterator1.getCurrent());
+    T2 current2=this.iterator2.getCurrent();
+    while (true) {
+      final int comp=comparator.compareToReference(current2);
+      if (comp == 0) {
+        break;
+      }
+      if (comp < 0) {
+        if (outerJoinType == OuterJoinType.RIGHT || outerJoinType == OuterJoinType.FULL) {
+          joinRightKeyValuesWithNull(iterator2.getValues(),joinFunction,collector);
+          it2Empty=!iterator2.nextKey();
+          return true;
+        }
+ else {
+          if (!this.iterator2.nextKey()) {
+            joinLeftKeyValuesWithNull(iterator1.getValues(),joinFunction,collector);
+            it1Empty=!iterator1.nextKey();
+            it2Empty=true;
+            return true;
+          }
+          current2=this.iterator2.getCurrent();
+        }
+      }
+ else {
+        if (outerJoinType == OuterJoinType.LEFT || outerJoinType == OuterJoinType.FULL) {
+          joinLeftKeyValuesWithNull(iterator1.getValues(),joinFunction,collector);
+          it1Empty=!iterator1.nextKey();
+          return true;
+        }
+ else {
+          if (!this.iterator1.nextKey()) {
+            joinRightKeyValuesWithNull(iterator2.getValues(),joinFunction,collector);
+            it1Empty=true;
+            it2Empty=!iterator2.nextKey();
+            return true;
+          }
+          comparator.setReference(this.iterator1.getCurrent());
+        }
+      }
+    }
+    final Iterator<T1> values1=this.iterator1.getValues();
+    final Iterator<T2> values2=this.iterator2.getValues();
+    crossMatchingGroup(values1,values2,joinFunction,collector);
+    it1Empty=!iterator1.nextKey();
+    it2Empty=!iterator2.nextKey();
+    return true;
+  }
+}
