@@ -3,11 +3,13 @@
   try {
     final int sequences=10;
     final Random rnd=new Random();
-    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
-    final SequenceConsumer consumer=new SequenceConsumer(error,sequences);
-    consumer.start();
     final int maxNumEventsAndBuffers=30000;
     final int maxNumChannels=1656;
+    int sequencesConsumed=0;
+    ArrayDeque<SequenceToConsume> pendingSequences=new ArrayDeque<SequenceToConsume>();
+    SequenceToConsume currentSequence=null;
+    int currentNumEvents=0;
+    int currentNumRecordAndEvents=0;
     for (int round=0; round < 2 * sequences; round++) {
       if (round % 2 == 1) {
         assertNull(spiller.rollOver());
@@ -18,35 +20,85 @@
         final int numEventsAndBuffers=rnd.nextInt(maxNumEventsAndBuffers) + 1;
         final int numChannels=rnd.nextInt(maxNumChannels) + 1;
         final ArrayList<BufferOrEvent> events=new ArrayList<BufferOrEvent>(128);
-        for (int i=0; i < numEventsAndBuffers; i++) {
-          boolean isEvent=rnd.nextDouble() < 0.05d;
-          if (isEvent) {
-            BufferOrEvent evt=generateRandomEvent(rnd,numChannels);
-            events.add(evt);
-            spiller.add(evt);
+        int generated=0;
+        while (generated < numEventsAndBuffers) {
+          if (currentSequence == null || rnd.nextDouble() < 0.5) {
+            boolean isEvent=rnd.nextDouble() < 0.05;
+            if (isEvent) {
+              BufferOrEvent evt=generateRandomEvent(rnd,numChannels);
+              events.add(evt);
+              spiller.add(evt);
+            }
+ else {
+              BufferOrEvent evt=generateRandomBuffer(bufferRnd.nextInt(PAGE_SIZE) + 1,bufferRnd.nextInt(numChannels));
+              spiller.add(evt);
+            }
+            generated++;
           }
  else {
-            BufferOrEvent evt=generateRandomBuffer(bufferRnd.nextInt(PAGE_SIZE) + 1,bufferRnd.nextInt(numChannels));
-            spiller.add(evt);
+            BufferOrEvent next=currentSequence.sequence.getNext();
+            assertNotNull(next);
+            if (next.isEvent()) {
+              BufferOrEvent expected=currentSequence.events.get(currentNumEvents++);
+              assertEquals(expected.getEvent(),next.getEvent());
+              assertEquals(expected.getChannelIndex(),next.getChannelIndex());
+            }
+ else {
+              Random validationRnd=currentSequence.bufferRnd;
+              validateBuffer(next,validationRnd.nextInt(PAGE_SIZE) + 1,validationRnd.nextInt(currentSequence.numChannels));
+            }
+            currentNumRecordAndEvents++;
+            if (currentNumRecordAndEvents == currentSequence.numBuffersAndEvents) {
+              currentSequence.sequence.cleanup();
+              sequencesConsumed++;
+              assertEquals(currentSequence.events.size(),currentNumEvents);
+              currentSequence=pendingSequences.pollFirst();
+              if (currentSequence != null) {
+                currentSequence.sequence.open();
+              }
+              currentNumRecordAndEvents=0;
+              currentNumEvents=0;
+            }
           }
         }
         bufferRnd.setSeed(bufferSeed);
         BufferSpiller.SpilledBufferOrEventSequence seq=spiller.rollOver();
         SequenceToConsume stc=new SequenceToConsume(bufferRnd,events,seq,numEventsAndBuffers,numChannels);
-        consumer.queue(stc);
+        if (currentSequence == null) {
+          currentSequence=stc;
+          stc.sequence.open();
+        }
+ else {
+          pendingSequences.addLast(stc);
+        }
       }
     }
-    consumer.join(180000);
-    assertFalse("sequence consumer did not finish its work in time",consumer.isAlive());
-    if (error.get() != null) {
-      Throwable t=error.get();
-      if (t instanceof Error) {
-        throw (Error)t;
+    while (currentSequence != null) {
+      BufferOrEvent next=currentSequence.sequence.getNext();
+      assertNotNull(next);
+      if (next.isEvent()) {
+        BufferOrEvent expected=currentSequence.events.get(currentNumEvents++);
+        assertEquals(expected.getEvent(),next.getEvent());
+        assertEquals(expected.getChannelIndex(),next.getChannelIndex());
       }
  else {
-        throw new Exception("Error while consuming the spilled records",t);
+        Random validationRnd=currentSequence.bufferRnd;
+        validateBuffer(next,validationRnd.nextInt(PAGE_SIZE) + 1,validationRnd.nextInt(currentSequence.numChannels));
+      }
+      currentNumRecordAndEvents++;
+      if (currentNumRecordAndEvents == currentSequence.numBuffersAndEvents) {
+        currentSequence.sequence.cleanup();
+        sequencesConsumed++;
+        assertEquals(currentSequence.events.size(),currentNumEvents);
+        currentSequence=pendingSequences.pollFirst();
+        if (currentSequence != null) {
+          currentSequence.sequence.open();
+        }
+        currentNumRecordAndEvents=0;
+        currentNumEvents=0;
       }
     }
+    assertEquals(sequences,sequencesConsumed);
   }
  catch (  Exception e) {
     e.printStackTrace();
