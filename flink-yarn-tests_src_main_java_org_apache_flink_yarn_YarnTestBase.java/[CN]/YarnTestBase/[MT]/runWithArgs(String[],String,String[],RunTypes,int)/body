@@ -4,11 +4,12 @@
   errContent=new ByteArrayOutputStream();
   System.setOut(new PrintStream(outContent));
   System.setErr(new PrintStream(errContent));
-  final int START_TIMEOUT_SECONDS=60;
+  final int START_TIMEOUT_SECONDS=180;
+  final long deadline=System.currentTimeMillis() + (START_TIMEOUT_SECONDS * 1000);
   Runner runner=new Runner(args,type);
   runner.start();
   boolean expectedStringSeen=false;
-  for (int second=0; second < START_TIMEOUT_SECONDS; second++) {
+  do {
     sleep(1000);
     String outContentString=outContent.toString();
     String errContentString=errContent.toString();
@@ -28,24 +29,26 @@
       LOG.info("RunWithArgs: request runner to stop");
       runner.sendStop();
       try {
-        runner.join(10000);
+        runner.join(30000);
       }
  catch (      InterruptedException e) {
         LOG.debug("Interrupted while stopping runner",e);
       }
       LOG.warn("RunWithArgs runner stopped.");
-      break;
     }
-    if (!runner.isAlive()) {
-      sendOutput();
-      if (runner.getReturnValue() != 0) {
-        Assert.fail("Runner thread died before the test was finished. Return value = " + runner.getReturnValue());
-      }
  else {
-        LOG.info("Runner stopped earlier than expected with return value = 0");
+      if (!runner.isAlive()) {
+        sendOutput();
+        if (runner.getReturnValue() != 0) {
+          Assert.fail("Runner thread died before the test was finished. Return value = " + runner.getReturnValue());
+        }
+ else {
+          LOG.info("Runner stopped earlier than expected with return value = 0");
+        }
       }
     }
   }
+ while (!expectedStringSeen && System.currentTimeMillis() < deadline);
   sendOutput();
   Assert.assertTrue("During the timeout period of " + START_TIMEOUT_SECONDS + " seconds the "+ "expected string did not show up",expectedStringSeen);
   Assert.assertTrue("Expecting return value == " + returnCode,runner.getReturnValue() == returnCode);
