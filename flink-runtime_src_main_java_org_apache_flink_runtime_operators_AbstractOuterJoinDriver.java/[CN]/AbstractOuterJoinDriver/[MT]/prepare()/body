@@ -1,0 +1,33 @@
+{
+  final TaskConfig config=this.taskContext.getTaskConfig();
+  final MemoryManager memoryManager=this.taskContext.getMemoryManager();
+  final IOManager ioManager=this.taskContext.getIOManager();
+  final double fractionAvailableMemory=config.getRelativeMemoryDriver();
+  final int numPages=memoryManager.computeNumberOfPages(fractionAvailableMemory);
+  final DriverStrategy ls=config.getDriverStrategy();
+  final MutableObjectIterator<IT1> in1=this.taskContext.getInput(0);
+  final MutableObjectIterator<IT2> in2=this.taskContext.getInput(1);
+  final TypeSerializer<IT1> serializer1=this.taskContext.<IT1>getInputSerializer(0).getSerializer();
+  final TypeSerializer<IT2> serializer2=this.taskContext.<IT2>getInputSerializer(1).getSerializer();
+  final TypeComparator<IT1> comparator1=this.taskContext.getDriverComparator(0);
+  final TypeComparator<IT2> comparator2=this.taskContext.getDriverComparator(1);
+  final TypePairComparatorFactory<IT1,IT2> pairComparatorFactory=config.getPairComparatorFactory(this.taskContext.getUserCodeClassLoader());
+  if (pairComparatorFactory == null) {
+    throw new Exception("Missing pair comparator factory for outer join driver");
+  }
+  ExecutionConfig executionConfig=taskContext.getExecutionConfig();
+  boolean objectReuseEnabled=executionConfig.isObjectReuseEnabled();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Outer Join Driver object reuse: " + (objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+  }
+  if (objectReuseEnabled) {
+    this.outerJoinIterator=getReusingOuterJoinIterator(ls,in1,in2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory,memoryManager,ioManager,numPages);
+  }
+ else {
+    this.outerJoinIterator=getNonReusingOuterJoinIterator(ls,in1,in2,serializer1,comparator1,serializer2,comparator2,pairComparatorFactory,memoryManager,ioManager,numPages);
+  }
+  this.outerJoinIterator.open();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(this.taskContext.formatLogString("outer join task iterator ready."));
+  }
+}
