@@ -1,0 +1,15 @@
+{
+switch (direction) {
+case IN:
+    DataSet<Tuple2<Edge<K,EV>,Vertex<K,VV>>> edgesWithSources=edges.join(this.vertices).where(0).equalTo(0);
+  return vertices.coGroup(edgesWithSources).where(0).equalTo("f0.f1").with(new ApplyNeighborCoGroupFunction<K,VV,EV,T>(neighborsFunction)).returns(typeInfo);
+case OUT:
+DataSet<Tuple2<Edge<K,EV>,Vertex<K,VV>>> edgesWithTargets=edges.join(this.vertices).where(1).equalTo(0);
+return vertices.coGroup(edgesWithTargets).where(0).equalTo("f0.f0").with(new ApplyNeighborCoGroupFunction<K,VV,EV,T>(neighborsFunction)).returns(typeInfo);
+case ALL:
+DataSet<Tuple3<K,Edge<K,EV>,Vertex<K,VV>>> edgesWithNeighbors=edges.flatMap(new EmitOneEdgeWithNeighborPerNode<K,EV>()).join(this.vertices).where(1).equalTo(0).with(new ProjectEdgeWithNeighbor<K,VV,EV>());
+return vertices.coGroup(edgesWithNeighbors).where(0).equalTo(0).with(new ApplyCoGroupFunctionOnAllNeighbors<K,VV,EV,T>(neighborsFunction)).returns(typeInfo);
+default :
+throw new IllegalArgumentException("Illegal edge direction");
+}
+}
