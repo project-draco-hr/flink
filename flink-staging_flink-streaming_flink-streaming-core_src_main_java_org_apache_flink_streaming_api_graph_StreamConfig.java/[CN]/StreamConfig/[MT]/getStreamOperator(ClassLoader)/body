@@ -1,8 +1,15 @@
 {
   try {
-    return (T)InstantiationUtil.readObjectFromConfig(this.config,SERIALIZEDUDF,cl);
+    @SuppressWarnings("unchecked") T result=(T)InstantiationUtil.readObjectFromConfig(this.config,SERIALIZEDUDF,cl);
+    return result;
   }
- catch (  Exception e) {
+ catch (  ClassNotFoundException e) {
+    String classLoaderInfo=ClassLoaderUtil.getUserCodeClassLoaderInfo(cl);
+    boolean loadableDoubleCheck=ClassLoaderUtil.validateClassLoadable(e,cl);
+    String exceptionMessage="Cannot load user class: " + e.getMessage() + "\nClassLoader info: "+ classLoaderInfo+ (loadableDoubleCheck ? "Class was actually found in classloader - deserialization issue." : "Class not resolveable through given classloader.");
+    throw new StreamTaskException(exceptionMessage);
+  }
+catch (  Exception e) {
     throw new StreamTaskException("Cannot instantiate user function.",e);
   }
 }
