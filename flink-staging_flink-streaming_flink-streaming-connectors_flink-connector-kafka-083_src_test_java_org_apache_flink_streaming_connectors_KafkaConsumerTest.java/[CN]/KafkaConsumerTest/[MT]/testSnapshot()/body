@@ -1,0 +1,33 @@
+{
+  try {
+    Field offsetsField=FlinkKafkaConsumer.class.getDeclaredField("lastOffsets");
+    Field runningField=FlinkKafkaConsumer.class.getDeclaredField("running");
+    Field mapField=FlinkKafkaConsumer.class.getDeclaredField("pendingCheckpoints");
+    offsetsField.setAccessible(true);
+    runningField.setAccessible(true);
+    mapField.setAccessible(true);
+    FlinkKafkaConsumer<?> consumer=mock(FlinkKafkaConsumer.class);
+    when(consumer.snapshotState(anyLong(),anyLong())).thenCallRealMethod();
+    long[] testOffsets=new long[]{43,6146,133,16,162,616};
+    LinkedMap map=new LinkedMap();
+    offsetsField.set(consumer,testOffsets);
+    runningField.set(consumer,true);
+    mapField.set(consumer,map);
+    assertTrue(map.isEmpty());
+    for (long checkpointId=10L; checkpointId <= 2000L; checkpointId+=9L) {
+      long[] checkpoint=consumer.snapshotState(checkpointId,47 * checkpointId);
+      assertArrayEquals(testOffsets,checkpoint);
+      long[] checkpointCopy=Arrays.copyOf(checkpoint,checkpoint.length);
+      for (int i=0; i < testOffsets.length; i++) {
+        testOffsets[i]+=1L;
+      }
+      assertArrayEquals(checkpointCopy,checkpoint);
+      assertTrue(map.size() > 0);
+      assertTrue(map.size() <= FlinkKafkaConsumer.MAX_NUM_PENDING_CHECKPOINTS);
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

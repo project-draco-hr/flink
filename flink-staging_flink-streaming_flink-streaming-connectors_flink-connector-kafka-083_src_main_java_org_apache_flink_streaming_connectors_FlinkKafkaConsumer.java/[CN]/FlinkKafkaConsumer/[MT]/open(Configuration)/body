@@ -1,0 +1,58 @@
+{
+  super.open(parameters);
+  final int numConsumers=getRuntimeContext().getNumberOfParallelSubtasks();
+  final int thisComsumerIndex=getRuntimeContext().getIndexOfThisSubtask();
+  subscribedPartitions=assignPartitions(this.partitions,this.topic,numConsumers,thisComsumerIndex);
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Kafka consumer {} will read partitions {} out of partitions {}",thisComsumerIndex,subscribedPartitions,Arrays.toString(partitions));
+  }
+  if (subscribedPartitions.isEmpty()) {
+    LOG.info("Kafka consumer {} has no partitions (empty source)",thisComsumerIndex);
+    return;
+  }
+switch (fetcherType) {
+case NEW_HIGH_LEVEL:
+    fetcher=new NewConsumerApiFetcher(props);
+  break;
+case LEGACY_LOW_LEVEL:
+fetcher=new LegacyFetcher(topic,props,getRuntimeContext().getTaskName());
+break;
+default :
+throw new RuntimeException("Requested unknown fetcher " + fetcher);
+}
+fetcher.setPartitionsToRead(subscribedPartitions);
+switch (offsetStore) {
+case FLINK_ZOOKEEPER:
+offsetHandler=new ZookeeperOffsetHandler(props);
+break;
+case KAFKA:
+if (fetcher instanceof NewConsumerApiFetcher) {
+offsetHandler=(NewConsumerApiFetcher)fetcher;
+}
+ else {
+throw new Exception("Kafka offset handler cannot work with legacy fetcher");
+}
+break;
+default :
+throw new RuntimeException("Requested unknown offset store " + offsetStore);
+}
+lastOffsets=new long[partitions.length];
+commitedOffsets=new long[partitions.length];
+Arrays.fill(lastOffsets,OFFSET_NOT_SET);
+Arrays.fill(commitedOffsets,OFFSET_NOT_SET);
+if (restoreToOffset != null) {
+if (LOG.isInfoEnabled()) {
+LOG.info("Consumer {} found offsets from previous checkpoint: {}",thisComsumerIndex,Arrays.toString(restoreToOffset));
+}
+for (int i=0; i < restoreToOffset.length; i++) {
+long restoredOffset=restoreToOffset[i];
+if (restoredOffset != OFFSET_NOT_SET) {
+fetcher.seek(new TopicPartition(topic,i),restoredOffset + 1);
+lastOffsets[i]=restoredOffset;
+}
+}
+}
+ else {
+offsetHandler.seekFetcherToInitialOffsets(subscribedPartitions,fetcher);
+}
+}

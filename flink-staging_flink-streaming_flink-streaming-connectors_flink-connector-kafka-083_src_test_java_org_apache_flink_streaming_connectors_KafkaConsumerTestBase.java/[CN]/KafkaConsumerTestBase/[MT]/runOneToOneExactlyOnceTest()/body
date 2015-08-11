@@ -1,0 +1,27 @@
+{
+  try {
+    LOG.info("Starting runOneToOneExactlyOnceTest()");
+    final String topic="oneToOneTopic";
+    final int parallelism=5;
+    final int numElementsPerPartition=1000;
+    final int totalElements=parallelism * numElementsPerPartition;
+    final int failAfterElements=numElementsPerPartition / 3;
+    createTestTopic(topic,parallelism,1);
+    DataGenerators.generateRandomizedIntegerSequence(StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort),brokerConnectionStrings,topic,parallelism,numElementsPerPartition,true);
+    DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+    env.enableCheckpointing(500);
+    env.setParallelism(parallelism);
+    env.setNumberOfExecutionRetries(3);
+    env.getConfig().disableSysoutLogging();
+    FlinkKafkaConsumer<Integer> kafkaSource=getConsumer(topic,schema,standardProps);
+    env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new FailingIdentityMapper<Integer>(failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
+    FailingIdentityMapper.failedBefore=false;
+    tryExecute(env,"One-to-one exactly once test");
+    deleteTestTopic(topic);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

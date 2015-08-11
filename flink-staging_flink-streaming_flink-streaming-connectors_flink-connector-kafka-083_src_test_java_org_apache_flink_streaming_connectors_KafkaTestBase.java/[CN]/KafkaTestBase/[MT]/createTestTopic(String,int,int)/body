@@ -1,10 +1,18 @@
 {
   Properties topicConfig=new Properties();
   LOG.info("Creating topic {}",topic);
-  AdminUtils.createTopic(zkClient,topic,numberOfPartitions,replicationFactor,topicConfig);
-  try {
-    Thread.sleep(500);
+  ZkClient creator=new ZkClient(standardCC.zkConnect(),standardCC.zkSessionTimeoutMs(),standardCC.zkConnectionTimeoutMs(),new ZooKeeperStringSerializer());
+  AdminUtils.createTopic(creator,topic,numberOfPartitions,replicationFactor,topicConfig);
+  creator.close();
+  try (KafkaConsumer<byte[],byte[]> consumer=new KafkaConsumer<>(standardProps,null,new ByteArrayDeserializer(),new ByteArrayDeserializer())){
+    final long deadline=System.currentTimeMillis() + 30000;
+    do {
+      List<PartitionInfo> partitions=consumer.partitionsFor(topic);
+      if (partitions != null && partitions.size() > 0) {
+        return;
+      }
+    }
+ while (System.currentTimeMillis() < deadline);
+    fail("Test topic could not be created");
   }
- catch (  InterruptedException e) {
-  }
-}
+ }

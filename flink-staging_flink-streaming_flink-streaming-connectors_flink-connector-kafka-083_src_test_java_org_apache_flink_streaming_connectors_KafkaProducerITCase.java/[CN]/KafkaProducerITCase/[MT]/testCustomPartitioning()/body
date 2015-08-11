@@ -1,0 +1,67 @@
+{
+  try {
+    LOG.info("Starting KafkaProducerITCase.testCustomPartitioning()");
+    final String topic="customPartitioningTestTopic";
+    final int parallelism=3;
+    createTestTopic(topic,parallelism,1);
+    TypeInformation<Tuple2<Long,String>> longStringInfo=TypeInfoParser.parse("Tuple2<Long, String>");
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+    env.setNumberOfExecutionRetries(0);
+    env.getConfig().disableSysoutLogging();
+    TypeInformationSerializationSchema<Tuple2<Long,String>> serSchema=new TypeInformationSerializationSchema<>(longStringInfo,env.getConfig());
+    TypeInformationSerializationSchema<Tuple2<Long,String>> deserSchema=new TypeInformationSerializationSchema<>(longStringInfo,env.getConfig());
+    DataStream<Tuple2<Long,String>> stream=env.addSource(new SourceFunction<Tuple2<Long,String>>(){
+      private boolean running=true;
+      @Override public void run(      SourceContext<Tuple2<Long,String>> ctx) throws Exception {
+        long cnt=0;
+        while (running) {
+          ctx.collect(new Tuple2<Long,String>(cnt,"kafka-" + cnt));
+          cnt++;
+        }
+      }
+      @Override public void cancel(){
+        running=false;
+      }
+    }
+).setParallelism(1);
+    stream.addSink(new KafkaSink<Tuple2<Long,String>>(brokerConnectionStrings,topic,serSchema,new CustomPartitioner(parallelism))).setParallelism(parallelism);
+    FlinkKafkaConsumer<Tuple2<Long,String>> source=new FlinkKafkaConsumer<>(topic,deserSchema,standardProps,FlinkKafkaConsumer.OffsetStore.FLINK_ZOOKEEPER,FlinkKafkaConsumer.FetcherType.LEGACY_LOW_LEVEL);
+    env.addSource(source).setParallelism(parallelism).map(new RichMapFunction<Tuple2<Long,String>,Integer>(){
+      private int ourPartition=-1;
+      @Override public Integer map(      Tuple2<Long,String> value){
+        int partition=value.f0.intValue() % parallelism;
+        if (ourPartition != -1) {
+          assertEquals("inconsistent partitioning",ourPartition,partition);
+        }
+ else {
+          ourPartition=partition;
+        }
+        return partition;
+      }
+    }
+).setParallelism(parallelism).addSink(new SinkFunction<Integer>(){
+      private int[] valuesPerPartition=new int[parallelism];
+      @Override public void invoke(      Integer value) throws Exception {
+        valuesPerPartition[value]++;
+        boolean missing=false;
+        for (        int i : valuesPerPartition) {
+          if (i < 100) {
+            missing=true;
+            break;
+          }
+        }
+        if (!missing) {
+          throw new SuccessException();
+        }
+      }
+    }
+).setParallelism(1);
+    tryExecute(env,"custom partitioning test");
+    deleteTestTopic(topic);
+    LOG.info("Finished KafkaProducerITCase.testCustomPartitioning()");
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
