@@ -1,0 +1,17 @@
+{
+  byte[] header=new byte[KafkaLZ4BlockOutputStream.LZ4_MAX_HEADER_LENGTH];
+  bufferOffset=6;
+  if (in.read(header,0,bufferOffset) != bufferOffset) {
+    throw new IOException(PREMATURE_EOS);
+  }
+  if (KafkaLZ4BlockOutputStream.MAGIC != Utils.readUnsignedIntLE(header,bufferOffset - 6)) {
+    throw new IOException(NOT_SUPPORTED);
+  }
+  flg=KafkaLZ4BlockOutputStream.FLG.fromByte(header[bufferOffset - 2]);
+  bd=KafkaLZ4BlockOutputStream.BD.fromByte(header[bufferOffset - 1]);
+  byte hash=(byte)((checksum.hash(header,0,bufferOffset,0) >> 8) & 0xFF);
+  header[bufferOffset++]=(byte)in.read();
+  if (hash != header[bufferOffset - 1]) {
+    throw new IOException(DESCRIPTOR_HASH_MISMATCH);
+  }
+}
