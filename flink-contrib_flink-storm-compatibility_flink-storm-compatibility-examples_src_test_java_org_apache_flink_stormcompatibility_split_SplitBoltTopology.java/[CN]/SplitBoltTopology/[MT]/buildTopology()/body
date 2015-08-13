@@ -1,0 +1,16 @@
+{
+  final FlinkTopologyBuilder builder=new FlinkTopologyBuilder();
+  builder.setSpout(spoutId,new RandomSpout(false,seed));
+  builder.setBolt(boltId,new SplitBolt()).shuffleGrouping(spoutId);
+  builder.setBolt(evenVerifierId,new VerifyAndEnrichBolt(true)).shuffleGrouping(boltId,SplitBolt.EVEN_STREAM);
+  builder.setBolt(oddVerifierId,new VerifyAndEnrichBolt(false)).shuffleGrouping(boltId,SplitBolt.ODD_STREAM);
+  if (outputPath != null) {
+    final String[] tokens=outputPath.split(":");
+    final String outputFile=tokens[tokens.length - 1];
+    builder.setBolt(sinkId,new StormBoltFileSink(outputFile,formatter)).shuffleGrouping(evenVerifierId).shuffleGrouping(oddVerifierId);
+  }
+ else {
+    builder.setBolt(sinkId,new StormBoltPrintSink(formatter),4).shuffleGrouping(evenVerifierId).shuffleGrouping(oddVerifierId);
+  }
+  return builder;
+}
