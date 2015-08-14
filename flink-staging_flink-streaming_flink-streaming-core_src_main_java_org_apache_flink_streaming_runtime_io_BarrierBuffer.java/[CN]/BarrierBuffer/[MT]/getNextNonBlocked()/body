@@ -1,29 +1,34 @@
 {
   while (true) {
     BufferOrEvent next;
-    if (currentBuffered != null) {
-      next=currentBuffered.getNext();
-      if (next == null) {
-        currentBuffered.cleanup();
-        currentBuffered=queuedBuffered.pollFirst();
-        if (currentBuffered != null) {
-          currentBuffered.open();
-        }
-        return getNextNonBlocked();
-      }
+    if (currentBuffered == null) {
+      next=inputGate.getNextBufferOrEvent();
     }
  else {
-      next=inputGate.getNextBufferOrEvent();
+      next=currentBuffered.getNext();
+      if (next == null) {
+        completeBufferedSequence();
+        return getNextNonBlocked();
+      }
     }
     if (next != null) {
       if (isBlocked(next.getChannelIndex())) {
         bufferSpiller.add(next);
       }
- else       if (next.isBuffer() || next.getEvent().getClass() != CheckpointBarrier.class) {
+ else       if (next.isBuffer()) {
         return next;
       }
- else       if (!endOfStream) {
-        processBarrier((CheckpointBarrier)next.getEvent(),next.getChannelIndex());
+ else       if (next.getEvent().getClass() == CheckpointBarrier.class) {
+        if (!endOfStream) {
+          processBarrier((CheckpointBarrier)next.getEvent(),next.getChannelIndex());
+        }
+      }
+ else {
+        if (next.getEvent().getClass() == EndOfPartitionEvent.class) {
+          numClosedChannels++;
+          releaseBlocks();
+        }
+        return next;
       }
     }
  else     if (!endOfStream) {
