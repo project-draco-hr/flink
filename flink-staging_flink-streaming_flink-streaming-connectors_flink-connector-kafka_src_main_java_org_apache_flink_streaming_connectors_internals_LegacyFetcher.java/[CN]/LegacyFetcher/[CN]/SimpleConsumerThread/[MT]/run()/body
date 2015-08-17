@@ -1,0 +1,92 @@
+{
+  try {
+    final String clientId="flink-kafka-consumer-legacy-" + broker.id();
+    final int soTimeout=Integer.valueOf(config.getProperty("socket.timeout.ms","30000"));
+    final int bufferSize=Integer.valueOf(config.getProperty("socket.receive.buffer.bytes","65536"));
+    final int fetchSize=Integer.valueOf(config.getProperty("fetch.message.max.bytes","1048576"));
+    final int maxWait=Integer.valueOf(config.getProperty("fetch.wait.max.ms","100"));
+    final int minBytes=Integer.valueOf(config.getProperty("fetch.min.bytes","1"));
+    consumer=new SimpleConsumer(broker.host(),broker.port(),soTimeout,bufferSize,clientId);
+    List<FetchPartition> partitionsToGetOffsetsFor=new ArrayList<>();
+    for (    FetchPartition fp : partitions) {
+      if (fp.nextOffsetToRead == FlinkKafkaConsumer.OFFSET_NOT_SET) {
+        partitionsToGetOffsetsFor.add(fp);
+      }
+    }
+    if (partitionsToGetOffsetsFor.size() > 0) {
+      long timeType;
+      if (config.getProperty("auto.offset.reset","latest").equals("latest")) {
+        timeType=OffsetRequest.LatestTime();
+      }
+ else {
+        timeType=OffsetRequest.EarliestTime();
+      }
+      getLastOffset(consumer,topic,partitionsToGetOffsetsFor,timeType);
+      LOG.info("No prior offsets found for some partitions in topic {}. Fetched the following start offsets {}",topic,partitionsToGetOffsetsFor);
+    }
+    while (running) {
+      FetchRequestBuilder frb=new FetchRequestBuilder();
+      frb.clientId(clientId);
+      frb.maxWait(maxWait);
+      frb.minBytes(minBytes);
+      for (      FetchPartition fp : partitions) {
+        frb.addFetch(topic,fp.partition,fp.nextOffsetToRead,fetchSize);
+      }
+      kafka.api.FetchRequest fetchRequest=frb.build();
+      LOG.debug("Issuing fetch request {}",fetchRequest);
+      FetchResponse fetchResponse;
+      fetchResponse=consumer.fetch(fetchRequest);
+      if (fetchResponse.hasError()) {
+        String exception="";
+        for (        FetchPartition fp : partitions) {
+          short code;
+          if ((code=fetchResponse.errorCode(topic,fp.partition)) != ErrorMapping.NoError()) {
+            exception+="\nException for partition " + fp.partition + ": "+ StringUtils.stringifyException(ErrorMapping.exceptionFor(code));
+          }
+        }
+        throw new IOException("Error while fetching from broker: " + exception);
+      }
+      int messagesInFetch=0;
+      for (      FetchPartition fp : partitions) {
+        final ByteBufferMessageSet messageSet=fetchResponse.messageSet(topic,fp.partition);
+        final int partition=fp.partition;
+        for (        MessageAndOffset msg : messageSet) {
+          if (running) {
+            messagesInFetch++;
+            if (msg.offset() < fp.nextOffsetToRead) {
+              LOG.info("Skipping message with offset " + msg.offset() + " because we have seen messages until "+ fp.nextOffsetToRead+ " from partition "+ fp.partition+ " already");
+              continue;
+            }
+            ByteBuffer payload=msg.message().payload();
+            byte[] valueByte=new byte[payload.remaining()];
+            payload.get(valueByte);
+            final T value=valueDeserializer.deserialize(valueByte);
+            final long offset=msg.offset();
+synchronized (sourceContext.getCheckpointLock()) {
+              sourceContext.collect(value);
+              offsetsState[partition]=offset;
+            }
+            fp.nextOffsetToRead=offset + 1;
+          }
+ else {
+            return;
+          }
+        }
+      }
+      LOG.debug("This fetch contained {} messages",messagesInFetch);
+    }
+  }
+ catch (  Throwable t) {
+    owner.onErrorInFetchThread(t);
+  }
+ finally {
+    if (consumer != null) {
+      try {
+        consumer.close();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error while closing the Kafka simple consumer",t);
+      }
+    }
+  }
+}

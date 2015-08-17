@@ -1,0 +1,26 @@
+{
+  this.offsetStore=checkNotNull(offsetStore);
+  this.fetcherType=checkNotNull(fetcherType);
+  if (fetcherType == FetcherType.NEW_HIGH_LEVEL) {
+    throw new UnsupportedOperationException("The fetcher for Kafka 0.8.3 is not yet " + "supported in Flink");
+  }
+  if (offsetStore == OffsetStore.KAFKA && fetcherType == FetcherType.LEGACY_LOW_LEVEL) {
+    throw new IllegalArgumentException("The Kafka offset handler cannot be used together with the old low-level fetcher.");
+  }
+  this.topic=checkNotNull(topic,"topic");
+  this.props=checkNotNull(props,"props");
+  this.valueDeserializer=checkNotNull(valueDeserializer,"valueDeserializer");
+  if (offsetStore == OffsetStore.FLINK_ZOOKEEPER) {
+    validateZooKeeperConfig(props);
+  }
+  List<PartitionInfo> partitionInfos=getPartitionsForTopic(topic,props);
+  this.partitions=new int[partitionInfos.size()];
+  for (int i=0; i < partitionInfos.size(); i++) {
+    partitions[i]=partitionInfos.get(i).partition();
+    if (partitions[i] >= partitions.length) {
+      throw new RuntimeException("Kafka partition numbers are sparse");
+    }
+  }
+  LOG.info("Topic {} has {} partitions",topic,partitions.length);
+  props.setProperty("enable.auto.commit","false");
+}
