@@ -1,0 +1,88 @@
+{
+  try {
+    final StringWriter writer=new StringWriter(256);
+    final JsonGenerator gen=jsonFactory.createGenerator(writer);
+    final OptimizerNode optNode=node.getOptimizerNode();
+    gen.writeStartObject();
+    if (node.getGlobalProperties() != null) {
+      GlobalProperties gp=node.getGlobalProperties();
+      gen.writeArrayFieldStart("global_properties");
+      addProperty(gen,"Partitioning",gp.getPartitioning().name());
+      if (gp.getPartitioningFields() != null) {
+        addProperty(gen,"Partitioned on",gp.getPartitioningFields().toString());
+      }
+      if (gp.getPartitioningOrdering() != null) {
+        addProperty(gen,"Partitioning Order",gp.getPartitioningOrdering().toString());
+      }
+ else {
+        addProperty(gen,"Partitioning Order","(none)");
+      }
+      if (optNode.getUniqueFields() == null || optNode.getUniqueFields().size() == 0) {
+        addProperty(gen,"Uniqueness","not unique");
+      }
+ else {
+        addProperty(gen,"Uniqueness",optNode.getUniqueFields().toString());
+      }
+      gen.writeEndArray();
+    }
+    if (node.getLocalProperties() != null) {
+      LocalProperties lp=node.getLocalProperties();
+      gen.writeArrayFieldStart("local_properties");
+      if (lp.getOrdering() != null) {
+        addProperty(gen,"Order",lp.getOrdering().toString());
+      }
+ else {
+        addProperty(gen,"Order","(none)");
+      }
+      if (lp.getGroupedFields() != null && lp.getGroupedFields().size() > 0) {
+        addProperty(gen,"Grouped on",lp.getGroupedFields().toString());
+      }
+ else {
+        addProperty(gen,"Grouping","not grouped");
+      }
+      if (optNode.getUniqueFields() == null || optNode.getUniqueFields().size() == 0) {
+        addProperty(gen,"Uniqueness","not unique");
+      }
+ else {
+        addProperty(gen,"Uniqueness",optNode.getUniqueFields().toString());
+      }
+      gen.writeEndArray();
+    }
+{
+      gen.writeArrayFieldStart("estimates");
+      addProperty(gen,"Est. Output Size",optNode.getEstimatedOutputSize() == -1 ? "(unknown)" : formatNumber(optNode.getEstimatedOutputSize(),"B"));
+      addProperty(gen,"Est. Cardinality",optNode.getEstimatedNumRecords() == -1 ? "(unknown)" : formatNumber(optNode.getEstimatedNumRecords()));
+      gen.writeEndArray();
+    }
+    if (node.getNodeCosts() != null) {
+      gen.writeArrayFieldStart("costs");
+      addProperty(gen,"Network",node.getNodeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(node.getNodeCosts().getNetworkCost(),"B"));
+      addProperty(gen,"Disk I/O",node.getNodeCosts().getDiskCost() == -1 ? "(unknown)" : formatNumber(node.getNodeCosts().getDiskCost(),"B"));
+      addProperty(gen,"CPU",node.getNodeCosts().getCpuCost() == -1 ? "(unknown)" : formatNumber(node.getNodeCosts().getCpuCost(),""));
+      addProperty(gen,"Cumulative Network",node.getCumulativeCosts().getNetworkCost() == -1 ? "(unknown)" : formatNumber(node.getCumulativeCosts().getNetworkCost(),"B"));
+      addProperty(gen,"Cumulative Disk I/O",node.getCumulativeCosts().getDiskCost() == -1 ? "(unknown)" : formatNumber(node.getCumulativeCosts().getDiskCost(),"B"));
+      addProperty(gen,"Cumulative CPU",node.getCumulativeCosts().getCpuCost() == -1 ? "(unknown)" : formatNumber(node.getCumulativeCosts().getCpuCost(),""));
+      gen.writeEndArray();
+    }
+    if (optNode.getOperator().getCompilerHints() != null) {
+      CompilerHints hints=optNode.getOperator().getCompilerHints();
+      CompilerHints defaults=new CompilerHints();
+      String size=hints.getOutputSize() == defaults.getOutputSize() ? "(none)" : String.valueOf(hints.getOutputSize());
+      String card=hints.getOutputCardinality() == defaults.getOutputCardinality() ? "(none)" : String.valueOf(hints.getOutputCardinality());
+      String width=hints.getAvgOutputRecordSize() == defaults.getAvgOutputRecordSize() ? "(none)" : String.valueOf(hints.getAvgOutputRecordSize());
+      String filter=hints.getFilterFactor() == defaults.getFilterFactor() ? "(none)" : String.valueOf(hints.getFilterFactor());
+      gen.writeArrayFieldStart("compiler_hints");
+      addProperty(gen,"Output Size (bytes)",size);
+      addProperty(gen,"Output Cardinality",card);
+      addProperty(gen,"Avg. Output Record Size (bytes)",width);
+      addProperty(gen,"Filter Factor",filter);
+      gen.writeEndArray();
+    }
+    gen.writeEndObject();
+    gen.close();
+    return writer.toString();
+  }
+ catch (  Exception e) {
+    return "{}";
+  }
+}

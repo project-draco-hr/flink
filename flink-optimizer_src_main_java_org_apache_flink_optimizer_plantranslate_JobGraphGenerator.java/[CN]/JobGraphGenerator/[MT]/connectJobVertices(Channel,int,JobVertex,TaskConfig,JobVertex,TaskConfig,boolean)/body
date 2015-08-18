@@ -28,7 +28,7 @@ throw new UnsupportedOperationException("Data exchange mode " + channel.getDataE
 default :
 throw new UnsupportedOperationException("Unknown data exchange mode.");
 }
-targetVertex.connectNewDataSetAsInput(sourceVertex,distributionPattern,resultType);
+JobEdge edge=targetVertex.connectNewDataSetAsInput(sourceVertex,distributionPattern,resultType);
 final int outputIndex=sourceConfig.getNumOutputs();
 sourceConfig.addOutputShipStrategy(channel.getShipStrategy());
 if (outputIndex == 0) {
@@ -60,5 +60,23 @@ targetConfig.addBroadcastInputToGroup(inputNumber);
  else {
 targetConfig.addInputToGroup(inputNumber);
 }
+String shipStrategy=JsonMapper.getShipStrategyString(channel.getShipStrategy());
+if (channel.getShipStrategyKeys() != null && channel.getShipStrategyKeys().size() > 0) {
+shipStrategy+=" on " + (channel.getShipStrategySortOrder() == null ? channel.getShipStrategyKeys().toString() : Utils.createOrdering(channel.getShipStrategyKeys(),channel.getShipStrategySortOrder()).toString());
+}
+String localStrategy;
+if (channel.getLocalStrategy() == null || channel.getLocalStrategy() == LocalStrategy.NONE) {
+localStrategy=null;
+}
+ else {
+localStrategy=JsonMapper.getLocalStrategyString(channel.getLocalStrategy());
+if (localStrategy != null && channel.getLocalStrategyKeys() != null && channel.getLocalStrategyKeys().size() > 0) {
+localStrategy+=" on " + (channel.getLocalStrategySortOrder() == null ? channel.getLocalStrategyKeys().toString() : Utils.createOrdering(channel.getLocalStrategyKeys(),channel.getLocalStrategySortOrder()).toString());
+}
+}
+String caching=channel.getTempMode() == TempMode.NONE ? null : channel.getTempMode().toString();
+edge.setShipStrategyName(shipStrategy);
+edge.setPreProcessingOperationName(localStrategy);
+edge.setOperatorLevelCachingDescription(caching);
 return distributionPattern;
 }

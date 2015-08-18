@@ -1,0 +1,73 @@
+{
+  JsonFactory jsonFactory=new JsonFactory();
+  for (int i=chainedTasksInSequence.size() - 1; i >= 0; i--) {
+    TaskInChain next=chainedTasksInSequence.get(i);
+    PlanNode planNode=next.getPlanNode();
+    JobVertex vertex=next.getContainingVertex();
+    String opName=planNode.getOptimizerNode().getOperatorName();
+    if (vertex.getOperatorName() == null) {
+      vertex.setOperatorName(opName);
+    }
+ else {
+      vertex.setOperatorName(opName + " -> " + vertex.getOperatorName());
+    }
+    String opDescription=JsonMapper.getOperatorStrategyString(planNode.getDriverStrategy());
+    if (vertex.getOperatorDescription() == null) {
+      vertex.setOperatorDescription(opDescription);
+    }
+ else {
+      vertex.setOperatorDescription(opDescription + "\n -> " + vertex.getOperatorDescription());
+    }
+    String prettyName=StringUtils.showControlCharacters(planNode.getNodeName());
+    if (vertex.getOperatorPrettyName() == null) {
+      vertex.setOperatorPrettyName(prettyName);
+    }
+ else {
+      vertex.setOperatorPrettyName(prettyName + "\n -> " + vertex.getOperatorPrettyName());
+    }
+    if (vertex.getResultOptimizerProperties() == null) {
+      String outputProps=JsonMapper.getOptimizerPropertiesJson(jsonFactory,planNode);
+      vertex.setResultOptimizerProperties(outputProps);
+    }
+  }
+  for (  Map.Entry<PlanNode,JobVertex> entry : vertices.entrySet()) {
+    PlanNode node=entry.getKey();
+    JobVertex vertex=entry.getValue();
+    String input1name=null;
+    String input2name=null;
+    int num=0;
+    for (    Channel c : node.getInputs()) {
+      if (num == 0) {
+        input1name=c.getSource().getNodeName();
+      }
+ else       if (num == 1) {
+        input2name=c.getSource().getNodeName();
+      }
+      num++;
+    }
+    String opName=node.getOptimizerNode().getOperatorName();
+    if (vertex.getOperatorName() == null) {
+      vertex.setOperatorName(opName);
+    }
+ else {
+      vertex.setOperatorName(opName + " -> " + vertex.getOperatorName());
+    }
+    String opStrategy=JsonMapper.getOperatorStrategyString(node.getDriverStrategy(),input1name != null ? input1name : "(unnamed)",input2name != null ? input2name : "(unnamed)");
+    if (vertex.getOperatorDescription() == null) {
+      vertex.setOperatorDescription(opStrategy);
+    }
+ else {
+      vertex.setOperatorDescription(opStrategy + "\n -> " + vertex.getOperatorDescription());
+    }
+    String prettyName=StringUtils.showControlCharacters(node.getNodeName());
+    if (vertex.getOperatorPrettyName() == null) {
+      vertex.setOperatorPrettyName(prettyName);
+    }
+ else {
+      vertex.setOperatorPrettyName(prettyName + "\n -> " + vertex.getOperatorPrettyName());
+    }
+    if (vertex.getResultOptimizerProperties() == null) {
+      vertex.setResultOptimizerProperties(JsonMapper.getOptimizerPropertiesJson(jsonFactory,node));
+    }
+  }
+}
