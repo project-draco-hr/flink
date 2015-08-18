@@ -1,0 +1,20 @@
+{
+  ClassLoader cl=ClassLoader.getSystemClassLoader();
+  URL[] urls=((URLClassLoader)cl).getURLs();
+  for (  URL url : urls) {
+    System.out.println(url.getFile());
+  }
+  System.out.println("CheckpointedStreamingProgram classpath: ");
+  final String jarFile=args[0];
+  final String host=args[1];
+  final int port=Integer.parseInt(args[2]);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment(host,port,jarFile);
+  env.getConfig().disableSysoutLogging();
+  env.enableCheckpointing(CHECKPOINT_INTERVALL);
+  env.setNumberOfExecutionRetries(1);
+  env.disableOperatorChaining();
+  DataStream<String> text=env.addSource(new SimpleStringGenerator());
+  text.map(new StatefulMapper()).addSink(new NoOpSink());
+  env.setParallelism(1);
+  env.execute("Checkpointed Streaming Program");
+}
