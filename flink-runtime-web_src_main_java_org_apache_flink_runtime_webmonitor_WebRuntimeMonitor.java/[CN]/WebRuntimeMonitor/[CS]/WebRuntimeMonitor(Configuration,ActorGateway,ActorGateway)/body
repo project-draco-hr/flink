@@ -1,0 +1,24 @@
+{
+  final WebMonitorConfig cfg=new WebMonitorConfig(config);
+  final String flinkRoot=config.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,null);
+  final String configuredWebRoot=cfg.getWebRoot();
+  final File webRootDir;
+  if (configuredWebRoot != null) {
+    webRootDir=new File(configuredWebRoot);
+  }
+ else   if (flinkRoot != null) {
+    webRootDir=new File(flinkRoot,STATIC_CONTENTS_PATH);
+  }
+ else {
+    throw new IllegalConfigurationException("The given configuration provides neither the web-document root (" + WebMonitorConfig.JOB_MANAGER_WEB_DOC_ROOT_KEY + "), not the Flink installation root ("+ ConfigConstants.FLINK_BASE_DIR_PATH_KEY+ ").");
+  }
+  if (!(webRootDir.exists() && webRootDir.isDirectory() && webRootDir.canRead())) {
+    throw new IllegalConfigurationException("The path to the static contents (" + webRootDir.getAbsolutePath() + ") is not a readable directory.");
+  }
+  this.configuredPort=cfg.getWebFrontendPort();
+  if (this.configuredPort < 0) {
+    throw new IllegalArgumentException("Web frontend port is invalid: " + this.configuredPort);
+  }
+  ExecutionGraphHolder currentGraphs=new ExecutionGraphHolder(jobManager);
+  router=new Router().GET("/config",handler(new RequestConfigHandler(cfg.getRefreshInterval()))).GET("/overview",handler(new RequestOverviewHandler(jobManager))).GET("/jobs",handler(new RequestJobIdsHandler(jobManager))).GET("/jobs/:jobid",handler(new JobSummaryHandler(currentGraphs))).GET("/jobs/:jobid/vertices",handler(new JobVerticesOverviewHandler(currentGraphs))).GET("/jobs/:jobid/plan",handler(new ExecutionPlanHandler(currentGraphs))).GET("/jobs/:jobid/config",handler(new JobConfigHandler(currentGraphs))).GET("/jobsInfo",new JobManagerInfoHandler(jobManager,archive,DEFAULT_REQUEST_TIMEOUT)).GET("/:*",new StaticFileServerHandler(webRootDir));
+}

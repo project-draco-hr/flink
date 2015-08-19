@@ -4,25 +4,18 @@
     return cached;
   }
   try {
-    ActorGateway jobManager=retriever.getJobManagerGateway();
-    if (jobManager != null) {
-      Future<Object> future=jobManager.ask(new JobManagerMessages.RequestJob(jid),timeout);
-      Object result=Await.result(future,timeout);
-      if (result instanceof JobManagerMessages.JobNotFound) {
-        return null;
-      }
- else       if (result instanceof JobManagerMessages.JobFound) {
-        ExecutionGraph eg=((JobManagerMessages.JobFound)result).executionGraph();
-        cache.put(jid,eg);
-        return eg;
-      }
- else {
-        throw new RuntimeException("Unknown response from JobManager / Archive: " + result);
-      }
+    Future<Object> future=source.ask(new JobManagerMessages.RequestJob(jid),timeout);
+    Object result=Await.result(future,timeout);
+    if (result instanceof JobManagerMessages.JobNotFound) {
+      return null;
+    }
+ else     if (result instanceof JobManagerMessages.JobFound) {
+      ExecutionGraph eg=((JobManagerMessages.JobFound)result).executionGraph();
+      cache.put(jid,eg);
+      return eg;
     }
  else {
-      LOG.warn("No connection to the leading JobManager.");
-      return null;
+      throw new RuntimeException("Unknown response from JobManager / Archive: " + result);
     }
   }
  catch (  Exception e) {
