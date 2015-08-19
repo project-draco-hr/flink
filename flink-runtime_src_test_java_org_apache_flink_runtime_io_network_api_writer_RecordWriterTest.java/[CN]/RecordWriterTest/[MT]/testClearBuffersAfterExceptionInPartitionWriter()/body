@@ -1,0 +1,80 @@
+{
+  NetworkBufferPool buffers=null;
+  BufferPool bufferPool=null;
+  try {
+    buffers=new NetworkBufferPool(1,1024);
+    bufferPool=spy(buffers.createBufferPool(1,true));
+    ResultPartitionWriter partitionWriter=mock(ResultPartitionWriter.class);
+    when(partitionWriter.getBufferProvider()).thenReturn(checkNotNull(bufferPool));
+    when(partitionWriter.getNumberOfOutputChannels()).thenReturn(1);
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        Buffer buffer=(Buffer)invocation.getArguments()[0];
+        buffer.recycle();
+        throw new RuntimeException("Expected test Exception");
+      }
+    }
+).when(partitionWriter).writeBuffer(any(Buffer.class),anyInt());
+    RecordWriter<IntValue> recordWriter=new RecordWriter<>(partitionWriter);
+    try {
+      for (; ; ) {
+        recordWriter.emit(new IntValue(0));
+      }
+    }
+ catch (    Exception e) {
+      recordWriter.clearBuffers();
+    }
+    verify(partitionWriter,times(1)).writeBuffer(any(Buffer.class),anyInt());
+    verify(bufferPool,times(1)).requestBufferBlocking();
+    try {
+      recordWriter.emit(new IntValue(0));
+      recordWriter.flush();
+      Assert.fail("Did not throw expected test Exception");
+    }
+ catch (    Exception e) {
+      recordWriter.clearBuffers();
+    }
+    verify(partitionWriter,times(2)).writeBuffer(any(Buffer.class),anyInt());
+    verify(bufferPool,times(2)).requestBufferBlocking();
+    try {
+      for (; ; ) {
+        recordWriter.broadcastEmit(new IntValue(0));
+      }
+    }
+ catch (    Exception e) {
+      recordWriter.clearBuffers();
+    }
+    verify(partitionWriter,times(3)).writeBuffer(any(Buffer.class),anyInt());
+    verify(bufferPool,times(3)).requestBufferBlocking();
+    try {
+      recordWriter.emit(new IntValue(0));
+      recordWriter.sendEndOfSuperstep();
+      Assert.fail("Did not throw expected test Exception");
+    }
+ catch (    Exception e) {
+      recordWriter.clearBuffers();
+    }
+    verify(partitionWriter,times(4)).writeBuffer(any(Buffer.class),anyInt());
+    verify(bufferPool,times(4)).requestBufferBlocking();
+    try {
+      recordWriter.emit(new IntValue(0));
+      recordWriter.broadcastEvent(new TestTaskEvent());
+      Assert.fail("Did not throw expected test Exception");
+    }
+ catch (    Exception e) {
+      recordWriter.clearBuffers();
+    }
+    verify(partitionWriter,times(5)).writeBuffer(any(Buffer.class),anyInt());
+    verify(bufferPool,times(5)).requestBufferBlocking();
+  }
+  finally {
+    if (bufferPool != null) {
+      assertEquals(1,bufferPool.getNumberOfAvailableMemorySegments());
+      bufferPool.lazyDestroy();
+    }
+    if (buffers != null) {
+      assertEquals(1,buffers.getNumberOfAvailableMemorySegments());
+      buffers.destroy();
+    }
+  }
+}
