@@ -1,0 +1,34 @@
+{
+  try {
+    Future<Object> future=jobManager.ask(new RequestJobDetails(includeRunningJobs,includeFinishedJobs),timeout);
+    MultipleJobsDetails result=(MultipleJobsDetails)Await.result(future,timeout);
+    StringWriter writer=new StringWriter();
+    JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+    gen.writeStartObject();
+    if (includeRunningJobs && includeFinishedJobs) {
+      gen.writeArrayFieldStart("running");
+      for (      JobDetails detail : result.getRunningJobs()) {
+        generateSingleJobDetails(detail,gen);
+      }
+      gen.writeEndArray();
+      gen.writeArrayFieldStart("finished");
+      for (      JobDetails detail : result.getFinishedJobs()) {
+        generateSingleJobDetails(detail,gen);
+      }
+      gen.writeEndArray();
+    }
+ else {
+      gen.writeArrayFieldStart("jobs");
+      for (      JobDetails detail : includeRunningJobs ? result.getRunningJobs() : result.getFinishedJobs()) {
+        generateSingleJobDetails(detail,gen);
+      }
+      gen.writeEndArray();
+    }
+    gen.writeEndObject();
+    gen.close();
+    return writer.toString();
+  }
+ catch (  Exception e) {
+    throw new Exception("Failed to fetch the status overview: " + e.getMessage(),e);
+  }
+}

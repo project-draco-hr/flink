@@ -1,0 +1,25 @@
+{
+  long bytesRead=0;
+  long bytesWritten=0;
+  long recordsRead=0;
+  long recordsWritten=0;
+  for (  ExecutionVertex v : getTaskVertices()) {
+    Map<AccumulatorRegistry.Metric,Accumulator<?,?>> metrics=v.getCurrentExecutionAttempt().getFlinkAccumulators();
+    if (metrics != null) {
+      LongCounter br=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_IN);
+      LongCounter bw=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_OUT);
+      LongCounter rr=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_RECORDS_IN);
+      LongCounter rw=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_RECORDS_OUT);
+      bytesRead+=br != null ? br.getLocalValuePrimitive() : 0;
+      bytesWritten+=bw != null ? bw.getLocalValuePrimitive() : 0;
+      recordsRead+=rr != null ? rr.getLocalValuePrimitive() : 0;
+      recordsWritten+=rw != null ? rw.getLocalValuePrimitive() : 0;
+    }
+  }
+  HashMap<AccumulatorRegistry.Metric,Accumulator<?,?>> agg=new HashMap<>();
+  agg.put(AccumulatorRegistry.Metric.NUM_BYTES_IN,new LongCounter(bytesRead));
+  agg.put(AccumulatorRegistry.Metric.NUM_BYTES_OUT,new LongCounter(bytesWritten));
+  agg.put(AccumulatorRegistry.Metric.NUM_RECORDS_IN,new LongCounter(recordsRead));
+  agg.put(AccumulatorRegistry.Metric.NUM_RECORDS_OUT,new LongCounter(recordsWritten));
+  return agg;
+}

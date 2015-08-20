@@ -1,21 +1,33 @@
 {
+  StringWriter writer=new StringWriter();
+  JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+  gen.writeStartObject();
   Throwable rootException=graph.getFailureCause();
-  List<ExceptionWithContext> localExceptions=new ArrayList<>();
+  if (rootException != null) {
+    gen.writeStringField("root-exception",ExceptionUtils.stringifyException(rootException));
+  }
+  gen.writeArrayFieldStart("all-exceptions");
+  int numExceptionsSoFar=0;
   boolean truncated=false;
   for (  ExecutionVertex task : graph.getAllExecutionVertices()) {
     Throwable t=task.getFailureCause();
     if (t != null) {
-      if (localExceptions.size() >= MAX_NUMBER_EXCEPTION_TO_REPORT) {
+      if (numExceptionsSoFar >= MAX_NUMBER_EXCEPTION_TO_REPORT) {
         truncated=true;
         break;
       }
       InstanceConnectionInfo location=task.getCurrentAssignedResourceLocation();
       String locationString=location != null ? location.getFQDNHostname() + ':' + location.dataPort() : "(unassigned)";
-      localExceptions.add(new ExceptionWithContext(t,task.getTaskName(),locationString));
+      gen.writeStartObject();
+      gen.writeStringField("exception",ExceptionUtils.stringifyException(t));
+      gen.writeStringField("task",task.getSimpleName());
+      gen.writeStringField("location",locationString);
+      gen.writeEndObject();
     }
   }
-  if (localExceptions.size() == 1 && localExceptions.get(0).getException() == rootException) {
-    localExceptions=null;
-  }
-  return JsonFactory.generateExceptionsJson(rootException,localExceptions,truncated);
+  gen.writeEndArray();
+  gen.writeBooleanField("truncated",truncated);
+  gen.writeEndObject();
+  gen.close();
+  return writer.toString();
 }

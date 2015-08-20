@@ -1,0 +1,42 @@
+{
+  String vidString=params.get("vertexid");
+  if (vidString == null) {
+    throw new IllegalArgumentException("vertexId parameter missing");
+  }
+  JobVertexID vid;
+  try {
+    vid=JobVertexID.fromHexString(vidString);
+  }
+ catch (  Exception e) {
+    throw new IllegalArgumentException("Invalid JobVertexID string '" + vidString + "': "+ e.getMessage());
+  }
+  ExecutionJobVertex jobVertex=graph.getJobVertex(vid);
+  if (jobVertex == null) {
+    throw new IllegalArgumentException("No vertex with ID '" + vidString + "' exists.");
+  }
+  StringWriter writer=new StringWriter();
+  JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+  gen.writeStartObject();
+  gen.writeStringField("id",jobVertex.getJobVertexId().toString());
+  gen.writeStringField("name",jobVertex.getJobVertex().getName());
+  gen.writeArrayFieldStart("subtasks");
+  int num=0;
+  for (  ExecutionVertex vertex : jobVertex.getTaskVertices()) {
+    gen.writeStartObject();
+    gen.writeNumberField("subtask",num);
+    InstanceConnectionInfo location=vertex.getCurrentAssignedResourceLocation();
+    String locationString=location == null ? "(unassigned)" : location.getHostname();
+    gen.writeStringField("host",locationString);
+    gen.writeObjectFieldStart("timestamps");
+    long[] timestamps=vertex.getCurrentExecutionAttempt().getStateTimestamps();
+    for (    ExecutionState state : ExecutionState.values()) {
+      gen.writeNumberField(state.name(),timestamps[state.ordinal()]);
+    }
+    gen.writeEndObject();
+    gen.writeEndObject();
+  }
+  gen.writeEndArray();
+  gen.writeEndObject();
+  gen.close();
+  return writer.toString();
+}
