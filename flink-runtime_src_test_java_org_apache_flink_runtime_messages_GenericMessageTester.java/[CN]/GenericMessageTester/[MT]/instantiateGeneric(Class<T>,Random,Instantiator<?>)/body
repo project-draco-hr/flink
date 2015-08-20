@@ -1,0 +1,35 @@
+{
+  try {
+    Map<Class<?>,Instantiator<?>> extraInsts=new HashMap<>();
+    for (    Instantiator<?> inst : extraInstantiators) {
+      Class<?> type=(Class<?>)((ParameterizedType)inst.getClass().getGenericInterfaces()[0]).getActualTypeArguments()[0];
+      assertNotNull("Cannot get type for extra instantiator",type);
+      extraInsts.put(type,inst);
+    }
+    Constructor<?>[] constructors=messageClass.getConstructors();
+    Class<?> missingType=null;
+    outer:     for (    Constructor<?> constructor : constructors) {
+      Class<?>[] paramTypes=constructor.getParameterTypes();
+      Object[] params=new Object[paramTypes.length];
+      for (int i=0; i < paramTypes.length; i++) {
+        Instantiator<?> inst=extraInsts.get(paramTypes[i]);
+        if (inst == null) {
+          inst=INSTANTIATORS.get(paramTypes[i]);
+        }
+        if (inst == null) {
+          missingType=paramTypes[i];
+          continue outer;
+        }
+        params[i]=inst.instantiate(rnd);
+      }
+      return (T)constructor.newInstance(params);
+    }
+    fail("No instantiator available for type " + missingType.getCanonicalName());
+    throw new RuntimeException();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail("Could not perform reflective tests: " + e.getMessage());
+    throw new RuntimeException();
+  }
+}

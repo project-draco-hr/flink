@@ -1,0 +1,18 @@
+{
+  JobStatus status=job.getState();
+  long started=job.getStatusTimestamp(JobStatus.CREATED);
+  long finished=status.isTerminalState() ? job.getStatusTimestamp(status) : -1L;
+  int[] countsPerStatus=new int[ExecutionState.values().length];
+  long lastChanged=0;
+  int numTotalTasks=0;
+  for (  ExecutionJobVertex ejv : job.getVerticesTopologically()) {
+    ExecutionVertex[] vertices=ejv.getTaskVertices();
+    numTotalTasks+=vertices.length;
+    for (    ExecutionVertex vertex : vertices) {
+      ExecutionState state=vertex.getExecutionState();
+      countsPerStatus[state.ordinal()]++;
+      lastChanged=Math.max(lastChanged,vertex.getStateTimestamp(state));
+    }
+  }
+  return new JobDetails(job.getJobID(),job.getJobName(),started,finished,status,lastChanged,countsPerStatus,numTotalTasks);
+}
