@@ -11,12 +11,13 @@
   gen.writeNumberField("start-time",jobStartTime);
   gen.writeNumberField("end-time",jobEndTime);
   gen.writeNumberField("duration",(jobEndTime > 0 ? jobEndTime : now) - jobStartTime);
+  gen.writeNumberField("now",now);
   gen.writeObjectFieldStart("timestamps");
   for (  JobStatus status : JobStatus.values()) {
     gen.writeNumberField(status.name(),graph.getStatusTimestamp(status));
   }
   gen.writeEndObject();
-  final int[] tasksPerStatusTotal=new int[ExecutionState.values().length];
+  int[] jobVerticesPerState=new int[ExecutionState.values().length];
   gen.writeArrayFieldStart("vertices");
   for (  ExecutionJobVertex ejv : graph.getVerticesTopologically()) {
     int[] tasksPerState=new int[ExecutionState.values().length];
@@ -26,7 +27,6 @@
     for (    ExecutionVertex vertex : ejv.getTaskVertices()) {
       final ExecutionState state=vertex.getExecutionState();
       tasksPerState[state.ordinal()]++;
-      tasksPerStatusTotal[state.ordinal()]++;
       long started=vertex.getStateTimestamp(ExecutionState.DEPLOYING);
       if (started > 0) {
         startTime=Math.min(startTime,started);
@@ -49,6 +49,8 @@
       endTime=-1L;
       duration=-1L;
     }
+    ExecutionState jobVertexState=ExecutionJobVertex.getAggregateJobVertexState(tasksPerState,ejv.getParallelism());
+    jobVerticesPerState[jobVertexState.ordinal()]++;
     Map<AccumulatorRegistry.Metric,Accumulator<?,?>> metrics=ejv.getAggregatedMetricAccumulators();
     LongCounter readBytes=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_IN);
     LongCounter writeBytes=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_OUT);
@@ -58,6 +60,7 @@
     gen.writeStringField("id",ejv.getJobVertexId().toString());
     gen.writeStringField("name",ejv.getJobVertex().getName());
     gen.writeNumberField("parallelism",ejv.getParallelism());
+    gen.writeStringField("status",jobVertexState.name());
     gen.writeNumberField("start-time",startTime);
     gen.writeNumberField("end-time",endTime);
     gen.writeNumberField("duration",duration);
@@ -75,6 +78,13 @@
     gen.writeEndObject();
   }
   gen.writeEndArray();
+  gen.writeObjectFieldStart("status-counts");
+  for (  ExecutionState state : ExecutionState.values()) {
+    gen.writeNumberField(state.name(),jobVerticesPerState[state.ordinal()]);
+  }
+  gen.writeEndObject();
+  gen.writeFieldName("plan");
+  gen.writeRawValue(graph.getJsonPlan());
   gen.writeEndObject();
   gen.close();
   return writer.toString();
