@@ -1,0 +1,63 @@
+{
+  if (transportNodes == null) {
+    Settings settings=ImmutableSettings.settingsBuilder().put(userConfig).put("http.enabled",false).build();
+    node=nodeBuilder().settings(settings).client(true).data(false).node();
+    client=node.client();
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Created Elasticsearch Client {} from embedded Node",client);
+    }
+  }
+ else {
+    Settings settings=ImmutableSettings.settingsBuilder().put(userConfig).build();
+    TransportClient transportClient=new TransportClient(settings);
+    for (    TransportAddress transport : transportNodes) {
+      transportClient.addTransportAddress(transport);
+    }
+    ImmutableList<DiscoveryNode> nodes=transportClient.connectedNodes();
+    if (nodes.isEmpty()) {
+      throw new RuntimeException("Client is not connected to any Elasticsearch nodes!");
+    }
+ else {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Connected to nodes: " + nodes.toString());
+      }
+    }
+    client=transportClient;
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Created Elasticsearch TransportClient {}",client);
+    }
+  }
+  BulkProcessor.Builder bulkProcessorBuilder=BulkProcessor.builder(client,new BulkProcessor.Listener(){
+    @Override public void beforeBulk(    long executionId,    BulkRequest request){
+    }
+    @Override public void afterBulk(    long executionId,    BulkRequest request,    BulkResponse response){
+      if (response.hasFailures()) {
+        for (        BulkItemResponse itemResp : response.getItems()) {
+          if (itemResp.isFailed()) {
+            LOG.error("Failed to index document in Elasticsearch: " + itemResp.getFailureMessage());
+            failureThrowable.compareAndSet(null,new RuntimeException(itemResp.getFailureMessage()));
+          }
+        }
+        hasFailure.set(true);
+      }
+    }
+    @Override public void afterBulk(    long executionId,    BulkRequest request,    Throwable failure){
+      LOG.error(failure.getMessage());
+      failureThrowable.compareAndSet(null,failure);
+      hasFailure.set(true);
+    }
+  }
+);
+  bulkProcessorBuilder.setConcurrentRequests(0);
+  ParameterTool params=ParameterTool.fromMap(userConfig);
+  if (params.has(CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS)) {
+    bulkProcessorBuilder.setBulkActions(params.getInt(CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS));
+  }
+  if (params.has(CONFIG_KEY_BULK_FLUSH_MAX_SIZE_MB)) {
+    bulkProcessorBuilder.setBulkSize(new ByteSizeValue(params.getInt(CONFIG_KEY_BULK_FLUSH_MAX_SIZE_MB),ByteSizeUnit.MB));
+  }
+  if (params.has(CONFIG_KEY_BULK_FLUSH_INTERVAL_MS)) {
+    bulkProcessorBuilder.setFlushInterval(TimeValue.timeValueMillis(params.getInt(CONFIG_KEY_BULK_FLUSH_INTERVAL_MS)));
+  }
+  bulkProcessor=bulkProcessorBuilder.build();
+}

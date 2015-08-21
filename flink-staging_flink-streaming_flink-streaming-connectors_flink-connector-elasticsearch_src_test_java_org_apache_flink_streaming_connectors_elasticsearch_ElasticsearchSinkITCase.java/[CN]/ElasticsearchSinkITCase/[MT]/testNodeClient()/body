@@ -1,0 +1,18 @@
+{
+  File dataDir=tempFolder.newFolder();
+  Node node=nodeBuilder().settings(ImmutableSettings.settingsBuilder().put("http.enabled",false).put("path.data",dataDir.getAbsolutePath())).clusterName("my-node-client-cluster").local(true).node();
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStreamSource<Tuple2<Integer,String>> source=env.addSource(new TestSourceFunction());
+  Map<String,String> config=Maps.newHashMap();
+  config.put(ElasticsearchSink.CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS,"1");
+  config.put("cluster.name","my-node-client-cluster");
+  config.put("node.local","true");
+  source.addSink(new ElasticsearchSink<>(config,new TestIndexRequestBuilder()));
+  env.execute("Elasticsearch Node Client Test");
+  Client client=node.client();
+  for (int i=0; i < NUM_ELEMENTS; i++) {
+    GetResponse response=client.get(new GetRequest("my-index","my-type",Integer.toString(i))).actionGet();
+    Assert.assertEquals("message #" + i,response.getSource().get("data"));
+  }
+  node.close();
+}
