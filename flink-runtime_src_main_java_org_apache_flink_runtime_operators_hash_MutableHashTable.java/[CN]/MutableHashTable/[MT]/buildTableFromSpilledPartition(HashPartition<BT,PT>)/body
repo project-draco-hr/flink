@@ -7,8 +7,8 @@
   if (totalBuffersAvailable != this.totalNumBuffers - this.numWriteBehindBuffers) {
     throw new RuntimeException("Hash Join bug in memory management: Memory buffers leaked.");
   }
-  long numBuckets=(p.getBuildSideRecordCount() * RECORD_TABLE_BYTES) / (HASH_BUCKET_SIZE - BUCKET_HEADER_LENGTH) + 1;
-  final long totalBuffersNeeded=(numBuckets * 2) / (this.bucketsPerSegmentMask + 1) + p.getBuildSideBlockCount() + 1;
+  long numBuckets=p.getBuildSideRecordCount() / NUM_ENTRIES_PER_BUCKET + 1;
+  final long totalBuffersNeeded=2 * (numBuckets / (this.bucketsPerSegmentMask + 1)) + p.getBuildSideBlockCount() + 2;
   if (totalBuffersNeeded < totalBuffersAvailable) {
     ensureNumBuffersReturned(p.getBuildSideBlockCount());
     final BulkBlockChannelReader reader=this.ioManager.createBulkBlockChannelReader(p.getBuildSideChannel().getChannelID(),this.availableMemory,p.getBuildSideBlockCount());
@@ -31,7 +31,7 @@
       final int bucketArrayPos=posHashCode >> this.bucketsPerSegmentBits;
       final int bucketInSegmentPos=(posHashCode & this.bucketsPerSegmentMask) << NUM_INTRA_BUCKET_BITS;
       final MemorySegment bucket=this.buckets[bucketArrayPos];
-      insertBucketEntry(newPart,bucket,bucketInSegmentPos,hashCode,pointer);
+      insertBucketEntry(newPart,bucket,bucketInSegmentPos,hashCode,pointer,false);
     }
   }
  else {
@@ -52,6 +52,12 @@
     while ((rec=inIter.next(rec)) != null) {
       final int hashCode=hash(btComparator.hash(rec),nextRecursionLevel);
       insertIntoTable(rec,hashCode);
+    }
+    if (keepBuildSidePartitions && p.recursionLevel == 0) {
+      inReader.close();
+    }
+ else {
+      inReader.closeAndDelete();
     }
     for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
       HashPartition<BT,PT> part=this.partitionsBeingBuilt.get(i);
