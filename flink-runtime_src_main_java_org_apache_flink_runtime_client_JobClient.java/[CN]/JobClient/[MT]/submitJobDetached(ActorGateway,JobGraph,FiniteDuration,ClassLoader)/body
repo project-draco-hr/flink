@@ -1,0 +1,37 @@
+{
+  checkNotNull(jobManagerGateway,"The jobManagerGateway must not be null.");
+  checkNotNull(jobGraph,"The jobGraph must not be null.");
+  checkNotNull(timeout,"The timeout must not be null.");
+  Object result;
+  try {
+    Future<Object> future=jobManagerGateway.ask(new JobManagerMessages.SubmitJob(jobGraph,false),timeout);
+    result=Await.result(future,timeout);
+  }
+ catch (  TimeoutException e) {
+    throw new JobTimeoutException(jobGraph.getJobID(),"JobManager did not respond within " + timeout.toString(),e);
+  }
+catch (  Throwable t) {
+    throw new JobExecutionException(jobGraph.getJobID(),"Failed to send job to JobManager: " + t.getMessage(),t.getCause());
+  }
+  if (result instanceof JobManagerMessages.JobSubmitSuccess) {
+    JobID respondedID=((JobManagerMessages.JobSubmitSuccess)result).jobId();
+    if (!respondedID.equals(jobGraph.getJobID())) {
+      throw new JobExecutionException(jobGraph.getJobID(),"JobManager responded for wrong Job. This Job: " + jobGraph.getJobID() + ", response: "+ respondedID);
+    }
+  }
+ else   if (result instanceof JobManagerMessages.JobResultFailure) {
+    try {
+      SerializedThrowable t=((JobManagerMessages.JobResultFailure)result).cause();
+      throw t.deserializeError(userCodeClassloader);
+    }
+ catch (    JobExecutionException e) {
+      throw e;
+    }
+catch (    Throwable t) {
+      throw new JobExecutionException(jobGraph.getJobID(),"JobSubmission failed: " + t.getMessage(),t);
+    }
+  }
+ else {
+    throw new JobExecutionException(jobGraph.getJobID(),"Unexpected response from JobManager: " + result);
+  }
+}

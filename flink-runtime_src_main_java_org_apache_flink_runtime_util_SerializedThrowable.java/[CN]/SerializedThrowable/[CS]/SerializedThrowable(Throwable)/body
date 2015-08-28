@@ -1,25 +1,32 @@
 {
-  Preconditions.checkNotNull(error,"The exception to serialize has to be set");
-  this.cachedError=error;
-  byte[] serializedError;
-  try {
-    serializedError=InstantiationUtil.serializeObject(error);
-  }
- catch (  Throwable t) {
+  super(getMessageOrError(exception));
+  if (!(exception instanceof SerializedThrowable)) {
+    this.cachedException=new WeakReference<Throwable>(exception);
+    this.originalErrorClassName=exception.getClass().getName();
+    this.fullStingifiedStackTrace=ExceptionUtils.stringifyException(exception);
+    this.placeholder=new Exception("Serialized representation of " + originalErrorClassName + ": "+ getMessage());
+    this.placeholder.setStackTrace(exception.getStackTrace());
+    initCause(this.placeholder);
+    byte[] serialized;
     try {
-      this.cachedError=new Exception(ExceptionUtils.stringifyException(error));
-      serializedError=InstantiationUtil.serializeObject(this.cachedError);
+      serialized=InstantiationUtil.serializeObject(exception);
     }
- catch (    Throwable tt) {
+ catch (    Throwable t) {
       try {
-        this.cachedError=new Exception("Cause is a '" + error.getClass().getName() + "' (failed to serialize or stringify)");
-        serializedError=InstantiationUtil.serializeObject(this.cachedError);
+        serialized=InstantiationUtil.serializeObject(placeholder);
       }
- catch (      Throwable ttt) {
-        this.cachedError=null;
-        serializedError=null;
+ catch (      IOException e) {
+        throw new RuntimeException(e.getMessage(),e);
       }
     }
+    this.serializedException=serialized;
   }
-  this.serializedError=serializedError;
+ else {
+    SerializedThrowable other=(SerializedThrowable)exception;
+    this.serializedException=other.serializedException;
+    this.originalErrorClassName=other.originalErrorClassName;
+    this.fullStingifiedStackTrace=other.fullStingifiedStackTrace;
+    this.placeholder=other.placeholder;
+    this.cachedException=other.cachedException;
+  }
 }
