@@ -1,0 +1,41 @@
+{
+  if (memoryType == null) {
+    throw new NullPointerException();
+  }
+  if (memorySize <= 0) {
+    throw new IllegalArgumentException("Size of total memory must be positive.");
+  }
+  if (pageSize < MIN_PAGE_SIZE) {
+    throw new IllegalArgumentException("The page size must be at least " + MIN_PAGE_SIZE + " bytes.");
+  }
+  if (!MathUtils.isPowerOf2(pageSize)) {
+    throw new IllegalArgumentException("The given page size is not a power of two.");
+  }
+  this.memoryType=memoryType;
+  this.memorySize=memorySize;
+  this.numberOfSlots=numberOfSlots;
+  this.pageSize=pageSize;
+  this.roundingMask=~((long)(pageSize - 1));
+  final long numPagesLong=memorySize / pageSize;
+  if (numPagesLong > Integer.MAX_VALUE) {
+    throw new IllegalArgumentException("The given number of memory bytes (" + memorySize + ") corresponds to more than MAX_INT pages.");
+  }
+  this.totalNumPages=(int)numPagesLong;
+  if (this.totalNumPages < 1) {
+    throw new IllegalArgumentException("The given amount of memory amounted to less than one page.");
+  }
+  this.allocatedSegments=new HashMap<Object,Set<MemorySegment>>();
+  this.isPreAllocated=preAllocateMemory;
+  this.numNonAllocatedPages=preAllocateMemory ? 0 : this.totalNumPages;
+  final int memToAllocate=preAllocateMemory ? this.totalNumPages : 0;
+switch (memoryType) {
+case HEAP:
+    this.memoryPool=new HeapMemoryPool(memToAllocate,pageSize);
+  break;
+case OFF_HEAP:
+this.memoryPool=new HybridOffHeapMemoryPool(memToAllocate,pageSize);
+break;
+default :
+throw new IllegalArgumentException("unrecognized memory type: " + memoryType);
+}
+}

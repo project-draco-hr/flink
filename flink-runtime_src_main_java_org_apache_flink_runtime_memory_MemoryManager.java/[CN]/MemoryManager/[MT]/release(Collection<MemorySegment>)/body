@@ -1,0 +1,52 @@
+{
+  if (segments == null) {
+    return;
+  }
+synchronized (lock) {
+    if (isShutDown) {
+      throw new IllegalStateException("Memory manager has been shut down.");
+    }
+    boolean successfullyReleased=false;
+    do {
+      final Iterator<MemorySegment> segmentsIterator=segments.iterator();
+      Object lastOwner=null;
+      Set<MemorySegment> segsForOwner=null;
+      try {
+        while (segmentsIterator.hasNext()) {
+          final MemorySegment seg=segmentsIterator.next();
+          if (seg == null || seg.isFreed()) {
+            continue;
+          }
+          final Object owner=seg.getOwner();
+          try {
+            if (lastOwner != owner) {
+              lastOwner=owner;
+              segsForOwner=this.allocatedSegments.get(owner);
+            }
+            if (segsForOwner != null) {
+              segsForOwner.remove(seg);
+              if (segsForOwner.isEmpty()) {
+                this.allocatedSegments.remove(owner);
+              }
+            }
+            if (isPreAllocated) {
+              memoryPool.returnSegmentToPool(seg);
+            }
+ else {
+              seg.free();
+              numNonAllocatedPages++;
+            }
+          }
+ catch (          Throwable t) {
+            throw new RuntimeException("Error removing book-keeping reference to allocated memory segment.",t);
+          }
+        }
+        segments.clear();
+        successfullyReleased=true;
+      }
+ catch (      ConcurrentModificationException e) {
+      }
+    }
+ while (!successfullyReleased);
+  }
+}

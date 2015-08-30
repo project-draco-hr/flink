@@ -1,0 +1,36 @@
+{
+  if (owner == null) {
+    throw new IllegalArgumentException("The memory owner must not be null.");
+  }
+  if (target instanceof ArrayList) {
+    ((ArrayList<MemorySegment>)target).ensureCapacity(numPages);
+  }
+synchronized (lock) {
+    if (isShutDown) {
+      throw new IllegalStateException("Memory manager has been shut down.");
+    }
+    if (numPages > (memoryPool.getNumberOfAvailableMemorySegments() + numNonAllocatedPages)) {
+      throw new MemoryAllocationException("Could not allocate " + numPages + " pages. Only "+ (memoryPool.getNumberOfAvailableMemorySegments() + numNonAllocatedPages)+ " pages are remaining.");
+    }
+    Set<MemorySegment> segmentsForOwner=allocatedSegments.get(owner);
+    if (segmentsForOwner == null) {
+      segmentsForOwner=new HashSet<MemorySegment>(numPages);
+      allocatedSegments.put(owner,segmentsForOwner);
+    }
+    if (isPreAllocated) {
+      for (int i=numPages; i > 0; i--) {
+        MemorySegment segment=memoryPool.requestSegmentFromPool(owner);
+        target.add(segment);
+        segmentsForOwner.add(segment);
+      }
+    }
+ else {
+      for (int i=numPages; i > 0; i--) {
+        MemorySegment segment=memoryPool.allocateNewSegment(owner);
+        target.add(segment);
+        segmentsForOwner.add(segment);
+      }
+      numNonAllocatedPages-=numPages;
+    }
+  }
+}

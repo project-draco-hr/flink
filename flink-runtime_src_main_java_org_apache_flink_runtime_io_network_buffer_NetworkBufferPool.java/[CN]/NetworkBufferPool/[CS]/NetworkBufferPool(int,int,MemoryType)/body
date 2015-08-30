@@ -1,0 +1,39 @@
+{
+  checkNotNull(memoryType);
+  this.totalNumberOfMemorySegments=numberOfSegmentsToAllocate;
+  this.memorySegmentSize=segmentSize;
+  final long sizeInLong=(long)segmentSize;
+  try {
+    this.availableMemorySegments=new ArrayBlockingQueue<MemorySegment>(numberOfSegmentsToAllocate);
+  }
+ catch (  OutOfMemoryError err) {
+    throw new OutOfMemoryError("Could not allocate buffer queue of length " + numberOfSegmentsToAllocate + " - "+ err.getMessage());
+  }
+  try {
+    if (memoryType == MemoryType.HEAP) {
+      for (int i=0; i < numberOfSegmentsToAllocate; i++) {
+        byte[] memory=new byte[segmentSize];
+        availableMemorySegments.add(MemorySegmentFactory.wrapPooledHeapMemory(memory,null));
+      }
+    }
+ else     if (memoryType == MemoryType.OFF_HEAP) {
+      for (int i=0; i < numberOfSegmentsToAllocate; i++) {
+        ByteBuffer memory=ByteBuffer.allocateDirect(segmentSize);
+        availableMemorySegments.add(MemorySegmentFactory.wrapPooledOffHeapMemory(memory,null));
+      }
+    }
+ else {
+      throw new IllegalArgumentException("Unknown memory type " + memoryType);
+    }
+  }
+ catch (  OutOfMemoryError err) {
+    int allocated=availableMemorySegments.size();
+    availableMemorySegments.clear();
+    long requiredMb=(sizeInLong * numberOfSegmentsToAllocate) >> 20;
+    long allocatedMb=(sizeInLong * allocated) >> 20;
+    long missingMb=requiredMb - allocatedMb;
+    throw new OutOfMemoryError("Could not allocate enough memory segments for NetworkBufferPool " + "(required (Mb): " + requiredMb + ", allocated (Mb): "+ allocatedMb+ ", missing (Mb): "+ missingMb+ "). Cause: "+ err.getMessage());
+  }
+  long allocatedMb=(sizeInLong * availableMemorySegments.size()) >> 20;
+  LOG.info("Allocated {} MB for network buffer pool (number of memory segments: {}, bytes per segment: {}).",allocatedMb,availableMemorySegments.size(),segmentSize);
+}

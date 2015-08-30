@@ -1,0 +1,39 @@
+{
+  if (len < 32) {
+    while (len >= 8) {
+      long tmp=this.getLong(offset1);
+      this.putLong(offset1,seg2.getLong(offset2));
+      seg2.putLong(offset2,tmp);
+      offset1+=8;
+      offset2+=8;
+      len-=8;
+    }
+    while (len > 0) {
+      byte tmp=this.get(offset1);
+      this.put(offset1,seg2.get(offset2));
+      seg2.put(offset2,tmp);
+      offset1++;
+      offset2++;
+      len--;
+    }
+  }
+ else   if ((offset1 | offset2 | len| (offset1 + len)| (offset2 + len)| (this.size - (offset1 + len))| (seg2.size() - (offset2 + len))) < 0 || len > tempBuffer.length) {
+    throw new IndexOutOfBoundsException();
+  }
+ else {
+    final long thisPos=this.address + offset1;
+    final long otherPos=seg2.address + offset2;
+    if (thisPos <= this.addressLimit - len && otherPos <= seg2.addressLimit - len) {
+      final long arrayAddress=BYTE_ARRAY_BASE_OFFSET;
+      UNSAFE.copyMemory(this.heapMemory,thisPos,tempBuffer,arrayAddress,len);
+      UNSAFE.copyMemory(seg2.heapMemory,otherPos,this.heapMemory,thisPos,len);
+      UNSAFE.copyMemory(tempBuffer,arrayAddress,seg2.heapMemory,otherPos,len);
+    }
+ else     if (this.address <= 0 || seg2.address <= 0) {
+      throw new IllegalStateException("Memory segment has been freed.");
+    }
+ else {
+      throw new IndexOutOfBoundsException();
+    }
+  }
+}
