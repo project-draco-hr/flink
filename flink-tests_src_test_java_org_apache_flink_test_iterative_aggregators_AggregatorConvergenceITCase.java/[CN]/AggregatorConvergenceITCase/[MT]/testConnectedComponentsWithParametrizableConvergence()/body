@@ -1,0 +1,23 @@
+{
+  try {
+    List<Tuple2<Long,Long>> verticesInput=Arrays.asList(new Tuple2<Long,Long>(1l,1l),new Tuple2<Long,Long>(2l,2l),new Tuple2<Long,Long>(3l,3l),new Tuple2<Long,Long>(4l,4l),new Tuple2<Long,Long>(5l,5l),new Tuple2<Long,Long>(6l,6l),new Tuple2<Long,Long>(7l,7l),new Tuple2<Long,Long>(8l,8l),new Tuple2<Long,Long>(9l,9l));
+    List<Tuple2<Long,Long>> edgesInput=Arrays.asList(new Tuple2<Long,Long>(1l,2l),new Tuple2<Long,Long>(1l,3l),new Tuple2<Long,Long>(2l,3l),new Tuple2<Long,Long>(2l,4l),new Tuple2<Long,Long>(2l,1l),new Tuple2<Long,Long>(3l,1l),new Tuple2<Long,Long>(3l,2l),new Tuple2<Long,Long>(4l,2l),new Tuple2<Long,Long>(4l,6l),new Tuple2<Long,Long>(5l,6l),new Tuple2<Long,Long>(6l,4l),new Tuple2<Long,Long>(6l,5l),new Tuple2<Long,Long>(7l,8l),new Tuple2<Long,Long>(7l,9l),new Tuple2<Long,Long>(8l,7l),new Tuple2<Long,Long>(8l,9l),new Tuple2<Long,Long>(9l,7l),new Tuple2<Long,Long>(9l,8l));
+    final String UPDATED_ELEMENTS="updated.elements.aggr";
+    final long convergence_threshold=3;
+    final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+    DataSet<Tuple2<Long,Long>> initialSolutionSet=env.fromCollection(verticesInput);
+    DataSet<Tuple2<Long,Long>> edges=env.fromCollection(edgesInput);
+    IterativeDataSet<Tuple2<Long,Long>> iteration=initialSolutionSet.iterate(10);
+    iteration.registerAggregationConvergenceCriterion(UPDATED_ELEMENTS,new LongSumAggregator(),new UpdatedElementsConvergenceCriterion(convergence_threshold));
+    DataSet<Tuple2<Long,Long>> verticesWithNewComponents=iteration.join(edges).where(0).equalTo(0).with(new NeighborWithComponentIDJoin()).groupBy(0).min(1);
+    DataSet<Tuple2<Long,Long>> updatedComponentId=verticesWithNewComponents.join(iteration).where(0).equalTo(0).flatMap(new MinimumIdFilter(UPDATED_ELEMENTS));
+    List<Tuple2<Long,Long>> result=iteration.closeWith(updatedComponentId).collect();
+    Collections.sort(result,new JavaProgramTestBase.TupleComparator<Tuple2<Long,Long>>());
+    List<Tuple2<Long,Long>> expectedResult=Arrays.asList(new Tuple2<Long,Long>(1L,1L),new Tuple2<Long,Long>(2L,1L),new Tuple2<Long,Long>(3L,1L),new Tuple2<Long,Long>(4L,1L),new Tuple2<Long,Long>(5L,2L),new Tuple2<Long,Long>(6L,1L),new Tuple2<Long,Long>(7L,7L),new Tuple2<Long,Long>(8L,7L),new Tuple2<Long,Long>(9L,7L));
+    assertEquals(expectedResult,result);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
