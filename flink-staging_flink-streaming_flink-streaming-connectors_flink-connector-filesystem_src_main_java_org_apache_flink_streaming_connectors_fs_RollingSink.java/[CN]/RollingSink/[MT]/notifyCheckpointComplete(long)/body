@@ -1,0 +1,22 @@
+{
+synchronized (bucketState.pendingFilesPerCheckpoint) {
+    Set<Long> pastCheckpointIds=bucketState.pendingFilesPerCheckpoint.keySet();
+    Set<Long> checkpointsToRemove=Sets.newHashSet();
+    for (    Long pastCheckpointId : pastCheckpointIds) {
+      if (pastCheckpointId <= checkpointId) {
+        LOG.debug("Moving pending files to final location for checkpoint {}",pastCheckpointId);
+        for (        String filename : bucketState.pendingFilesPerCheckpoint.get(pastCheckpointId)) {
+          Path finalPath=new Path(filename);
+          Path pendingPath=new Path(finalPath.getParent(),pendingPrefix + finalPath.getName()).suffix(pendingSuffix);
+          FileSystem fs=pendingPath.getFileSystem(new org.apache.hadoop.conf.Configuration());
+          fs.rename(pendingPath,finalPath);
+          LOG.debug("Moving pending file {} to final location after complete checkpoint {}.",pendingPath,pastCheckpointId);
+        }
+        checkpointsToRemove.add(pastCheckpointId);
+      }
+    }
+    for (    Long toRemove : checkpointsToRemove) {
+      bucketState.pendingFilesPerCheckpoint.remove(toRemove);
+    }
+  }
+}

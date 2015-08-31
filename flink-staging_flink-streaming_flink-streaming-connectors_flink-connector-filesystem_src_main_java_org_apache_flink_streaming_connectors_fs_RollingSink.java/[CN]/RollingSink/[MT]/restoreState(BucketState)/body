@@ -1,0 +1,98 @@
+{
+  bucketState=state;
+  bucketState.pendingFiles.clear();
+  FileSystem fs=null;
+  try {
+    fs=new Path(basePath).getFileSystem(new org.apache.hadoop.conf.Configuration());
+  }
+ catch (  IOException e) {
+    LOG.error("Error while creating FileSystem in checkpoint restore.",e);
+    throw new RuntimeException("Error while creating FileSystem in checkpoint restore.",e);
+  }
+  if (bucketState.currentFile != null) {
+    Path partPath=new Path(bucketState.currentFile);
+    try {
+      Path partPendingPath=new Path(partPath.getParent(),pendingPrefix + partPath.getName()).suffix(pendingSuffix);
+      Path partInProgressPath=new Path(partPath.getParent(),inProgressPrefix + partPath.getName()).suffix(inProgressSuffix);
+      if (fs.exists(partPendingPath)) {
+        LOG.debug("In-progress file {} has been moved to pending after checkpoint, moving to final location.",partPath);
+        fs.rename(partPendingPath,partPath);
+      }
+ else       if (fs.exists(partInProgressPath)) {
+        LOG.debug("In-progress file {} is still in-progress, moving to final location.",partPath);
+        fs.rename(partInProgressPath,partPath);
+      }
+ else {
+        LOG.error("In-Progress file {} was neither moved to pending nor is still in progress.",bucketState.currentFile);
+        throw new RuntimeException("In-Progress file " + bucketState.currentFile + " "+ "was neither moved to pending nor is still in progress.");
+      }
+      refTruncate=reflectTruncate(fs);
+      if (refTruncate != null) {
+        LOG.debug("Truncating {} to valid length {}",partPath,bucketState.currentFileValidLength);
+        refTruncate.invoke(fs,partPath,bucketState.currentFileValidLength);
+      }
+ else {
+        LOG.debug("Writing valid-length file for {} to specify valid length {}",partPath,bucketState.currentFileValidLength);
+        Path validLengthFilePath=new Path(partPath.getParent(),validLengthPrefix + partPath.getName()).suffix(validLengthSuffix);
+        FSDataOutputStream lengthFileOut=fs.create(validLengthFilePath);
+        lengthFileOut.writeUTF(Long.toString(bucketState.currentFileValidLength));
+        lengthFileOut.close();
+      }
+      bucketState.currentFile=null;
+      bucketState.currentFileValidLength=-1;
+    }
+ catch (    IOException e) {
+      LOG.error("Error while restoring RollingSink state.",e);
+      throw new RuntimeException("Error while restoring RollingSink state.",e);
+    }
+catch (    InvocationTargetException|IllegalAccessException e) {
+      LOG.error("Cound not invoke truncate.",e);
+      throw new RuntimeException("Could not invoke truncate.",e);
+    }
+  }
+  LOG.debug("Clearing pending/in-progress files.");
+  Set<Long> pastCheckpointIds=bucketState.pendingFilesPerCheckpoint.keySet();
+  LOG.debug("Moving pending files to final location on restore.");
+  for (  Long pastCheckpointId : pastCheckpointIds) {
+    for (    String filename : bucketState.pendingFilesPerCheckpoint.get(pastCheckpointId)) {
+      Path finalPath=new Path(filename);
+      Path pendingPath=new Path(finalPath.getParent(),pendingPrefix + finalPath.getName()).suffix(pendingSuffix);
+      try {
+        if (fs.exists(pendingPath)) {
+          LOG.debug("Moving pending file {} to final location after complete checkpoint {}.",pendingPath,pastCheckpointId);
+          fs.rename(pendingPath,finalPath);
+        }
+      }
+ catch (      IOException e) {
+        LOG.error("Error while renaming pending file {} to final path {}: {}",pendingPath,finalPath,e);
+        throw new RuntimeException("Error while renaming pending file " + pendingPath + " to final path "+ finalPath,e);
+      }
+    }
+  }
+  bucketState.pendingFiles.clear();
+synchronized (bucketState.pendingFilesPerCheckpoint) {
+    bucketState.pendingFilesPerCheckpoint.clear();
+  }
+  int subtaskIndex=getRuntimeContext().getIndexOfThisSubtask();
+  try {
+    RemoteIterator<LocatedFileStatus> bucketFiles=fs.listFiles(new Path(basePath),true);
+    while (bucketFiles.hasNext()) {
+      LocatedFileStatus file=bucketFiles.next();
+      if (file.getPath().toString().endsWith(pendingSuffix)) {
+        if (file.getPath().toString().contains(partPrefix + "-" + subtaskIndex)) {
+          fs.delete(file.getPath(),true);
+        }
+      }
+      if (file.getPath().toString().endsWith(inProgressSuffix)) {
+        if (file.getPath().toString().contains(partPrefix + "-" + subtaskIndex)) {
+          LOG.debug("Deleting in-progress file {}",file.getPath().toString());
+          fs.delete(file.getPath(),true);
+        }
+      }
+    }
+  }
+ catch (  IOException e) {
+    LOG.error("Error while deleting old pending files: {}",e);
+    throw new RuntimeException("Error while deleting old pending files.",e);
+  }
+}

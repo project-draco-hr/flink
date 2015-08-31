@@ -1,0 +1,35 @@
+{
+  super.open(parameters);
+  subtaskIndex=getRuntimeContext().getIndexOfThisSubtask();
+  partCounter=0;
+  this.writer=writerTemplate.duplicate();
+  if (bucketState == null) {
+    bucketState=new BucketState();
+  }
+  FileSystem fs=new Path(basePath).getFileSystem(new org.apache.hadoop.conf.Configuration());
+  refTruncate=reflectTruncate(fs);
+  try {
+    if (fs.exists(new Path(basePath)) && cleanupOnOpen) {
+      RemoteIterator<LocatedFileStatus> bucketFiles=fs.listFiles(new Path(basePath),true);
+      while (bucketFiles.hasNext()) {
+        LocatedFileStatus file=bucketFiles.next();
+        if (file.getPath().toString().endsWith(pendingSuffix)) {
+          if (file.getPath().toString().contains(partPrefix + "-" + subtaskIndex)) {
+            LOG.debug("Deleting leftover pending file {}",file.getPath().toString());
+            fs.delete(file.getPath(),true);
+          }
+        }
+        if (file.getPath().toString().endsWith(inProgressSuffix)) {
+          if (file.getPath().toString().contains(partPrefix + "-" + subtaskIndex)) {
+            LOG.debug("Deleting leftover in-progress file {}",file.getPath().toString());
+            fs.delete(file.getPath(),true);
+          }
+        }
+      }
+    }
+  }
+ catch (  IOException e) {
+    LOG.error("Error while deleting leftover pending/in-progress files: {}",e);
+    throw new RuntimeException("Error while deleting leftover pending/in-progress files.",e);
+  }
+}

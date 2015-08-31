@@ -1,0 +1,39 @@
+{
+  Method m=null;
+  if (fs != null) {
+    Class<?> fsClass=fs.getClass();
+    try {
+      m=fsClass.getMethod("truncate",Path.class,long.class);
+    }
+ catch (    NoSuchMethodException ex) {
+      LOG.debug("Truncate not found. Will write a file with suffix '{}' " + " and prefix '{}' to specify how many bytes in a bucket are valid.",validLengthSuffix,validLengthPrefix);
+      return null;
+    }
+    FSDataOutputStream outputStream;
+    Path testPath=new Path(UUID.randomUUID().toString());
+    try {
+      outputStream=fs.create(testPath);
+      outputStream.writeUTF("hello");
+      outputStream.close();
+    }
+ catch (    IOException e) {
+      LOG.error("Could not create file for checking if truncate works.",e);
+      throw new RuntimeException("Could not create file for checking if truncate works.",e);
+    }
+    try {
+      m.invoke(fs,testPath,2);
+    }
+ catch (    IllegalAccessException|InvocationTargetException e) {
+      LOG.debug("Truncate is not supported.",e);
+      m=null;
+    }
+    try {
+      fs.delete(testPath,false);
+    }
+ catch (    IOException e) {
+      LOG.error("Could not delete truncate test file.",e);
+      throw new RuntimeException("Could not delete truncate test file.",e);
+    }
+  }
+  return m;
+}
