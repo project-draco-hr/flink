@@ -1,0 +1,47 @@
+{
+  EnvironmentInformation.logEnvironmentInfo(LOG,"YARN TaskManager",args);
+  EnvironmentInformation.checkJavaVersion();
+  org.apache.flink.runtime.util.SignalHandler.register(LOG);
+  final Configuration configuration;
+  final StreamingMode mode;
+  try {
+    scala.Tuple2<Configuration,StreamingMode> res=TaskManager.parseArgsAndLoadConfig(args);
+    configuration=res._1();
+    mode=res._2();
+  }
+ catch (  Throwable t) {
+    LOG.error(t.getMessage(),t);
+    System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
+    return;
+  }
+  final Map<String,String> envs=System.getenv();
+  final String yarnClientUsername=envs.get(FlinkYarnClient.ENV_CLIENT_USERNAME);
+  final String localDirs=envs.get(Environment.LOCAL_DIRS.key());
+  String flinkTempDirs=configuration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,null);
+  if (flinkTempDirs == null) {
+    LOG.info("Setting directories for temporary file " + localDirs);
+    configuration.setString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,localDirs);
+  }
+ else {
+    LOG.info("Overriding YARN's temporary file directories with those " + "specified in the Flink config: " + flinkTempDirs);
+  }
+  LOG.info("YARN daemon runs as '" + UserGroupInformation.getCurrentUser().getShortUserName() + "' setting user to execute Flink TaskManager to '"+ yarnClientUsername+ "'");
+  configuration.setBoolean(ConfigConstants.AKKA_JVM_EXIT_ON_FATAL_ERROR,true);
+  UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
+  for (  Token<? extends TokenIdentifier> toks : UserGroupInformation.getCurrentUser().getTokens()) {
+    ugi.addToken(toks);
+  }
+  ugi.doAs(new PrivilegedAction<Object>(){
+    @Override public Object run(){
+      try {
+        TaskManager.selectNetworkInterfaceAndRunTaskManager(configuration,mode,taskManager);
+      }
+ catch (      Throwable t) {
+        LOG.error("Error while starting the TaskManager",t);
+        System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
+      }
+      return null;
+    }
+  }
+);
+}

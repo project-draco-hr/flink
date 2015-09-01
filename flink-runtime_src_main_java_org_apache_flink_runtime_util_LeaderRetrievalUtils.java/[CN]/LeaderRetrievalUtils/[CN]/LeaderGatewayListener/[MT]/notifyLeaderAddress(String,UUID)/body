@@ -1,12 +1,20 @@
 {
   if (leaderAddress != null && !leaderAddress.equals("") && !futureActorGateway.isCompleted()) {
-    try {
-      ActorRef actorRef=AkkaUtils.getActorRef(leaderAddress,actorSystem,timeout);
-      ActorGateway gateway=new AkkaActorGateway(actorRef,leaderSessionID);
-      futureActorGateway.success(gateway);
+    AkkaUtils.getActorRefFuture(leaderAddress,actorSystem,timeout).map(new Mapper<ActorRef,ActorGateway>(){
+      public ActorGateway apply(      ActorRef ref){
+        return new AkkaActorGateway(ref,leaderSessionID);
+      }
     }
- catch (    Exception e) {
-      futureActorGateway.failure(e);
+,actorSystem.dispatcher()).onComplete(new OnComplete<ActorGateway>(){
+      @Override public void onComplete(      Throwable failure,      ActorGateway success) throws Throwable {
+        if (failure == null) {
+          completePromise(success);
+        }
+ else {
+          LOG.debug("Could not retrieve the leader for address " + leaderAddress + ".",failure);
+        }
+      }
     }
+,actorSystem.dispatcher());
   }
 }
