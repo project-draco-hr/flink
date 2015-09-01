@@ -1,0 +1,26 @@
+{
+  ZooKeeperSubmittedJobGraphStore jobGraphs=new ZooKeeperSubmittedJobGraphStore(ZooKeeper.createClient(),"/testPutAndRemoveJobGraph",StateHandleProvider);
+  try {
+    SubmittedJobGraphListener listener=mock(SubmittedJobGraphListener.class);
+    jobGraphs.start(listener);
+    SubmittedJobGraph jobGraph=createSubmittedJobGraph(new JobID(),0);
+    assertEquals(0,jobGraphs.recoverJobGraphs().size());
+    jobGraphs.putJobGraph(jobGraph);
+    List<SubmittedJobGraph> actual=jobGraphs.recoverJobGraphs();
+    assertEquals(1,actual.size());
+    verifyJobGraphs(jobGraph,actual.get(0));
+    jobGraph=createSubmittedJobGraph(jobGraph.getJobId(),1);
+    jobGraphs.putJobGraph(jobGraph);
+    actual=jobGraphs.recoverJobGraphs();
+    assertEquals(1,actual.size());
+    verifyJobGraphs(jobGraph,actual.get(0));
+    jobGraphs.removeJobGraph(jobGraph.getJobId());
+    assertEquals(0,jobGraphs.recoverJobGraphs().size());
+    verify(listener,atMost(1)).onAddedJobGraph(any(JobID.class));
+    verify(listener,never()).onRemovedJobGraph(any(JobID.class));
+    jobGraphs.removeJobGraph(jobGraph.getJobId());
+  }
+  finally {
+    jobGraphs.stop();
+  }
+}

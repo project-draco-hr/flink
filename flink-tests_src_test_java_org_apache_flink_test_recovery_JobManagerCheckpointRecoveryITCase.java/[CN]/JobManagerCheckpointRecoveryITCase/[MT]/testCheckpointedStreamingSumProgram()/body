@@ -1,0 +1,86 @@
+{
+  final int checkpointingInterval=200;
+  final int sequenceEnd=5000;
+  final long expectedSum=Parallelism * sequenceEnd * (sequenceEnd + 1) / 2;
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.setParallelism(Parallelism);
+  env.enableCheckpointing(checkpointingInterval);
+  env.addSource(new CheckpointedSequenceSource(sequenceEnd)).addSink(new CountingSink()).setParallelism(1);
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(ZooKeeper.getConnectString(),FileStateBackendBasePath.getPath());
+  config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,Parallelism);
+  ActorSystem testSystem=null;
+  JobManagerProcess[] jobManagerProcess=new JobManagerProcess[2];
+  LeaderRetrievalService leaderRetrievalService=null;
+  ActorSystem taskManagerSystem=null;
+  try {
+    final Deadline deadline=TestTimeOut.fromNow();
+    testSystem=AkkaUtils.createActorSystem(new Configuration(),new Some<>(new Tuple2<String,Object>("localhost",0)));
+    jobManagerProcess[0]=new JobManagerProcess(0,config);
+    jobManagerProcess[1]=new JobManagerProcess(1,config);
+    jobManagerProcess[0].createAndStart();
+    jobManagerProcess[1].createAndStart();
+    TestingListener leaderListener=new TestingListener();
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(config);
+    leaderRetrievalService.start(leaderListener);
+    taskManagerSystem=AkkaUtils.createActorSystem(AkkaUtils.getDefaultAkkaConfig());
+    TaskManager.startTaskManagerComponentsAndActor(config,taskManagerSystem,"localhost",Option.<String>empty(),Option.<LeaderRetrievalService>empty(),false,StreamingMode.STREAMING,TaskManager.class);
+{
+      leaderListener.waitForNewLeader(deadline.timeLeft().toMillis());
+      String leaderAddress=leaderListener.getAddress();
+      UUID leaderId=leaderListener.getLeaderSessionID();
+      ActorRef leaderRef=AkkaUtils.getActorRef(leaderAddress,testSystem,deadline.timeLeft());
+      ActorGateway leader=new AkkaActorGateway(leaderRef,leaderId);
+      leader.tell(new SubmitJob(jobGraph,ListeningBehaviour.DETACHED));
+      JobManagerActorTestUtils.waitForJobStatus(jobGraph.getJobID(),JobStatus.RUNNING,leader,deadline.timeLeft());
+    }
+    JobManagerProcess leadingJobManagerProcess;
+    if (jobManagerProcess[0].getJobManagerAkkaURL().equals(leaderListener.getAddress())) {
+      leadingJobManagerProcess=jobManagerProcess[0];
+    }
+ else {
+      leadingJobManagerProcess=jobManagerProcess[1];
+    }
+    CompletedCheckpointsLatch.await();
+    leadingJobManagerProcess.destroy();
+{
+      leaderListener.waitForNewLeader(deadline.timeLeft().toMillis());
+      String leaderAddress=leaderListener.getAddress();
+      UUID leaderId=leaderListener.getLeaderSessionID();
+      ActorRef leaderRef=AkkaUtils.getActorRef(leaderAddress,testSystem,deadline.timeLeft());
+      ActorGateway leader=new AkkaActorGateway(leaderRef,leaderId);
+      JobManagerActorTestUtils.waitForJobStatus(jobGraph.getJobID(),JobStatus.RUNNING,leader,deadline.timeLeft());
+    }
+    FinalCountLatch.await();
+    assertEquals(expectedSum,(long)FinalCount.get());
+    for (int i=0; i < Parallelism; i++) {
+      assertNotEquals(0,RecoveredStates.get(i));
+    }
+  }
+ catch (  Throwable t) {
+    if (jobManagerProcess[0] != null) {
+      jobManagerProcess[0].printProcessLog();
+    }
+    if (jobManagerProcess[1] != null) {
+      jobManagerProcess[1].printProcessLog();
+    }
+    t.printStackTrace();
+  }
+ finally {
+    if (jobManagerProcess[0] != null) {
+      jobManagerProcess[0].destroy();
+    }
+    if (jobManagerProcess[1] != null) {
+      jobManagerProcess[1].destroy();
+    }
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+    if (taskManagerSystem != null) {
+      taskManagerSystem.shutdown();
+    }
+    if (testSystem != null) {
+      testSystem.shutdown();
+    }
+  }
+}

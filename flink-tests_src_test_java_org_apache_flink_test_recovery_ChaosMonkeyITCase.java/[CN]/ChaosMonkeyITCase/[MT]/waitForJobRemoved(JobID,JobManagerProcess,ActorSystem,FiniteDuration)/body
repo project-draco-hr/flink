@@ -1,0 +1,17 @@
+{
+  ActorRef jobManagerRef=jobManager.getActorRef(actorSystem,timeout);
+  AkkaActorGateway jobManagerGateway=new AkkaActorGateway(jobManagerRef,null);
+  Future<Object> archiveFuture=jobManagerGateway.ask(JobManagerMessages.getRequestArchive(),timeout);
+  ActorRef archive=((JobManagerMessages.ResponseArchive)Await.result(archiveFuture,timeout)).actor();
+  AkkaActorGateway archiveGateway=new AkkaActorGateway(archive,null);
+  Deadline deadline=timeout.fromNow();
+  while (deadline.hasTimeLeft()) {
+    JobManagerMessages.JobStatusResponse resp=JobManagerActorTestUtils.requestJobStatus(jobId,archiveGateway,deadline.timeLeft());
+    if (resp instanceof JobManagerMessages.JobNotFound) {
+      Thread.sleep(100);
+    }
+ else {
+      return;
+    }
+  }
+}

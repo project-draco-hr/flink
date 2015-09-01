@@ -1,0 +1,39 @@
+{
+  Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(ZooKeeper.getConnectString(),FileStateBackendBasePath.getPath());
+  config.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,2);
+  config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,1);
+  TestingCluster flink=new TestingCluster(config,false,false,StreamingMode.STREAMING);
+  try {
+    final Deadline deadline=TestTimeOut.fromNow();
+    flink.start(true);
+    JobGraph jobGraph=createBlockingJobGraph();
+    List<ActorRef> bothJobManagers=flink.getJobManagersAsJava();
+    ActorGateway leadingJobManager=flink.getLeaderGateway(deadline.timeLeft());
+    ActorGateway nonLeadingJobManager;
+    if (bothJobManagers.get(0).equals(leadingJobManager.actor())) {
+      nonLeadingJobManager=new AkkaActorGateway(bothJobManagers.get(1),null);
+    }
+ else {
+      nonLeadingJobManager=new AkkaActorGateway(bothJobManagers.get(0),null);
+    }
+    nonLeadingJobManager.tell(new SubmitJob(jobGraph,ListeningBehaviour.DETACHED));
+    JobManagerActorTestUtils.waitForJobStatus(jobGraph.getJobID(),JobStatus.RUNNING,leadingJobManager,deadline.timeLeft());
+    boolean success=false;
+    while (!success && deadline.hasTimeLeft()) {
+      JobStatusResponse jobStatusResponse=JobManagerActorTestUtils.requestJobStatus(jobGraph.getJobID(),nonLeadingJobManager,deadline.timeLeft());
+      if (jobStatusResponse instanceof JobManagerMessages.JobNotFound) {
+        success=true;
+      }
+ else {
+        Thread.sleep(100);
+      }
+    }
+    if (!success) {
+      fail("Non-leading JM was still holding reference to the job graph.");
+    }
+  }
+  finally {
+    flink.shutdown();
+  }
+  verifyCleanRecoveryState(config);
+}

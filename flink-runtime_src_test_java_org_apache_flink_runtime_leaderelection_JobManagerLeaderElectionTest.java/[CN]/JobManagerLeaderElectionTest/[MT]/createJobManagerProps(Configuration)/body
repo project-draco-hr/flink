@@ -1,4 +1,13 @@
 {
-  LeaderElectionService leaderElectionService=LeaderElectionUtils.createLeaderElectionService(configuration);
-  return Props.create(TestingJobManager.class,configuration,TestingUtils.defaultExecutionContext(),new InstanceManager(),new Scheduler(TestingUtils.defaultExecutionContext()),new BlobLibraryCacheManager(new BlobServer(configuration),10l),ActorRef.noSender(),1,1L,AkkaUtils.getDefaultTimeout(),StreamingMode.BATCH_ONLY,leaderElectionService);
+  LeaderElectionService leaderElectionService;
+  if (RecoveryMode.fromConfig(configuration) == RecoveryMode.STANDALONE) {
+    leaderElectionService=new StandaloneLeaderElectionService();
+  }
+ else {
+    CuratorFramework client=ZooKeeperUtils.startCuratorFramework(configuration);
+    leaderElectionService=ZooKeeperUtils.createLeaderElectionService(client,configuration);
+  }
+  SubmittedJobGraphStore submittedJobGraphStore=new StandaloneSubmittedJobGraphStore();
+  CheckpointRecoveryFactory checkpointRecoveryFactory=new StandaloneCheckpointRecoveryFactory();
+  return Props.create(TestingJobManager.class,configuration,TestingUtils.defaultExecutionContext(),new InstanceManager(),new Scheduler(TestingUtils.defaultExecutionContext()),new BlobLibraryCacheManager(new BlobServer(configuration),10l),ActorRef.noSender(),1,1L,AkkaUtils.getDefaultTimeout(),StreamingMode.BATCH_ONLY,leaderElectionService,submittedJobGraphStore,checkpointRecoveryFactory);
 }

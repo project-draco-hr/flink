@@ -1,0 +1,26 @@
+{
+  checkNotNull(jobId,"Job ID");
+  checkNotNull(expectedJobStatus,"Expected job status");
+  checkNotNull(jobManager,"Job manager");
+  checkNotNull(timeout,"Timeout");
+  final Deadline deadline=timeout.fromNow();
+  while (deadline.hasTimeLeft()) {
+    JobStatusResponse response=requestJobStatus(jobId,jobManager,deadline.timeLeft());
+    if (response instanceof CurrentJobStatus) {
+      JobStatus jobStatus=((CurrentJobStatus)response).status();
+      if (jobStatus == expectedJobStatus) {
+        return;
+      }
+ else       if (jobStatus.isTerminalState()) {
+        throw new IllegalStateException("Job is in terminal state " + jobStatus + ", "+ "but was waiting for "+ expectedJobStatus+ ".");
+      }
+    }
+ else     if (response instanceof JobNotFound) {
+      Thread.sleep(Math.min(100,deadline.timeLeft().toMillis()));
+    }
+ else {
+      throw new IllegalStateException("Unexpected response.");
+    }
+  }
+  throw new IllegalStateException("Job not found within deadline.");
+}

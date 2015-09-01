@@ -1,0 +1,15 @@
+{
+  CompletedCheckpointStore checkpoints=createCompletedCheckpoints(3,ClassLoader.getSystemClassLoader());
+  TestCheckpoint[] expected=new TestCheckpoint[]{createCheckpoint(0),createCheckpoint(1),createCheckpoint(2)};
+  checkpoints.addCheckpoint(expected[0]);
+  checkpoints.addCheckpoint(expected[1]);
+  checkpoints.addCheckpoint(expected[2]);
+  assertEquals(3,ZooKeeper.getClient().getChildren().forPath(CheckpointsPath).size());
+  checkpoints.recover();
+  Deadline deadline=new FiniteDuration(1,TimeUnit.MINUTES).fromNow();
+  while (deadline.hasTimeLeft() && ZooKeeper.getClient().getChildren().forPath(CheckpointsPath).size() != 1) {
+    Thread.sleep(Math.min(100,deadline.timeLeft().toMillis()));
+  }
+  assertEquals(1,ZooKeeper.getClient().getChildren().forPath(CheckpointsPath).size());
+  assertEquals(expected[2],checkpoints.getLatestCheckpoint());
+}

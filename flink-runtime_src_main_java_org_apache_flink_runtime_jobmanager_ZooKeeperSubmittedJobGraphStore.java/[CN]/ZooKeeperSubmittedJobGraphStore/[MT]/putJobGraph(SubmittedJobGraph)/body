@@ -1,0 +1,33 @@
+{
+  checkNotNull(jobGraph,"Job graph");
+  String path=getPathForJob(jobGraph.getJobId());
+  boolean success=false;
+  while (!success) {
+synchronized (cacheLock) {
+      verifyIsRunning();
+      int currentVersion=jobGraphsInZooKeeper.exists(path);
+      if (currentVersion == -1) {
+        try {
+          jobGraphsInZooKeeper.add(path,jobGraph);
+          addedJobGraphs.add(jobGraph.getJobId());
+          LOG.info("Added {} to ZooKeeper.",jobGraph);
+          success=true;
+        }
+ catch (        KeeperException.NodeExistsException ignored) {
+        }
+      }
+ else       if (addedJobGraphs.contains(jobGraph.getJobId())) {
+        try {
+          jobGraphsInZooKeeper.replace(path,currentVersion,jobGraph);
+          LOG.info("Updated {} in ZooKeeper.",jobGraph);
+          success=true;
+        }
+ catch (        KeeperException.NoNodeException ignored) {
+        }
+      }
+ else {
+        throw new IllegalStateException("Oh, no. Trying to update a graph you didn't " + "#getAllSubmittedJobGraphs() or #putJobGraph() yourself before.");
+      }
+    }
+  }
+}

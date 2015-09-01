@@ -1,0 +1,61 @@
+{
+  if (LOG.isDebugEnabled()) {
+    if (event.getData() != null) {
+      LOG.debug("Received {} event (path: {})",event.getType(),event.getData().getPath());
+    }
+ else {
+      LOG.debug("Received {} event",event.getType());
+    }
+  }
+switch (event.getType()) {
+case CHILD_ADDED:
+synchronized (cacheLock) {
+      try {
+        JobID jobId=fromEvent(event);
+        if (jobGraphListener != null && !addedJobGraphs.contains(jobId)) {
+          try {
+            jobGraphListener.onAddedJobGraph(jobId);
+          }
+ catch (          Throwable t) {
+            LOG.error("Error in callback",t);
+          }
+        }
+      }
+ catch (      Exception e) {
+        LOG.error("Error in SubmittedJobGraphsPathCacheListener",e);
+      }
+    }
+  break;
+case CHILD_UPDATED:
+break;
+case CHILD_REMOVED:
+synchronized (cacheLock) {
+try {
+  JobID jobId=fromEvent(event);
+  if (jobGraphListener != null && addedJobGraphs.contains(jobId)) {
+    try {
+      jobGraphListener.onRemovedJobGraph(jobId);
+    }
+ catch (    Throwable t) {
+      LOG.error("Error in callback",t);
+    }
+  }
+  break;
+}
+ catch (Exception e) {
+  LOG.error("Error in SubmittedJobGraphsPathCacheListener",e);
+}
+}
+break;
+case CONNECTION_SUSPENDED:
+LOG.warn("ZooKeeper connection SUSPENDED. Changes to the submitted job " + "graphs are not monitored (temporarily).");
+case CONNECTION_LOST:
+LOG.warn("ZooKeeper connection LOST. Changes to the submitted job " + "graphs are not monitored (permanently).");
+break;
+case CONNECTION_RECONNECTED:
+LOG.info("ZooKeeper connection RECONNECTED. Changes to the submitted job " + "graphs are monitored again.");
+case INITIALIZED:
+LOG.info("SubmittedJobGraphsPathCacheListener initialized");
+break;
+}
+}

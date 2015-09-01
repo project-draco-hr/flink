@@ -1,0 +1,33 @@
+{
+  LongStateHandleProvider stateHandleProvider=new LongStateHandleProvider();
+  ZooKeeperStateHandleStore<Long> store=new ZooKeeperStateHandleStore<>(ZooKeeper.getClient(),stateHandleProvider);
+  Long state=3457347234L;
+  CreateMode[] modes=CreateMode.values();
+  for (int i=0; i < modes.length; i++) {
+    CreateMode mode=modes[i];
+    state+=i;
+    String pathInZooKeeper="/testAddWithCreateMode" + mode.name();
+    store.add(pathInZooKeeper,state,mode);
+    if (mode.isSequential()) {
+      List<String> paths=ZooKeeper.getClient().getChildren().forPath("/");
+      for (      String p : paths) {
+        if (p.startsWith("testAddWithCreateMode" + mode.name())) {
+          pathInZooKeeper="/" + p;
+          break;
+        }
+      }
+    }
+    assertEquals(i + 1,stateHandleProvider.getStateHandles().size());
+    assertEquals(state,stateHandleProvider.getStateHandles().get(i).getState(null));
+    Stat stat=ZooKeeper.getClient().checkExists().forPath(pathInZooKeeper);
+    assertNotNull(stat);
+    if (mode.isEphemeral()) {
+      assertTrue(stat.getEphemeralOwner() != 0);
+    }
+ else {
+      assertEquals(0,stat.getEphemeralOwner());
+    }
+    @SuppressWarnings("unchecked") Long actual=((StateHandle<Long>)InstantiationUtil.deserializeObject(ZooKeeper.getClient().getData().forPath(pathInZooKeeper),ClassLoader.getSystemClassLoader())).getState(null);
+    assertEquals(state,actual);
+  }
+}

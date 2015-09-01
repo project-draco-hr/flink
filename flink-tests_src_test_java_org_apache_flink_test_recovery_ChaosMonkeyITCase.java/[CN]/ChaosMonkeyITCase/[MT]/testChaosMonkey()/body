@@ -1,0 +1,125 @@
+{
+  final int numberOfJobManagers=3;
+  final int numberOfTaskManagers=3;
+  final int numberOfSlotsPerTaskManager=2;
+  final int n=5000;
+  final int parallelism=numberOfTaskManagers * numberOfSlotsPerTaskManager;
+  final FiniteDuration testDuration=new FiniteDuration(10,TimeUnit.MINUTES);
+  final FiniteDuration killEvery=new FiniteDuration(30,TimeUnit.SECONDS);
+  final int checkpointingIntervalMs=2000;
+  final int totalNumberOfKills=5;
+  Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(ZooKeeper.getConnectString(),FileStateBackendBasePath.getPath());
+  config.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_INTERVAL,"1000 ms");
+  config.setString(ConfigConstants.AKKA_WATCH_HEARTBEAT_PAUSE,"6 s");
+  config.setInteger(ConfigConstants.AKKA_WATCH_THRESHOLD,9);
+  if (checkpointingIntervalMs >= killEvery.toMillis()) {
+    throw new IllegalArgumentException("Relax! You want to kill processes every " + killEvery + ", but the checkpointing interval is "+ checkpointingIntervalMs / 1000 + " seconds. Either decrease the interval or " + "increase the kill interval. Otherwise, the program will not complete any " + "checkpoint.");
+  }
+  config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,numberOfSlotsPerTaskManager);
+  ActorSystem testActorSystem=null;
+  LeaderRetrievalService leaderRetrievalService=null;
+  List<JobManagerProcess> jobManagerProcesses=new ArrayList<>();
+  List<TaskManagerProcess> taskManagerProcesses=new ArrayList<>();
+  try {
+    for (int i=0; i < numberOfJobManagers; i++) {
+      jobManagerProcesses.add(createAndStartJobManagerProcess(config));
+    }
+    for (int i=0; i < numberOfTaskManagers; i++) {
+      taskManagerProcesses.add(createAndStartTaskManagerProcess(config));
+    }
+    testActorSystem=AkkaUtils.createDefaultActorSystem();
+    leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(config);
+    TestingListener leaderListener=new TestingListener();
+    leaderRetrievalService.start(leaderListener);
+    Deadline deadline=testDuration.fromNow();
+    int leaderIndex=waitForNewLeader(leaderListener,jobManagerProcesses,deadline.timeLeft());
+    waitForTaskManagers(numberOfTaskManagers,jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+    JobGraph jobGraph=createJobGraph(n,CheckpointCompletedCoordination.getPath(),ProceedCoordination.getPath(),parallelism,checkpointingIntervalMs);
+    LOG.info("Submitting job {}",jobGraph.getJobID());
+    submitJobGraph(jobGraph,jobManagerProcesses.get(leaderIndex),leaderListener,testActorSystem,deadline.timeLeft());
+    LOG.info("Waiting for a checkpoint to complete before kicking off chaos");
+    TestJvmProcess.waitForMarkerFiles(FileStateBackendBasePath,COMPLETED_PREFIX,parallelism,deadline.timeLeft().toMillis());
+    LOG.info("Checkpoint completed... ready for chaos");
+    int currentKillNumber=1;
+    int currentJobManagerKills=0;
+    int currentTaskManagerKills=0;
+    for (int i=0; i < totalNumberOfKills; i++) {
+      LOG.info("Waiting for {} before next kill ({}/{})",killEvery,currentKillNumber++,totalNumberOfKills);
+      Thread.sleep(killEvery.toMillis());
+      LOG.info("Checking job status...");
+      JobStatus jobStatus=requestJobStatus(jobGraph.getJobID(),jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+      if (jobStatus != JobStatus.RUNNING && jobStatus != JobStatus.FINISHED) {
+        LOG.info("Waiting for job status {}",JobStatus.RUNNING);
+        waitForJobRunning(jobGraph.getJobID(),jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+      }
+ else       if (jobStatus == JobStatus.FINISHED) {
+        LOG.info("Job finished");
+        return;
+      }
+ else {
+        LOG.info("Job status is {}",jobStatus);
+      }
+      if (rand.nextBoolean()) {
+        LOG.info("Killing the leading JobManager");
+        JobManagerProcess newJobManager=createAndStartJobManagerProcess(config);
+        JobManagerProcess leader=jobManagerProcesses.remove(leaderIndex);
+        leader.destroy();
+        currentJobManagerKills++;
+        LOG.info("Killed {}",leader);
+        jobManagerProcesses.add(newJobManager);
+        leaderIndex=waitForNewLeader(leaderListener,jobManagerProcesses,deadline.timeLeft());
+        waitForTaskManagers(numberOfTaskManagers,jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+      }
+ else {
+        LOG.info("Killing a random TaskManager");
+        TaskManagerProcess newTaskManager=createAndStartTaskManagerProcess(config);
+        waitForTaskManagers(numberOfTaskManagers + 1,jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+        int next=rand.nextInt(numberOfTaskManagers);
+        TaskManagerProcess taskManager=taskManagerProcesses.remove(next);
+        LOG.info("{} has been chosen. Killing process...",taskManager);
+        taskManager.destroy();
+        currentTaskManagerKills++;
+        taskManagerProcesses.add(newTaskManager);
+      }
+    }
+    LOG.info("Chaos is over. Total kills: {} ({} job manager + {} task managers). " + "Checking job status...",totalNumberOfKills,currentJobManagerKills,currentTaskManagerKills);
+    TestJvmProcess.touchFile(ProceedCoordination);
+    LOG.info("Waiting for job status {}",JobStatus.FINISHED);
+    waitForJobFinished(jobGraph.getJobID(),jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+    LOG.info("Job finished");
+    LOG.info("Waiting for job removal");
+    waitForJobRemoved(jobGraph.getJobID(),jobManagerProcesses.get(leaderIndex),testActorSystem,deadline.timeLeft());
+    LOG.info("Job removed");
+    LOG.info("Checking clean recovery state...");
+    checkCleanRecoveryState(config);
+    LOG.info("Recovery state clean");
+  }
+ catch (  Throwable t) {
+    System.out.println("#################################################");
+    System.out.println(" TASK MANAGERS");
+    System.out.println("#################################################");
+    for (    TaskManagerProcess taskManagerProcess : taskManagerProcesses) {
+      taskManagerProcess.printProcessLog();
+    }
+    System.out.println("#################################################");
+    System.out.println(" JOB MANAGERS");
+    System.out.println("#################################################");
+    for (    JobManagerProcess jobManagerProcess : jobManagerProcesses) {
+      jobManagerProcess.printProcessLog();
+    }
+    t.printStackTrace();
+  }
+ finally {
+    for (    JobManagerProcess jobManagerProcess : jobManagerProcesses) {
+      if (jobManagerProcess != null) {
+        jobManagerProcess.destroy();
+      }
+    }
+    if (leaderRetrievalService != null) {
+      leaderRetrievalService.stop();
+    }
+    if (testActorSystem != null) {
+      testActorSystem.shutdown();
+    }
+  }
+}

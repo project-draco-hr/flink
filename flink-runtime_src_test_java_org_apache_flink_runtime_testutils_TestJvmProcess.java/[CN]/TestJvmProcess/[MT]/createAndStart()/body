@@ -1,0 +1,26 @@
+{
+  String[] cmd=new String[]{javaCommandPath,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + log4jConfigFilePath,"-Xms" + jvmMemoryInMb + "m","-Xmx" + jvmMemoryInMb + "m","-classpath",getCurrentClasspath(),getEntryPointClassName()};
+  String[] jvmArgs=getJvmArgs();
+  if (jvmArgs != null && jvmArgs.length > 0) {
+    cmd=ArrayUtils.addAll(cmd,jvmArgs);
+  }
+synchronized (createDestroyLock) {
+    if (process == null) {
+      LOG.debug("Running command '{}'.",Arrays.toString(cmd));
+      this.process=new ProcessBuilder(cmd).start();
+      this.processOutput=new StringWriter();
+      new CommonTestUtils.PipeForwarder(process.getErrorStream(),processOutput);
+      try {
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+      }
+ catch (      IllegalStateException ignored) {
+      }
+catch (      Throwable t) {
+        LOG.error("Cannot register process cleanup shutdown hook.",t);
+      }
+    }
+ else {
+      throw new IllegalStateException("Already running.");
+    }
+  }
+}

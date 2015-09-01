@@ -1,0 +1,29 @@
+{
+synchronized (cacheLock) {
+    verifyIsRunning();
+    List<Tuple2<StateHandle<SubmittedJobGraph>,String>> submitted;
+    while (true) {
+      try {
+        submitted=jobGraphsInZooKeeper.getAll();
+        break;
+      }
+ catch (      ConcurrentModificationException e) {
+        LOG.warn("Concurrent modification while reading from ZooKeeper. Retrying.");
+      }
+    }
+    if (submitted.size() != 0) {
+      List<SubmittedJobGraph> jobGraphs=new ArrayList<>(submitted.size());
+      for (      Tuple2<StateHandle<SubmittedJobGraph>,String> jobStateHandle : submitted) {
+        SubmittedJobGraph jobGraph=jobStateHandle.f0.getState(ClassLoader.getSystemClassLoader());
+        addedJobGraphs.add(jobGraph.getJobId());
+        jobGraphs.add(jobGraph);
+      }
+      LOG.info("Recovered {} job graphs: {}.",jobGraphs.size(),jobGraphs);
+      return jobGraphs;
+    }
+ else {
+      LOG.info("No job graph to recover.");
+      return Collections.emptyList();
+    }
+  }
+}

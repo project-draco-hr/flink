@@ -1,0 +1,20 @@
+{
+  LongStateHandleProvider stateHandleProvider=new LongStateHandleProvider();
+  ZooKeeperStateHandleStore<Long> store=new ZooKeeperStateHandleStore<>(ZooKeeper.getClient(),stateHandleProvider);
+  final String pathInZooKeeper="/testRemoveWithCallback";
+  final Long state=27255442L;
+  store.add(pathInZooKeeper,state);
+  final CountDownLatch sync=new CountDownLatch(1);
+  BackgroundCallback callback=mock(BackgroundCallback.class);
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      sync.countDown();
+      return null;
+    }
+  }
+).when(callback).processResult(eq(ZooKeeper.getClient()),any(CuratorEvent.class));
+  store.remove(pathInZooKeeper,callback);
+  assertEquals(0,ZooKeeper.getClient().getChildren().forPath("/").size());
+  sync.await();
+  verify(callback,times(1)).processResult(eq(ZooKeeper.getClient()),any(CuratorEvent.class));
+}

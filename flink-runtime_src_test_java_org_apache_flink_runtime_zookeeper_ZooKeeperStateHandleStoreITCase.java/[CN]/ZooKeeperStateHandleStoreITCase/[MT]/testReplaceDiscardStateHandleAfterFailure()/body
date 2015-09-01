@@ -1,0 +1,22 @@
+{
+  LongStateHandleProvider stateHandleProvider=new LongStateHandleProvider();
+  CuratorFramework client=spy(ZooKeeper.getClient());
+  when(client.setData()).thenThrow(new RuntimeException("Expected test Exception."));
+  ZooKeeperStateHandleStore<Long> store=new ZooKeeperStateHandleStore<>(client,stateHandleProvider);
+  final String pathInZooKeeper="/testReplaceDiscardStateHandleAfterFailure";
+  final Long initialState=30968470898L;
+  final Long replaceState=88383776661L;
+  store.add(pathInZooKeeper,initialState);
+  try {
+    store.replace(pathInZooKeeper,0,replaceState);
+    fail("Did not throw expected exception");
+  }
+ catch (  Exception ignored) {
+  }
+  assertEquals(2,stateHandleProvider.getStateHandles().size());
+  assertEquals(initialState,stateHandleProvider.getStateHandles().get(0).getState(null));
+  assertEquals(replaceState,stateHandleProvider.getStateHandles().get(1).getState(null));
+  assertEquals(1,stateHandleProvider.getStateHandles().get(1).getNumberOfDiscardCalls());
+  @SuppressWarnings("unchecked") Long actual=((StateHandle<Long>)InstantiationUtil.deserializeObject(ZooKeeper.getClient().getData().forPath(pathInZooKeeper),ClassLoader.getSystemClassLoader())).getState(null);
+  assertEquals(initialState,actual);
+}

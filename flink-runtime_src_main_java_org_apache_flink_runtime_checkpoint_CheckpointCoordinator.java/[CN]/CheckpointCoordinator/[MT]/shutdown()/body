@@ -1,28 +1,25 @@
 {
 synchronized (lock) {
     try {
-      if (shutdown) {
-        return;
+      if (!shutdown) {
+        shutdown=true;
+        LOG.info("Stopping checkpoint coordinator for job " + job);
+        timer.cancel();
+        if (jobStatusListener != null) {
+          jobStatusListener.tell(PoisonPill.getInstance());
+          jobStatusListener=null;
+        }
+        if (periodicScheduler != null) {
+          periodicScheduler.cancel();
+          periodicScheduler=null;
+        }
+        checkpointIdCounter.stop();
+        for (        PendingCheckpoint pending : pendingCheckpoints.values()) {
+          pending.discard(userClassLoader,true);
+        }
+        pendingCheckpoints.clear();
+        completedCheckpointStore.discardAllCheckpoints();
       }
-      shutdown=true;
-      LOG.info("Stopping checkpoint coordinator for job " + job);
-      timer.cancel();
-      if (jobStatusListener != null) {
-        jobStatusListener.tell(PoisonPill.getInstance());
-        jobStatusListener=null;
-      }
-      if (periodicScheduler != null) {
-        periodicScheduler.cancel();
-        periodicScheduler=null;
-      }
-      for (      PendingCheckpoint pending : pendingCheckpoints.values()) {
-        pending.discard(userClassLoader,true);
-      }
-      pendingCheckpoints.clear();
-      for (      SuccessfulCheckpoint checkpoint : completedCheckpoints) {
-        checkpoint.discard(userClassLoader);
-      }
-      completedCheckpoints.clear();
     }
   finally {
       if (shutdownHook != null && shutdownHook != Thread.currentThread()) {

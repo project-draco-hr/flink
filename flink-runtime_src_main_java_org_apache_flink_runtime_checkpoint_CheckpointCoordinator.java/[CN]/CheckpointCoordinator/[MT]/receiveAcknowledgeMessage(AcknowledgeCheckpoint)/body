@@ -7,7 +7,7 @@
     return;
   }
   final long checkpointId=message.getCheckpointId();
-  SuccessfulCheckpoint completed=null;
+  CompletedCheckpoint completed=null;
   PendingCheckpoint checkpoint;
 synchronized (lock) {
     if (shutdown) {
@@ -17,12 +17,10 @@ synchronized (lock) {
     if (checkpoint != null && !checkpoint.isDiscarded()) {
       if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState())) {
         if (checkpoint.isFullyAcknowledged()) {
-          LOG.info("Completed checkpoint " + checkpointId);
           completed=checkpoint.toCompletedCheckpoint();
-          completedCheckpoints.addLast(completed);
-          if (completedCheckpoints.size() > numSuccessfulCheckpointsToRetain) {
-            completedCheckpoints.removeFirst().discard(userClassLoader);
-          }
+          completedCheckpointStore.addCheckpoint(completed);
+          LOG.info("Completed checkpoint " + checkpointId);
+          LOG.debug(completed.getStates().toString());
           pendingCheckpoints.remove(checkpointId);
           rememberRecentCheckpointId(checkpointId);
           dropSubsumedCheckpoints(completed.getTimestamp());
