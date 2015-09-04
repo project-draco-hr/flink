@@ -1,49 +1,20 @@
 {
-  final FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
-  final FiniteDuration lookupTimeout=AkkaUtils.getLookupTimeout(configuration);
-  ActorSystem actorSystem;
+  Future<Object> response;
   try {
-    actorSystem=JobClient.startJobClientActorSystem(configuration);
+    response=jobManagerGateway.ask(new RequestAccumulatorResults(jobID),timeout);
   }
  catch (  Exception e) {
-    throw new Exception("Could start client actor system.",e);
+    throw new Exception("Failed to query the job manager gateway for accumulators.",e);
   }
-  try {
-    ActorGateway jobManagerGateway;
-    LeaderRetrievalService leaderRetrievalService;
-    try {
-      leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(configuration);
-    }
- catch (    Exception e) {
-      throw new ProgramInvocationException("Could not create the leader retrieval service.",e);
-    }
-    try {
-      jobManagerGateway=LeaderRetrievalUtils.retrieveLeaderGateway(leaderRetrievalService,actorSystem,lookupTimeout);
-    }
- catch (    LeaderRetrievalException e) {
-      throw new ProgramInvocationException("Failed to retrieve JobManager gateway",e);
-    }
-    Future<Object> response;
-    try {
-      response=jobManagerGateway.ask(new RequestAccumulatorResults(jobID),timeout);
-    }
- catch (    Exception e) {
-      throw new Exception("Failed to query the job manager gateway for accumulators.",e);
-    }
-    Object result=Await.result(response,timeout);
-    if (result instanceof AccumulatorResultsFound) {
-      Map<String,SerializedValue<Object>> serializedAccumulators=((AccumulatorResultsFound)result).result();
-      return AccumulatorHelper.deserializeAccumulators(serializedAccumulators,loader);
-    }
- else     if (result instanceof AccumulatorResultsErroneous) {
-      throw ((AccumulatorResultsErroneous)result).cause();
-    }
+  Object result=Await.result(response,timeout);
+  if (result instanceof AccumulatorResultsFound) {
+    Map<String,SerializedValue<Object>> serializedAccumulators=((AccumulatorResultsFound)result).result();
+    return AccumulatorHelper.deserializeAccumulators(serializedAccumulators,loader);
+  }
+ else   if (result instanceof AccumulatorResultsErroneous) {
+    throw ((AccumulatorResultsErroneous)result).cause();
+  }
  else {
-      throw new Exception("Failed to fetch accumulators for the job " + jobID + ".");
-    }
-  }
-  finally {
-    actorSystem.shutdown();
-    actorSystem.awaitTermination();
+    throw new Exception("Failed to fetch accumulators for the job " + jobID + ".");
   }
 }

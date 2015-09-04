@@ -1,0 +1,62 @@
+{
+  if (program == null) {
+    throw new NullPointerException();
+  }
+  if (jobId == null) {
+    jobId=JobID.generate();
+  }
+  this.vertices=new HashMap<PlanNode,JobVertex>();
+  this.chainedTasks=new HashMap<PlanNode,TaskInChain>();
+  this.chainedTasksInSequence=new ArrayList<TaskInChain>();
+  this.auxVertices=new ArrayList<JobVertex>();
+  this.iterations=new HashMap<IterationPlanNode,IterationDescriptor>();
+  this.iterationStack=new ArrayList<IterationPlanNode>();
+  this.sharingGroup=new SlotSharingGroup();
+  program.accept(this);
+  if (this.currentIteration != null) {
+    throw new CompilerException("The graph translation ended prematurely, leaving an unclosed iteration.");
+  }
+  for (  IterationDescriptor iteration : this.iterations.values()) {
+    if (iteration.getIterationNode() instanceof BulkIterationPlanNode) {
+      finalizeBulkIteration(iteration);
+    }
+ else     if (iteration.getIterationNode() instanceof WorksetIterationPlanNode) {
+      finalizeWorksetIteration(iteration);
+    }
+ else {
+      throw new CompilerException();
+    }
+  }
+  for (  TaskInChain tic : this.chainedTasksInSequence) {
+    TaskConfig t=new TaskConfig(tic.getContainingVertex().getConfiguration());
+    t.addChainedTask(tic.getChainedTask(),tic.getTaskConfig(),tic.getTaskName());
+  }
+  attachOperatorNamesAndDescriptions();
+  JobGraph graph=new JobGraph(jobId,program.getJobName());
+  graph.setNumberOfExecutionRetries(program.getOriginalPlan().getNumberOfExecutionRetries());
+  graph.setAllowQueuedScheduling(false);
+  graph.setSessionTimeout(program.getOriginalPlan().getSessionTimeout());
+  for (  JobVertex vertex : this.vertices.values()) {
+    graph.addVertex(vertex);
+  }
+  for (  JobVertex vertex : this.auxVertices) {
+    graph.addVertex(vertex);
+    vertex.setSlotSharingGroup(sharingGroup);
+  }
+  for (  Entry<String,DistributedCacheEntry> e : program.getOriginalPlan().getCachedFiles()) {
+    DistributedCache.writeFileInfoToConfig(e.getKey(),e.getValue(),graph.getJobConfiguration());
+  }
+  try {
+    InstantiationUtil.writeObjectToConfig(program.getOriginalPlan().getExecutionConfig(),graph.getJobConfiguration(),ExecutionConfig.CONFIG_KEY);
+  }
+ catch (  IOException e) {
+    throw new RuntimeException("Config object could not be written to Job Configuration: " + e);
+  }
+  this.vertices=null;
+  this.chainedTasks=null;
+  this.chainedTasksInSequence=null;
+  this.auxVertices=null;
+  this.iterations=null;
+  this.iterationStack=null;
+  return graph;
+}

@@ -1,0 +1,45 @@
+{
+  this.compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),config);
+  this.maxSlots=maxSlots;
+  LOG.info("Starting client actor system");
+  try {
+    this.actorSystem=JobClient.startJobClientActorSystem(config);
+  }
+ catch (  Exception e) {
+    throw new IOException("Could start client actor system.",e);
+  }
+  boolean success=false;
+  try {
+    FiniteDuration lookupTimeout=AkkaUtils.getLookupTimeout(config);
+    this.timeout=AkkaUtils.getTimeout(config);
+    LOG.info("Looking up JobManager");
+    LeaderRetrievalService leaderRetrievalService;
+    try {
+      leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(config);
+    }
+ catch (    Exception e) {
+      throw new IOException("Could not create the leader retrieval service.",e);
+    }
+    try {
+      this.jobManagerGateway=LeaderRetrievalUtils.retrieveLeaderGateway(leaderRetrievalService,actorSystem,lookupTimeout);
+    }
+ catch (    LeaderRetrievalException e) {
+      throw new IOException("Failed to retrieve JobManager gateway",e);
+    }
+    LOG.info("Leading JobManager actor system address is " + this.jobManagerGateway.path());
+    LOG.info("JobManager runs at " + this.jobManagerGateway.path());
+    LOG.info("Communication between client and JobManager will have a timeout of " + this.timeout);
+    success=true;
+  }
+  finally {
+    if (!success) {
+      try {
+        this.actorSystem.shutdown();
+        actorSystem.awaitTermination(new FiniteDuration(30,TimeUnit.SECONDS));
+      }
+ catch (      Throwable t) {
+        LOG.error("Shutting down actor system after error caused another error",t);
+      }
+    }
+  }
+}

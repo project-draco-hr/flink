@@ -1,50 +1,21 @@
 {
-  final FiniteDuration timeout=AkkaUtils.getTimeout(configuration);
-  final FiniteDuration lookupTimeout=AkkaUtils.getLookupTimeout(configuration);
-  ActorSystem actorSystem;
+  Future<Object> response;
   try {
-    actorSystem=JobClient.startJobClientActorSystem(configuration);
+    response=jobManagerGateway.ask(new JobManagerMessages.CancelJob(jobId),timeout);
   }
  catch (  Exception e) {
-    throw new ProgramInvocationException("Could start client actor system.",e);
+    throw new ProgramInvocationException("Failed to query the job manager gateway.",e);
   }
-  try {
-    ActorGateway jobManagerGateway;
-    LeaderRetrievalService leaderRetrievalService;
-    try {
-      leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(configuration);
-    }
- catch (    Exception e) {
-      throw new ProgramInvocationException("Could not create the leader retrieval service.",e);
-    }
-    try {
-      jobManagerGateway=LeaderRetrievalUtils.retrieveLeaderGateway(leaderRetrievalService,actorSystem,lookupTimeout);
-    }
- catch (    LeaderRetrievalException e) {
-      throw new ProgramInvocationException("Failed to retrieve JobManager gateway",e);
-    }
-    Future<Object> response;
-    try {
-      response=jobManagerGateway.ask(new JobManagerMessages.CancelJob(jobId),timeout);
-    }
- catch (    Exception e) {
-      throw new ProgramInvocationException("Failed to query the job manager gateway.",e);
-    }
-    Object result=Await.result(response,timeout);
-    if (result instanceof JobManagerMessages.CancellationSuccess) {
-      LOG.debug("Job cancellation with ID " + jobId + " succeeded.");
-    }
- else     if (result instanceof JobManagerMessages.CancellationFailure) {
-      Throwable t=((JobManagerMessages.CancellationFailure)result).cause();
-      LOG.debug("Job cancellation with ID " + jobId + " failed.",t);
-      throw new Exception("Failed to cancel the job because of \n" + t.getMessage());
-    }
+  Object result=Await.result(response,timeout);
+  if (result instanceof JobManagerMessages.CancellationSuccess) {
+    LOG.debug("Job cancellation with ID " + jobId + " succeeded.");
+  }
+ else   if (result instanceof JobManagerMessages.CancellationFailure) {
+    Throwable t=((JobManagerMessages.CancellationFailure)result).cause();
+    LOG.debug("Job cancellation with ID " + jobId + " failed.",t);
+    throw new Exception("Failed to cancel the job because of \n" + t.getMessage());
+  }
  else {
-      throw new Exception("Unknown message received while cancelling.");
-    }
-  }
-  finally {
-    actorSystem.shutdown();
-    actorSystem.awaitTermination();
+    throw new Exception("Unknown message received while cancelling.");
   }
 }
