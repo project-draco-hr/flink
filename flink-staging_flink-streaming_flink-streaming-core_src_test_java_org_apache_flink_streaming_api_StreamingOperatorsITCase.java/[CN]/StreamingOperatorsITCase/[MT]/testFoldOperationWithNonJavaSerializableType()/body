@@ -1,0 +1,22 @@
+{
+  final int numElements=10;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Tuple2<Integer,NonSerializable>> input=env.addSource(new NonSerializableTupleSource(numElements));
+  input.groupBy(0).fold(new NonSerializable(42),new FoldFunction<Tuple2<Integer,NonSerializable>,NonSerializable>(){
+    @Override public NonSerializable fold(    NonSerializable accumulator,    Tuple2<Integer,NonSerializable> value) throws Exception {
+      return new NonSerializable(accumulator.value + value.f1.value);
+    }
+  }
+).map(new MapFunction<NonSerializable,Integer>(){
+    @Override public Integer map(    NonSerializable value) throws Exception {
+      return value.value;
+    }
+  }
+).writeAsText(resultPath1,FileSystem.WriteMode.OVERWRITE);
+  StringBuilder builder=new StringBuilder();
+  for (int i=0; i < numElements; i++) {
+    builder.append(42 + i + "\n");
+  }
+  expected1=builder.toString();
+  env.execute();
+}
