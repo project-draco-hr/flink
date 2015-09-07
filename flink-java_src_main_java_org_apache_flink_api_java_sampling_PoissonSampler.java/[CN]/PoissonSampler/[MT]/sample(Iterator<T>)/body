@@ -10,7 +10,7 @@
         return true;
       }
  else {
-        moveToNextElement();
+        samplingProcess();
         if (currentCount > 0) {
           return true;
         }
@@ -19,25 +19,49 @@
         }
       }
     }
-    private void moveToNextElement(){
-      while (input.hasNext()) {
+    @Override public T next(){
+      if (currentCount <= 0) {
+        samplingProcess();
+      }
+      currentCount--;
+      return currentElement;
+    }
+    public int poisson_ge1(    double p){
+      double q=Math.pow(Math.E,-p);
+      double t=q + (1 - q) * random.nextDouble();
+      int k=1;
+      t=t * random.nextDouble();
+      while (t > q) {
+        k++;
+        t=t * random.nextDouble();
+      }
+      return k;
+    }
+    private void skipGapElements(    int num){
+      int elementCount=0;
+      while (input.hasNext() && elementCount < num) {
         currentElement=input.next();
-        currentCount=poissonDistribution.sample();
-        if (currentCount > 0) {
-          break;
-        }
+        elementCount++;
       }
     }
-    @Override public T next(){
-      if (currentCount == 0) {
-        moveToNextElement();
-      }
-      if (currentCount == 0) {
-        return null;
+    private void samplingProcess(){
+      if (fraction <= THRESHOLD) {
+        double u=Math.max(random.nextDouble(),EPSILON);
+        int gap=(int)(Math.log(u) / -fraction);
+        skipGapElements(gap);
+        if (input.hasNext()) {
+          currentElement=input.next();
+          currentCount=poisson_ge1(fraction);
+        }
       }
  else {
-        currentCount--;
-        return currentElement;
+        while (input.hasNext()) {
+          currentElement=input.next();
+          currentCount=poissonDistribution.sample();
+          if (currentCount > 0) {
+            break;
+          }
+        }
       }
     }
   }
