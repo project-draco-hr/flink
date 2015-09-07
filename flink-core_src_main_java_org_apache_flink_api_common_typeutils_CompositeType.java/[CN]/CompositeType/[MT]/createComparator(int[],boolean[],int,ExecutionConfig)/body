@@ -1,21 +1,28 @@
 {
-  initializeNewComparator(logicalKeyFields.length);
+  TypeComparatorBuilder<T> builder=createTypeComparatorBuilder();
+  builder.initializeTypeComparatorBuilder(logicalKeyFields.length);
   for (int logicalKeyFieldIndex=0; logicalKeyFieldIndex < logicalKeyFields.length; logicalKeyFieldIndex++) {
     int logicalKeyField=logicalKeyFields[logicalKeyFieldIndex];
     int logicalField=logicalFieldOffset;
-    for (int localFieldId=0; localFieldId < this.getArity(); localFieldId++) {
+    boolean comparatorAdded=false;
+    for (int localFieldId=0; localFieldId < this.getArity() && logicalField <= logicalKeyField && !comparatorAdded; localFieldId++) {
       TypeInformation<?> localFieldType=this.getTypeAt(localFieldId);
       if (localFieldType instanceof AtomicType && logicalField == logicalKeyField) {
-        addCompareField(localFieldId,((AtomicType<?>)localFieldType).createComparator(orders[logicalKeyFieldIndex],config));
+        builder.addComparatorField(localFieldId,((AtomicType<?>)localFieldType).createComparator(orders[logicalKeyFieldIndex],config));
+        comparatorAdded=true;
       }
- else       if (localFieldType instanceof CompositeType && (logicalField <= logicalKeyField && logicalKeyField <= logicalField + (localFieldType.getTotalFields() - 1))) {
-        addCompareField(localFieldId,((CompositeType<?>)localFieldType).createComparator(new int[]{logicalKeyField},new boolean[]{orders[logicalKeyFieldIndex]},logicalField,config));
+ else       if (localFieldType instanceof CompositeType && logicalField <= logicalKeyField && logicalKeyField <= logicalField + (localFieldType.getTotalFields() - 1)) {
+        builder.addComparatorField(localFieldId,((CompositeType<?>)localFieldType).createComparator(new int[]{logicalKeyField},new boolean[]{orders[logicalKeyFieldIndex]},logicalField,config));
+        comparatorAdded=true;
       }
       if (localFieldType instanceof CompositeType) {
         logicalField+=localFieldType.getTotalFields() - 1;
       }
       logicalField++;
     }
+    if (!comparatorAdded) {
+      throw new IllegalArgumentException("Could not add a comparator for the logical" + "key field index " + logicalKeyFieldIndex + ".");
+    }
   }
-  return getNewComparator(config);
+  return builder.createTypeComparator(config);
 }
