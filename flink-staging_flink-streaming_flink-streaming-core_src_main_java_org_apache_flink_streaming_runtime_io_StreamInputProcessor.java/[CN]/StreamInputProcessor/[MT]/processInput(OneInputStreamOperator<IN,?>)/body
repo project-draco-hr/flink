@@ -10,17 +10,14 @@
         currentRecordDeserializer=null;
       }
       if (result.isFullRecord()) {
-        Object recordOrWatermark=deserializationDelegate.getInstance();
-        if (recordOrWatermark instanceof Watermark) {
-          Watermark mark=(Watermark)recordOrWatermark;
-          long watermarkMillis=mark.getTimestamp();
+        StreamElement recordOrWatermark=deserializationDelegate.getInstance();
+        if (recordOrWatermark.isWatermark()) {
+          long watermarkMillis=recordOrWatermark.asWatermark().getTimestamp();
           if (watermarkMillis > watermarks[currentChannel]) {
             watermarks[currentChannel]=watermarkMillis;
             long newMinWatermark=Long.MAX_VALUE;
             for (            long watermark : watermarks) {
-              if (watermark < newMinWatermark) {
-                newMinWatermark=watermark;
-              }
+              newMinWatermark=Math.min(watermark,newMinWatermark);
             }
             if (newMinWatermark > lastEmittedWatermark) {
               lastEmittedWatermark=newMinWatermark;
@@ -30,7 +27,7 @@
           continue;
         }
  else {
-          @SuppressWarnings("unchecked") StreamRecord<IN> record=(StreamRecord<IN>)deserializationDelegate.getInstance();
+          StreamRecord<IN> record=recordOrWatermark.asRecord();
           StreamingRuntimeContext ctx=streamOperator.getRuntimeContext();
           if (ctx != null) {
             ctx.setNextInput(record);
