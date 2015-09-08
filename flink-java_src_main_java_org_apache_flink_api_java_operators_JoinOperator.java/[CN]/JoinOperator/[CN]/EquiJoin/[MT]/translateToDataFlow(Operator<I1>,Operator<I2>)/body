@@ -1,40 +1,27 @@
 {
   String name=getName() != null ? getName() : "Join at " + joinLocationName;
-  final JoinOperatorBase<?,?,OUT,?> translated;
-  if (keys1 instanceof Keys.SelectorFunctionKeys && keys2 instanceof Keys.SelectorFunctionKeys) {
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
-    PlanBothUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoin(selectorKeys1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
-    po.setParallelism(this.getParallelism());
-    translated=po;
+  JoinOperatorBaseBuilder<OUT> builder=new JoinOperatorBaseBuilder<OUT>(name,joinType).withParallelism(getParallelism()).withPartitioner(getPartitioner()).withJoinHint(getJoinHint()).withResultType(getResultType());
+  final boolean requiresTupleUnwrapping=keys1 instanceof Keys.SelectorFunctionKeys || keys2 instanceof Keys.SelectorFunctionKeys;
+  if (requiresTupleUnwrapping) {
+    if (keys1 instanceof Keys.SelectorFunctionKeys && keys2 instanceof Keys.SelectorFunctionKeys) {
+      @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
+      @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
+      builder=builder.withUdf(new TupleUnwrappingJoiner<>(function)).withWrappedInput1(input1,selectorKeys1,getInput1Type()).withWrappedInput2(input2,selectorKeys2,getInput2Type());
+    }
+ else     if (keys2 instanceof Keys.SelectorFunctionKeys) {
+      @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
+      builder=builder.withUdf(new TupleRightUnwrappingJoiner<>(function)).withInput1(input1,getInput1Type(),keys1).withWrappedInput2(input2,selectorKeys2,getInput2Type());
+    }
+ else {
+      @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
+      builder=builder.withUdf(new TupleLeftUnwrappingJoiner<>(function)).withWrappedInput1(input1,selectorKeys1,getInput1Type()).withInput2(input2,getInput2Type(),keys2);
+    }
   }
- else   if (keys2 instanceof Keys.SelectorFunctionKeys) {
-    int[] logicalKeyPositions1=keys1.computeLogicalKeyPositions();
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I2,?> selectorKeys2=(Keys.SelectorFunctionKeys<I2,?>)keys2;
-    PlanRightUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinRight(logicalKeyPositions1,selectorKeys2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
-    po.setParallelism(this.getParallelism());
-    translated=po;
-  }
- else   if (keys1 instanceof Keys.SelectorFunctionKeys) {
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<I1,?> selectorKeys1=(Keys.SelectorFunctionKeys<I1,?>)keys1;
-    int[] logicalKeyPositions2=keys2.computeLogicalKeyPositions();
-    PlanLeftUnwrappingJoinOperator<I1,I2,OUT,?> po=translateSelectorFunctionJoinLeft(selectorKeys1,logicalKeyPositions2,function,getInput1Type(),getInput2Type(),getResultType(),name,input1,input2);
-    po.setParallelism(this.getParallelism());
-    translated=po;
-  }
- else   if (super.keys1 instanceof Keys.ExpressionKeys && super.keys2 instanceof Keys.ExpressionKeys) {
-    int[] logicalKeyPositions1=super.keys1.computeLogicalKeyPositions();
-    int[] logicalKeyPositions2=super.keys2.computeLogicalKeyPositions();
-    JoinOperatorBase<I1,I2,OUT,FlatJoinFunction<I1,I2,OUT>> po=new JoinOperatorBase<I1,I2,OUT,FlatJoinFunction<I1,I2,OUT>>(function,new BinaryOperatorInformation<I1,I2,OUT>(getInput1Type(),getInput2Type(),getResultType()),logicalKeyPositions1,logicalKeyPositions2,name);
-    po.setFirstInput(input1);
-    po.setSecondInput(input2);
-    po.setParallelism(this.getParallelism());
-    translated=po;
+ else   if (keys1 instanceof Keys.ExpressionKeys && keys2 instanceof Keys.ExpressionKeys) {
+    builder=builder.withUdf(function).withInput1(input1,getInput1Type(),keys1).withInput2(input2,getInput2Type(),keys2);
   }
  else {
     throw new UnsupportedOperationException("Unrecognized or incompatible key types.");
   }
-  translated.setJoinHint(getJoinHint());
-  translated.setCustomPartitioner(getPartitioner());
-  return translated;
+  return builder.build();
 }

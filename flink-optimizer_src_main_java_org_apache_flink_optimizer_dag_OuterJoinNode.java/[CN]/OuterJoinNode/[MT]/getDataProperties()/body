@@ -1,0 +1,28 @@
+{
+  OuterJoinOperatorBase<?,?,?,?> operator=getOperator();
+  OuterJoinType type=operator.getOuterJoinType();
+  JoinHint joinHint=operator.getJoinHint();
+  joinHint=joinHint == null ? JoinHint.OPTIMIZER_CHOOSES : joinHint;
+  List<OperatorDescriptorDual> list=new ArrayList<>();
+switch (joinHint) {
+case OPTIMIZER_CHOOSES:
+    list.add(getSortMergeDescriptor(type,true));
+  break;
+case REPARTITION_SORT_MERGE:
+list.add(getSortMergeDescriptor(type,false));
+break;
+case REPARTITION_HASH_FIRST:
+case REPARTITION_HASH_SECOND:
+case BROADCAST_HASH_FIRST:
+case BROADCAST_HASH_SECOND:
+default :
+throw new CompilerException("Invalid join hint: " + joinHint + " for outer join type: "+ type);
+}
+Partitioner<?> customPartitioner=operator.getCustomPartitioner();
+if (customPartitioner != null) {
+for (OperatorDescriptorDual desc : list) {
+((AbstractJoinDescriptor)desc).setCustomPartitioner(customPartitioner);
+}
+}
+return list;
+}
