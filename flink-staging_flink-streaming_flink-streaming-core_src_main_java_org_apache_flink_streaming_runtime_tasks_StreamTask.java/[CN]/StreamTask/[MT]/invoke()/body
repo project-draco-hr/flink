@@ -1,41 +1,34 @@
 {
   LOG.debug("Invoking {}",getName());
-  boolean operatorOpen=false;
+  boolean disposed=false;
   try {
     openAllOperators();
-    operatorOpen=true;
     isRunning=true;
     run();
+    isRunning=false;
     if (LOG.isDebugEnabled()) {
       LOG.debug("Finished task {}",getName());
     }
-    this.isRunning=false;
 synchronized (checkpointLock) {
     }
     closeAllOperators();
-    operatorOpen=false;
     outputHandler.flushOutputs();
+    tryDisposeAllOperators();
+    disposed=true;
   }
   finally {
-    this.isRunning=false;
+    isRunning=false;
+    if (outputHandler != null) {
+      outputHandler.releaseOutputs();
+    }
     try {
-      if (operatorOpen) {
-        closeAllOperators();
-      }
+      cleanup();
     }
  catch (    Throwable t) {
-      LOG.error("Error closing stream operators after an exception.",t);
+      LOG.error("Error during cleanup of stream task.");
     }
- finally {
-      if (outputHandler != null) {
-        outputHandler.releaseOutputs();
-      }
-      try {
-        cleanup();
-      }
- catch (      Throwable t) {
-        LOG.error("Error during cleanup of stream task.");
-      }
+    if (!disposed) {
+      disposeAllOperators();
     }
   }
 }
