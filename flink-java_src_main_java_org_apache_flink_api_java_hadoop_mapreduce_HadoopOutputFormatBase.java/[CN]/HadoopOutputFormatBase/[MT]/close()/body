@@ -1,19 +1,21 @@
 {
-  try {
-    this.recordWriter.close(this.context);
-  }
- catch (  InterruptedException e) {
-    throw new IOException("Could not close RecordReader.",e);
-  }
-  if (this.outputCommitter.needsTaskCommit(this.context)) {
-    this.outputCommitter.commitTask(this.context);
-  }
-  Path outputPath=new Path(this.configuration.get("mapred.output.dir"));
-  FileSystem fs=FileSystem.get(outputPath.toUri(),this.configuration);
-  String taskNumberStr=Integer.toString(this.taskNumber);
-  String tmpFileTemplate="tmp-r-00000";
-  String tmpFile=tmpFileTemplate.substring(0,11 - taskNumberStr.length()) + taskNumberStr;
-  if (fs.exists(new Path(outputPath.toString() + "/" + tmpFile))) {
-    fs.rename(new Path(outputPath.toString() + "/" + tmpFile),new Path(outputPath.toString() + "/" + taskNumberStr));
+synchronized (CLOSE_MUTEX) {
+    try {
+      this.recordWriter.close(this.context);
+    }
+ catch (    InterruptedException e) {
+      throw new IOException("Could not close RecordReader.",e);
+    }
+    if (this.outputCommitter.needsTaskCommit(this.context)) {
+      this.outputCommitter.commitTask(this.context);
+    }
+    Path outputPath=new Path(this.configuration.get("mapred.output.dir"));
+    FileSystem fs=FileSystem.get(outputPath.toUri(),this.configuration);
+    String taskNumberStr=Integer.toString(this.taskNumber);
+    String tmpFileTemplate="tmp-r-00000";
+    String tmpFile=tmpFileTemplate.substring(0,11 - taskNumberStr.length()) + taskNumberStr;
+    if (fs.exists(new Path(outputPath.toString() + "/" + tmpFile))) {
+      fs.rename(new Path(outputPath.toString() + "/" + tmpFile),new Path(outputPath.toString() + "/" + taskNumberStr));
+    }
   }
 }
