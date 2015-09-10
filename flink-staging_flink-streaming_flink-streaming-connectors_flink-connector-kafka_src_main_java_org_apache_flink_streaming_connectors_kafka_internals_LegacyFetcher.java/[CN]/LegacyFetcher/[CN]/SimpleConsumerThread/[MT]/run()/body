@@ -7,23 +7,19 @@
     final int maxWait=Integer.valueOf(config.getProperty("fetch.wait.max.ms","100"));
     final int minBytes=Integer.valueOf(config.getProperty("fetch.min.bytes","1"));
     consumer=new SimpleConsumer(broker.host(),broker.port(),soTimeout,bufferSize,clientId);
-    List<FetchPartition> partitionsToGetOffsetsFor=new ArrayList<>();
-    for (    FetchPartition fp : partitions) {
-      if (fp.nextOffsetToRead == FlinkKafkaConsumer.OFFSET_NOT_SET) {
-        partitionsToGetOffsetsFor.add(fp);
+{
+      List<FetchPartition> partitionsToGetOffsetsFor=new ArrayList<>();
+      for (      FetchPartition fp : partitions) {
+        if (fp.nextOffsetToRead == FlinkKafkaConsumer.OFFSET_NOT_SET) {
+          partitionsToGetOffsetsFor.add(fp);
+        }
+      }
+      if (partitionsToGetOffsetsFor.size() > 0) {
+        getLastOffset(consumer,topic,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
+        LOG.info("No prior offsets found for some partitions in topic {}. Fetched the following start offsets {}",topic,partitionsToGetOffsetsFor);
       }
     }
-    if (partitionsToGetOffsetsFor.size() > 0) {
-      long timeType;
-      if (config.getProperty("auto.offset.reset","latest").equals("latest")) {
-        timeType=OffsetRequest.LatestTime();
-      }
- else {
-        timeType=OffsetRequest.EarliestTime();
-      }
-      getLastOffset(consumer,topic,partitionsToGetOffsetsFor,timeType);
-      LOG.info("No prior offsets found for some partitions in topic {}. Fetched the following start offsets {}",topic,partitionsToGetOffsetsFor);
-    }
+    int OffsetOutOfRangeCount=0;
     while (running) {
       FetchRequestBuilder frb=new FetchRequestBuilder();
       frb.clientId(clientId);
@@ -38,13 +34,28 @@
       fetchResponse=consumer.fetch(fetchRequest);
       if (fetchResponse.hasError()) {
         String exception="";
+        List<FetchPartition> partitionsToGetOffsetsFor=new ArrayList<>();
         for (        FetchPartition fp : partitions) {
-          short code;
-          if ((code=fetchResponse.errorCode(topic,fp.partition)) != ErrorMapping.NoError()) {
+          short code=fetchResponse.errorCode(topic,fp.partition);
+          if (code == ErrorMapping.OffsetOutOfRangeCode()) {
+            partitionsToGetOffsetsFor.add(fp);
+          }
+ else           if (code != ErrorMapping.NoError()) {
             exception+="\nException for partition " + fp.partition + ": "+ StringUtils.stringifyException(ErrorMapping.exceptionFor(code));
           }
         }
-        throw new IOException("Error while fetching from broker: " + exception);
+        if (partitionsToGetOffsetsFor.size() > 0) {
+          if (OffsetOutOfRangeCount++ > 0) {
+            throw new RuntimeException("Found invalid offsets more than once in partitions " + partitionsToGetOffsetsFor.toString() + " "+ "Exceptions: "+ exception);
+          }
+          LOG.warn("The following partitions had an invalid offset: {}",partitionsToGetOffsetsFor);
+          getLastOffset(consumer,topic,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
+          LOG.warn("The new partition offsets are {}",partitionsToGetOffsetsFor);
+          continue;
+        }
+ else {
+          throw new IOException("Error while fetching from broker: " + exception);
+        }
       }
       int messagesInFetch=0;
       for (      FetchPartition fp : partitions) {
