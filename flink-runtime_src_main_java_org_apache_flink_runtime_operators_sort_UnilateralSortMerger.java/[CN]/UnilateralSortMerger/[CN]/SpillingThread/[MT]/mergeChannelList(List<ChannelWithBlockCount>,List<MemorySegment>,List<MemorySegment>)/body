@@ -1,22 +1,23 @@
 {
-  final double numMerges=Math.ceil(channelIDs.size() / ((double)this.maxFanIn));
-  final int channelsToMergePerStep=(int)Math.ceil(channelIDs.size() / numMerges);
+  final double scale=Math.ceil(Math.log(channelIDs.size()) / Math.log(this.maxFanIn)) - 1;
+  final int numStart=channelIDs.size();
+  final int numEnd=(int)Math.pow(this.maxFanIn,scale);
+  final int numMerges=(int)Math.ceil((numStart - numEnd) / (double)(this.maxFanIn - 1));
+  final int numNotMerged=numEnd - numMerges;
+  final int numToMerge=numStart - numNotMerged;
+  final List<ChannelWithBlockCount> mergedChannelIDs=new ArrayList<ChannelWithBlockCount>(numEnd);
+  mergedChannelIDs.addAll(channelIDs.subList(0,numNotMerged));
+  final int channelsToMergePerStep=(int)Math.ceil(numToMerge / (double)numMerges);
   final List<List<MemorySegment>> readBuffers=new ArrayList<List<MemorySegment>>(channelsToMergePerStep);
   getSegmentsForReaders(readBuffers,allReadBuffers,channelsToMergePerStep);
-  final ArrayList<ChannelWithBlockCount> mergedChannelIDs=new ArrayList<ChannelWithBlockCount>((int)(numMerges + 1));
-  final ArrayList<ChannelWithBlockCount> channelsToMergeThisStep=new ArrayList<ChannelWithBlockCount>(channelsToMergePerStep);
-  int channelNum=0;
+  final List<ChannelWithBlockCount> channelsToMergeThisStep=new ArrayList<ChannelWithBlockCount>(channelsToMergePerStep);
+  int channelNum=numNotMerged;
   while (isRunning() && channelNum < channelIDs.size()) {
     channelsToMergeThisStep.clear();
     for (int i=0; i < channelsToMergePerStep && channelNum < channelIDs.size(); i++, channelNum++) {
       channelsToMergeThisStep.add(channelIDs.get(channelNum));
     }
-    if (channelsToMergeThisStep.size() < 2) {
-      mergedChannelIDs.addAll(channelsToMergeThisStep);
-    }
- else {
-      mergedChannelIDs.add(mergeChannels(channelsToMergeThisStep,readBuffers,writeBuffers));
-    }
+    mergedChannelIDs.add(mergeChannels(channelsToMergeThisStep,readBuffers,writeBuffers));
   }
   return mergedChannelIDs;
 }
