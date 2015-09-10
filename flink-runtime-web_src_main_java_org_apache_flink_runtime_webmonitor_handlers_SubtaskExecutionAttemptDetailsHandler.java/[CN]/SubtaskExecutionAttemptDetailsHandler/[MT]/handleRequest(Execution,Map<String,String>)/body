@@ -1,0 +1,48 @@
+{
+  final ExecutionState status=execAttempt.getState();
+  final long now=System.currentTimeMillis();
+  InstanceConnectionInfo location=execAttempt.getAssignedResourceLocation();
+  String locationString=location == null ? "(unassigned)" : location.getHostname();
+  long startTime=execAttempt.getStateTimestamp(ExecutionState.DEPLOYING);
+  if (startTime == 0) {
+    startTime=-1;
+  }
+  long endTime=status.isTerminal() ? execAttempt.getStateTimestamp(status) : -1;
+  long duration=startTime > 0 ? ((endTime > 0 ? endTime : now) - startTime) : -1;
+  Map<AccumulatorRegistry.Metric,Accumulator<?,?>> metrics=execAttempt.getFlinkAccumulators();
+  LongCounter readBytes;
+  LongCounter writeBytes;
+  LongCounter readRecords;
+  LongCounter writeRecords;
+  if (metrics != null) {
+    readBytes=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_IN);
+    writeBytes=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_BYTES_OUT);
+    readRecords=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_RECORDS_IN);
+    writeRecords=(LongCounter)metrics.get(AccumulatorRegistry.Metric.NUM_RECORDS_OUT);
+  }
+ else {
+    readBytes=null;
+    writeBytes=null;
+    readRecords=null;
+    writeRecords=null;
+  }
+  StringWriter writer=new StringWriter();
+  JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+  gen.writeStartObject();
+  gen.writeNumberField("subtask",execAttempt.getVertex().getSubTaskIndex());
+  gen.writeStringField("status",status.name());
+  gen.writeNumberField("attempt",execAttempt.getAttemptNumber());
+  gen.writeStringField("host",locationString);
+  gen.writeNumberField("start-time",startTime);
+  gen.writeNumberField("end-time",endTime);
+  gen.writeNumberField("duration",duration);
+  gen.writeObjectFieldStart("metrics");
+  gen.writeNumberField("read-bytes",readBytes != null ? readBytes.getLocalValuePrimitive() : -1L);
+  gen.writeNumberField("write-bytes",writeBytes != null ? writeBytes.getLocalValuePrimitive() : -1L);
+  gen.writeNumberField("read-records",readRecords != null ? readRecords.getLocalValuePrimitive() : -1L);
+  gen.writeNumberField("write-records",writeRecords != null ? writeRecords.getLocalValuePrimitive() : -1L);
+  gen.writeEndObject();
+  gen.writeEndObject();
+  gen.close();
+  return writer.toString();
+}

@@ -1,0 +1,35 @@
+{
+  final long now=System.currentTimeMillis();
+  StringWriter writer=new StringWriter();
+  JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+  gen.writeStartObject();
+  gen.writeStringField("id",jobVertex.getJobVertexId().toString());
+  gen.writeStringField("name",jobVertex.getJobVertex().getName());
+  gen.writeNumberField("now",now);
+  gen.writeArrayFieldStart("subtasks");
+  int num=0;
+  for (  ExecutionVertex vertex : jobVertex.getTaskVertices()) {
+    long[] timestamps=vertex.getCurrentExecutionAttempt().getStateTimestamps();
+    ExecutionState status=vertex.getExecutionState();
+    long scheduledTime=timestamps[ExecutionState.SCHEDULED.ordinal()];
+    long start=scheduledTime > 0 ? scheduledTime : -1;
+    long end=status.isTerminal() ? timestamps[status.ordinal()] : now;
+    long duration=start >= 0 ? end - start : -1L;
+    gen.writeStartObject();
+    gen.writeNumberField("subtask",num++);
+    InstanceConnectionInfo location=vertex.getCurrentAssignedResourceLocation();
+    String locationString=location == null ? "(unassigned)" : location.getHostname();
+    gen.writeStringField("host",locationString);
+    gen.writeNumberField("duration",duration);
+    gen.writeObjectFieldStart("timestamps");
+    for (    ExecutionState state : ExecutionState.values()) {
+      gen.writeNumberField(state.name(),timestamps[state.ordinal()]);
+    }
+    gen.writeEndObject();
+    gen.writeEndObject();
+  }
+  gen.writeEndArray();
+  gen.writeEndObject();
+  gen.close();
+  return writer.toString();
+}
