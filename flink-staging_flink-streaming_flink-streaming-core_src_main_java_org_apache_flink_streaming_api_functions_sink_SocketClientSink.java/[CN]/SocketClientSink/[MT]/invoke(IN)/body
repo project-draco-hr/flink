@@ -4,6 +4,37 @@
     dataOutputStream.write(msg);
   }
  catch (  IOException e) {
-    throw new RuntimeException("Cannot send message " + value.toString() + " to socket server at "+ hostName+ ":"+ port,e);
+    LOG.error("Cannot send message " + value + " to socket server at "+ hostName+ ":"+ port+ ". Caused by "+ e.getMessage()+ ". Trying to reconnect.",e);
+    retries=0;
+    boolean success=false;
+    while ((retries < maxRetry || retryForever) && !success && isRunning) {
+      try {
+        if (dataOutputStream != null) {
+          dataOutputStream.close();
+        }
+        if (client != null && !client.isClosed()) {
+          client.close();
+        }
+        retries++;
+        client=new Socket(hostName,port);
+        dataOutputStream=new DataOutputStream(client.getOutputStream());
+        dataOutputStream.write(msg);
+        success=true;
+      }
+ catch (      IOException ee) {
+        LOG.error("Reconnect to socket server and send message failed. Caused by " + ee.getMessage() + ". Retry time(s):"+ retries);
+        try {
+synchronized (lock) {
+            lock.wait(CONNECTION_RETRY_SLEEP);
+          }
+        }
+ catch (        InterruptedException eee) {
+          break;
+        }
+      }
+    }
+    if (!success) {
+      throw new RuntimeException("Cannot send message " + value + " to socket server at "+ hostName+ ":"+ port,e);
+    }
   }
 }

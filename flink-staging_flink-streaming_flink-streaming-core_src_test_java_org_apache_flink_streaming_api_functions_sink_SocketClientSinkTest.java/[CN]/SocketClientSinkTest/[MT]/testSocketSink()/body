@@ -1,0 +1,32 @@
+{
+  error.set(null);
+  value="";
+  server=new ServerSocket(0);
+  port=server.getLocalPort();
+  new Thread(new Runnable(){
+    @Override public void run(){
+      t1=Thread.currentThread();
+      try {
+        simpleSink=new SocketClientSink<String>(host,port,simpleSchema,0);
+        simpleSink.open(new Configuration());
+        simpleSink.invoke("testSocketSinkInvoke");
+        simpleSink.close();
+      }
+ catch (      Exception e) {
+        error.set(e);
+      }
+    }
+  }
+).start();
+  Socket sk=server.accept();
+  BufferedReader rdr=new BufferedReader(new InputStreamReader(sk.getInputStream()));
+  value=rdr.readLine();
+  t1.join();
+  server.close();
+  if (error.get() != null) {
+    Throwable t=error.get();
+    t.printStackTrace();
+    fail("Error in spawned thread: " + t.getMessage());
+  }
+  assertEquals("testSocketSinkInvoke",value);
+}

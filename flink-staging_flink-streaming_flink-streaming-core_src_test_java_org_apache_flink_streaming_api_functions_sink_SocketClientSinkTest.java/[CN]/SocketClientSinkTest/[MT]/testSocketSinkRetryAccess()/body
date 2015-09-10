@@ -1,0 +1,61 @@
+{
+  retry=-1L;
+  error.set(null);
+  server=new ServerSocket(0);
+  port=server.getLocalPort();
+  t1=new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        t1=Thread.currentThread();
+        Socket sk=server.accept();
+        sk.close();
+        server.close();
+        server=null;
+      }
+ catch (      Exception e) {
+        error.set(e);
+      }
+    }
+  }
+);
+  t1.start();
+  try {
+    simpleSink=new SocketClientSink<String>(host,port,simpleSchema,-1);
+    simpleSink.open(new Configuration());
+    t1.join();
+    if (error.get() == null) {
+      simpleSink.invoke("testSocketSinkInvoke");
+      new Thread(new Runnable(){
+        @Override public void run(){
+          try {
+            simpleSink.invoke("testSocketSinkInvoke");
+            simpleSink.close();
+          }
+ catch (          Exception e) {
+            error.set(e);
+          }
+        }
+      }
+).start();
+      while (simpleSink.retries == 0) {
+        Thread.sleep(1000);
+      }
+      value="";
+      server=new ServerSocket(port);
+      Socket sk=server.accept();
+      BufferedReader rdr=new BufferedReader(new InputStreamReader(sk.getInputStream()));
+      value=rdr.readLine();
+      retry=simpleSink.retries;
+    }
+  }
+ catch (  Exception e) {
+    error.set(e);
+  }
+  if (error.get() != null) {
+    Throwable t=error.get();
+    t.printStackTrace();
+    fail("Error in spawned thread: " + t.getMessage());
+  }
+  assertEquals("testSocketSinkInvoke",value);
+  assertTrue(retry > 0);
+}
