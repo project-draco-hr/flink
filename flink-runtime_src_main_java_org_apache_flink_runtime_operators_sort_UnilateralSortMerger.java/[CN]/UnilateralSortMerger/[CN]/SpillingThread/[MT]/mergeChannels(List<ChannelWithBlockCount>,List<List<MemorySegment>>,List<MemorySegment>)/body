@@ -6,10 +6,18 @@
   final BlockChannelWriter<MemorySegment> writer=this.ioManager.createBlockChannelWriter(mergedChannelID);
   registerOpenChannelToBeRemovedAtShudown(writer);
   final ChannelWriterOutputView output=new ChannelWriterOutputView(writer,writeBuffers,this.memManager.getPageSize());
-  final TypeSerializer<E> serializer=this.serializer;
-  E rec=serializer.createInstance();
-  while ((rec=mergeIterator.next(rec)) != null) {
-    serializer.serialize(rec,output);
+  if (objectReuseEnabled) {
+    final TypeSerializer<E> serializer=this.serializer;
+    E rec=serializer.createInstance();
+    while ((rec=mergeIterator.next(rec)) != null) {
+      serializer.serialize(rec,output);
+    }
+  }
+ else {
+    E rec;
+    while ((rec=mergeIterator.next()) != null) {
+      serializer.serialize(rec,output);
+    }
   }
   output.close();
   final int numBlocksWritten=output.getBlockCount();
