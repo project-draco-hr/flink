@@ -1,25 +1,11 @@
 {
-  List<Tuple2<Integer,Integer>> expectedSumList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Tuple2<Integer,Integer>> expectedMinList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Tuple2<Integer,Integer>> expectedMaxList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Integer> expectedSumList0=new ArrayList<Integer>();
-  List<Integer> expectedMinList0=new ArrayList<Integer>();
-  List<Integer> expectedMaxList0=new ArrayList<Integer>();
-  List<Tuple2<Integer,Integer>> expectedGroupSumList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Tuple2<Integer,Integer>> expectedGroupMinList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Tuple2<Integer,Integer>> expectedGroupMaxList=new ArrayList<Tuple2<Integer,Integer>>();
-  List<Integer> simpleInput=new ArrayList<Integer>();
+  List<Tuple2<Integer,Integer>> expectedGroupSumList=new ArrayList<>();
+  List<Tuple2<Integer,Integer>> expectedGroupMinList=new ArrayList<>();
+  List<Tuple2<Integer,Integer>> expectedGroupMaxList=new ArrayList<>();
   int groupedSum0=0;
   int groupedSum1=0;
   int groupedSum2=0;
   for (int i=0; i < 9; i++) {
-    simpleInput.add(i);
-    expectedSumList.add(new Tuple2<Integer,Integer>(i % 3,(i + 1) * i / 2));
-    expectedMinList.add(new Tuple2<Integer,Integer>(i % 3,0));
-    expectedMaxList.add(new Tuple2<Integer,Integer>(i % 3,i));
-    expectedSumList0.add((i + 1) * i / 2);
-    expectedMaxList0.add(i);
-    expectedMinList0.add(0);
     int groupedSum;
 switch (i % 3) {
 case 0:
@@ -32,34 +18,20 @@ default :
 groupedSum=groupedSum2+=i;
 break;
 }
-expectedGroupSumList.add(new Tuple2<Integer,Integer>(i % 3,groupedSum));
-expectedGroupMinList.add(new Tuple2<Integer,Integer>(i % 3,i % 3));
-expectedGroupMaxList.add(new Tuple2<Integer,Integer>(i % 3,i));
+expectedGroupSumList.add(new Tuple2<>(i % 3,groupedSum));
+expectedGroupMinList.add(new Tuple2<>(i % 3,i % 3));
+expectedGroupMaxList.add(new Tuple2<>(i % 3,i));
 }
-TypeInformation<Tuple2<Integer,Integer>> type1=TypeExtractor.getForObject(new Tuple2<Integer,Integer>(0,0));
-TypeInformation<Integer> type2=TypeExtractor.getForObject(2);
+TypeInformation<Tuple2<Integer,Integer>> typeInfo=TypeExtractor.getForObject(new Tuple2<>(0,0));
 ExecutionConfig config=new ExecutionConfig();
-ReduceFunction<Tuple2<Integer,Integer>> sumFunction=new SumAggregator<Tuple2<Integer,Integer>>(1,type1,config);
-ReduceFunction<Integer> sumFunction0=new SumAggregator<Integer>(0,type2,config);
-ReduceFunction<Tuple2<Integer,Integer>> minFunction=new ComparableAggregator<Tuple2<Integer,Integer>>(1,type1,AggregationType.MIN,config);
-ReduceFunction<Integer> minFunction0=new ComparableAggregator<Integer>(0,type2,AggregationType.MIN,config);
-ReduceFunction<Tuple2<Integer,Integer>> maxFunction=new ComparableAggregator<Tuple2<Integer,Integer>>(1,type1,AggregationType.MAX,config);
-ReduceFunction<Integer> maxFunction0=new ComparableAggregator<Integer>(0,type2,AggregationType.MAX,config);
-List<Tuple2<Integer,Integer>> sumList=MockContext.createAndExecute(new StreamReduce<Tuple2<Integer,Integer>>(sumFunction),getInputList());
-List<Tuple2<Integer,Integer>> minList=MockContext.createAndExecute(new StreamReduce<Tuple2<Integer,Integer>>(minFunction),getInputList());
-List<Tuple2<Integer,Integer>> maxList=MockContext.createAndExecute(new StreamReduce<Tuple2<Integer,Integer>>(maxFunction),getInputList());
-TypeInformation<Tuple2<Integer,Integer>> typeInfo=TypeExtractor.getForObject(new Tuple2<Integer,Integer>(1,1));
-KeySelector<Tuple2<Integer,Integer>,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<Tuple2<Integer,Integer>>(new int[]{0},typeInfo),typeInfo,new ExecutionConfig());
-List<Tuple2<Integer,Integer>> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<Tuple2<Integer,Integer>>(sumFunction,keySelector),getInputList());
-List<Tuple2<Integer,Integer>> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<Tuple2<Integer,Integer>>(minFunction,keySelector),getInputList());
-List<Tuple2<Integer,Integer>> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<Tuple2<Integer,Integer>>(maxFunction,keySelector),getInputList());
-assertEquals(expectedSumList,sumList);
-assertEquals(expectedMinList,minList);
-assertEquals(expectedMaxList,maxList);
+KeySelector<Tuple2<Integer,Integer>,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new int[]{0},typeInfo),typeInfo,config);
+ReduceFunction<Tuple2<Integer,Integer>> sumFunction=new SumAggregator<>(1,typeInfo,config);
+ReduceFunction<Tuple2<Integer,Integer>> minFunction=new ComparableAggregator<>(1,typeInfo,AggregationType.MIN,config);
+ReduceFunction<Tuple2<Integer,Integer>> maxFunction=new ComparableAggregator<>(1,typeInfo,AggregationType.MAX,config);
+List<Tuple2<Integer,Integer>> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<>(sumFunction,keySelector),getInputList());
+List<Tuple2<Integer,Integer>> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<>(minFunction,keySelector),getInputList());
+List<Tuple2<Integer,Integer>> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<>(maxFunction,keySelector),getInputList());
 assertEquals(expectedGroupSumList,groupedSumList);
 assertEquals(expectedGroupMinList,groupedMinList);
 assertEquals(expectedGroupMaxList,groupedMaxList);
-assertEquals(expectedSumList0,MockContext.createAndExecute(new StreamReduce<Integer>(sumFunction0),simpleInput));
-assertEquals(expectedMinList0,MockContext.createAndExecute(new StreamReduce<Integer>(minFunction0),simpleInput));
-assertEquals(expectedMaxList0,MockContext.createAndExecute(new StreamReduce<Integer>(maxFunction0),simpleInput));
 }

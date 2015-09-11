@@ -1,25 +1,11 @@
 {
-  List<MyPojo> expectedSumList=new ArrayList<MyPojo>();
-  List<MyPojo> expectedMinList=new ArrayList<MyPojo>();
-  List<MyPojo> expectedMaxList=new ArrayList<MyPojo>();
-  List<Integer> expectedSumList0=new ArrayList<Integer>();
-  List<Integer> expectedMinList0=new ArrayList<Integer>();
-  List<Integer> expectedMaxList0=new ArrayList<Integer>();
-  List<MyPojo> expectedGroupSumList=new ArrayList<MyPojo>();
-  List<MyPojo> expectedGroupMinList=new ArrayList<MyPojo>();
-  List<MyPojo> expectedGroupMaxList=new ArrayList<MyPojo>();
-  List<Integer> simpleInput=new ArrayList<Integer>();
+  List<MyPojo> expectedGroupSumList=new ArrayList<>();
+  List<MyPojo> expectedGroupMinList=new ArrayList<>();
+  List<MyPojo> expectedGroupMaxList=new ArrayList<>();
   int groupedSum0=0;
   int groupedSum1=0;
   int groupedSum2=0;
   for (int i=0; i < 9; i++) {
-    simpleInput.add(i);
-    expectedSumList.add(new MyPojo(i % 3,(i + 1) * i / 2));
-    expectedMinList.add(new MyPojo(i % 3,0));
-    expectedMaxList.add(new MyPojo(i % 3,i));
-    expectedSumList0.add((i + 1) * i / 2);
-    expectedMaxList0.add(i);
-    expectedMinList0.add(0);
     int groupedSum;
 switch (i % 3) {
 case 0:
@@ -36,30 +22,16 @@ expectedGroupSumList.add(new MyPojo(i % 3,groupedSum));
 expectedGroupMinList.add(new MyPojo(i % 3,i % 3));
 expectedGroupMaxList.add(new MyPojo(i % 3,i));
 }
-TypeInformation<MyPojo> type1=TypeExtractor.getForObject(new MyPojo(0,0));
-TypeInformation<Integer> type2=TypeExtractor.getForObject(0);
+TypeInformation<MyPojo> typeInfo=TypeExtractor.getForObject(new MyPojo(0,0));
 ExecutionConfig config=new ExecutionConfig();
-ReduceFunction<MyPojo> sumFunction=new SumAggregator<MyPojo>("f1",type1,config);
-ReduceFunction<Integer> sumFunction0=new SumAggregator<Integer>(0,type2,config);
-ReduceFunction<MyPojo> minFunction=new ComparableAggregator<MyPojo>("f1",type1,AggregationType.MIN,false,config);
-ReduceFunction<Integer> minFunction0=new ComparableAggregator<Integer>(0,type2,AggregationType.MIN,config);
-ReduceFunction<MyPojo> maxFunction=new ComparableAggregator<MyPojo>("f1",type1,AggregationType.MAX,false,config);
-ReduceFunction<Integer> maxFunction0=new ComparableAggregator<Integer>(0,type2,AggregationType.MAX,config);
-List<MyPojo> sumList=MockContext.createAndExecute(new StreamReduce<MyPojo>(sumFunction),getInputPojoList());
-List<MyPojo> minList=MockContext.createAndExecute(new StreamReduce<MyPojo>(minFunction),getInputPojoList());
-List<MyPojo> maxList=MockContext.createAndExecute(new StreamReduce<MyPojo>(maxFunction),getInputPojoList());
-TypeInformation<MyPojo> typeInfo=TypeExtractor.getForObject(new MyPojo(1,1));
-KeySelector<MyPojo,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<MyPojo>(new String[]{"f0"},typeInfo),typeInfo,config);
-List<MyPojo> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<MyPojo>(sumFunction,keySelector),getInputPojoList());
-List<MyPojo> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<MyPojo>(minFunction,keySelector),getInputPojoList());
-List<MyPojo> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<MyPojo>(maxFunction,keySelector),getInputPojoList());
-assertEquals(expectedSumList,sumList);
-assertEquals(expectedMinList,minList);
-assertEquals(expectedMaxList,maxList);
+KeySelector<MyPojo,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new String[]{"f0"},typeInfo),typeInfo,config);
+ReduceFunction<MyPojo> sumFunction=new SumAggregator<>("f1",typeInfo,config);
+ReduceFunction<MyPojo> minFunction=new ComparableAggregator<>("f1",typeInfo,AggregationType.MIN,false,config);
+ReduceFunction<MyPojo> maxFunction=new ComparableAggregator<>("f1",typeInfo,AggregationType.MAX,false,config);
+List<MyPojo> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<>(sumFunction,keySelector),getInputPojoList());
+List<MyPojo> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<>(minFunction,keySelector),getInputPojoList());
+List<MyPojo> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<>(maxFunction,keySelector),getInputPojoList());
 assertEquals(expectedGroupSumList,groupedSumList);
 assertEquals(expectedGroupMinList,groupedMinList);
 assertEquals(expectedGroupMaxList,groupedMaxList);
-assertEquals(expectedSumList0,MockContext.createAndExecute(new StreamReduce<Integer>(sumFunction0),simpleInput));
-assertEquals(expectedMinList0,MockContext.createAndExecute(new StreamReduce<Integer>(minFunction0),simpleInput));
-assertEquals(expectedMaxList0,MockContext.createAndExecute(new StreamReduce<Integer>(maxFunction0),simpleInput));
 }
