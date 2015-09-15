@@ -1,6 +1,6 @@
 {
-  final StormTopology stormTopology=this.stormBuilder.createTopology();
-  final FlinkTopology env=new FlinkTopology(stormTopology);
+  this.stormTopology=this.stormBuilder.createTopology();
+  final FlinkTopology env=new FlinkTopology();
   env.setParallelism(1);
   final HashMap<String,HashMap<String,DataStream>> availableInputs=new HashMap<String,HashMap<String,DataStream>>();
   for (  final Entry<String,IRichSpout> spout : this.spouts.entrySet()) {
@@ -18,6 +18,7 @@
  else {
       spoutWrapper=new StormSpoutWrapper(userSpout);
     }
+    spoutWrapper.setStormTopology(stormTopology);
     DataStreamSource source;
     HashMap<String,DataStream> outputStreams=new HashMap<String,DataStream>();
     if (sourceStreams.size() == 1) {
@@ -38,6 +39,9 @@
     if (common.is_set_parallelism_hint()) {
       dop=common.get_parallelism_hint();
       source.setParallelism(dop);
+    }
+ else {
+      common.set_parallelism_hint(1);
     }
     env.increaseNumberOfTasks(dop);
   }
@@ -103,13 +107,15 @@
               throw new UnsupportedOperationException("Flink only supports (local-or-)shuffle, fields, all, and global grouping");
             }
             SingleOutputStreamOperator outputStream;
+            StormBoltWrapper boltWrapper;
             if (boltOutputStreams.size() < 2) {
               String outputStreamId=null;
               if (boltOutputStreams.size() == 1) {
                 outputStreamId=(String)boltOutputStreams.keySet().toArray()[0];
               }
               final TypeInformation<?> outType=declarer.getOutputType(outputStreamId);
-              outputStream=inputStream.transform(boltId,outType,new StormBoltWrapper(userBolt,this.outputStreams.get(producerId).get(inputStreamId)));
+              boltWrapper=new StormBoltWrapper(userBolt,this.outputStreams.get(producerId).get(inputStreamId));
+              outputStream=inputStream.transform(boltId,outType,boltWrapper);
               if (outType != null) {
                 HashMap<String,DataStream> op=new HashMap<String,DataStream>();
                 op.put(outputStreamId,outputStream);
@@ -118,7 +124,8 @@
             }
  else {
               final TypeInformation<?> outType=TypeExtractor.getForClass(SplitStreamType.class);
-              outputStream=inputStream.transform(boltId,outType,new StormBoltWrapper(userBolt,this.outputStreams.get(producerId).get(inputStreamId)));
+              boltWrapper=new StormBoltWrapper(userBolt,this.outputStreams.get(producerId).get(inputStreamId));
+              outputStream=inputStream.transform(boltId,outType,boltWrapper);
               SplitStream splitStreams=outputStream.split(new FlinkStormStreamSelector());
               HashMap<String,DataStream> op=new HashMap<String,DataStream>();
               for (              String outputStreamId : boltOutputStreams.keySet()) {
@@ -126,10 +133,14 @@
               }
               availableInputs.put(boltId,op);
             }
+            boltWrapper.setStormTopology(stormTopology);
             int dop=1;
             if (common.is_set_parallelism_hint()) {
               dop=common.get_parallelism_hint();
               outputStream.setParallelism(dop);
+            }
+ else {
+              common.set_parallelism_hint(1);
             }
             env.increaseNumberOfTasks(dop);
             inputStreamsIterator.remove();
