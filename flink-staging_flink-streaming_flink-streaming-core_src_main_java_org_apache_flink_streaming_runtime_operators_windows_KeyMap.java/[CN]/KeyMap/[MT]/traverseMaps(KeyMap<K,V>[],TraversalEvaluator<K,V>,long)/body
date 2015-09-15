@@ -1,0 +1,35 @@
+{
+  Arrays.sort(maps,CapacityDescendingComparator.INSTANCE);
+  final int[] shifts=new int[maps.length];
+  final int[] lowBitsMask=new int[maps.length];
+  final int numSlots=maps[0].table.length;
+  final int numTables=maps.length;
+  for (int i=0; i < numTables; i++) {
+    shifts[i]=maps[0].log2size - maps[i].log2size;
+    lowBitsMask[i]=(1 << shifts[i]) - 1;
+  }
+  for (int pos=0; pos < numSlots; pos++) {
+    int mask;
+    for (int rootTable=0; rootTable < numTables && ((mask=lowBitsMask[rootTable]) & pos) == mask; rootTable++) {
+      Entry<K,V> entry=maps[rootTable].table[pos >> shifts[rootTable]];
+      while (entry != null) {
+        if (entry.touchedTag < touchedTag) {
+          entry.touchedTag=touchedTag;
+          final K key=entry.key;
+          final int hashCode=entry.hashCode;
+          visitor.startNewKey(key);
+          visitor.nextValue(entry.value);
+          addEntriesFromChain(entry.next,visitor,key,touchedTag,hashCode);
+          for (int followupTable=rootTable + 1; followupTable < numTables; followupTable++) {
+            Entry<K,V> followupEntry=maps[followupTable].table[pos >> shifts[followupTable]];
+            if (followupEntry != null) {
+              addEntriesFromChain(followupEntry,visitor,key,touchedTag,hashCode);
+            }
+          }
+          visitor.keyDone();
+        }
+        entry=entry.next;
+      }
+    }
+  }
+}

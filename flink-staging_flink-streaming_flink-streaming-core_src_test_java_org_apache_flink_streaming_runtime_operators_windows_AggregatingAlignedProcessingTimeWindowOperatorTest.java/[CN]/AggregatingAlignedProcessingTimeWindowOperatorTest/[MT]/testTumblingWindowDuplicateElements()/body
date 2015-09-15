@@ -1,0 +1,34 @@
+{
+  try {
+    final int windowSize=50;
+    final CollectingOutput<Integer> out=new CollectingOutput<>(windowSize);
+    final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
+    when(mockContext.getTaskName()).thenReturn("Test task name");
+    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,windowSize,windowSize);
+    op.setup(out,mockContext);
+    op.open(new Configuration());
+    final int numWindows=10;
+    long previousNextTime=0;
+    int window=1;
+    while (window <= numWindows) {
+      long nextTime=op.getNextEvaluationTime();
+      int val=((int)nextTime) ^ ((int)(nextTime >>> 32));
+      op.processElement(new StreamRecord<Integer>(val));
+      if (nextTime != previousNextTime) {
+        window++;
+        previousNextTime=nextTime;
+      }
+      Thread.sleep(1);
+    }
+    op.close();
+    op.dispose();
+    List<Integer> result=out.getElements();
+    assertTrue(result.size() >= numWindows && result.size() <= 2 * numWindows);
+    HashSet<Integer> set=new HashSet<>(result);
+    assertTrue(set.size() == 10 || set.size() == 11);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

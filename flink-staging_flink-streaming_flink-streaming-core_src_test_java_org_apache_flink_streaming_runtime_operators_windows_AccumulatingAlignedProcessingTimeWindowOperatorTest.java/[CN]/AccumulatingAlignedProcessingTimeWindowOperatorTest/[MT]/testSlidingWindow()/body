@@ -1,0 +1,38 @@
+{
+  try {
+    final CollectingOutput<Integer> out=new CollectingOutput<>(50);
+    final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
+    when(mockContext.getTaskName()).thenReturn("Test task name");
+    AbstractAlignedProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,150,50);
+    op.setup(out,mockContext);
+    op.open(new Configuration());
+    final int numElements=1000;
+    for (int i=0; i < numElements; i++) {
+      op.processElement(new StreamRecord<Integer>(i));
+      Thread.sleep(1);
+    }
+    op.close();
+    op.dispose();
+    List<Integer> result=out.getElements();
+    if (result.size() < numElements || result.size() > 3 * numElements) {
+      fail("Wrong number of results: " + result.size());
+    }
+    Collections.sort(result);
+    int lastNum=-1;
+    int lastCount=-1;
+    for (    int num : result) {
+      if (num == lastNum) {
+        lastCount++;
+        assertTrue(lastCount <= 3);
+      }
+ else {
+        lastNum=num;
+        lastCount=1;
+      }
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

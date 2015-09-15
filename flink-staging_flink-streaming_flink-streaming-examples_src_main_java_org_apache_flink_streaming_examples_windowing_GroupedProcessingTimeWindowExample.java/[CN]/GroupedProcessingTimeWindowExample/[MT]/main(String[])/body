@@ -1,0 +1,33 @@
+{
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(4);
+  DataStream<Tuple2<Long,Long>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Long,Long>>(){
+    private volatile boolean running=true;
+    @Override public void run(    SourceContext<Tuple2<Long,Long>> ctx) throws Exception {
+      final long startTime=System.currentTimeMillis();
+      final long numElements=20000000;
+      final long numKeys=10000;
+      long val=1L;
+      long count=0L;
+      while (running && count < numElements) {
+        count++;
+        ctx.collect(new Tuple2<Long,Long>(val++,1L));
+        if (val > numKeys) {
+          val=1L;
+        }
+      }
+      final long endTime=System.currentTimeMillis();
+      System.out.println("Took " + (endTime - startTime) + " msecs for "+ numElements+ " values");
+    }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
+);
+  stream.transform("Aligned time window",TypeInfoParser.<Tuple2<Long,Long>>parse("Tuple2<Long, Long>"),new AggregatingProcessingTimeWindowOperator<Long,Tuple2<Long,Long>>(new SummingReducer(),new FirstFieldKeyExtractor<Tuple2<Long,Long>,Long>(),2500,500)).addSink(new SinkFunction<Tuple2<Long,Long>>(){
+    @Override public void invoke(    Tuple2<Long,Long> value){
+    }
+  }
+);
+  env.execute();
+}

@@ -1,0 +1,23 @@
+{
+  try {
+    final CollectingOutput<Integer> out=new CollectingOutput<>(50);
+    final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
+    when(mockContext.getTaskName()).thenReturn("Test task name");
+    AbstractAlignedProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,150,50);
+    op.setup(out,mockContext);
+    op.open(new Configuration());
+    op.processElement(new StreamRecord<Integer>(1));
+    op.processElement(new StreamRecord<Integer>(2));
+    out.waitForNElements(6,120000);
+    List<Integer> result=out.getElements();
+    assertEquals(6,result.size());
+    Collections.sort(result);
+    assertEquals(Arrays.asList(1,1,1,2,2,2),result);
+    op.close();
+    op.dispose();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

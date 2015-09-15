@@ -1,0 +1,27 @@
+{
+  try {
+    final CollectingOutput<Integer> out=new CollectingOutput<>();
+    final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
+    when(mockContext.getTaskName()).thenReturn("Test task name");
+    ReduceFunction<Integer> failingFunction=new FailingFunction(100);
+    final long hundredYears=100L * 365 * 24* 60* 60* 1000;
+    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(failingFunction,identitySelector,hundredYears,hundredYears);
+    op.setup(out,mockContext);
+    op.open(new Configuration());
+    for (int i=0; i < 100; i++) {
+      op.processElement(new StreamRecord<Integer>(1));
+    }
+    try {
+      op.processElement(new StreamRecord<Integer>(1));
+      fail("This fail with an exception");
+    }
+ catch (    Exception e) {
+      assertTrue(e.getMessage().contains("Artificial Test Exception"));
+    }
+    op.dispose();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
