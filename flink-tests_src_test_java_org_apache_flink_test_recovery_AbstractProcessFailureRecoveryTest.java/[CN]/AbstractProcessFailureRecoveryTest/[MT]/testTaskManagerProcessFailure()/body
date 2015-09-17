@@ -33,7 +33,7 @@
     new PipeForwarder(taskManagerProcess2.getErrorStream(),processOutput2);
     waitUntilNumTaskManagersAreRegistered(jmActor,2,120000);
     final File coordinateDirClosure=coordinateTempDir;
-    final Throwable[] errorRef=new Throwable[1];
+    final AtomicReference<Throwable> errorRef=new AtomicReference<>();
     Thread programTrigger=new Thread("Program Trigger"){
       @Override public void run(){
         try {
@@ -41,13 +41,22 @@
         }
  catch (        Throwable t) {
           t.printStackTrace();
-          errorRef[0]=t;
+          errorRef.set(t);
         }
       }
     }
 ;
     programTrigger.start();
-    waitForMarkerFiles(coordinateTempDir,PARALLELISM,20000);
+    if (!waitForMarkerFiles(coordinateTempDir,PARALLELISM,120000)) {
+      if (errorRef.get() != null) {
+        Throwable error=errorRef.get();
+        error.printStackTrace();
+        fail("The program encountered a " + error.getClass().getSimpleName() + " : "+ error.getMessage());
+      }
+ else {
+        fail("The tasks were not started within time (" + 120000 + "msecs)");
+      }
+    }
     taskManagerProcess3=new ProcessBuilder(command).start();
     new PipeForwarder(taskManagerProcess3.getErrorStream(),processOutput3);
     waitUntilNumTaskManagersAreRegistered(jmActor,3,120000);
@@ -56,8 +65,8 @@
     touchFile(new File(coordinateTempDir,PROCEED_MARKER_FILE));
     programTrigger.join(300000);
     assertFalse("The program did not finish in time",programTrigger.isAlive());
-    if (errorRef[0] != null) {
-      Throwable error=errorRef[0];
+    if (errorRef.get() != null) {
+      Throwable error=errorRef.get();
       error.printStackTrace();
       fail("The program encountered a " + error.getClass().getSimpleName() + " : "+ error.getMessage());
     }
