@@ -11,8 +11,7 @@
     File tempLogFile=File.createTempFile("testlogconfig","properties");
     tempLogFile.deleteOnExit();
     CommonTestUtils.printLog4jDebugConfig(tempLogFile);
-    int jobManagerPort=NetUtils.getAvailablePort();
-    String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms256m","-Xmx256m","-classpath",getCurrentClasspath(),JobManagerTestEntryPoint.class.getName(),String.valueOf(jobManagerPort)};
+    String[] command=new String[]{javaCommand,"-Dlog.level=DEBUG","-Dlog4j.configuration=file:" + tempLogFile.getAbsolutePath(),"-Xms256m","-Xmx256m","-classpath",getCurrentClasspath(),JobManagerTestEntryPoint.class.getName()};
     ProcessBuilder bld=new ProcessBuilder(command);
     jmProcess=bld.start();
     new PipeForwarder(jmProcess.getErrorStream(),processOutput);
@@ -20,15 +19,27 @@
     localSystem=AkkaUtils.createActorSystem(new Configuration(),new Some<Tuple2<String,Object>>(localAddress));
     ActorRef jobManagerRef=null;
     Throwable lastError=null;
+    String pattern="Starting JobManager at [^:]*://flink@[^:]*:(\\d*)/";
+    Pattern r=Pattern.compile(pattern);
+    int jobManagerPort=-1;
     for (int i=0; i < 40; i++) {
+      Matcher m=r.matcher(processOutput.toString());
+      if (m.find()) {
+        jobManagerPort=Integer.parseInt(m.group(1));
+        break;
+      }
+      Thread.sleep(500);
+    }
+    if (jobManagerPort != -1) {
       try {
         jobManagerRef=JobManager.getJobManagerActorRef(new InetSocketAddress("localhost",jobManagerPort),localSystem,new FiniteDuration(25,TimeUnit.SECONDS));
-        break;
       }
  catch (      Throwable t) {
         lastError=t;
       }
-      Thread.sleep(500);
+    }
+ else {
+      fail("Could not determine port of started JobManager.");
     }
     assertTrue("JobManager process died",isProcessAlive(jmProcess));
     if (jobManagerRef == null) {
