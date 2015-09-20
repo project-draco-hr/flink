@@ -1,0 +1,16 @@
+{
+  GroupedDataStream<Tuple2<Integer,Long>> stream=env.addSource(new StatefulMultipleSequence()).groupBy(0);
+  stream.min(1).map(new OnceFailingIdentityMapFunction(NUM_INPUT)).groupBy(0).addSink(new MinEvictingQueueSink());
+  stream.reduce(new ReduceFunction<Tuple2<Integer,Long>>(){
+    @Override public Tuple2<Integer,Long> reduce(    Tuple2<Integer,Long> value1,    Tuple2<Integer,Long> value2) throws Exception {
+      return Tuple2.of(value1.f0,value1.f1 + value2.f1);
+    }
+  }
+).groupBy(0).addSink(new SumEvictingQueueSink());
+  stream.fold(Tuple2.of(0,0L),new FoldFunction<Tuple2<Integer,Long>,Tuple2<Integer,Long>>(){
+    @Override public Tuple2<Integer,Long> fold(    Tuple2<Integer,Long> accumulator,    Tuple2<Integer,Long> value) throws Exception {
+      return Tuple2.of(value.f0,accumulator.f1 + value.f1);
+    }
+  }
+).groupBy(0).addSink(new FoldEvictingQueueSink());
+}
