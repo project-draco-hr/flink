@@ -1,23 +1,21 @@
 {
   int noKeys=100;
   int noKeyCnt=10000;
-  MockRecordReader reader=new MockRecordReader();
+  TestData.MockTuple2Reader<Tuple2<Integer,Integer>> reader=TestData.getIntIntTupleReader();
   LOG.debug("initializing sortmerger");
   TestCountCombiner comb=new TestCountCombiner();
-  Sorter<Record> merger=new CombiningUnilateralSortMerger<Record>(comb,this.memoryManager,this.ioManager,reader,this.parentTask,this.serializerFactory,this.comparator,0.25,64,0.7f,false);
-  final Record rec=new Record();
-  rec.setField(1,new IntValue(1));
-  final TestData.Key key=new TestData.Key();
+  Sorter<Tuple2<Integer,Integer>> merger=new CombiningUnilateralSortMerger<>(comb,this.memoryManager,this.ioManager,reader,this.parentTask,this.serializerFactory2,this.comparator2,0.25,64,0.7f,false);
+  final Tuple2<Integer,Integer> rec=new Tuple2<>();
+  rec.setField(1,1);
   for (int i=0; i < noKeyCnt; i++) {
     for (int j=0; j < noKeys; j++) {
-      key.setKey(j);
-      rec.setField(0,key);
+      rec.setField(j,0);
       reader.emit(rec);
     }
   }
   reader.close();
-  MutableObjectIterator<Record> iterator=merger.getIterator();
-  Iterator<Integer> result=getReducingIterator(iterator,serializerFactory.getSerializer(),comparator.duplicate());
+  MutableObjectIterator<Tuple2<Integer,Integer>> iterator=merger.getIterator();
+  Iterator<Integer> result=getReducingIterator(iterator,serializerFactory2.getSerializer(),comparator2.duplicate());
   while (result.hasNext()) {
     Assert.assertEquals(noKeyCnt,result.next().intValue());
   }

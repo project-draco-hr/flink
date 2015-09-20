@@ -2,9 +2,9 @@
   final int NUM_RECORDS=559273;
   final int numSegments=MEMORY_SIZE / MEMORY_PAGE_SIZE;
   final List<MemorySegment> memory=this.memoryManager.allocatePages(new DummyInvokable(),numSegments);
-  NormalizedKeySorter<Record> sorter=newSortBuffer(memory);
-  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-  Record record=new Record();
+  NormalizedKeySorter<Tuple2<Integer,String>> sorter=newSortBuffer(memory);
+  TestData.TupleGenerator generator=new TestData.TupleGenerator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+  Tuple2<Integer,String> record=new Tuple2<>();
   int num=0;
   do {
     generator.next(record);
@@ -13,21 +13,17 @@
  while (sorter.write(record) && num < NUM_RECORDS);
   QuickSort qs=new QuickSort();
   qs.sort(sorter);
-  MutableObjectIterator<Record> iter=sorter.getIterator();
-  Record readTarget=new Record();
-  Key current=new Key();
-  Key last=new Key();
+  MutableObjectIterator<Tuple2<Integer,String>> iter=sorter.getIterator();
+  Tuple2<Integer,String> readTarget=new Tuple2<>();
   iter.next(readTarget);
-  readTarget.getFieldInto(0,last);
+  int last=readTarget.f0;
   while ((readTarget=iter.next(readTarget)) != null) {
-    readTarget.getFieldInto(0,current);
-    final int cmp=last.compareTo(current);
+    int current=readTarget.f0;
+    final int cmp=last - current;
     if (cmp > 0) {
       Assert.fail("Next key is not larger or equal to previous key.");
     }
-    Key tmp=current;
-    current=last;
-    last=tmp;
+    last=current;
   }
   sorter.dispose();
   this.memoryManager.release(memory);

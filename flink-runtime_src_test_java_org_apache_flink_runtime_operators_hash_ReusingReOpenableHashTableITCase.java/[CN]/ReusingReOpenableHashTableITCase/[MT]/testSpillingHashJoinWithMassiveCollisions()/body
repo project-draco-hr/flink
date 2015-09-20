@@ -6,14 +6,14 @@
   final int NUM_KEYS=1000000;
   final int BUILD_VALS_PER_KEY=3;
   final int PROBE_VALS_PER_KEY=10;
-  MutableObjectIterator<Record> build1=new UniformRecordGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
-  MutableObjectIterator<Record> build2=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT_BUILD);
-  MutableObjectIterator<Record> build3=new ConstantsKeyValuePairsIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT_BUILD);
-  List<MutableObjectIterator<Record>> builds=new ArrayList<MutableObjectIterator<Record>>();
+  MutableObjectIterator<Tuple2<Integer,Integer>> build1=new UniformIntTupleGenerator(NUM_KEYS,BUILD_VALS_PER_KEY,false);
+  MutableObjectIterator<Tuple2<Integer,Integer>> build2=new TestData.ConstantIntIntTuplesIterator(REPEATED_VALUE_1,17,REPEATED_VALUE_COUNT_BUILD);
+  MutableObjectIterator<Tuple2<Integer,Integer>> build3=new TestData.ConstantIntIntTuplesIterator(REPEATED_VALUE_2,23,REPEATED_VALUE_COUNT_BUILD);
+  List<MutableObjectIterator<Tuple2<Integer,Integer>>> builds=new ArrayList<>();
   builds.add(build1);
   builds.add(build2);
   builds.add(build3);
-  MutableObjectIterator<Record> buildInput=new UnionIterator<Record>(builds);
+  MutableObjectIterator<Tuple2<Integer,Integer>> buildInput=new UnionIterator<>(builds);
   List<MemorySegment> memSegments;
   try {
     memSegments=this.memoryManager.allocatePages(MEM_OWNER,896);
@@ -23,32 +23,32 @@
     return;
   }
   HashMap<Integer,Long> map=new HashMap<Integer,Long>(NUM_KEYS);
-  final ReOpenableMutableHashTable<Record,Record> join=new ReOpenableMutableHashTable<Record,Record>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager,true);
+  final ReOpenableMutableHashTable<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> join=new ReOpenableMutableHashTable<>(this.recordBuildSideAccesssor,this.recordProbeSideAccesssor,this.recordBuildSideComparator,this.recordProbeSideComparator,this.pactRecordComparator,memSegments,ioManager,true);
   for (int probe=0; probe < NUM_PROBES; probe++) {
-    MutableObjectIterator<Record> probeInput=getProbeInput(NUM_KEYS,PROBE_VALS_PER_KEY,REPEATED_VALUE_1,REPEATED_VALUE_2);
+    MutableObjectIterator<Tuple2<Integer,Integer>> probeInput=getProbeInput(NUM_KEYS,PROBE_VALS_PER_KEY,REPEATED_VALUE_1,REPEATED_VALUE_2);
     if (probe == 0) {
       join.open(buildInput,probeInput);
     }
  else {
       join.reopenProbe(probeInput);
     }
-    Record record;
-    final Record recordReuse=new Record();
+    Tuple2<Integer,Integer> record;
+    final Tuple2<Integer,Integer> recordReuse=new Tuple2<>();
     while (join.nextRecord()) {
       long numBuildValues=0;
-      final Record probeRec=join.getCurrentProbeRecord();
-      int key=probeRec.getField(0,IntValue.class).getValue();
-      HashBucketIterator<Record,Record> buildSide=join.getBuildSideIterator();
+      final Tuple2<Integer,Integer> probeRec=join.getCurrentProbeRecord();
+      Integer key=probeRec.f0;
+      HashBucketIterator<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> buildSide=join.getBuildSideIterator();
       if ((record=buildSide.next(recordReuse)) != null) {
         numBuildValues=1;
-        Assert.assertEquals("Probe-side key was different than build-side key.",key,record.getField(0,IntValue.class).getValue());
+        Assert.assertEquals("Probe-side key was different than build-side key.",key,record.f0);
       }
  else {
         fail("No build side values found for a probe key.");
       }
       while ((record=buildSide.next(record)) != null) {
         numBuildValues++;
-        Assert.assertEquals("Probe-side key was different than build-side key.",key,record.getField(0,IntValue.class).getValue());
+        Assert.assertEquals("Probe-side key was different than build-side key.",key,record.f0);
       }
       Long contained=map.get(key);
       if (contained == null) {

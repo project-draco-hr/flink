@@ -1,0 +1,36 @@
+{
+  final Map<Integer,Collection<TupleMatch>> expectedFirstMatchesMap=ReusingHashMatchIteratorITCase.matchSecondTupleFields(ReusingHashMatchIteratorITCase.collectTupleData(buildInput),ReusingHashMatchIteratorITCase.collectTupleData(probeInput));
+  final List<Map<Integer,Collection<TupleMatch>>> expectedNMatchesMapList=new ArrayList<>(NUM_PROBES);
+  final FlatJoinFunction[] nMatcher=new TupleMatchRemovingJoin[NUM_PROBES];
+  for (int i=0; i < NUM_PROBES; i++) {
+    Map<Integer,Collection<TupleMatch>> tmp;
+    expectedNMatchesMapList.add(tmp=deepCopy(expectedFirstMatchesMap));
+    nMatcher[i]=new TupleMatchRemovingJoin(tmp);
+  }
+  final FlatJoinFunction firstMatcher=new TupleMatchRemovingJoin(expectedFirstMatchesMap);
+  final Collector<Tuple2<Integer,String>> collector=new DiscardingOutputCollector<>();
+  bgen.reset();
+  pgen.reset();
+  buildInput.reset();
+  probeInput.reset();
+  ReusingBuildFirstReOpenableHashMatchIterator<Tuple2<Integer,String>,Tuple2<Integer,String>,Tuple2<Integer,String>> iterator=new ReusingBuildFirstReOpenableHashMatchIterator<>(buildInput,probeInput,this.recordSerializer,this.record1Comparator,this.recordSerializer,this.record2Comparator,this.recordPairComparator,this.memoryManager,ioManager,this.parentTask,1.0,true);
+  iterator.open();
+  while (iterator.callWithNextKey(firstMatcher,collector))   ;
+  for (  Entry<Integer,Collection<TupleMatch>> entry : expectedFirstMatchesMap.entrySet()) {
+    if (!entry.getValue().isEmpty()) {
+      Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+    }
+  }
+  for (int i=0; i < NUM_PROBES; i++) {
+    pgen.reset();
+    probeInput.reset();
+    iterator.reopenProbe(probeInput);
+    while (iterator.callWithNextKey(nMatcher[i],collector))     ;
+    for (    Entry<Integer,Collection<TupleMatch>> entry : expectedNMatchesMapList.get(i).entrySet()) {
+      if (!entry.getValue().isEmpty()) {
+        Assert.fail("Collection for key " + entry.getKey() + " is not empty");
+      }
+    }
+  }
+  iterator.close();
+}

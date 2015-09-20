@@ -1,31 +1,27 @@
 {
   final int numSegments=MEMORY_SIZE / MEMORY_PAGE_SIZE;
   final List<MemorySegment> memory=this.memoryManager.allocatePages(new DummyInvokable(),numSegments);
-  @SuppressWarnings({"unchecked","rawtypes"}) RecordComparator accessors=new RecordComparator(new int[]{1},new Class[]{Value.class});
-  NormalizedKeySorter<Record> sorter=new NormalizedKeySorter<Record>(RecordSerializer.get(),accessors,memory);
-  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
-  Record record=new Record();
+  @SuppressWarnings("unchecked") TypeComparator<Tuple2<Integer,String>> accessors=TestData.getIntStringTupleTypeInfo().createComparator(new int[]{1},new boolean[]{true},0,null);
+  NormalizedKeySorter<Tuple2<Integer,String>> sorter=new NormalizedKeySorter<>(TestData.getIntStringTupleSerializer(),accessors,memory);
+  TestData.TupleGenerator generator=new TestData.TupleGenerator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  Tuple2<Integer,String> record=new Tuple2<>();
   do {
     generator.next(record);
   }
  while (sorter.write(record));
   QuickSort qs=new QuickSort();
   qs.sort(sorter);
-  MutableObjectIterator<Record> iter=sorter.getIterator();
-  Record readTarget=new Record();
-  Value current=new Value();
-  Value last=new Value();
+  MutableObjectIterator<Tuple2<Integer,String>> iter=sorter.getIterator();
+  Tuple2<Integer,String> readTarget=new Tuple2<>();
   iter.next(readTarget);
-  readTarget.getFieldInto(1,last);
+  String last=readTarget.f1;
   while ((readTarget=iter.next(readTarget)) != null) {
-    readTarget.getFieldInto(1,current);
+    String current=readTarget.f1;
     final int cmp=last.compareTo(current);
     if (cmp > 0) {
       Assert.fail("Next value is not larger or equal to previous value.");
     }
-    Value tmp=current;
-    current=last;
-    last=tmp;
+    last=current;
   }
   sorter.dispose();
   this.memoryManager.release(memory);

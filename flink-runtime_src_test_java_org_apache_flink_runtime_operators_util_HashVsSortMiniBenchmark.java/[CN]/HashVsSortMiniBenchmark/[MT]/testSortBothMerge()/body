@@ -1,17 +1,17 @@
 {
   try {
-    Generator generator1=new Generator(SEED1,INPUT_1_SIZE / 10,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    Generator generator2=new Generator(SEED2,INPUT_2_SIZE,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
-    final TestData.GeneratorIterator input1=new TestData.GeneratorIterator(generator1,INPUT_1_SIZE);
-    final TestData.GeneratorIterator input2=new TestData.GeneratorIterator(generator2,INPUT_2_SIZE);
-    final JoinFunction matcher=new NoOpMatcher();
-    final Collector<Record> collector=new DiscardingOutputCollector<Record>();
+    TestData.TupleGenerator generator1=new TestData.TupleGenerator(SEED1,INPUT_1_SIZE / 10,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    TestData.TupleGenerator generator2=new TestData.TupleGenerator(SEED2,INPUT_2_SIZE,100,KeyMode.RANDOM,ValueMode.RANDOM_LENGTH);
+    final TestData.TupleGeneratorIterator input1=new TestData.TupleGeneratorIterator(generator1,INPUT_1_SIZE);
+    final TestData.TupleGeneratorIterator input2=new TestData.TupleGeneratorIterator(generator2,INPUT_2_SIZE);
+    final FlatJoinFunction matcher=new NoOpMatcher();
+    final Collector<Tuple2<Integer,String>> collector=new DiscardingOutputCollector<>();
     long start=System.nanoTime();
-    final UnilateralSortMerger<Record> sorter1=new UnilateralSortMerger<Record>(this.memoryManager,this.ioManager,input1,this.parentTask,this.serializer1,this.comparator1.duplicate(),MEMORY_FOR_SORTER,128,0.8f,true);
-    final UnilateralSortMerger<Record> sorter2=new UnilateralSortMerger<Record>(this.memoryManager,this.ioManager,input2,this.parentTask,this.serializer2,this.comparator2.duplicate(),MEMORY_FOR_SORTER,128,0.8f,true);
-    final MutableObjectIterator<Record> sortedInput1=sorter1.getIterator();
-    final MutableObjectIterator<Record> sortedInput2=sorter2.getIterator();
-    ReusingMergeInnerJoinIterator<Record,Record,Record> iterator=new ReusingMergeInnerJoinIterator<Record,Record,Record>(sortedInput1,sortedInput2,this.serializer1.getSerializer(),this.comparator1,this.serializer2.getSerializer(),this.comparator2,this.pairComparator11,this.memoryManager,this.ioManager,MEMORY_PAGES_FOR_MERGE,this.parentTask);
+    final UnilateralSortMerger<Tuple2<Integer,String>> sorter1=new UnilateralSortMerger<>(this.memoryManager,this.ioManager,input1,this.parentTask,this.serializer1,this.comparator1.duplicate(),MEMORY_FOR_SORTER,128,0.8f,true);
+    final UnilateralSortMerger<Tuple2<Integer,String>> sorter2=new UnilateralSortMerger<>(this.memoryManager,this.ioManager,input2,this.parentTask,this.serializer2,this.comparator2.duplicate(),MEMORY_FOR_SORTER,128,0.8f,true);
+    final MutableObjectIterator<Tuple2<Integer,String>> sortedInput1=sorter1.getIterator();
+    final MutableObjectIterator<Tuple2<Integer,String>> sortedInput2=sorter2.getIterator();
+    ReusingMergeInnerJoinIterator<Tuple2<Integer,String>,Tuple2<Integer,String>,Tuple2<Integer,String>> iterator=new ReusingMergeInnerJoinIterator<>(sortedInput1,sortedInput2,this.serializer1.getSerializer(),this.comparator1,this.serializer2.getSerializer(),this.comparator2,this.pairComparator11,this.memoryManager,this.ioManager,MEMORY_PAGES_FOR_MERGE,this.parentTask);
     iterator.open();
     while (iterator.callWithNextKey(matcher,collector))     ;
     iterator.close();

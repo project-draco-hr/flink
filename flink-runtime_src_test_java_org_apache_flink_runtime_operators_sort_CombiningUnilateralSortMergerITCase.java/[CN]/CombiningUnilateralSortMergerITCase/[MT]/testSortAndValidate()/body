@@ -1,41 +1,36 @@
 {
-  final Hashtable<TestData.Key,Integer> countTable=new Hashtable<TestData.Key,Integer>(KEY_MAX);
+  final Hashtable<Integer,Integer> countTable=new Hashtable<>(KEY_MAX);
   for (int i=1; i <= KEY_MAX; i++) {
-    countTable.put(new TestData.Key(i),0);
+    countTable.put(i,0);
   }
-  final Comparator<TestData.Key> keyComparator=new TestData.KeyComparator();
-  MockRecordReader reader=new MockRecordReader();
+  final TypeComparator<Integer> keyComparator=new IntComparator(true);
+  TestData.MockTuple2Reader<Tuple2<Integer,String>> reader=TestData.getIntStringTupleReader();
   LOG.debug("initializing sortmerger");
   TestCountCombiner2 comb=new TestCountCombiner2();
-  Sorter<Record> merger=new CombiningUnilateralSortMerger<Record>(comb,this.memoryManager,this.ioManager,reader,this.parentTask,this.serializerFactory,this.comparator,0.25,2,0.7f,false);
+  Sorter<Tuple2<Integer,String>> merger=new CombiningUnilateralSortMerger<>(comb,this.memoryManager,this.ioManager,reader,this.parentTask,this.serializerFactory1,this.comparator1,0.25,2,0.7f,false);
   LOG.debug("emitting data");
-  TestData.Generator generator=new TestData.Generator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
-  Record rec=new Record();
-  final TestData.Value value=new TestData.Value("1");
+  TestData.TupleGenerator generator=new TestData.TupleGenerator(SEED,KEY_MAX,VALUE_LENGTH,KeyMode.RANDOM,ValueMode.FIX_LENGTH);
+  Tuple2<Integer,String> rec=new Tuple2<>();
   for (int i=0; i < NUM_PAIRS; i++) {
     Assert.assertTrue((rec=generator.next(rec)) != null);
-    final TestData.Key key=rec.getField(0,TestData.Key.class);
-    rec.setField(1,value);
+    final Integer key=rec.f0;
+    rec.setField("1",1);
     reader.emit(rec);
-    countTable.put(new TestData.Key(key.getKey()),countTable.get(key) + 1);
+    countTable.put(key,countTable.get(key) + 1);
   }
   reader.close();
-  rec=null;
-  MutableObjectIterator<Record> iterator=merger.getIterator();
+  MutableObjectIterator<Tuple2<Integer,String>> iterator=merger.getIterator();
   LOG.debug("checking results");
-  Record rec1=new Record();
-  Record rec2=new Record();
+  Tuple2<Integer,String> rec1=new Tuple2<>();
+  Tuple2<Integer,String> rec2=new Tuple2<>();
   Assert.assertTrue((rec1=iterator.next(rec1)) != null);
-  countTable.put(new TestData.Key(rec1.getField(0,TestData.Key.class).getKey()),countTable.get(rec1.getField(0,TestData.Key.class)) - (Integer.parseInt(rec1.getField(1,TestData.Value.class).toString())));
+  countTable.put(rec1.f0,countTable.get(rec1.f0) - (Integer.parseInt(rec1.f1)));
   while ((rec2=iterator.next(rec2)) != null) {
-    final Key k1=rec1.getField(0,TestData.Key.class);
-    final Key k2=rec2.getField(0,TestData.Key.class);
+    int k1=rec1.f0;
+    int k2=rec2.f0;
     Assert.assertTrue(keyComparator.compare(k1,k2) <= 0);
-    countTable.put(new TestData.Key(k2.getKey()),countTable.get(k2) - (Integer.parseInt(rec2.getField(1,TestData.Value.class).toString())));
-    Record tmp=rec1;
+    countTable.put(k2,countTable.get(k2) - (Integer.parseInt(rec2.f1)));
     rec1=rec2;
-    k1.setKey(k2.getKey());
-    rec2=tmp;
   }
   for (  Integer cnt : countTable.values()) {
     Assert.assertTrue(cnt == 0);
