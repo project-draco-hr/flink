@@ -2,14 +2,14 @@
   if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_PARTIAL_REDUCE) {
     throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
   }
-  this.memManager=this.taskContext.getMemoryManager();
-  final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
   final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
   this.comparator=this.taskContext.getDriverComparator(0);
   this.serializer=serializerFactory.getSerializer();
   this.reducer=this.taskContext.getStub();
   this.output=this.taskContext.getOutputCollector();
-  final List<MemorySegment> memory=this.memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
+  MemoryManager memManager=this.taskContext.getMemoryManager();
+  final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
+  this.memory=memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
   if (this.comparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
     this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.comparator,memory);
   }
