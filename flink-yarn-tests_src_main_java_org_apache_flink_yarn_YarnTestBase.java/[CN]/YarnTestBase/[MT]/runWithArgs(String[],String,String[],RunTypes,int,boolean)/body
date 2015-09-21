@@ -1,0 +1,64 @@
+{
+  LOG.info("Running with args {}",Arrays.toString(args));
+  outContent=new ByteArrayOutputStream();
+  errContent=new ByteArrayOutputStream();
+  System.setOut(new PrintStream(outContent));
+  System.setErr(new PrintStream(errContent));
+  final int START_TIMEOUT_SECONDS=180;
+  final long deadline=System.currentTimeMillis() + (START_TIMEOUT_SECONDS * 1000);
+  Runner runner=new Runner(args,type);
+  runner.start();
+  boolean expectedStringSeen=false;
+  boolean testPassedFromLog4j=false;
+  do {
+    sleep(1000);
+    String outContentString=outContent.toString();
+    String errContentString=errContent.toString();
+    if (failOnStrings != null) {
+      for (      String failOnString : failOnStrings) {
+        if (outContentString.contains(failOnString) || errContentString.contains(failOnString)) {
+          LOG.warn("Failing test. Output contained illegal string '" + failOnString + "'");
+          sendOutput();
+          runner.sendStop();
+          Assert.fail("Output contained illegal string '" + failOnString + "'");
+        }
+      }
+    }
+    if (checkLogForTerminateString) {
+      LoggingEvent matchedEvent=UtilsTest.getEventContainingString(terminateAfterString);
+      if (matchedEvent != null) {
+        testPassedFromLog4j=true;
+        LOG.info("Found expected output in logging event {}",matchedEvent);
+      }
+    }
+    if (outContentString.contains(terminateAfterString) || errContentString.contains(terminateAfterString) || testPassedFromLog4j) {
+      expectedStringSeen=true;
+      LOG.info("Found expected output in redirected streams");
+      LOG.info("RunWithArgs: request runner to stop");
+      runner.sendStop();
+      try {
+        runner.join(30000);
+      }
+ catch (      InterruptedException e) {
+        LOG.warn("Interrupted while stopping runner",e);
+      }
+      LOG.warn("RunWithArgs runner stopped.");
+    }
+ else {
+      if (!runner.isAlive()) {
+        if (runner.getReturnValue() != 0) {
+          Assert.fail("Runner thread died before the test was finished. Return value = " + runner.getReturnValue());
+        }
+ else {
+          LOG.info("Runner stopped earlier than expected with return value = 0");
+        }
+        break;
+      }
+    }
+  }
+ while (!expectedStringSeen && System.currentTimeMillis() < deadline);
+  sendOutput();
+  Assert.assertTrue("During the timeout period of " + START_TIMEOUT_SECONDS + " seconds the "+ "expected string did not show up",expectedStringSeen);
+  Assert.assertTrue("Expecting return value == " + returnCode,runner.getReturnValue() == returnCode);
+  LOG.info("Test was successful");
+}
