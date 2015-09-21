@@ -1,0 +1,43 @@
+{
+  try {
+    SourceFunction.SourceContext<String> ctx=new SourceFunction.SourceContext<String>(){
+      private final Object lock=new Object();
+      @Override public void collect(      String element){
+        int pos=numElementsReceived;
+synchronized (sync) {
+          numElementsReceived++;
+          sync.notifyAll();
+        }
+        if (expectedData != null && expectedData.length > pos) {
+          assertEquals(expectedData[pos],element);
+        }
+      }
+      @Override public void collectWithTimestamp(      String element,      long timestamp){
+        collect(element);
+      }
+      @Override public void emitWatermark(      Watermark mark){
+      }
+      @Override public Object getCheckpointLock(){
+        return lock;
+      }
+      @Override public void close(){
+      }
+    }
+;
+    socketSource.run(ctx);
+  }
+ catch (  Throwable t) {
+synchronized (sync) {
+      if (!canceled) {
+        error=t;
+      }
+      sync.notifyAll();
+    }
+  }
+ finally {
+synchronized (sync) {
+      done=true;
+      sync.notifyAll();
+    }
+  }
+}
