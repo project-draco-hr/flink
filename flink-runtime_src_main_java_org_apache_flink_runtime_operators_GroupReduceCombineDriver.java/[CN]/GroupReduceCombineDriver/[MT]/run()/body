@@ -4,18 +4,22 @@
   }
   final MutableObjectIterator<IN> in=this.taskContext.getInput(0);
   final TypeSerializer<IN> serializer=this.serializer;
-  IN value=serializer.createInstance();
-  while (running && (value=in.next(value)) != null) {
-    if (this.sorter.write(value)) {
-      continue;
+  if (objectReuseEnabled) {
+    IN value=serializer.createInstance();
+    while (running && (value=in.next(value)) != null) {
+      if (this.sorter.write(value)) {
+        continue;
+      }
+      sortAndCombineAndRetryWrite(value);
     }
-    sortAndCombine();
-    this.sorter.reset();
-    if (!this.sorter.write(value)) {
-      ++oversizedRecordCount;
-      LOG.debug("Cannot write record to fresh sort buffer, record is too large. " + "Oversized record count: {}",oversizedRecordCount);
-      Iterable<IN> input=Collections.singleton(value);
-      this.combiner.combine(input,this.output);
+  }
+ else {
+    IN value;
+    while (running && (value=in.next()) != null) {
+      if (this.sorter.write(value)) {
+        continue;
+      }
+      sortAndCombineAndRetryWrite(value);
     }
   }
   if (running) {

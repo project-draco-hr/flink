@@ -4,15 +4,30 @@
   }
   final MutableObjectIterator<T> in=this.taskContext.getInput(0);
   final TypeSerializer<T> serializer=this.serializer;
-  T value=serializer.createInstance();
-  while (running && (value=in.next(value)) != null) {
-    if (this.sorter.write(value)) {
-      continue;
+  if (objectReuseEnabled) {
+    T value=serializer.createInstance();
+    while (running && (value=in.next(value)) != null) {
+      if (this.sorter.write(value)) {
+        continue;
+      }
+      sortAndCombine();
+      this.sorter.reset();
+      if (!this.sorter.write(value)) {
+        throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+      }
     }
-    sortAndCombine();
-    this.sorter.reset();
-    if (!this.sorter.write(value)) {
-      throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+  }
+ else {
+    T value;
+    while (running && (value=in.next()) != null) {
+      if (this.sorter.write(value)) {
+        continue;
+      }
+      sortAndCombine();
+      this.sorter.reset();
+      if (!this.sorter.write(value)) {
+        throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+      }
     }
   }
   sortAndCombine();
