@@ -1,43 +1,43 @@
 {
-  retry=-1L;
-  error.set(null);
-  server=new ServerSocket(0);
-  port=server.getLocalPort();
-  t1=new Thread(new Runnable(){
-    @Override public void run(){
-      try {
-        t1=Thread.currentThread();
-        Socket sk=server.accept();
-        sk.close();
-        server.close();
-      }
- catch (      Exception e) {
-        error.set(e);
-      }
-    }
-  }
-);
-  t1.start();
-  simpleSink=new SocketClientSink<String>(host,port,simpleSchema,0);
+  final ServerSocket server=new ServerSocket(0);
+  final int port=server.getLocalPort();
   try {
+    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+    Thread serverRunner=new Thread("Test server runner"){
+      @Override public void run(){
+        try {
+          Socket sk=server.accept();
+          sk.close();
+        }
+ catch (        Throwable t) {
+          error.set(t);
+        }
+      }
+    }
+;
+    serverRunner.start();
+    SocketClientSink<String> simpleSink=new SocketClientSink<>(host,port,simpleSchema,0,true);
     simpleSink.open(new Configuration());
-    t1.join();
-    if (error.get() == null) {
-      simpleSink.invoke("testSocketSinkInvoke");
-      simpleSink.invoke("testSocketSinkInvoke");
-      simpleSink.close();
+    serverRunner.join();
+    if (error.get() != null) {
+      Throwable t=error.get();
+      t.printStackTrace();
+      fail("Error in server thread: " + t.getMessage());
     }
-  }
- catch (  Exception e) {
-    retry=simpleSink.retries;
-    if (!(e instanceof RuntimeException) || e.toString().indexOf(except) == -1) {
-      error.set(e);
+    try {
+      simpleSink.invoke(TEST_MESSAGE + '\n');
+      simpleSink.invoke(TEST_MESSAGE + '\n');
+      fail("This should have failed with an exception");
     }
+ catch (    IOException e) {
+      assertTrue("Wrong exception",e.getMessage().contains(EXCEPTION_MESSGAE));
+    }
+catch (    Exception e) {
+      fail("wrong exception: " + e.getClass().getName() + " - "+ e.getMessage());
+    }
+    assertEquals(0,simpleSink.getCurrentNumberOfRetries());
   }
-  if (error.get() != null) {
-    Throwable t=error.get();
-    t.printStackTrace();
-    fail("Error in spawned thread: " + t.getMessage());
+  finally {
+    IOUtils.closeQuietly(server);
   }
-  assertEquals(0,retry);
 }

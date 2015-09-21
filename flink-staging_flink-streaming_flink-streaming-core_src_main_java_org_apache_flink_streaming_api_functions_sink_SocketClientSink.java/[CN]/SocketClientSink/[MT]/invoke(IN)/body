@@ -1,40 +1,51 @@
 {
   byte[] msg=schema.serialize(value);
   try {
-    dataOutputStream.write(msg);
+    outputStream.write(msg);
+    if (autoFlush) {
+      outputStream.flush();
+    }
   }
  catch (  IOException e) {
-    LOG.error("Cannot send message " + value + " to socket server at "+ hostName+ ":"+ port+ ". Caused by "+ e.getMessage()+ ". Trying to reconnect.",e);
-    retries=0;
-    boolean success=false;
-    while ((retries < maxRetry || retryForever) && !success && isRunning) {
-      try {
-        if (dataOutputStream != null) {
-          dataOutputStream.close();
-        }
-        if (client != null && !client.isClosed()) {
-          client.close();
-        }
-        retries++;
-        client=new Socket(hostName,port);
-        dataOutputStream=new DataOutputStream(client.getOutputStream());
-        dataOutputStream.write(msg);
-        success=true;
-      }
- catch (      IOException ee) {
-        LOG.error("Reconnect to socket server and send message failed. Caused by " + ee.getMessage() + ". Retry time(s):"+ retries);
-        try {
+    if (maxNumRetries == 0) {
+      throw new IOException("Failed to send message '" + value + "' to socket server at "+ hostName+ ":"+ port+ ". Connection re-tries are not enabled.",e);
+    }
+    LOG.error("Failed to send message '" + value + "' to socket server at "+ hostName+ ":"+ port+ ". Trying to reconnect...",e);
 synchronized (lock) {
-            lock.wait(CONNECTION_RETRY_SLEEP);
+      IOException lastException=null;
+      retries=0;
+      while (isRunning && (maxNumRetries < 0 || retries < maxNumRetries)) {
+        try {
+          if (outputStream != null) {
+            outputStream.close();
           }
         }
- catch (        InterruptedException eee) {
-          break;
+ catch (        IOException ee) {
+          LOG.error("Could not close output stream from failed write attempt",ee);
         }
+        try {
+          if (client != null) {
+            client.close();
+          }
+        }
+ catch (        IOException ee) {
+          LOG.error("Could not close socket from failed write attempt",ee);
+        }
+        retries++;
+        try {
+          createConnection();
+          outputStream.write(msg);
+          return;
+        }
+ catch (        IOException ee) {
+          lastException=ee;
+          LOG.error("Re-connect to socket server and send message failed. Retry time(s): " + retries,ee);
+        }
+        lock.wait(CONNECTION_RETRY_DELAY);
       }
-    }
-    if (!success) {
-      throw new RuntimeException("Cannot send message " + value + " to socket server at "+ hostName+ ":"+ port,e);
+      if (isRunning) {
+        throw new IOException("Failed to send message '" + value + "' to socket server at "+ hostName+ ":"+ port+ ". Failed after "+ retries+ " retries.",lastException);
+      }
     }
   }
 }
