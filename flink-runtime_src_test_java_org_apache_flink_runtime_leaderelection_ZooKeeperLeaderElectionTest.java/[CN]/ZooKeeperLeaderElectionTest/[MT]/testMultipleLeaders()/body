@@ -7,18 +7,20 @@
   configuration.setString(ConfigConstants.ZOOKEEPER_LEADER_PATH,leaderPath);
   ZooKeeperLeaderElectionService leaderElectionService=null;
   ZooKeeperLeaderRetrievalService leaderRetrievalService=null;
+  ZooKeeperLeaderRetrievalService leaderRetrievalService2=null;
   TestingListener listener=new TestingListener();
+  TestingListener listener2=new TestingListener();
   TestingContender contender;
   try {
     leaderElectionService=ZooKeeperUtils.createLeaderElectionService(configuration);
     leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(configuration);
+    leaderRetrievalService2=ZooKeeperUtils.createLeaderRetrievalService(configuration);
     contender=new TestingContender(TEST_URL,leaderElectionService);
     leaderElectionService.start(contender);
     leaderRetrievalService.start(listener);
-    listener.waitForLeader(timeout.toMillis());
+    listener.waitForNewLeader(timeout.toMillis());
     assertEquals(listener.getLeaderSessionID(),contender.getLeaderSessionID());
     assertEquals(TEST_URL,listener.getAddress());
-    listener.clear();
     CuratorFramework client=ZooKeeperUtils.startCuratorFramework(configuration);
     ByteArrayOutputStream baos=new ByteArrayOutputStream();
     ObjectOutputStream oos=new ObjectOutputStream(baos);
@@ -35,13 +37,13 @@
  catch (      KeeperException.NodeExistsException e) {
       }
     }
-    listener.waitForLeader(timeout.toMillis());
-    if (FAULTY_CONTENDER_URL.equals(listener.getAddress())) {
-      listener.clear();
-      listener.waitForLeader(timeout.toMillis());
+    leaderRetrievalService2.start(listener2);
+    listener2.waitForNewLeader(timeout.toMillis());
+    if (FAULTY_CONTENDER_URL.equals(listener2.getAddress())) {
+      listener2.waitForNewLeader(timeout.toMillis());
     }
-    assertEquals(listener.getLeaderSessionID(),contender.getLeaderSessionID());
-    assertEquals(listener.getAddress(),contender.getAddress());
+    assertEquals(listener2.getLeaderSessionID(),contender.getLeaderSessionID());
+    assertEquals(listener2.getAddress(),contender.getAddress());
   }
   finally {
     if (leaderElectionService != null) {
@@ -49,6 +51,9 @@
     }
     if (leaderRetrievalService != null) {
       leaderRetrievalService.stop();
+    }
+    if (leaderRetrievalService2 != null) {
+      leaderRetrievalService2.stop();
     }
   }
 }
