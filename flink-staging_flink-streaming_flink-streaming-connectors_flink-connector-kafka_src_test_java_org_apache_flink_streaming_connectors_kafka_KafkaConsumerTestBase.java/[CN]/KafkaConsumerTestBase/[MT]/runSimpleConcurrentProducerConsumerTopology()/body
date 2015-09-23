@@ -1,13 +1,12 @@
 {
   LOG.info("Starting runSimpleConcurrentProducerConsumerTopology()");
-  final String topic="concurrentProducerConsumerTopic";
+  final String topic="concurrentProducerConsumerTopic_" + UUID.randomUUID().toString();
   final int parallelism=3;
   final int elementsPerPartition=100;
   final int totalElements=parallelism * elementsPerPartition;
   createTestTopic(topic,parallelism,2);
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
   env.setParallelism(parallelism);
-  env.setNumberOfExecutionRetries(0);
   env.getConfig().disableSysoutLogging();
   TypeInformation<Tuple2<Long,String>> longStringType=TypeInfoParser.parse("Tuple2<Long, String>");
   TypeInformationSerializationSchema<Tuple2<Long,String>> sourceSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
@@ -53,7 +52,20 @@
     }
   }
 ).setParallelism(1);
-  tryExecute(env,"runSimpleConcurrentProducerConsumerTopology");
+  try {
+    tryExecutePropagateExceptions(env,"runSimpleConcurrentProducerConsumerTopology");
+  }
+ catch (  ProgramInvocationException|JobExecutionException e) {
+    Throwable cause=e.getCause();
+    int depth=0;
+    while (cause != null && depth++ < 20) {
+      if (cause instanceof kafka.common.NotLeaderForPartitionException) {
+        throw (Exception)cause;
+      }
+      cause=cause.getCause();
+    }
+    throw e;
+  }
   LOG.info("Finished runSimpleConcurrentProducerConsumerTopology()");
   deleteTestTopic(topic);
 }
