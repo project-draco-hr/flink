@@ -1,0 +1,23 @@
+{
+  timestampedCollector.setTimestamp(window.getEnd());
+  Map<W,Tuple2<WindowBuffer<IN>,TriggerContext>> keyWindows=windows.get(key);
+  if (keyWindows == null) {
+    LOG.debug("Window {} for key {} already gone.",window,key);
+    return;
+  }
+  Tuple2<WindowBuffer<IN>,TriggerContext> bufferAndTrigger;
+  if (purge) {
+    bufferAndTrigger=keyWindows.remove(window);
+  }
+ else {
+    bufferAndTrigger=keyWindows.get(window);
+  }
+  if (bufferAndTrigger == null) {
+    LOG.debug("Window {} for key {} already gone.",window,key);
+    return;
+  }
+  userFunction.evaluate(key,window,bufferAndTrigger.f0.getUnpackedElements(),timestampedCollector);
+  if (keyWindows.isEmpty()) {
+    windows.remove(key);
+  }
+}

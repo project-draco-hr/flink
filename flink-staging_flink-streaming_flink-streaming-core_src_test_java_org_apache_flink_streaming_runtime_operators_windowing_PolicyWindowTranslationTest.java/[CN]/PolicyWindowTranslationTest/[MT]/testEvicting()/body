@@ -1,0 +1,34 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Tuple2<String,Integer>> source=env.fromElements(Tuple2.of("hello",1),Tuple2.of("hello",2));
+  DummyReducer reducer=new DummyReducer();
+  DataStream<Tuple2<String,Integer>> window1=source.keyBy(0).window(Time.of(1000,TimeUnit.MICROSECONDS),Count.of(100)).reduceWindow(reducer);
+  OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>> transform1=(OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>>)window1.getTransformation();
+  OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator1=transform1.getOperator();
+  Assert.assertTrue(operator1 instanceof EvictingWindowOperator);
+  EvictingWindowOperator winOperator1=(EvictingWindowOperator)operator1;
+  Assert.assertTrue(winOperator1.isSetProcessingTime());
+  Assert.assertTrue(winOperator1.getTriggerTemplate() instanceof CountTrigger);
+  Assert.assertTrue(winOperator1.getWindowAssigner() instanceof GlobalWindows);
+  Assert.assertTrue(winOperator1.getEvictor() instanceof TimeEvictor);
+  Assert.assertTrue(winOperator1.getWindowBufferFactory() instanceof HeapWindowBuffer.Factory);
+  DataStream<Tuple2<String,Integer>> window2=source.keyBy(0).window(Count.of(1000),Delta.of(1.0,new DeltaFunction<Object>(){
+    @Override public double getDelta(    Object oldDataPoint,    Object newDataPoint){
+      return 0;
+    }
+  }
+)).mapWindow(new KeyedWindowFunction<Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple,Window>(){
+    private static final long serialVersionUID=1L;
+    @Override public void evaluate(    Tuple tuple,    Window window,    Iterable<Tuple2<String,Integer>> values,    Collector<Tuple2<String,Integer>> out) throws Exception {
+    }
+  }
+);
+  OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>> transform2=(OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>>)window2.getTransformation();
+  OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator2=transform2.getOperator();
+  Assert.assertTrue(operator2 instanceof EvictingWindowOperator);
+  EvictingWindowOperator winOperator2=(EvictingWindowOperator)operator2;
+  Assert.assertTrue(winOperator2.getTriggerTemplate() instanceof DeltaTrigger);
+  Assert.assertTrue(winOperator2.getWindowAssigner() instanceof GlobalWindows);
+  Assert.assertTrue(winOperator2.getEvictor() instanceof CountEvictor);
+  Assert.assertTrue(winOperator2.getWindowBufferFactory() instanceof HeapWindowBuffer.Factory);
+}

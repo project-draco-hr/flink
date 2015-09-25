@@ -1,0 +1,20 @@
+{
+  WindowPolicy windowPolicy=null;
+  WindowPolicy slidePolicy=null;
+  if (windowAssigner instanceof SlidingProcessingTimeWindows && trigger instanceof ProcessingTimeTrigger && evictor == null) {
+    SlidingProcessingTimeWindows timeWindows=(SlidingProcessingTimeWindows)windowAssigner;
+    windowPolicy=ProcessingTime.of(timeWindows.getSize(),TimeUnit.MILLISECONDS);
+    slidePolicy=ProcessingTime.of(timeWindows.getSlide(),TimeUnit.MILLISECONDS);
+  }
+ else   if (windowAssigner instanceof TumblingProcessingTimeWindows && trigger instanceof ProcessingTimeTrigger && evictor == null) {
+    TumblingProcessingTimeWindows timeWindows=(TumblingProcessingTimeWindows)windowAssigner;
+    windowPolicy=ProcessingTime.of(timeWindows.getSize(),TimeUnit.MILLISECONDS);
+  }
+  if (windowPolicy == null) {
+    return null;
+  }
+  String opName=windowPolicy.toString(slidePolicy) + " of " + functionName;
+  KeySelector<T,K> keySel=input.getKeySelector();
+  OneInputStreamOperator<T,R> operator=PolicyToOperator.createOperatorForPolicies(windowPolicy,slidePolicy,function,keySel);
+  return input.transform(opName,resultType,operator);
+}
