@@ -1,4 +1,7 @@
 {
+  if (localJobManagerAddress == null) {
+    localJobManagerAddress=localJobManagerAddressPromise.future().value().get().get();
+  }
   final HttpRequest request=routed.request();
   String requestPath=routed.path();
   if (requestPath.endsWith("/")) {
@@ -10,63 +13,18 @@
  else   if (requestPath.equals("/jobmanager/stdout")) {
     requestPath="/" + getFileName(rootPath,WebRuntimeMonitor.STDOUT_FILE_PATTERN);
   }
-  final File file=new File(rootPath,requestPath);
-  if (!file.exists()) {
-    ClassLoader cl=StaticFileServerHandler.class.getClassLoader();
-    try (InputStream resourceStream=cl.getResourceAsStream("web" + requestPath)){
-      if (resourceStream == null) {
-        logger.debug("Unable to load requested file {} from classloader",requestPath);
-        sendError(ctx,NOT_FOUND);
-        return;
-      }
-      logger.debug("Loading missing file from classloader: {}",requestPath);
-      file.getParentFile().mkdirs();
-      Files.copy(resourceStream,file.toPath());
+  Option<Tuple2<ActorGateway,Integer>> jobManager=retriever.getJobManagerGatewayAndWebPort();
+  if (jobManager.isDefined()) {
+    String redirectAddress=HandlerRedirectUtils.getRedirectAddress(localJobManagerAddress,jobManager.get());
+    if (redirectAddress != null) {
+      HttpResponse redirect=HandlerRedirectUtils.getRedirectResponse(redirectAddress,requestPath);
+      KeepAliveWrite.flush(ctx,routed.request(),redirect);
     }
-   }
-  if (!file.exists() || file.isHidden() || file.isDirectory()|| !file.isFile()) {
-    sendError(ctx,NOT_FOUND);
-    return;
-  }
-  final String ifModifiedSince=request.headers().get(IF_MODIFIED_SINCE);
-  if (ifModifiedSince != null && !ifModifiedSince.isEmpty()) {
-    SimpleDateFormat dateFormatter=new SimpleDateFormat(HTTP_DATE_FORMAT,Locale.US);
-    Date ifModifiedSinceDate=dateFormatter.parse(ifModifiedSince);
-    long ifModifiedSinceDateSeconds=ifModifiedSinceDate.getTime() / 1000;
-    long fileLastModifiedSeconds=file.lastModified() / 1000;
-    if (ifModifiedSinceDateSeconds == fileLastModifiedSeconds) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("Responding 'NOT MODIFIED' for file '" + file.getAbsolutePath() + '\'');
-      }
-      sendNotModified(ctx);
-      return;
+ else {
+      respondAsLeader(ctx,request,requestPath);
     }
   }
-  if (logger.isDebugEnabled()) {
-    logger.debug("Responding with file '" + file.getAbsolutePath() + '\'');
-  }
-  final RandomAccessFile raf;
-  try {
-    raf=new RandomAccessFile(file,"r");
-  }
- catch (  FileNotFoundException e) {
-    sendError(ctx,NOT_FOUND);
-    return;
-  }
-  long fileLength=raf.length();
-  HttpResponse response=new DefaultHttpResponse(HTTP_1_1,OK);
-  setContentTypeHeader(response,file);
-  if (!(requestPath.contains("log") || requestPath.contains("out"))) {
-    setDateAndCacheHeaders(response,file);
-  }
-  if (HttpHeaders.isKeepAlive(request)) {
-    response.headers().set(CONNECTION,HttpHeaders.Values.KEEP_ALIVE);
-  }
-  HttpHeaders.setContentLength(response,fileLength);
-  ctx.write(response);
-  ctx.write(new DefaultFileRegion(raf.getChannel(),0,fileLength),ctx.newProgressivePromise());
-  ChannelFuture lastContentFuture=ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-  if (!HttpHeaders.isKeepAlive(request)) {
-    lastContentFuture.addListener(ChannelFutureListener.CLOSE);
+ else {
+    KeepAliveWrite.flush(ctx,routed.request(),HandlerRedirectUtils.getUnavailableResponse());
   }
 }

@@ -1,0 +1,40 @@
+{
+  if (leaderAddress != null && !leaderAddress.equals("")) {
+    try {
+      final Promise<ActorGateway> gatewayPromise=new scala.concurrent.impl.Promise.DefaultPromise<>();
+      final Promise<Integer> webPortPromise=new scala.concurrent.impl.Promise.DefaultPromise<>();
+      final Tuple2<Promise<ActorGateway>,Promise<Integer>> newPromise=new Tuple2<>(gatewayPromise,webPortPromise);
+      LOG.info("Retrieved leader notification {}:{}.",leaderAddress,leaderSessionID);
+      AkkaUtils.getActorRefFuture(leaderAddress,actorSystem,lookupTimeout).flatMap(new Mapper<ActorRef,Future<Object>>(){
+        @Override public Future<Object> apply(        ActorRef jobManagerRef){
+          ActorGateway leaderGateway=new AkkaActorGateway(jobManagerRef,leaderSessionID);
+          gatewayPromise.success(leaderGateway);
+          return leaderGateway.ask(JobManagerMessages.getRequestWebMonitorPort(),timeout);
+        }
+      }
+,actorSystem.dispatcher()).onComplete(new OnComplete<Object>(){
+        @Override public void onComplete(        Throwable failure,        Object success) throws Throwable {
+          if (failure == null) {
+            int webMonitorPort=((ResponseWebMonitorPort)success).port();
+            webPortPromise.success(webMonitorPort);
+synchronized (lock) {
+              Tuple2<Promise<ActorGateway>,Promise<Integer>> previousPromise=leaderPromise;
+              leaderPromise=newPromise;
+              if (!previousPromise._2().isCompleted()) {
+                previousPromise._1().completeWith(gatewayPromise.future());
+                previousPromise._2().completeWith(webPortPromise.future());
+              }
+            }
+          }
+ else {
+            LOG.warn("Failed to retrieve leader gateway and port.");
+          }
+        }
+      }
+,actorSystem.dispatcher());
+    }
+ catch (    Exception e) {
+      handleError(e);
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  final Deadline deadline=TestTimeout.fromNow();
+  TestingCluster flink=null;
+  WebRuntimeMonitor webMonitor=null;
+  try {
+    flink=new TestingCluster(new Configuration());
+    flink.start(true);
+    ActorSystem jmActorSystem=flink.jobManagerActorSystems().get().head();
+    ActorRef jmActor=flink.jobManagerActors().get().head();
+    Configuration monitorConfig=new Configuration();
+    monitorConfig.setString(WebMonitorConfig.JOB_MANAGER_WEB_DOC_ROOT_KEY,MAIN_RESOURCES_PATH);
+    monitorConfig.setBoolean(ConfigConstants.JOB_MANAGER_NEW_WEB_FRONTEND_KEY,true);
+    String jobManagerAddress=AkkaUtils.getAkkaURL(jmActorSystem,jmActor);
+    webMonitor=new WebRuntimeMonitor(monitorConfig,flink.createLeaderRetrievalService(),jmActorSystem);
+    webMonitor.start(jobManagerAddress);
+    try (HttpTestClient client=new HttpTestClient("localhost",webMonitor.getServerPort())){
+      String expected=new Scanner(new File(MAIN_RESOURCES_PATH + "/index.html")).useDelimiter("\\A").next();
+      client.sendGetRequest("index.html",deadline.timeLeft());
+      HttpTestClient.SimpleHttpResponse response=client.getNextResponse(deadline.timeLeft());
+      assertEquals(HttpResponseStatus.OK,response.getStatus());
+      assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("html"));
+      assertEquals(expected,response.getContent());
+      client.sendGetRequest("/overview",deadline.timeLeft());
+      response=client.getNextResponse(deadline.timeLeft());
+      assertEquals(HttpResponseStatus.OK,response.getStatus());
+      assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("json"));
+      assertTrue(response.getContent().contains("\"taskmanagers\":1"));
+    }
+   }
+  finally {
+    if (flink != null) {
+      flink.shutdown();
+    }
+    if (webMonitor != null) {
+      webMonitor.stop();
+    }
+  }
+}

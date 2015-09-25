@@ -1,0 +1,30 @@
+{
+  ExecutionGraph cached=cache.get(jid);
+  if (cached != null) {
+    return cached;
+  }
+  try {
+    if (jobManager != null) {
+      Future<Object> future=jobManager.ask(new JobManagerMessages.RequestJob(jid),timeout);
+      Object result=Await.result(future,timeout);
+      if (result instanceof JobManagerMessages.JobNotFound) {
+        return null;
+      }
+ else       if (result instanceof JobManagerMessages.JobFound) {
+        ExecutionGraph eg=((JobManagerMessages.JobFound)result).executionGraph();
+        cache.put(jid,eg);
+        return eg;
+      }
+ else {
+        throw new RuntimeException("Unknown response from JobManager / Archive: " + result);
+      }
+    }
+ else {
+      LOG.warn("No connection to the leading JobManager.");
+      return null;
+    }
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Error requesting execution graph",e);
+  }
+}

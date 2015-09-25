@@ -1,0 +1,24 @@
+{
+  LOG.debug("Received {}",msg);
+  if (msg instanceof HttpResponse) {
+    HttpResponse response=(HttpResponse)msg;
+    currentStatus=response.getStatus();
+    currentType=response.headers().get(HttpHeaders.Names.CONTENT_TYPE);
+    currentLocation=response.headers().get(HttpHeaders.Names.LOCATION);
+    if (HttpHeaders.isTransferEncodingChunked(response)) {
+      LOG.debug("Content is chunked");
+    }
+  }
+  if (msg instanceof HttpContent) {
+    HttpContent content=(HttpContent)msg;
+    currentContent+=content.content().toString(CharsetUtil.UTF_8);
+    if (content instanceof LastHttpContent) {
+      responses.add(new SimpleHttpResponse(currentStatus,currentType,currentContent,currentLocation));
+      currentStatus=null;
+      currentType=null;
+      currentLocation=null;
+      currentContent="";
+      ctx.close();
+    }
+  }
+}
