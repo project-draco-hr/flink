@@ -1,0 +1,21 @@
+{
+  final SimpleSlot slot=this.assignedResource;
+  if (slot != null) {
+    final ActorGateway gateway=slot.getInstance().getActorGateway();
+    Future<Object> stopResult=gateway.retry(new StopTask(attemptId),NUM_STOP_CALL_TRIES,timeout,executionContext);
+    stopResult.onComplete(new OnComplete<Object>(){
+      @Override public void onComplete(      Throwable failure,      Object success) throws Throwable {
+        if (failure != null) {
+          fail(new Exception("Task could not be stopped.",failure));
+        }
+ else {
+          TaskOperationResult result=(TaskOperationResult)success;
+          if (!result.success()) {
+            LOG.info("Stopping task was not successful. Description: {}",result.description());
+          }
+        }
+      }
+    }
+,executionContext);
+  }
+}

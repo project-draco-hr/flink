@@ -1,0 +1,22 @@
+{
+  final ActorGateway jobManagerGateway=getJobManagerGateway();
+  final Future<Object> response;
+  try {
+    response=jobManagerGateway.ask(new JobManagerMessages.StopJob(jobId),timeout);
+  }
+ catch (  final Exception e) {
+    throw new ProgramInvocationException("Failed to query the job manager gateway.",e);
+  }
+  final Object result=Await.result(response,timeout);
+  if (result instanceof JobManagerMessages.StoppingSuccess) {
+    LOG.info("Job stopping with ID " + jobId + " succeeded.");
+  }
+ else   if (result instanceof JobManagerMessages.StoppingFailure) {
+    final Throwable t=((JobManagerMessages.StoppingFailure)result).cause();
+    LOG.info("Job stopping with ID " + jobId + " failed.",t);
+    throw new Exception("Failed to stop the job because of \n" + t.getMessage());
+  }
+ else {
+    throw new Exception("Unknown message received while stopping: " + result.getClass().getName());
+  }
+}

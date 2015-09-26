@@ -1,0 +1,18 @@
+{
+  final JobVertex sender=new JobVertex("Sender");
+  sender.setParallelism(2);
+  sender.setInvokableClass(StoppableInvokable.class);
+  final JobGraph jobGraph=new JobGraph("Stoppable streaming test job",sender);
+  final JobID jid=jobGraph.getJobID();
+  cluster.submitJobDetached(jobGraph);
+  final FiniteDuration testTimeout=new FiniteDuration(2,TimeUnit.MINUTES);
+  final Deadline deadline=testTimeout.fromNow();
+  try (HttpTestClient client=new HttpTestClient("localhost",port)){
+    client.sendGetRequest("/jobs/" + jid + "/yarn-stop",deadline.timeLeft());
+    HttpTestClient.SimpleHttpResponse response=client.getNextResponse(deadline.timeLeft());
+    assertEquals(HttpResponseStatus.OK,response.getStatus());
+    assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("json"));
+    assertEquals("{}",response.getContent());
+  }
+   waitForTaskManagers();
+}

@@ -1,0 +1,45 @@
+{
+  final JobID jobId=new JobID();
+  final String jobName="Test Job Sample Name";
+  final Configuration cfg=new Configuration();
+  assert(mockEJV.length == 5);
+  JobVertex v1=new JobVertex("vertex1");
+  JobVertex v2=new JobVertex("vertex2");
+  JobVertex v3=new JobVertex("vertex3");
+  JobVertex v4=new JobVertex("vertex4");
+  JobVertex v5=new JobVertex("vertex5");
+  for (int i=0; i < mockEJV.length; ++i) {
+    mockEJV[i]=mock(ExecutionJobVertex.class);
+    this.mockEV[i]=new ExecutionVertex[dop[i]];
+    for (int j=0; j < dop[i]; ++j) {
+      this.mockEV[i][j]=mock(ExecutionVertex.class);
+    }
+    when(mockEJV[i].getProducedDataSets()).thenReturn(new IntermediateResult[0]);
+    when(mockEJV[i].getTaskVertices()).thenReturn(this.mockEV[i]);
+  }
+  PowerMockito.whenNew(ExecutionJobVertex.class).withArguments(any(ExecutionGraph.class),same(v1),any(Integer.class).intValue(),any(FiniteDuration.class),any(Long.class).longValue()).thenReturn(mockEJV[0]);
+  PowerMockito.whenNew(ExecutionJobVertex.class).withArguments(any(ExecutionGraph.class),same(v2),any(Integer.class).intValue(),any(FiniteDuration.class),any(Long.class).longValue()).thenReturn(mockEJV[1]);
+  PowerMockito.whenNew(ExecutionJobVertex.class).withArguments(any(ExecutionGraph.class),same(v3),any(Integer.class).intValue(),any(FiniteDuration.class),any(Long.class).longValue()).thenReturn(mockEJV[2]);
+  PowerMockito.whenNew(ExecutionJobVertex.class).withArguments(any(ExecutionGraph.class),same(v4),any(Integer.class).intValue(),any(FiniteDuration.class),any(Long.class).longValue()).thenReturn(mockEJV[3]);
+  PowerMockito.whenNew(ExecutionJobVertex.class).withArguments(any(ExecutionGraph.class),same(v5),any(Integer.class).intValue(),any(FiniteDuration.class),any(Long.class).longValue()).thenReturn(mockEJV[4]);
+  v1.setParallelism(dop[0]);
+  v2.setParallelism(dop[1]);
+  v3.setParallelism(dop[2]);
+  v4.setParallelism(dop[3]);
+  v5.setParallelism(dop[4]);
+  v2.connectNewDataSetAsInput(v1,DistributionPattern.ALL_TO_ALL);
+  mockNumberOfInputs(1,0);
+  v4.connectNewDataSetAsInput(v2,DistributionPattern.ALL_TO_ALL);
+  mockNumberOfInputs(3,1);
+  v4.connectNewDataSetAsInput(v3,DistributionPattern.ALL_TO_ALL);
+  mockNumberOfInputs(3,2);
+  v5.connectNewDataSetAsInput(v4,DistributionPattern.ALL_TO_ALL);
+  mockNumberOfInputs(4,3);
+  v5.connectNewDataSetAsInput(v3,DistributionPattern.ALL_TO_ALL);
+  mockNumberOfInputs(4,2);
+  List<JobVertex> ordered=new ArrayList<JobVertex>(Arrays.asList(v1,v2,v3,v4,v5));
+  eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),jobId,jobName,cfg,AkkaUtils.getDefaultTimeout());
+  eg.attachJobGraph(ordered);
+  f=eg.getClass().getDeclaredField("state");
+  f.setAccessible(true);
+}
