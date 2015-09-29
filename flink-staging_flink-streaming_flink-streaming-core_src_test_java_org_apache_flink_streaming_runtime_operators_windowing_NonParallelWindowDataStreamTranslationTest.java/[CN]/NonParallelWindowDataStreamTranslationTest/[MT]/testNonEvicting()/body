@@ -1,0 +1,26 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Tuple2<String,Integer>> source=env.fromElements(Tuple2.of("hello",1),Tuple2.of("hello",2));
+  DummyReducer reducer=new DummyReducer();
+  DataStream<Tuple2<String,Integer>> window1=source.windowAll(SlidingProcessingTimeWindows.of(1000,100)).trigger(CountTrigger.of(100)).reduceWindow(reducer);
+  OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>> transform1=(OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>>)window1.getTransformation();
+  OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator1=transform1.getOperator();
+  Assert.assertTrue(operator1 instanceof NonKeyedWindowOperator);
+  NonKeyedWindowOperator winOperator1=(NonKeyedWindowOperator)operator1;
+  Assert.assertTrue(winOperator1.getTriggerTemplate() instanceof CountTrigger);
+  Assert.assertTrue(winOperator1.getWindowAssigner() instanceof SlidingProcessingTimeWindows);
+  Assert.assertTrue(winOperator1.getWindowBufferFactory() instanceof PreAggregatingHeapWindowBuffer.Factory);
+  DataStream<Tuple2<String,Integer>> window2=source.windowAll(TumblingProcessingTimeWindows.of(1000)).trigger(CountTrigger.of(100)).mapWindow(new WindowFunction<Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow>(){
+    private static final long serialVersionUID=1L;
+    @Override public void evaluate(    TimeWindow window,    Iterable<Tuple2<String,Integer>> values,    Collector<Tuple2<String,Integer>> out) throws Exception {
+    }
+  }
+);
+  OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>> transform2=(OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>>)window2.getTransformation();
+  OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator2=transform2.getOperator();
+  Assert.assertTrue(operator2 instanceof NonKeyedWindowOperator);
+  NonKeyedWindowOperator winOperator2=(NonKeyedWindowOperator)operator2;
+  Assert.assertTrue(winOperator2.getTriggerTemplate() instanceof CountTrigger);
+  Assert.assertTrue(winOperator2.getWindowAssigner() instanceof TumblingProcessingTimeWindows);
+  Assert.assertTrue(winOperator2.getWindowBufferFactory() instanceof HeapWindowBuffer.Factory);
+}

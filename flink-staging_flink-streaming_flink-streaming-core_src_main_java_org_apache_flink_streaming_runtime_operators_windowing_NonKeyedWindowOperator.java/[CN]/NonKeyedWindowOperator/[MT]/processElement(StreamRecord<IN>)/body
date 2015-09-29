@@ -1,0 +1,19 @@
+{
+  if (setProcessingTime) {
+    element.replace(element.getValue(),System.currentTimeMillis());
+  }
+  Collection<W> elementWindows=windowAssigner.assignWindows(element.getValue(),element.getTimestamp());
+  for (  W window : elementWindows) {
+    Tuple2<WindowBuffer<IN>,TriggerContext> bufferAndTrigger=windows.get(window);
+    if (bufferAndTrigger == null) {
+      bufferAndTrigger=new Tuple2<>();
+      bufferAndTrigger.f0=windowBufferFactory.create();
+      bufferAndTrigger.f1=new TriggerContext(window,triggerTemplate.duplicate());
+      windows.put(window,bufferAndTrigger);
+    }
+    StreamRecord<IN> elementCopy=new StreamRecord<>(inputSerializer.copy(element.getValue()),element.getTimestamp());
+    bufferAndTrigger.f0.storeElement(elementCopy);
+    Trigger.TriggerResult triggerResult=bufferAndTrigger.f1.trigger.onElement(elementCopy.getValue(),elementCopy.getTimestamp(),window,bufferAndTrigger.f1);
+    processTriggerResult(triggerResult,window);
+  }
+}
