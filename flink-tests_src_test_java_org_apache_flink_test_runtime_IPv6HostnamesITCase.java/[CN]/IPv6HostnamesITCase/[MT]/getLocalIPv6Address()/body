@@ -1,0 +1,34 @@
+{
+  try {
+    Enumeration<NetworkInterface> e=NetworkInterface.getNetworkInterfaces();
+    while (e.hasMoreElements()) {
+      NetworkInterface netInterface=e.nextElement();
+      Enumeration<InetAddress> ee=netInterface.getInetAddresses();
+      while (ee.hasMoreElements()) {
+        InetAddress addr=ee.nextElement();
+        if (addr instanceof Inet6Address && (!addr.isLoopbackAddress()) && (!addr.isAnyLocalAddress())) {
+          InetSocketAddress socketAddress=new InetSocketAddress(addr,0);
+          try {
+            log.info("Considering address " + addr);
+            log.info("Testing whether sockets can bind to " + addr);
+            ServerSocket sock=new ServerSocket();
+            sock.bind(socketAddress);
+            sock.close();
+            log.info("Testing whether Akka can use " + addr);
+            int port=NetUtils.getAvailablePort();
+            ActorSystem as=AkkaUtils.createActorSystem(new Configuration(),new Some<scala.Tuple2<String,Object>>(new scala.Tuple2<String,Object>(addr.getHostAddress(),port)));
+            as.shutdown();
+            log.info("Using address " + addr);
+            return (Inet6Address)addr;
+          }
+ catch (          IOException ignored) {
+          }
+        }
+      }
+    }
+    return null;
+  }
+ catch (  Exception e) {
+    return null;
+  }
+}

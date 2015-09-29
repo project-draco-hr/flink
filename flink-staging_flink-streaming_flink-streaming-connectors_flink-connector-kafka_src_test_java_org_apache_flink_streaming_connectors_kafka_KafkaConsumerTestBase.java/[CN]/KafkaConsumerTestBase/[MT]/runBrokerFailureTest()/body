@@ -19,7 +19,8 @@
   }
  while (firstPart.errorCode() != 0);
   zkClient.close();
-  final String leaderToShutDown=firstPart.leader().get().connectionString();
+  final kafka.cluster.Broker leaderToShutDown=firstPart.leader().get();
+  final String leaderToShutDownConnection=NetUtils.hostAndPortToUrlString(leaderToShutDown.host(),leaderToShutDown.port());
   final int leaderIdToShutDown=firstPart.leader().get().id();
   LOG.info("Leader to shutdown {}",leaderToShutDown);
   DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
@@ -29,7 +30,7 @@
   env.setNumberOfExecutionRetries(3);
   env.getConfig().disableSysoutLogging();
   FlinkKafkaConsumer<Integer> kafkaSource=getConsumer(topic,schema,standardProps);
-  env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderToShutDown,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
+  env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderToShutDownConnection,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
   BrokerKillingMapper.killedLeaderBefore=false;
   tryExecute(env,"One-to-one exactly once test");
   brokers.set(leaderIdToShutDown,getKafkaServer(leaderIdToShutDown,tmpKafkaDirs.get(leaderIdToShutDown),kafkaHost,zookeeperConnectionString));

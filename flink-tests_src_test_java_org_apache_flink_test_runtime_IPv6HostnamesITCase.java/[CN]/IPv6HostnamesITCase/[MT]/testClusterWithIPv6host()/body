@@ -1,0 +1,43 @@
+{
+  final Inet6Address ipv6address=getLocalIPv6Address();
+  if (ipv6address == null) {
+    System.err.println("--- Cannot find a non-loopback local IPv6 address, skipping IPv6HostnamesITCase");
+    return;
+  }
+  ForkableFlinkMiniCluster flink=null;
+  try {
+    final String addressString=ipv6address.getHostAddress();
+    log.info("Test will use IPv6 address " + addressString + " for connection tests");
+    Configuration conf=new Configuration();
+    conf.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,addressString);
+    conf.setString(ConfigConstants.TASK_MANAGER_HOSTNAME_KEY,addressString);
+    conf.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,2);
+    conf.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,2);
+    conf.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,16);
+    flink=new ForkableFlinkMiniCluster(conf,false,StreamingMode.BATCH_ONLY);
+    flink.start();
+    ExecutionEnvironment env=ExecutionEnvironment.createRemoteEnvironment(addressString,flink.getLeaderRPCPort());
+    DataSet<String> text=env.fromElements(WordCountData.TEXT.split("\n"));
+    DataSet<Tuple2<String,Integer>> counts=text.flatMap(new FlatMapFunction<String,Tuple2<String,Integer>>(){
+      @Override public void flatMap(      String value,      Collector<Tuple2<String,Integer>> out) throws Exception {
+        for (        String token : value.toLowerCase().split("\\W+")) {
+          if (token.length() > 0) {
+            out.collect(new Tuple2<String,Integer>(token,1));
+          }
+        }
+      }
+    }
+).groupBy(0).sum(1);
+    List<Tuple2<String,Integer>> result=counts.collect();
+    TestBaseUtils.compareResultAsText(result,WordCountData.COUNTS_AS_TUPLES);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    if (flink != null) {
+      flink.shutdown();
+    }
+  }
+}

@@ -11,8 +11,9 @@
     File tempLogFile=File.createTempFile("testlogconfig","properties");
     tempLogFile.deleteOnExit();
     CommonTestUtils.printLog4jDebugConfig(tempLogFile);
+    final InetAddress localhost=InetAddress.getByName("localhost");
     final int jobManagerPort=NetUtils.getAvailablePort();
-    Tuple2<String,Object> localAddress=new Tuple2<String,Object>("localhost",jobManagerPort);
+    Tuple2<String,Object> localAddress=new Tuple2<String,Object>(localhost.getHostAddress(),jobManagerPort);
     jmActorSystem=AkkaUtils.createActorSystem(new Configuration(),new Some<Tuple2<String,Object>>(localAddress));
     JobManager.startJobManagerActors(new Configuration(),jmActorSystem,StreamingMode.BATCH_ONLY);
     final int taskManagerPort=NetUtils.getAvailablePort();
@@ -20,7 +21,7 @@
     ProcessBuilder bld=new ProcessBuilder(command);
     taskManagerProcess=bld.start();
     new PipeForwarder(taskManagerProcess.getErrorStream(),processOutput);
-    String taskManagerActorName=String.format("akka.tcp://flink@%s:%d/user/%s","127.0.0.1",taskManagerPort,TaskManager.TASK_MANAGER_NAME());
+    String taskManagerActorName=String.format("akka.tcp://flink@%s/user/%s",org.apache.flink.util.NetUtils.ipAddressAndPortToUrlString(localhost,taskManagerPort),TaskManager.TASK_MANAGER_NAME());
     ActorRef taskManagerRef=null;
     Throwable lastError=null;
     for (int i=0; i < 40; i++) {
