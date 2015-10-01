@@ -1,7 +1,17 @@
 {
+  final StormConfig stormConfig=new StormConfig();
+  final Configuration flinkConfig=new Configuration();
+  final ExecutionConfig taskConfig=mock(ExecutionConfig.class);
+  when(taskConfig.getGlobalJobParameters()).thenReturn(null).thenReturn(stormConfig).thenReturn(flinkConfig);
+  final StreamingRuntimeContext taskContext=mock(StreamingRuntimeContext.class);
+  when(taskContext.getExecutionConfig()).thenReturn(taskConfig);
   final IRichBolt bolt=mock(IRichBolt.class);
   final StormBoltWrapper<Object,Object> wrapper=new StormBoltWrapper<Object,Object>(bolt);
-  wrapper.setup(mock(Output.class),mock(StreamingRuntimeContext.class));
-  wrapper.open(mock(Configuration.class));
+  wrapper.setup(mock(Output.class),taskContext);
+  wrapper.open(null);
   verify(bolt).prepare(any(Map.class),any(TopologyContext.class),isNull(OutputCollector.class));
+  wrapper.open(null);
+  verify(bolt).prepare(same(stormConfig),any(TopologyContext.class),isNull(OutputCollector.class));
+  wrapper.open(null);
+  verify(bolt,times(3)).prepare(eq(flinkConfig.toMap()),any(TopologyContext.class),isNull(OutputCollector.class));
 }
