@@ -1,0 +1,18 @@
+{
+  String callLocation=Utils.getCallLocationName();
+  String udfName="Reduce at " + callLocation;
+  DataStream<T> result=createFastTimeOperatorIfValid(function,input.getType(),udfName);
+  if (result != null) {
+    return result;
+  }
+  String opName="NonParallelTriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
+  OneInputStreamOperator<T,T> operator;
+  if (evictor != null) {
+    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,new HeapWindowBuffer.Factory<T>(),new ReduceAllWindowFunction<W,T>(function),trigger,evictor);
+  }
+ else {
+    @SuppressWarnings("unchecked") ReduceFunction<T> functionCopy=(ReduceFunction<T>)SerializationUtils.clone(function);
+    operator=new NonKeyedWindowOperator<>(windowAssigner,new PreAggregatingHeapWindowBuffer.Factory<>(functionCopy),new ReduceAllWindowFunction<W,T>(function),trigger);
+  }
+  return input.transform(opName,input.getType(),operator).setParallelism(1);
+}
