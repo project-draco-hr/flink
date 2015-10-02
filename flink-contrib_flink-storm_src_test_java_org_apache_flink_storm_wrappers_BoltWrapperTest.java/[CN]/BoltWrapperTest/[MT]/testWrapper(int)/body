@@ -1,0 +1,46 @@
+{
+  assert((-1 <= numberOfAttributes) && (numberOfAttributes <= 25));
+  Tuple flinkTuple=null;
+  String rawTuple=null;
+  if (numberOfAttributes == -1) {
+    rawTuple="test";
+  }
+ else {
+    flinkTuple=Tuple.getTupleClass(numberOfAttributes).newInstance();
+  }
+  final String[] schema;
+  if (numberOfAttributes == -1) {
+    schema=new String[1];
+  }
+ else {
+    schema=new String[numberOfAttributes];
+  }
+  for (int i=0; i < schema.length; ++i) {
+    schema[i]="a" + i;
+  }
+  final StreamRecord record=mock(StreamRecord.class);
+  if (numberOfAttributes == -1) {
+    when(record.getValue()).thenReturn(rawTuple);
+  }
+ else {
+    when(record.getValue()).thenReturn(flinkTuple);
+  }
+  final StreamingRuntimeContext taskContext=mock(StreamingRuntimeContext.class);
+  when(taskContext.getExecutionConfig()).thenReturn(mock(ExecutionConfig.class));
+  when(taskContext.getTaskStubParameters()).thenReturn(new Configuration());
+  when(taskContext.getTaskName()).thenReturn("name");
+  final IRichBolt bolt=mock(IRichBolt.class);
+  final SetupOutputFieldsDeclarer declarer=new SetupOutputFieldsDeclarer();
+  declarer.declare(new Fields(schema));
+  PowerMockito.whenNew(SetupOutputFieldsDeclarer.class).withNoArguments().thenReturn(declarer);
+  final BoltWrapper wrapper=new BoltWrapper(bolt,(Fields)null);
+  wrapper.setup(mock(Output.class),taskContext);
+  wrapper.open(null);
+  wrapper.processElement(record);
+  if (numberOfAttributes == -1) {
+    verify(bolt).execute(eq(new StormTuple<String>(rawTuple,null)));
+  }
+ else {
+    verify(bolt).execute(eq(new StormTuple<Tuple>(flinkTuple,null)));
+  }
+}

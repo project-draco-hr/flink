@@ -1,0 +1,24 @@
+{
+  final StormConfig stormConfig=new StormConfig();
+  final Configuration flinkConfig=new Configuration();
+  final ExecutionConfig taskConfig=mock(ExecutionConfig.class);
+  when(taskConfig.getGlobalJobParameters()).thenReturn(null).thenReturn(stormConfig).thenReturn(flinkConfig);
+  final StreamingRuntimeContext taskContext=mock(StreamingRuntimeContext.class);
+  when(taskContext.getExecutionConfig()).thenReturn(taskConfig);
+  when(taskContext.getTaskStubParameters()).thenReturn(new Configuration());
+  when(taskContext.getTaskName()).thenReturn("name");
+  final IRichBolt bolt=mock(IRichBolt.class);
+  BoltWrapper<Object,Object> wrapper=new BoltWrapper<Object,Object>(bolt);
+  wrapper.setup(mock(Output.class),taskContext);
+  wrapper.open(null);
+  verify(bolt).prepare(any(Map.class),any(TopologyContext.class),isNull(OutputCollector.class));
+  wrapper.open(null);
+  verify(bolt).prepare(same(stormConfig),any(TopologyContext.class),isNull(OutputCollector.class));
+  final TestDummyBolt testBolt=new TestDummyBolt();
+  wrapper=new BoltWrapper<Object,Object>(testBolt);
+  wrapper.setup(mock(Output.class),taskContext);
+  wrapper.open(null);
+  for (  Entry<String,String> entry : flinkConfig.toMap().entrySet()) {
+    Assert.assertEquals(entry.getValue(),testBolt.config.get(entry.getKey()));
+  }
+}

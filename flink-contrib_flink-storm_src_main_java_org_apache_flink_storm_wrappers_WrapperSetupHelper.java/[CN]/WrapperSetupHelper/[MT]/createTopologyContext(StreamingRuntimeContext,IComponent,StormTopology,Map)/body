@@ -1,0 +1,74 @@
+{
+  String operatorName=context.getTaskName();
+  if (operatorName.startsWith("Source: ")) {
+    operatorName=operatorName.substring(8);
+  }
+  final int dop=context.getNumberOfParallelSubtasks();
+  final Map<Integer,String> taskToComponents=new HashMap<Integer,String>();
+  final Map<String,List<Integer>> componentToSortedTasks=new HashMap<String,List<Integer>>();
+  final Map<String,Map<String,Fields>> componentToStreamToFields=new HashMap<String,Map<String,Fields>>();
+  String stormId=(String)stormConfig.get(TOPOLOGY_NAME);
+  String codeDir=null;
+  String pidDir=null;
+  Integer taskId=null;
+  Integer workerPort=null;
+  List<Integer> workerTasks=new ArrayList<Integer>();
+  final Map<String,Object> defaultResources=new HashMap<String,Object>();
+  final Map<String,Object> userResources=new HashMap<String,Object>();
+  final Map<String,Object> executorData=new HashMap<String,Object>();
+  final Map registeredMetrics=new HashMap();
+  Atom openOrPrepareWasCalled=null;
+  if (stormTopology == null) {
+    ComponentCommon common=new ComponentCommon();
+    common.set_parallelism_hint(dop);
+    HashMap<String,SpoutSpec> spouts=new HashMap<String,SpoutSpec>();
+    HashMap<String,Bolt> bolts=new HashMap<String,Bolt>();
+    if (spoutOrBolt instanceof IRichSpout) {
+      spouts.put(operatorName,new SpoutSpec(null,common));
+    }
+ else {
+      assert(spoutOrBolt instanceof IRichBolt);
+      bolts.put(operatorName,new Bolt(null,common));
+    }
+    stormTopology=new StormTopology(spouts,bolts,new HashMap<String,StateSpoutSpec>());
+    taskId=context.getIndexOfThisSubtask();
+    List<Integer> sortedTasks=new ArrayList<Integer>(dop);
+    for (int i=1; i <= dop; ++i) {
+      taskToComponents.put(i,operatorName);
+      sortedTasks.add(i);
+    }
+    componentToSortedTasks.put(operatorName,sortedTasks);
+    SetupOutputFieldsDeclarer declarer=new SetupOutputFieldsDeclarer();
+    spoutOrBolt.declareOutputFields(declarer);
+    componentToStreamToFields.put(operatorName,declarer.outputStreams);
+  }
+ else {
+    Map<String,SpoutSpec> spouts=stormTopology.get_spouts();
+    Map<String,Bolt> bolts=stormTopology.get_bolts();
+    Map<String,StateSpoutSpec> stateSpouts=stormTopology.get_state_spouts();
+    tid=1;
+    for (    Entry<String,SpoutSpec> spout : spouts.entrySet()) {
+      Integer rc=processSingleOperator(spout.getKey(),spout.getValue().get_common(),operatorName,context.getIndexOfThisSubtask(),dop,taskToComponents,componentToSortedTasks,componentToStreamToFields);
+      if (rc != null) {
+        taskId=rc;
+      }
+    }
+    for (    Entry<String,Bolt> bolt : bolts.entrySet()) {
+      Integer rc=processSingleOperator(bolt.getKey(),bolt.getValue().get_common(),operatorName,context.getIndexOfThisSubtask(),dop,taskToComponents,componentToSortedTasks,componentToStreamToFields);
+      if (rc != null) {
+        taskId=rc;
+      }
+    }
+    for (    Entry<String,StateSpoutSpec> stateSpout : stateSpouts.entrySet()) {
+      Integer rc=taskId=processSingleOperator(stateSpout.getKey(),stateSpout.getValue().get_common(),operatorName,context.getIndexOfThisSubtask(),dop,taskToComponents,componentToSortedTasks,componentToStreamToFields);
+      if (rc != null) {
+        taskId=rc;
+      }
+    }
+    assert(taskId != null);
+  }
+  if (!stormConfig.containsKey(Config.TOPOLOGY_MESSAGE_TIMEOUT_SECS)) {
+    stormConfig.put(Config.TOPOLOGY_MESSAGE_TIMEOUT_SECS,30);
+  }
+  return new FlinkTopologyContext(stormTopology,stormConfig,taskToComponents,componentToSortedTasks,componentToStreamToFields,stormId,codeDir,pidDir,taskId,workerPort,workerTasks,defaultResources,userResources,executorData,registeredMetrics,openOrPrepareWasCalled);
+}

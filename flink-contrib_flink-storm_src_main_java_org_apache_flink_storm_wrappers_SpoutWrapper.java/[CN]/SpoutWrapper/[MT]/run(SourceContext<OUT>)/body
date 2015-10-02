@@ -1,0 +1,43 @@
+{
+  this.collector=new SpoutCollector<OUT>(this.numberOfAttributes,ctx);
+  GlobalJobParameters config=super.getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+  StormConfig stormConfig=new StormConfig();
+  if (config != null) {
+    if (config instanceof StormConfig) {
+      stormConfig=(StormConfig)config;
+    }
+ else {
+      stormConfig.putAll(config.toMap());
+    }
+  }
+  this.spout.open(stormConfig,WrapperSetupHelper.createTopologyContext((StreamingRuntimeContext)super.getRuntimeContext(),this.spout,this.stormTopology,stormConfig),new SpoutOutputCollector(this.collector));
+  this.spout.activate();
+  if (numberOfInvocations == null) {
+    if (this.spout instanceof FiniteSpout) {
+      final FiniteSpout finiteSpout=(FiniteSpout)this.spout;
+      while (this.isRunning && !finiteSpout.reachedEnd()) {
+        finiteSpout.nextTuple();
+      }
+    }
+ else {
+      while (this.isRunning) {
+        this.spout.nextTuple();
+      }
+    }
+  }
+ else {
+    int counter=this.numberOfInvocations;
+    if (counter >= 0) {
+      while ((--counter >= 0) && this.isRunning) {
+        this.spout.nextTuple();
+      }
+    }
+ else {
+      do {
+        this.collector.tupleEmitted=false;
+        this.spout.nextTuple();
+      }
+ while (this.collector.tupleEmitted && this.isRunning);
+    }
+  }
+}
