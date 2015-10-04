@@ -3,31 +3,33 @@
     return;
   }
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
   env.setParallelism(2);
-  final List<Tuple3<String,Long,Integer>> input=new ArrayList<Tuple3<String,Long,Integer>>();
-  input.add(new Tuple3<String,Long,Integer>("a",1L,1));
-  input.add(new Tuple3<String,Long,Integer>("b",1L,1));
-  input.add(new Tuple3<String,Long,Integer>("b",3L,1));
-  input.add(new Tuple3<String,Long,Integer>("b",5L,1));
-  input.add(new Tuple3<String,Long,Integer>("c",6L,1));
-  input.add(new Tuple3<String,Long,Integer>("a",10L,1));
-  input.add(new Tuple3<String,Long,Integer>("c",11L,1));
-  DataStream<Tuple3<String,Long,Integer>> source=env.addSource(new SourceFunction<Tuple3<String,Long,Integer>>(){
+  final List<Tuple3<String,Long,Integer>> input=new ArrayList<>();
+  input.add(new Tuple3<>("a",1L,1));
+  input.add(new Tuple3<>("b",1L,1));
+  input.add(new Tuple3<>("b",3L,1));
+  input.add(new Tuple3<>("b",5L,1));
+  input.add(new Tuple3<>("c",6L,1));
+  input.add(new Tuple3<>("a",10L,1));
+  input.add(new Tuple3<>("c",11L,1));
+  DataStream<Tuple3<String,Long,Integer>> source=env.addSource(new EventTimeSourceFunction<Tuple3<String,Long,Integer>>(){
     private static final long serialVersionUID=1L;
     @Override public void run(    SourceContext<Tuple3<String,Long,Integer>> ctx) throws Exception {
       for (      Tuple3<String,Long,Integer> value : input) {
-        ctx.collect(value);
+        ctx.collectWithTimestamp(value,value.f1);
+        ctx.emitWatermark(new Watermark(value.f1 - 1));
         if (!fileOutput) {
           System.out.println("Collected: " + value);
-          Thread.sleep(3000);
         }
       }
+      ctx.emitWatermark(new Watermark(Long.MAX_VALUE));
     }
     @Override public void cancel(){
     }
   }
 );
-  DataStream<Tuple3<String,Long,Integer>> aggregated=source.keyBy(0).window(new SessionTriggerPolicy(3L),new TumblingEvictionPolicy<Tuple3<String,Long,Integer>>()).sum(2).flatten();
+  DataStream<Tuple3<String,Long,Integer>> aggregated=source.keyBy(0).window(GlobalWindows.create()).trigger(new SessionTrigger(3L)).sum(2);
   if (fileOutput) {
     aggregated.writeAsText(outputPath);
   }

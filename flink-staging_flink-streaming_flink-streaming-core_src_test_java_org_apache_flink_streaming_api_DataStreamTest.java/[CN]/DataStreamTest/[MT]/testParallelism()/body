@@ -1,6 +1,6 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  DataStreamSource<Tuple2<Long,Long>> src=env.fromElements(new Tuple2<Long,Long>(0L,0L));
+  DataStreamSource<Tuple2<Long,Long>> src=env.fromElements(new Tuple2<>(0L,0L));
   env.setParallelism(10);
   SingleOutputStreamOperator<Long,?> map=src.map(new MapFunction<Tuple2<Long,Long>,Long>(){
     @Override public Long map(    Tuple2<Long,Long> value) throws Exception {
@@ -8,14 +8,15 @@
     }
   }
 ).name("MyMap");
-  DataStream<Long> windowed=map.window(Count.of(10)).foldWindow(0L,new FoldFunction<Long,Long>(){
+  DataStream<Long> windowed=map.windowAll(GlobalWindows.create()).trigger(PurgingTrigger.of(CountTrigger.of(10))).fold(0L,new FoldFunction<Long,Long>(){
     @Override public Long fold(    Long accumulator,    Long value) throws Exception {
       return null;
     }
   }
-).flatten();
+);
   windowed.addSink(new NoOpSink<Long>());
   DataStreamSink<Long> sink=map.addSink(new SinkFunction<Long>(){
+    private static final long serialVersionUID=1L;
     @Override public void invoke(    Long value) throws Exception {
     }
   }
