@@ -2,9 +2,24 @@
   try {
     ActorGateway jobManager=retriever.getJobManagerGateway();
     if (jobManager != null) {
-      Future<Object> future=jobManager.ask(JobManagerMessages.getRequestRegisteredTaskManagers(),timeout);
-      RegisteredTaskManagers taskManagers=(RegisteredTaskManagers)Await.result(future,timeout);
-      final List<Instance> instances=new ArrayList<Instance>(taskManagers.asJavaCollection());
+      final List<Instance> instances=new ArrayList<>();
+      if (params.containsKey(TASK_MANAGER_ID_KEY)) {
+        try {
+          InstanceID instanceID=new InstanceID(StringUtils.hexStringToByte(params.get(TASK_MANAGER_ID_KEY)));
+          Future<Object> future=jobManager.ask(new JobManagerMessages.RequestTaskManagerInstance(instanceID),timeout);
+          TaskManagerInstance instance=(TaskManagerInstance)Await.result(future,timeout);
+          if (instance.instance().nonEmpty()) {
+            instances.add(instance.instance().get());
+          }
+        }
+ catch (        IllegalArgumentException e) {
+        }
+      }
+ else {
+        Future<Object> future=jobManager.ask(JobManagerMessages.getRequestRegisteredTaskManagers(),timeout);
+        RegisteredTaskManagers taskManagers=(RegisteredTaskManagers)Await.result(future,timeout);
+        instances.addAll(taskManagers.asJavaCollection());
+      }
       StringWriter writer=new StringWriter();
       JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
       gen.writeStartObject();
@@ -21,10 +36,12 @@
         gen.writeNumberField("physicalMemory",instance.getResources().getSizeOfPhysicalMemory());
         gen.writeNumberField("freeMemory",instance.getResources().getSizeOfJvmHeap());
         gen.writeNumberField("managedMemory",instance.getResources().getSizeOfManagedMemory());
-        byte[] report=instance.getLastMetricsReport();
-        if (report != null) {
-          gen.writeFieldName("metrics");
-          gen.writeRawValue(new String(report,"utf-8"));
+        if (params.containsKey(TASK_MANAGER_ID_KEY)) {
+          byte[] report=instance.getLastMetricsReport();
+          if (report != null) {
+            gen.writeFieldName("metrics");
+            gen.writeRawValue(new String(report,"utf-8"));
+          }
         }
         gen.writeEndObject();
       }
