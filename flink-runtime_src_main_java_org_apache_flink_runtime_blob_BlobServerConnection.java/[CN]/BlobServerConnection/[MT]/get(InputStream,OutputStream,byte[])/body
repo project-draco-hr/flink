@@ -11,10 +11,16 @@
       JobID jobID=JobID.fromByteArray(jidBytes);
       String key=readKey(buf,inputStream);
       blobFile=this.blobServer.getStorageLocation(jobID,key);
+      if (!blobFile.exists()) {
+        blobServer.getBlobStore().get(jobID,key,blobFile);
+      }
     }
  else     if (contentAddressable == CONTENT_ADDRESSABLE) {
       final BlobKey key=BlobKey.readFromInputStream(inputStream);
       blobFile=blobServer.getStorageLocation(key);
+      if (!blobFile.exists()) {
+        blobServer.getBlobStore().get(key,blobFile);
+      }
     }
  else {
       throw new IOException("Unknown type of BLOB addressing.");
@@ -40,8 +46,7 @@
   try {
     int blobLen=(int)blobFile.length();
     writeLength(blobLen,outputStream);
-    FileInputStream fis=new FileInputStream(blobFile);
-    try {
+    try (FileInputStream fis=new FileInputStream(blobFile)){
       int bytesRemaining=blobLen;
       while (bytesRemaining > 0) {
         int read=fis.read(buf);
@@ -52,10 +57,7 @@
         bytesRemaining-=read;
       }
     }
-  finally {
-      fis.close();
-    }
-  }
+   }
  catch (  SocketException e) {
     LOG.debug("Socket connection closed",e);
   }

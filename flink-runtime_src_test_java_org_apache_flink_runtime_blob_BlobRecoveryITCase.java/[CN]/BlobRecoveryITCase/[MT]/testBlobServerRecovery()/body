@@ -1,0 +1,68 @@
+{
+  Random rand=new Random();
+  BlobServer[] server=new BlobServer[2];
+  InetSocketAddress[] serverAddress=new InetSocketAddress[2];
+  BlobClient client=null;
+  try {
+    Configuration config=new Configuration();
+    config.setString(ConfigConstants.RECOVERY_MODE,"ZOOKEEPER");
+    config.setString(ConfigConstants.STATE_BACKEND,"FILESYSTEM");
+    config.setString(ConfigConstants.STATE_BACKEND_FS_RECOVERY_PATH,recoveryDir.getPath());
+    for (int i=0; i < server.length; i++) {
+      server[i]=new BlobServer(config);
+      serverAddress[i]=new InetSocketAddress("localhost",server[i].getPort());
+    }
+    client=new BlobClient(serverAddress[0]);
+    byte[] expected=new byte[1024];
+    rand.nextBytes(expected);
+    BlobKey[] keys=new BlobKey[2];
+    keys[0]=client.put(expected);
+    keys[1]=client.put(expected,32,256);
+    JobID[] jobId=new JobID[]{new JobID(),new JobID()};
+    String[] testKey=new String[]{"test-key-1","test-key-2"};
+    client.put(jobId[0],testKey[0],expected);
+    client.put(jobId[1],testKey[1],expected,32,256);
+    client.close();
+    client=new BlobClient(serverAddress[1]);
+    try (InputStream is=client.get(keys[0])){
+      byte[] actual=new byte[expected.length];
+      BlobUtils.readFully(is,actual,0,expected.length,null);
+      for (int i=0; i < expected.length; i++) {
+        assertEquals(expected[i],actual[i]);
+      }
+    }
+     try (InputStream is=client.get(keys[1])){
+      byte[] actual=new byte[256];
+      BlobUtils.readFully(is,actual,0,256,null);
+      for (int i=32, j=0; i < 256; i++, j++) {
+        assertEquals(expected[i],actual[j]);
+      }
+    }
+     try (InputStream is=client.get(jobId[0],testKey[0])){
+      byte[] actual=new byte[expected.length];
+      BlobUtils.readFully(is,actual,0,expected.length,null);
+      for (int i=0; i < expected.length; i++) {
+        assertEquals(expected[i],actual[i]);
+      }
+    }
+     try (InputStream is=client.get(jobId[1],testKey[1])){
+      byte[] actual=new byte[256];
+      BlobUtils.readFully(is,actual,0,256,null);
+      for (int i=32, j=0; i < 256; i++, j++) {
+        assertEquals(expected[i],actual[j]);
+      }
+    }
+   }
+  finally {
+    for (    BlobServer s : server) {
+      if (s != null) {
+        s.shutdown();
+      }
+    }
+    if (client != null) {
+      client.close();
+    }
+  }
+  File[] recoveryFiles=recoveryDir.listFiles();
+  assertEquals("Unclean state backend: " + Arrays.toString(recoveryFiles),0,recoveryFiles.length);
+}

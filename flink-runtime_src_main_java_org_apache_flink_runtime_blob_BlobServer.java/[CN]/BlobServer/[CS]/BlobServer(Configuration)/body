@@ -1,7 +1,18 @@
 {
+  checkNotNull(config,"Configuration");
+  RecoveryMode recoveryMode=RecoveryMode.fromConfig(config);
   String storageDirectory=config.getString(ConfigConstants.BLOB_STORAGE_DIRECTORY_KEY,null);
   this.storageDir=BlobUtils.initStorageDirectory(storageDirectory);
   LOG.info("Created BLOB server storage directory {}",storageDir);
+  if (recoveryMode == RecoveryMode.STANDALONE) {
+    this.blobStore=new VoidBlobStore();
+  }
+ else   if (config.containsKey(ConfigConstants.STATE_BACKEND) && config.containsKey(ConfigConstants.STATE_BACKEND_FS_RECOVERY_PATH)) {
+    this.blobStore=new FileSystemBlobStore(config);
+  }
+ else {
+    this.blobStore=new VoidBlobStore();
+  }
   final int maxConnections=config.getInteger(ConfigConstants.BLOB_FETCH_CONCURRENT_KEY,ConfigConstants.DEFAULT_BLOB_FETCH_CONCURRENT);
   if (maxConnections >= 1) {
     this.maxConnections=maxConnections;
@@ -15,7 +26,12 @@
     LOG.warn("Invalid value for BLOB connection backlog: {}. Using default value of {}",backlog,ConfigConstants.DEFAULT_BLOB_FETCH_BACKLOG);
     backlog=ConfigConstants.DEFAULT_BLOB_FETCH_BACKLOG;
   }
-  this.shutdownHook=BlobUtils.addShutdownHook(this,LOG);
+  if (recoveryMode == RecoveryMode.STANDALONE) {
+    this.shutdownHook=BlobUtils.addShutdownHook(this,LOG);
+  }
+ else {
+    this.shutdownHook=null;
+  }
   try {
     this.serverSocket=new ServerSocket(0,backlog);
   }

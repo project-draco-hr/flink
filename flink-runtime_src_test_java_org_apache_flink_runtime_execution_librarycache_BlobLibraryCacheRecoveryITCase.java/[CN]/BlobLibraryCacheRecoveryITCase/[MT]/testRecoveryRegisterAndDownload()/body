@@ -1,0 +1,74 @@
+{
+  Random rand=new Random();
+  BlobServer[] server=new BlobServer[2];
+  InetSocketAddress[] serverAddress=new InetSocketAddress[2];
+  BlobLibraryCacheManager[] libServer=new BlobLibraryCacheManager[2];
+  BlobCache cache=null;
+  BlobLibraryCacheManager libCache=null;
+  try {
+    Configuration config=new Configuration();
+    config.setString(ConfigConstants.RECOVERY_MODE,"ZOOKEEPER");
+    config.setString(ConfigConstants.STATE_BACKEND,"FILESYSTEM");
+    config.setString(ConfigConstants.STATE_BACKEND_FS_RECOVERY_PATH,recoveryDir.getPath());
+    for (int i=0; i < server.length; i++) {
+      server[i]=new BlobServer(config);
+      serverAddress[i]=new InetSocketAddress("localhost",server[i].getPort());
+      libServer[i]=new BlobLibraryCacheManager(server[i],3600 * 1000);
+    }
+    byte[] expected=new byte[1024];
+    rand.nextBytes(expected);
+    List<BlobKey> keys=new ArrayList<>(2);
+    try (BlobClient client=new BlobClient(serverAddress[0])){
+      keys.add(client.put(expected));
+      keys.add(client.put(expected,32,256));
+    }
+     cache=new BlobCache(serverAddress[0],config);
+    libCache=new BlobLibraryCacheManager(cache,3600 * 1000);
+    JobID jobId=new JobID();
+    ExecutionAttemptID executionId=new ExecutionAttemptID();
+    libServer[0].registerTask(jobId,executionId,keys,Collections.<URL>emptyList());
+    File f=libCache.getFile(keys.get(0));
+    assertEquals(expected.length,f.length());
+    try (FileInputStream fis=new FileInputStream(f)){
+      for (int i=0; i < expected.length && fis.available() > 0; i++) {
+        assertEquals(expected[i],(byte)fis.read());
+      }
+      assertEquals(0,fis.available());
+    }
+     cache.shutdown();
+    libCache.shutdown();
+    cache=new BlobCache(serverAddress[1],config);
+    libCache=new BlobLibraryCacheManager(cache,3600 * 1000);
+    f=libCache.getFile(keys.get(0));
+    assertEquals(expected.length,f.length());
+    try (FileInputStream fis=new FileInputStream(f)){
+      for (int i=0; i < expected.length && fis.available() > 0; i++) {
+        assertEquals(expected[i],(byte)fis.read());
+      }
+      assertEquals(0,fis.available());
+    }
+     f=libCache.getFile(keys.get(1));
+    assertEquals(256,f.length());
+    try (FileInputStream fis=new FileInputStream(f)){
+      for (int i=0; i < 256 && fis.available() > 0; i++) {
+        assertEquals(expected[32 + i],(byte)fis.read());
+      }
+      assertEquals(0,fis.available());
+    }
+   }
+  finally {
+    for (    BlobServer s : server) {
+      if (s != null) {
+        s.shutdown();
+      }
+    }
+    if (cache != null) {
+      cache.shutdown();
+    }
+    if (libCache != null) {
+      libCache.shutdown();
+    }
+  }
+  File[] recoveryFiles=recoveryDir.listFiles();
+  assertEquals("Unclean state backend: " + Arrays.toString(recoveryFiles),0,recoveryFiles.length);
+}
