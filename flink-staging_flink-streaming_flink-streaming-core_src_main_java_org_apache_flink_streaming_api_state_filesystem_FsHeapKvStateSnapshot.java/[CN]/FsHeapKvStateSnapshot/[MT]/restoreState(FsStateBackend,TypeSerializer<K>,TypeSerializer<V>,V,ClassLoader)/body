@@ -1,0 +1,19 @@
+{
+  if (!keySerializer.getClass().getName().equals(keySerializerClassName) || !valueSerializer.getClass().getName().equals(valueSerializerClassName)) {
+    throw new IllegalArgumentException("Cannot restore the state from the snapshot with the given serializers. " + "State (K/V) was serialized with (" + valueSerializerClassName + "/"+ keySerializerClassName+ ")");
+  }
+  try (FSDataInputStream inStream=stateBackend.getFileSystem().open(getFilePath())){
+    InputViewDataInputStreamWrapper inView=new InputViewDataInputStreamWrapper(new DataInputStream(inStream));
+    final int numEntries=inView.readInt();
+    HashMap<K,V> stateMap=new HashMap<>(numEntries);
+    for (int i=0; i < numEntries; i++) {
+      K key=keySerializer.deserialize(inView);
+      V value=valueSerializer.deserialize(inView);
+      stateMap.put(key,value);
+    }
+    return new FsHeapKvState<K,V>(keySerializer,valueSerializer,defaultValue,stateMap,stateBackend);
+  }
+ catch (  Exception e) {
+    throw new Exception("Failed to restore state from file system",e);
+  }
+}

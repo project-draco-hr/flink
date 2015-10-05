@@ -1,0 +1,28 @@
+{
+  if (keyValueState != null) {
+    throw new IllegalStateException("The key/value state has already been created");
+  }
+  if (stateKeySelector == null) {
+    stateKeySelector=config.getStatePartitioner(getUserCodeClassloader());
+    if (stateKeySelector == null) {
+      throw new UnsupportedOperationException("The function or operator is not executed " + "on a KeyedStream and can hence not access the key/value state");
+    }
+  }
+  TypeSerializer<K> keySerializer=config.getStateKeySerializer(getUserCodeClassloader());
+  if (keySerializer == null) {
+    throw new Exception("State key serializer has not been configured in the config.");
+  }
+  @SuppressWarnings("unchecked") Backend stateBackend=(Backend)container.getStateBackend();
+  if (keyValueStateSnapshot != null) {
+    @SuppressWarnings("unchecked") KvStateSnapshot<K,V,Backend> snapshot=(KvStateSnapshot<K,V,Backend>)keyValueStateSnapshot;
+    KvState<K,V,Backend> kvstate=snapshot.restoreState(stateBackend,keySerializer,valueSerializer,defaultValue,getUserCodeClassloader());
+    keyValueState=kvstate;
+    keyValueStateSnapshot=null;
+    return kvstate;
+  }
+ else {
+    KvState<K,V,Backend> kvstate=stateBackend.createKvState(keySerializer,valueSerializer,defaultValue);
+    keyValueState=kvstate;
+    return kvstate;
+  }
+}

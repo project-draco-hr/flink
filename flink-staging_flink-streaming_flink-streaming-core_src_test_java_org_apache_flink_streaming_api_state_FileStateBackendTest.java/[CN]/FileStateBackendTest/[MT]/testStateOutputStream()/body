@@ -1,0 +1,63 @@
+{
+  File tempDir=new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH,UUID.randomUUID().toString());
+  try {
+    FsStateBackend backend=CommonTestUtils.createCopySerializable(new FsStateBackend(localFileUri(tempDir)));
+    backend.initializeForJob(new JobID());
+    File checkpointDir=new File(backend.getCheckpointDirectory().toUri().getPath());
+    byte[] state1=new byte[1274673];
+    byte[] state2=new byte[1];
+    byte[] state3=new byte[0];
+    byte[] state4=new byte[177];
+    Random rnd=new Random();
+    rnd.nextBytes(state1);
+    rnd.nextBytes(state2);
+    rnd.nextBytes(state3);
+    rnd.nextBytes(state4);
+    long checkpointId=97231523452L;
+    FsStateBackend.FsCheckpointStateOutputStream stream1=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis());
+    FsStateBackend.FsCheckpointStateOutputStream stream2=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis());
+    FsStateBackend.FsCheckpointStateOutputStream stream3=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis());
+    stream1.write(state1);
+    stream2.write(state2);
+    stream3.write(state3);
+    FileStreamStateHandle handle1=stream1.closeAndGetHandle();
+    FileStreamStateHandle handle2=stream2.closeAndGetHandle();
+    FileStreamStateHandle handle3=stream3.closeAndGetHandle();
+    StreamStateHandle handle4;
+    try (StateBackend.CheckpointStateOutputStream stream4=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis())){
+      stream4.write(state4);
+      handle4=stream4.closeAndGetHandle();
+    }
+     StateBackend.CheckpointStateOutputStream stream5=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis());
+    stream5.write(state4);
+    stream5.close();
+    try {
+      stream5.closeAndGetHandle();
+      fail();
+    }
+ catch (    IOException e) {
+    }
+    validateBytesInStream(handle1.getState(getClass().getClassLoader()),state1);
+    handle1.discardState();
+    assertFalse(isDirectoryEmpty(checkpointDir));
+    ensureLocalFileDeleted(handle1.getFilePath());
+    validateBytesInStream(handle2.getState(getClass().getClassLoader()),state2);
+    handle2.discardState();
+    assertFalse(isDirectoryEmpty(checkpointDir));
+    ensureLocalFileDeleted(handle2.getFilePath());
+    validateBytesInStream(handle3.getState(getClass().getClassLoader()),state3);
+    handle3.discardState();
+    assertFalse(isDirectoryEmpty(checkpointDir));
+    ensureLocalFileDeleted(handle3.getFilePath());
+    validateBytesInStream(handle4.getState(getClass().getClassLoader()),state4);
+    handle4.discardState();
+    assertTrue(isDirectoryEmpty(checkpointDir));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    deleteDirectorySilently(tempDir);
+  }
+}

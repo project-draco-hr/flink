@@ -2,29 +2,20 @@
   LOG.debug("Starting checkpoint {} on task {}",checkpointId,getName());
 synchronized (lock) {
     if (isRunning) {
+      operatorChain.broadcastCheckpointBarrier(checkpointId,timestamp);
       try {
-        List<Tuple2<StateHandle<Serializable>,Map<String,OperatorStateHandle>>> chainedStates=new ArrayList<>();
-        WrapperStateHandle stateHandle;
-        try {
-          for (          StreamOperator<?> chainedOperator : outputHandler.getChainedOperators()) {
-            if (chainedOperator instanceof StatefulStreamOperator) {
-              chainedStates.add(((StatefulStreamOperator<?>)chainedOperator).getStateSnapshotFromFunction(checkpointId,timestamp));
-            }
- else {
-              chainedStates.add(null);
-            }
-          }
-          stateHandle=CollectionUtils.exists(chainedStates,NotNullPredicate.INSTANCE) ? new WrapperStateHandle(chainedStates) : null;
+        final StreamOperator<?>[] allOperators=operatorChain.getAllOperators();
+        final StreamTaskState[] states=new StreamTaskState[allOperators.length];
+        for (int i=0; i < states.length; i++) {
+          StreamTaskState state=allOperators[i].snapshotOperatorState(checkpointId,timestamp);
+          states[i]=state.isEmpty() ? null : state;
         }
- catch (        Exception e) {
-          throw new Exception("Error while drawing snapshot of the user state.",e);
-        }
-        outputHandler.broadcastBarrier(checkpointId,timestamp);
-        if (stateHandle == null) {
+        StreamTaskStateList allStates=new StreamTaskStateList(states);
+        if (allStates.isEmpty()) {
           getEnvironment().acknowledgeCheckpoint(checkpointId);
         }
  else {
-          getEnvironment().acknowledgeCheckpoint(checkpointId,stateHandle);
+          getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
         }
       }
  catch (      Exception e) {

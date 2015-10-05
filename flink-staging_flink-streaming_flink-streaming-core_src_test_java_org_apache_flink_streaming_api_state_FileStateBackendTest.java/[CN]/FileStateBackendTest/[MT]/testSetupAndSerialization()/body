@@ -1,0 +1,35 @@
+{
+  File tempDir=new File(ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH,UUID.randomUUID().toString());
+  try {
+    final String backendDir=localFileUri(tempDir);
+    FsStateBackend originalBackend=new FsStateBackend(backendDir);
+    assertFalse(originalBackend.isInitialized());
+    assertEquals(new URI(backendDir),originalBackend.getBasePath().toUri());
+    assertNull(originalBackend.getCheckpointDirectory());
+    FsStateBackend backend=CommonTestUtils.createCopySerializable(originalBackend);
+    assertFalse(backend.isInitialized());
+    assertEquals(new URI(backendDir),backend.getBasePath().toUri());
+    assertNull(backend.getCheckpointDirectory());
+    try {
+      backend.checkpointStateSerializable("exception train rolling in",2L,System.currentTimeMillis());
+      fail("should fail with an exception");
+    }
+ catch (    IllegalStateException e) {
+    }
+    backend.initializeForJob(new JobID());
+    assertNotNull(backend.getCheckpointDirectory());
+    File checkpointDir=new File(backend.getCheckpointDirectory().toUri().getPath());
+    assertTrue(checkpointDir.exists());
+    assertTrue(isDirectoryEmpty(checkpointDir));
+    backend.disposeAllStateForCurrentJob();
+    assertNull(backend.getCheckpointDirectory());
+    assertTrue(isDirectoryEmpty(tempDir));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    deleteDirectorySilently(tempDir);
+  }
+}

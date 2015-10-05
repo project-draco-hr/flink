@@ -1,14 +1,17 @@
 {
+  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
     final CollectingOutput<Integer> out=new CollectingOutput<>(50);
-    final StreamingRuntimeContext mockContext=mock(StreamingRuntimeContext.class);
-    when(mockContext.getTaskName()).thenReturn("Test task name");
+    final Object lock=new Object();
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
     AbstractAlignedProcessingTimeWindowOperator<Integer,Integer,Integer,?> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,150,50);
-    op.setup(out,mockContext);
-    op.open(new Configuration());
+    op.setup(mockTask,new StreamConfig(new Configuration()),out);
+    op.open();
     final int numElements=1000;
     for (int i=0; i < numElements; i++) {
-      op.processElement(new StreamRecord<Integer>(i));
+synchronized (lock) {
+        op.processElement(new StreamRecord<Integer>(i));
+      }
       Thread.sleep(1);
     }
     op.close();
@@ -34,5 +37,8 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    timerService.shutdown();
   }
 }

@@ -1,17 +1,24 @@
 {
   MockContext<IN,OUT> mockContext=new MockContext<IN,OUT>(inputs);
-  StreamingRuntimeContext runtimeContext=new StreamingRuntimeContext(new MockEnvironment("MockTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024),new ExecutionConfig(),null,null,new HashMap<String,Accumulator<?,?>>(),null);
-  operator.setup(mockContext.output,runtimeContext);
+  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  final Object lock=new Object();
+  final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+  operator.setup(mockTask,new StreamConfig(new Configuration()),mockContext.output);
   try {
-    operator.open(null);
+    operator.open();
     StreamRecord<IN> nextRecord;
     for (    IN in : inputs) {
-      operator.processElement(new StreamRecord<IN>(in));
+synchronized (lock) {
+        operator.processElement(new StreamRecord<IN>(in));
+      }
     }
     operator.close();
   }
  catch (  Exception e) {
     throw new RuntimeException("Cannot invoke operator.",e);
+  }
+ finally {
+    timerService.shutdownNow();
   }
   return mockContext.getOutputs();
 }

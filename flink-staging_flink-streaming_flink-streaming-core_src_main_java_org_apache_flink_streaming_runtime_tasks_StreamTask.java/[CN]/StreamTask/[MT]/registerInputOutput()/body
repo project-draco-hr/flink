@@ -1,19 +1,17 @@
 {
   LOG.debug("Begin initialization for {}",getName());
+  AccumulatorRegistry accumulatorRegistry=getEnvironment().getAccumulatorRegistry();
   userClassLoader=getUserCodeClassLoader();
   configuration=new StreamConfig(getTaskConfiguration());
-  streamOperator=configuration.getStreamOperator(userClassLoader);
-  AccumulatorRegistry accumulatorRegistry=getEnvironment().getAccumulatorRegistry();
-  Map<String,Accumulator<?,?>> accumulatorMap=accumulatorRegistry.getUserMap();
-  AccumulatorRegistry.Reporter reporter=accumulatorRegistry.getReadWriteReporter();
-  outputHandler=new OutputHandler<>(this,accumulatorMap,reporter);
-  if (streamOperator != null) {
-    headContext=createRuntimeContext(configuration,accumulatorMap);
-    this.contexts.add(headContext);
-    streamOperator.setup(outputHandler.getOutput(),headContext);
+  accumulatorMap=accumulatorRegistry.getUserMap();
+  stateBackend=createStateBackend();
+  stateBackend.initializeForJob(getEnvironment().getJobID());
+  headOperator=configuration.getStreamOperator(userClassLoader);
+  operatorChain=new OperatorChain<>(this,headOperator,accumulatorRegistry.getReadWriteReporter());
+  if (headOperator != null) {
+    headOperator.setup(this,configuration,operatorChain.getChainEntryPoint());
   }
-  hasChainedOperators=outputHandler.getChainedOperators().size() != 1;
-  this.timerService=Executors.newSingleThreadScheduledExecutor(new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
+  timerService=Executors.newSingleThreadScheduledExecutor(new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
   init();
   LOG.debug("Finish initialization for {}",getName());
 }

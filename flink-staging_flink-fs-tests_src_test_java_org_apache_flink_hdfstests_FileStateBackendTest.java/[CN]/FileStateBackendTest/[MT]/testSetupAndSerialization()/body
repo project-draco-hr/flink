@@ -1,0 +1,31 @@
+{
+  try {
+    URI baseUri=new URI(HDFS_ROOT_URI + UUID.randomUUID().toString());
+    FsStateBackend originalBackend=new FsStateBackend(baseUri);
+    assertFalse(originalBackend.isInitialized());
+    assertEquals(baseUri,originalBackend.getBasePath().toUri());
+    assertNull(originalBackend.getCheckpointDirectory());
+    FsStateBackend backend=CommonTestUtils.createCopySerializable(originalBackend);
+    assertFalse(backend.isInitialized());
+    assertEquals(baseUri,backend.getBasePath().toUri());
+    assertNull(backend.getCheckpointDirectory());
+    try {
+      backend.checkpointStateSerializable("exception train rolling in",2L,System.currentTimeMillis());
+      fail("should fail with an exception");
+    }
+ catch (    IllegalStateException e) {
+    }
+    backend.initializeForJob(new JobID());
+    assertNotNull(backend.getCheckpointDirectory());
+    Path checkpointDir=backend.getCheckpointDirectory();
+    assertTrue(FS.exists(checkpointDir));
+    assertTrue(isDirectoryEmpty(checkpointDir));
+    backend.disposeAllStateForCurrentJob();
+    assertNull(backend.getCheckpointDirectory());
+    assertTrue(isDirectoryEmpty(baseUri));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
