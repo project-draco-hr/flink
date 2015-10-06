@@ -1,0 +1,64 @@
+{
+  if (!this.running) {
+    return;
+  }
+  boolean stubOpen=false;
+  try {
+    try {
+      this.driver.prepare();
+    }
+ catch (    Throwable t) {
+      throw new Exception("The data preparation for task '" + this.getEnvironment().getTaskName() + "' , caused an error: "+ t.getMessage(),t);
+    }
+    if (!this.running) {
+      return;
+    }
+    BatchTask.openChainedTasks(this.chainedTasks,this);
+    if (this.stub != null) {
+      try {
+        Configuration stubConfig=this.config.getStubParameters();
+        FunctionUtils.openFunction(this.stub,stubConfig);
+        stubOpen=true;
+      }
+ catch (      Throwable t) {
+        throw new Exception("The user defined 'open()' method caused an exception: " + t.getMessage(),t);
+      }
+    }
+    this.driver.run();
+    if (this.running && this.stub != null) {
+      FunctionUtils.closeFunction(this.stub);
+      stubOpen=false;
+    }
+    this.output.close();
+    BatchTask.closeChainedTasks(this.chainedTasks,this);
+  }
+ catch (  Exception ex) {
+    if (stubOpen) {
+      try {
+        FunctionUtils.closeFunction(this.stub);
+      }
+ catch (      Throwable t) {
+      }
+    }
+    if (this.driver instanceof ResettableDriver) {
+      final ResettableDriver<?,?> resDriver=(ResettableDriver<?,?>)this.driver;
+      try {
+        resDriver.teardown();
+      }
+ catch (      Throwable t) {
+        throw new Exception("Error while shutting down an iterative operator: " + t.getMessage(),t);
+      }
+    }
+    BatchTask.cancelChainedTasks(this.chainedTasks);
+    ex=ExceptionInChainedStubException.exceptionUnwrap(ex);
+    if (ex instanceof CancelTaskException) {
+      throw ex;
+    }
+ else     if (this.running) {
+      BatchTask.logAndThrowException(ex,this);
+    }
+  }
+ finally {
+    this.driver.cleanup();
+  }
+}
