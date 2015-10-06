@@ -1,17 +1,19 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
   DataStream<Tuple2<String,Integer>> source=env.fromElements(Tuple2.of("hello",1),Tuple2.of("hello",2));
   DummyReducer reducer=new DummyReducer();
-  DataStream<Tuple2<String,Integer>> window1=source.windowAll(SlidingProcessingTimeWindows.of(Time.of(1,TimeUnit.SECONDS),Time.of(100,TimeUnit.MILLISECONDS))).evictor(CountEvictor.of(100)).reduce(reducer);
+  DataStream<Tuple2<String,Integer>> window1=source.windowAll(SlidingTimeWindows.of(Time.of(1,TimeUnit.SECONDS),Time.of(100,TimeUnit.MILLISECONDS))).evictor(CountEvictor.of(100)).reduce(reducer);
   OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>> transform1=(OneInputTransformation<Tuple2<String,Integer>,Tuple2<String,Integer>>)window1.getTransformation();
   OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator1=transform1.getOperator();
   Assert.assertTrue(operator1 instanceof EvictingNonKeyedWindowOperator);
   EvictingNonKeyedWindowOperator winOperator1=(EvictingNonKeyedWindowOperator)operator1;
-  Assert.assertTrue(winOperator1.getTriggerTemplate() instanceof ProcessingTimeTrigger);
-  Assert.assertTrue(winOperator1.getWindowAssigner() instanceof SlidingProcessingTimeWindows);
+  Assert.assertFalse(winOperator1.isSetProcessingTime());
+  Assert.assertTrue(winOperator1.getTriggerTemplate() instanceof WatermarkTrigger);
+  Assert.assertTrue(winOperator1.getWindowAssigner() instanceof SlidingTimeWindows);
   Assert.assertTrue(winOperator1.getEvictor() instanceof CountEvictor);
   Assert.assertTrue(winOperator1.getWindowBufferFactory() instanceof HeapWindowBuffer.Factory);
-  DataStream<Tuple2<String,Integer>> window2=source.windowAll(TumblingProcessingTimeWindows.of(Time.of(1,TimeUnit.SECONDS))).trigger(CountTrigger.of(100)).evictor(TimeEvictor.of(Time.of(100,TimeUnit.MILLISECONDS))).apply(new AllWindowFunction<Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow>(){
+  DataStream<Tuple2<String,Integer>> window2=source.windowAll(TumblingTimeWindows.of(Time.of(1,TimeUnit.SECONDS))).trigger(CountTrigger.of(100)).evictor(TimeEvictor.of(Time.of(100,TimeUnit.MILLISECONDS))).apply(new AllWindowFunction<Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow>(){
     private static final long serialVersionUID=1L;
     @Override public void apply(    TimeWindow window,    Iterable<Tuple2<String,Integer>> values,    Collector<Tuple2<String,Integer>> out) throws Exception {
     }
@@ -21,8 +23,9 @@
   OneInputStreamOperator<Tuple2<String,Integer>,Tuple2<String,Integer>> operator2=transform2.getOperator();
   Assert.assertTrue(operator2 instanceof EvictingNonKeyedWindowOperator);
   EvictingNonKeyedWindowOperator winOperator2=(EvictingNonKeyedWindowOperator)operator2;
+  Assert.assertFalse(winOperator2.isSetProcessingTime());
   Assert.assertTrue(winOperator2.getTriggerTemplate() instanceof CountTrigger);
-  Assert.assertTrue(winOperator2.getWindowAssigner() instanceof TumblingProcessingTimeWindows);
+  Assert.assertTrue(winOperator2.getWindowAssigner() instanceof TumblingTimeWindows);
   Assert.assertTrue(winOperator2.getEvictor() instanceof TimeEvictor);
   Assert.assertTrue(winOperator2.getWindowBufferFactory() instanceof HeapWindowBuffer.Factory);
 }
