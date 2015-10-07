@@ -1,0 +1,44 @@
+{
+  File rootFolder=tempFolder.getRoot();
+  Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(zkServer.getConnectString(),rootFolder.getPath());
+  config.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,2);
+  config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,1);
+  final TestingCluster cluster=new TestingCluster(config);
+  cluster.start();
+  JobVertex blockingVertex=new JobVertex("Blocking Vertex");
+  blockingVertex.setInvokableClass(BlockingTask.class);
+  blockingVertex.setParallelism(1);
+  final JobGraph jobGraph=new JobGraph("Blocking Test Job",blockingVertex);
+  final Promise<JobExecutionResult> promise=new scala.concurrent.impl.Promise.DefaultPromise<>();
+  Deadline deadline=new FiniteDuration(2,TimeUnit.MINUTES).fromNow();
+  try {
+    Thread submitter=new Thread(new Runnable(){
+      @Override public void run(){
+        try {
+          JobExecutionResult result=cluster.submitJobAndWait(jobGraph,false);
+          promise.success(result);
+        }
+ catch (        Exception e) {
+          promise.failure(e);
+        }
+      }
+    }
+);
+    submitter.start();
+synchronized (BlockingTask.waitLock) {
+      while (BlockingTask.HasBlockedExecution < 1 && deadline.hasTimeLeft()) {
+        BlockingTask.waitLock.wait(deadline.timeLeft().toMillis());
+      }
+    }
+    if (deadline.isOverdue()) {
+      Assert.fail("The job has not blocked within the given deadline.");
+    }
+    ActorGateway gateway=cluster.getLeaderGateway(deadline.timeLeft());
+    gateway.tell(TestingJobManagerMessages.getDisablePostStop());
+    gateway.tell(PoisonPill.getInstance());
+    Await.result(promise.future(),deadline.timeLeft());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}

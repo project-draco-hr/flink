@@ -1,0 +1,56 @@
+{
+  checkNotNull(actorSystem,"The actorSystem must not be null.");
+  checkNotNull(leaderRetrievalService,"The jobManagerGateway must not be null.");
+  checkNotNull(jobGraph,"The jobGraph must not be null.");
+  checkNotNull(timeout,"The timeout must not be null.");
+  Props jobClientActorProps=JobClientActor.createJobClientActorProps(leaderRetrievalService,timeout,sysoutLogUpdates);
+  ActorRef jobClientActor=actorSystem.actorOf(jobClientActorProps);
+  Object answer;
+  try {
+    Future<Object> future=Patterns.ask(jobClientActor,new JobClientMessages.SubmitJobAndWait(jobGraph),new Timeout(AkkaUtils.INF_TIMEOUT()));
+    answer=Await.result(future,AkkaUtils.INF_TIMEOUT());
+  }
+ catch (  TimeoutException e) {
+    throw new JobTimeoutException(jobGraph.getJobID(),"Timeout while waiting for JobManager answer. " + "Job time exceeded " + AkkaUtils.INF_TIMEOUT(),e);
+  }
+catch (  Throwable throwable) {
+    throw new JobExecutionException(jobGraph.getJobID(),"Communication with JobManager failed: " + throwable.getMessage(),throwable);
+  }
+ finally {
+    jobClientActor.tell(PoisonPill.getInstance(),ActorRef.noSender());
+  }
+  if (answer instanceof JobManagerMessages.JobResultSuccess) {
+    LOG.info("Job execution complete");
+    SerializedJobExecutionResult result=((JobManagerMessages.JobResultSuccess)answer).result();
+    if (result != null) {
+      try {
+        return result.toJobExecutionResult(classLoader);
+      }
+ catch (      Throwable t) {
+        throw new JobExecutionException(jobGraph.getJobID(),"Job was successfully executed but JobExecutionResult could not be deserialized.");
+      }
+    }
+ else {
+      throw new JobExecutionException(jobGraph.getJobID(),"Job was successfully executed but result contained a null JobExecutionResult.");
+    }
+  }
+  if (answer instanceof JobManagerMessages.JobResultFailure) {
+    LOG.info("Job execution failed");
+    SerializedThrowable serThrowable=((JobManagerMessages.JobResultFailure)answer).cause();
+    if (serThrowable != null) {
+      Throwable cause=serThrowable.deserializeError(classLoader);
+      if (cause instanceof JobExecutionException) {
+        throw (JobExecutionException)cause;
+      }
+ else {
+        throw new JobExecutionException(jobGraph.getJobID(),"Job execution failed",cause);
+      }
+    }
+ else {
+      throw new JobExecutionException(jobGraph.getJobID(),"Job execution failed with null as failure cause.");
+    }
+  }
+ else {
+    throw new JobExecutionException(jobGraph.getJobID(),"Unknown answer from JobManager after submitting the job: " + answer);
+  }
+}
