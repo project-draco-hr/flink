@@ -5,30 +5,32 @@
     final CollectingOutput<Integer> out=new CollectingOutput<>(windowSize);
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,windowSize,windowSize);
+    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSize);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     final int numWindows=10;
     long previousNextTime=0;
     int window=1;
     while (window <= numWindows) {
-      long nextTime=op.getNextEvaluationTime();
-      int val=((int)nextTime) ^ ((int)(nextTime >>> 32));
 synchronized (lock) {
+        long nextTime=op.getNextEvaluationTime();
+        int val=((int)nextTime) ^ ((int)(nextTime >>> 32));
         op.processElement(new StreamRecord<Integer>(val));
-      }
-      if (nextTime != previousNextTime) {
-        window++;
-        previousNextTime=nextTime;
+        if (nextTime != previousNextTime) {
+          window++;
+          previousNextTime=nextTime;
+        }
       }
       Thread.sleep(1);
     }
-    op.close();
+synchronized (lock) {
+      op.close();
+    }
     op.dispose();
     List<Integer> result=out.getElements();
     assertTrue(result.size() >= numWindows && result.size() <= 2 * numWindows);
     HashSet<Integer> set=new HashSet<>(result);
-    assertTrue(set.size() == 10 || set.size() == 11);
+    assertTrue(set.size() == 10);
   }
  catch (  Exception e) {
     e.printStackTrace();

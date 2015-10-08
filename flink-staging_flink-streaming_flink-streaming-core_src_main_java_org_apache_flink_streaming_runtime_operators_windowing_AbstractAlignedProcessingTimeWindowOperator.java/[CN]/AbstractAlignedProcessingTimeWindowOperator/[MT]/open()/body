@@ -1,9 +1,31 @@
 {
   super.open();
   out=new TimestampedCollector<>(output);
-  panes=createPanes(keySelector,function);
   final long now=System.currentTimeMillis();
   nextEvaluationTime=now + windowSlide - (now % windowSlide);
   nextSlideTime=now + paneSize - (now % paneSize);
-  registerTimer(Math.min(nextEvaluationTime,nextSlideTime),this);
+  final long firstTriggerTime=Math.min(nextEvaluationTime,nextSlideTime);
+  if (restoredState == null) {
+    panes=createPanes(keySelector,function);
+  }
+ else {
+    panes=restoredState.panes;
+    long nextPastEvaluationTime=restoredState.nextEvaluationTime;
+    long nextPastSlideTime=restoredState.nextSlideTime;
+    long nextPastTriggerTime=Math.min(nextPastEvaluationTime,nextPastSlideTime);
+    int numPanesRestored=panes.getNumPanes();
+    while (numPanesRestored > 0 && nextPastTriggerTime < firstTriggerTime) {
+      if (nextPastTriggerTime == nextPastEvaluationTime) {
+        computeWindow(nextPastTriggerTime);
+        nextPastEvaluationTime+=windowSlide;
+      }
+      if (nextPastTriggerTime == nextPastSlideTime) {
+        panes.slidePanes(numPanesPerWindow);
+        numPanesRestored--;
+        nextPastSlideTime+=paneSize;
+      }
+      nextPastTriggerTime=Math.min(nextPastEvaluationTime,nextPastSlideTime);
+    }
+  }
+  registerTimer(firstTriggerTime,this);
 }

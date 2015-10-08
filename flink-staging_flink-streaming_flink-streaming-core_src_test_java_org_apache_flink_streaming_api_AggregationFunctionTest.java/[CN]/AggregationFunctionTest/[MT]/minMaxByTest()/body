@@ -5,13 +5,14 @@
   List<Tuple3<Integer,Integer,Integer>> minByLastExpected=ImmutableList.of(Tuple3.of(0,0,0),Tuple3.of(0,0,0),Tuple3.of(0,0,0),Tuple3.of(0,0,3),Tuple3.of(0,0,3),Tuple3.of(0,0,3),Tuple3.of(0,0,6),Tuple3.of(0,0,6),Tuple3.of(0,0,6));
   TypeInformation<Tuple3<Integer,Integer,Integer>> typeInfo=TypeExtractor.getForObject(Tuple3.of(0,0,0));
   ExecutionConfig config=new ExecutionConfig();
-  KeySelector<Tuple3<Integer,Integer,Integer>,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new int[]{0},typeInfo),typeInfo,config);
+  KeySelector<Tuple3<Integer,Integer,Integer>,Tuple> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new int[]{0},typeInfo),typeInfo,config);
+  TypeInformation<Tuple> keyType=TypeExtractor.getKeySelectorTypes(keySelector,typeInfo);
   ReduceFunction<Tuple3<Integer,Integer,Integer>> maxByFunctionFirst=new ComparableAggregator<>(1,typeInfo,AggregationType.MAXBY,true,config);
   ReduceFunction<Tuple3<Integer,Integer,Integer>> maxByFunctionLast=new ComparableAggregator<>(1,typeInfo,AggregationType.MAXBY,false,config);
   ReduceFunction<Tuple3<Integer,Integer,Integer>> minByFunctionFirst=new ComparableAggregator<>(1,typeInfo,AggregationType.MINBY,true,config);
   ReduceFunction<Tuple3<Integer,Integer,Integer>> minByFunctionLast=new ComparableAggregator<>(1,typeInfo,AggregationType.MINBY,false,config);
-  assertEquals(maxByFirstExpected,MockContext.createAndExecute(new StreamGroupedReduce<>(maxByFunctionFirst,typeInfo.createSerializer(config)),getInputByList()));
-  assertEquals(maxByLastExpected,MockContext.createAndExecute(new StreamGroupedReduce<>(maxByFunctionLast,typeInfo.createSerializer(config)),getInputByList()));
-  assertEquals(minByLastExpected,MockContext.createAndExecute(new StreamGroupedReduce<>(minByFunctionLast,typeInfo.createSerializer(config)),getInputByList()));
-  assertEquals(minByFirstExpected,MockContext.createAndExecute(new StreamGroupedReduce<>(minByFunctionFirst,typeInfo.createSerializer(config)),getInputByList()));
+  assertEquals(maxByFirstExpected,MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(maxByFunctionFirst,typeInfo.createSerializer(config)),getInputByList(),keySelector,keyType));
+  assertEquals(maxByLastExpected,MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(maxByFunctionLast,typeInfo.createSerializer(config)),getInputByList(),keySelector,keyType));
+  assertEquals(minByLastExpected,MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(minByFunctionLast,typeInfo.createSerializer(config)),getInputByList(),keySelector,keyType));
+  assertEquals(minByFirstExpected,MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(minByFunctionFirst,typeInfo.createSerializer(config)),getInputByList(),keySelector,keyType));
 }

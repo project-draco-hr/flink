@@ -24,13 +24,14 @@ expectedGroupMaxList.add(new MyPojo(i % 3,i));
 }
 TypeInformation<MyPojo> typeInfo=TypeExtractor.getForObject(new MyPojo(0,0));
 ExecutionConfig config=new ExecutionConfig();
-KeySelector<MyPojo,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new String[]{"f0"},typeInfo),typeInfo,config);
+KeySelector<MyPojo,Tuple> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new String[]{"f0"},typeInfo),typeInfo,config);
+TypeInformation<Tuple> keyType=TypeExtractor.getKeySelectorTypes(keySelector,typeInfo);
 ReduceFunction<MyPojo> sumFunction=new SumAggregator<>("f1",typeInfo,config);
 ReduceFunction<MyPojo> minFunction=new ComparableAggregator<>("f1",typeInfo,AggregationType.MIN,false,config);
 ReduceFunction<MyPojo> maxFunction=new ComparableAggregator<>("f1",typeInfo,AggregationType.MAX,false,config);
-List<MyPojo> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<>(sumFunction,typeInfo.createSerializer(config)),getInputPojoList());
-List<MyPojo> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<>(minFunction,typeInfo.createSerializer(config)),getInputPojoList());
-List<MyPojo> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<>(maxFunction,typeInfo.createSerializer(config)),getInputPojoList());
+List<MyPojo> groupedSumList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(sumFunction,typeInfo.createSerializer(config)),getInputPojoList(),keySelector,keyType);
+List<MyPojo> groupedMinList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(minFunction,typeInfo.createSerializer(config)),getInputPojoList(),keySelector,keyType);
+List<MyPojo> groupedMaxList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(maxFunction,typeInfo.createSerializer(config)),getInputPojoList(),keySelector,keyType);
 assertEquals(expectedGroupSumList,groupedSumList);
 assertEquals(expectedGroupMinList,groupedMinList);
 assertEquals(expectedGroupMaxList,groupedMaxList);

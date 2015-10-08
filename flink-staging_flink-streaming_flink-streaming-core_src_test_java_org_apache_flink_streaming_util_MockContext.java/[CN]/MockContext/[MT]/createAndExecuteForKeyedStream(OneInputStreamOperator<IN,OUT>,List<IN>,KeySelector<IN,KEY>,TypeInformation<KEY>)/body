@@ -1,0 +1,31 @@
+{
+  MockContext<IN,OUT> mockContext=new MockContext<IN,OUT>(inputs);
+  StreamConfig config=new StreamConfig(new Configuration());
+  if (keySelector != null && keyType != null) {
+    config.setStateKeySerializer(keyType.createSerializer(new ExecutionConfig()));
+    config.setStatePartitioner(keySelector);
+  }
+  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  final Object lock=new Object();
+  final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+  operator.setup(mockTask,config,mockContext.output);
+  try {
+    operator.open();
+    StreamRecord<IN> record=new StreamRecord<IN>(null);
+    for (    IN in : inputs) {
+      record=record.replace(in);
+synchronized (lock) {
+        operator.setKeyContextElement(record);
+        operator.processElement(record);
+      }
+    }
+    operator.close();
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Cannot invoke operator.",e);
+  }
+ finally {
+    timerService.shutdownNow();
+  }
+  return mockContext.getOutputs();
+}

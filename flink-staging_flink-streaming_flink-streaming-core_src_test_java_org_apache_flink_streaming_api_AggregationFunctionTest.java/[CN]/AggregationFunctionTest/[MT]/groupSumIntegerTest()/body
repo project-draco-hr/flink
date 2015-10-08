@@ -24,13 +24,14 @@ expectedGroupMaxList.add(new Tuple2<>(i % 3,i));
 }
 TypeInformation<Tuple2<Integer,Integer>> typeInfo=TypeExtractor.getForObject(new Tuple2<>(0,0));
 ExecutionConfig config=new ExecutionConfig();
-KeySelector<Tuple2<Integer,Integer>,?> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new int[]{0},typeInfo),typeInfo,config);
+KeySelector<Tuple2<Integer,Integer>,Tuple> keySelector=KeySelectorUtil.getSelectorForKeys(new Keys.ExpressionKeys<>(new int[]{0},typeInfo),typeInfo,config);
+TypeInformation<Tuple> keyType=TypeExtractor.getKeySelectorTypes(keySelector,typeInfo);
 ReduceFunction<Tuple2<Integer,Integer>> sumFunction=new SumAggregator<>(1,typeInfo,config);
 ReduceFunction<Tuple2<Integer,Integer>> minFunction=new ComparableAggregator<>(1,typeInfo,AggregationType.MIN,config);
 ReduceFunction<Tuple2<Integer,Integer>> maxFunction=new ComparableAggregator<>(1,typeInfo,AggregationType.MAX,config);
-List<Tuple2<Integer,Integer>> groupedSumList=MockContext.createAndExecute(new StreamGroupedReduce<>(sumFunction,typeInfo.createSerializer(config)),getInputList());
-List<Tuple2<Integer,Integer>> groupedMinList=MockContext.createAndExecute(new StreamGroupedReduce<>(minFunction,typeInfo.createSerializer(config)),getInputList());
-List<Tuple2<Integer,Integer>> groupedMaxList=MockContext.createAndExecute(new StreamGroupedReduce<>(maxFunction,typeInfo.createSerializer(config)),getInputList());
+List<Tuple2<Integer,Integer>> groupedSumList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(sumFunction,typeInfo.createSerializer(config)),getInputList(),keySelector,keyType);
+List<Tuple2<Integer,Integer>> groupedMinList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(minFunction,typeInfo.createSerializer(config)),getInputList(),keySelector,keyType);
+List<Tuple2<Integer,Integer>> groupedMaxList=MockContext.createAndExecuteForKeyedStream(new StreamGroupedReduce<>(maxFunction,typeInfo.createSerializer(config)),getInputList(),keySelector,keyType);
 assertEquals(expectedGroupSumList,groupedSumList);
 assertEquals(expectedGroupMinList,groupedMinList);
 assertEquals(expectedGroupMaxList,groupedMaxList);

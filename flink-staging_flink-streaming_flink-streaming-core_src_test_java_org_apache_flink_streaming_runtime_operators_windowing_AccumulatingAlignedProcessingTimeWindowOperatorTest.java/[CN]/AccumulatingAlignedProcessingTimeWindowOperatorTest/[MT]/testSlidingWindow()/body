@@ -4,7 +4,7 @@
     final CollectingOutput<Integer> out=new CollectingOutput<>(50);
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-    AbstractAlignedProcessingTimeWindowOperator<Integer,Integer,Integer,?> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,150,50);
+    AccumulatingProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,150,50);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     final int numElements=1000;
@@ -14,7 +14,9 @@ synchronized (lock) {
       }
       Thread.sleep(1);
     }
-    op.close();
+synchronized (lock) {
+      op.close();
+    }
     op.dispose();
     List<Integer> result=out.getElements();
     if (result.size() < numElements || result.size() > 3 * numElements) {

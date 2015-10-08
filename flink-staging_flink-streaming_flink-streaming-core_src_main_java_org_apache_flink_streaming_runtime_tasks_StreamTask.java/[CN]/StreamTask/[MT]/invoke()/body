@@ -2,7 +2,9 @@
   LOG.debug("Invoking {}",getName());
   boolean disposed=false;
   try {
-    openAllOperators();
+synchronized (lock) {
+      openAllOperators();
+    }
     isRunning=true;
     run();
     isRunning=false;
@@ -10,8 +12,8 @@
       LOG.debug("Finished task {}",getName());
     }
 synchronized (lock) {
+      closeAllOperators();
     }
-    closeAllOperators();
     operatorChain.flushOutputs();
     tryDisposeAllOperators();
     disposed=true;
@@ -30,6 +32,14 @@ synchronized (lock) {
     }
     if (!disposed) {
       disposeAllOperators();
+    }
+    try {
+      if (stateBackend != null) {
+        stateBackend.close();
+      }
+    }
+ catch (    Throwable t) {
+      LOG.error("Error while closing the state backend",t);
     }
   }
 }
