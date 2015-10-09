@@ -8,6 +8,19 @@
     requestPath=requestPath.replace('/',File.separatorChar);
   }
   final File file=new File(rootPath,requestPath);
+  if (!file.exists()) {
+    ClassLoader cl=StaticFileServerHandler.class.getClassLoader();
+    try (InputStream resourceStream=cl.getResourceAsStream("web" + requestPath)){
+      if (resourceStream == null) {
+        logger.debug("Unable to load requested file {} from classloader",requestPath);
+        sendError(ctx,NOT_FOUND);
+        return;
+      }
+      logger.debug("Loading missing file from classloader: {}",requestPath);
+      file.getParentFile().mkdirs();
+      Files.copy(resourceStream,file.toPath());
+    }
+   }
   if (!file.exists() || file.isHidden() || file.isDirectory()|| !file.isFile()) {
     sendError(ctx,NOT_FOUND);
     return;
