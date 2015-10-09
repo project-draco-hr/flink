@@ -1,0 +1,35 @@
+{
+  requireNonNull(name,"The name of the state must not be null");
+  requireNonNull(stateType,"The state type information must not be null");
+  OperatorState<?> previousState;
+  if (this.stateTypeInfos != null && this.keyValueStates != null && (previousState=this.keyValueStates.get(name)) != null) {
+    TypeInformation<?> previousType;
+    if (stateType.equals((previousType=this.stateTypeInfos.get(name)))) {
+      @SuppressWarnings("unchecked") OperatorState<S> previous=(OperatorState<S>)previousState;
+      return previous;
+    }
+ else {
+      throw new IllegalStateException("Cannot initialize key/value state for type " + stateType + " ; The key/value state has already been created and initialized for a different type: "+ previousType);
+    }
+  }
+ else {
+    if (this.stateTypeInfos == null) {
+      this.stateTypeInfos=new HashMap<>();
+    }
+    if (this.keyValueStates == null) {
+      this.keyValueStates=new HashMap<>();
+    }
+    try {
+      OperatorState<S> state=operator.createKeyValueState(name,stateType,defaultState);
+      this.keyValueStates.put(name,state);
+      this.stateTypeInfos.put(name,stateType);
+      return state;
+    }
+ catch (    RuntimeException e) {
+      throw e;
+    }
+catch (    Exception e) {
+      throw new RuntimeException("Cannot initialize the key/value state",e);
+    }
+  }
+}

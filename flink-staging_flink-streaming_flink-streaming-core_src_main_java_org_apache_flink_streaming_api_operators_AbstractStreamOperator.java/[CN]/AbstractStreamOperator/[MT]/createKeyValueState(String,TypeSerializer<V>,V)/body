@@ -1,0 +1,43 @@
+{
+  if (name == null || name.isEmpty()) {
+    throw new IllegalArgumentException();
+  }
+  if (keyValueStatesByName != null && keyValueStatesByName.containsKey(name)) {
+    throw new IllegalStateException("The key/value state has already been created");
+  }
+  TypeSerializer<K> keySerializer;
+  if (stateKeySelector == null) {
+    stateKeySelector=config.getStatePartitioner(getUserCodeClassloader());
+    if (stateKeySelector == null) {
+      throw new UnsupportedOperationException("The function or operator is not executed " + "on a KeyedStream and can hence not access the key/value state");
+    }
+    keySerializer=config.getStateKeySerializer(getUserCodeClassloader());
+    if (keySerializer == null) {
+      throw new Exception("State key serializer has not been configured in the config.");
+    }
+    this.keySerializer=keySerializer;
+  }
+ else   if (this.keySerializer != null) {
+    keySerializer=(TypeSerializer<K>)this.keySerializer;
+  }
+ else {
+    throw new RuntimeException();
+  }
+  @SuppressWarnings("unchecked") Backend stateBackend=(Backend)container.getStateBackend();
+  KvState<K,V,Backend> kvstate=null;
+  if (keyValueStateSnapshots != null) {
+    @SuppressWarnings("unchecked") KvStateSnapshot<K,V,Backend> snapshot=(KvStateSnapshot<K,V,Backend>)keyValueStateSnapshots.remove(name);
+    if (snapshot != null) {
+      kvstate=snapshot.restoreState(stateBackend,keySerializer,valueSerializer,defaultValue,getUserCodeClassloader());
+    }
+  }
+  if (kvstate == null) {
+    kvstate=stateBackend.createKvState(keySerializer,valueSerializer,defaultValue);
+  }
+  if (keyValueStatesByName == null) {
+    keyValueStatesByName=new HashMap<>();
+  }
+  keyValueStatesByName.put(name,kvstate);
+  keyValueStates=keyValueStatesByName.values().toArray(new KvState[keyValueStatesByName.size()]);
+  return kvstate;
+}
