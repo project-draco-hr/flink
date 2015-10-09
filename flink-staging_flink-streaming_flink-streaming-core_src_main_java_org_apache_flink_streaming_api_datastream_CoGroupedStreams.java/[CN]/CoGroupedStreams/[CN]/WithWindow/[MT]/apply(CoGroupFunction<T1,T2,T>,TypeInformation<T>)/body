@@ -1,8 +1,11 @@
 {
   function=input1.getExecutionEnvironment().clean(function);
-  DataStream<TaggedUnion<T1,T2>> taggedInput1=input1.map(new Input1Tagger<T1,T2>()).returns(new UnionTypeInfo<>(input1.getType(),input2.getType()));
-  DataStream<TaggedUnion<T1,T2>> taggedInput2=input2.map(new Input2Tagger<T1,T2>()).returns(new UnionTypeInfo<>(input1.getType(),input2.getType()));
-  WindowedStream<TaggedUnion<T1,T2>,KEY,W> windowOp=taggedInput1.union(taggedInput2).keyBy(new UnionKeySelector<>(keySelector1,keySelector2)).window(windowAssigner);
+  UnionTypeInfo<T1,T2> unionType=new UnionTypeInfo<>(input1.getType(),input2.getType());
+  UnionKeySelector<T1,T2,KEY> unionKeySelector=new UnionKeySelector<>(keySelector1,keySelector2);
+  DataStream<TaggedUnion<T1,T2>> taggedInput1=input1.map(new Input1Tagger<T1,T2>()).returns(unionType);
+  DataStream<TaggedUnion<T1,T2>> taggedInput2=input2.map(new Input2Tagger<T1,T2>()).returns(unionType);
+  DataStream<TaggedUnion<T1,T2>> unionStream=taggedInput1.union(taggedInput2);
+  WindowedStream<TaggedUnion<T1,T2>,KEY,W> windowOp=new KeyedStream<TaggedUnion<T1,T2>,KEY>(unionStream,unionKeySelector,keyType).window(windowAssigner);
   if (trigger != null) {
     windowOp.trigger(trigger);
   }
