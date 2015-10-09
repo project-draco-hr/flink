@@ -2,15 +2,18 @@
   LOG.debug("Starting checkpoint {} on task {}",checkpointId,getName());
 synchronized (lock) {
     if (isRunning) {
-      operatorChain.broadcastCheckpointBarrier(checkpointId,timestamp);
       try {
         final StreamOperator<?>[] allOperators=operatorChain.getAllOperators();
         final StreamTaskState[] states=new StreamTaskState[allOperators.length];
         for (int i=0; i < states.length; i++) {
-          StreamTaskState state=allOperators[i].snapshotOperatorState(checkpointId,timestamp);
-          states[i]=state.isEmpty() ? null : state;
+          StreamOperator<?> operator=allOperators[i];
+          if (operator != null) {
+            StreamTaskState state=operator.snapshotOperatorState(checkpointId,timestamp);
+            states[i]=state.isEmpty() ? null : state;
+          }
         }
         StreamTaskStateList allStates=new StreamTaskStateList(states);
+        operatorChain.broadcastCheckpointBarrier(checkpointId,timestamp);
         if (allStates.isEmpty()) {
           getEnvironment().acknowledgeCheckpoint(checkpointId);
         }
