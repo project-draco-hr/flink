@@ -1,16 +1,22 @@
 {
-  if (localJobManagerAddress == null) {
-    localJobManagerAddress=localJobManagerAddressPromise.future().value().get().get();
-  }
-  Option<Tuple2<ActorGateway,Integer>> jobManager=retriever.getJobManagerGatewayAndWebPort();
-  if (jobManager.isDefined()) {
-    String redirectAddress=HandlerRedirectUtils.getRedirectAddress(localJobManagerAddress,jobManager.get());
-    if (redirectAddress != null) {
-      HttpResponse redirect=HandlerRedirectUtils.getRedirectResponse(redirectAddress,routed.path());
-      KeepAliveWrite.flush(ctx,routed.request(),redirect);
+  if (localJobManagerAddressFuture.isCompleted()) {
+    if (localJobManagerAddress == null) {
+      localJobManagerAddress=Await.result(localJobManagerAddressFuture,timeout);
+    }
+    Option<Tuple2<ActorGateway,Integer>> jobManager=retriever.getJobManagerGatewayAndWebPort();
+    if (jobManager.isDefined()) {
+      Tuple2<ActorGateway,Integer> gatewayPort=jobManager.get();
+      String redirectAddress=HandlerRedirectUtils.getRedirectAddress(localJobManagerAddress,gatewayPort);
+      if (redirectAddress != null) {
+        HttpResponse redirect=HandlerRedirectUtils.getRedirectResponse(redirectAddress,routed.path());
+        KeepAliveWrite.flush(ctx,routed.request(),redirect);
+      }
+ else {
+        respondAsLeader(ctx,routed,gatewayPort._1());
+      }
     }
  else {
-      respondAsLeader(ctx,routed,jobManager.get()._1());
+      KeepAliveWrite.flush(ctx,routed.request(),HandlerRedirectUtils.getUnavailableResponse());
     }
   }
  else {

@@ -1,33 +1,33 @@
 {
   if (leaderAddress != null && !leaderAddress.equals("")) {
     try {
-      final Promise<ActorGateway> gatewayPromise=new scala.concurrent.impl.Promise.DefaultPromise<>();
-      final Promise<Integer> webPortPromise=new scala.concurrent.impl.Promise.DefaultPromise<>();
-      final Tuple2<Promise<ActorGateway>,Promise<Integer>> newPromise=new Tuple2<>(gatewayPromise,webPortPromise);
-      LOG.info("Retrieved leader notification {}:{}.",leaderAddress,leaderSessionID);
-      AkkaUtils.getActorRefFuture(leaderAddress,actorSystem,lookupTimeout).flatMap(new Mapper<ActorRef,Future<Object>>(){
-        @Override public Future<Object> apply(        ActorRef jobManagerRef){
+      final Promise<Tuple2<ActorGateway,Integer>> leaderGatewayPortPromise=new scala.concurrent.impl.Promise.DefaultPromise<>();
+synchronized (waitLock) {
+        leaderGatewayPortFuture=leaderGatewayPortPromise.future();
+        waitLock.notifyAll();
+      }
+      LOG.info("New leader reachable under {}:{}.",leaderAddress,leaderSessionID);
+      AkkaUtils.getActorRefFuture(leaderAddress,actorSystem,lookupTimeout).flatMap(new Mapper<ActorRef,Future<Tuple2<ActorGateway,Object>>>(){
+        @Override public Future<Tuple2<ActorGateway,Object>> apply(        ActorRef jobManagerRef){
           ActorGateway leaderGateway=new AkkaActorGateway(jobManagerRef,leaderSessionID);
-          gatewayPromise.success(leaderGateway);
-          return leaderGateway.ask(JobManagerMessages.getRequestWebMonitorPort(),timeout);
+          Future<Object> webMonitorPort=leaderGateway.ask(JobManagerMessages.getRequestWebMonitorPort(),timeout);
+          return Futures.successful(leaderGateway).zip(webMonitorPort);
         }
       }
-,actorSystem.dispatcher()).onComplete(new OnComplete<Object>(){
-        @Override public void onComplete(        Throwable failure,        Object success) throws Throwable {
+,actorSystem.dispatcher()).onComplete(new OnComplete<Tuple2<ActorGateway,Object>>(){
+        @Override public void onComplete(        Throwable failure,        Tuple2<ActorGateway,Object> success) throws Throwable {
           if (failure == null) {
-            int webMonitorPort=((ResponseWebMonitorPort)success).port();
-            webPortPromise.success(webMonitorPort);
-synchronized (lock) {
-              Tuple2<Promise<ActorGateway>,Promise<Integer>> previousPromise=leaderPromise;
-              leaderPromise=newPromise;
-              if (!previousPromise._2().isCompleted()) {
-                previousPromise._1().completeWith(gatewayPromise.future());
-                previousPromise._2().completeWith(webPortPromise.future());
-              }
+            if (success._2() instanceof ResponseWebMonitorPort) {
+              int webMonitorPort=((ResponseWebMonitorPort)success._2()).port();
+              leaderGatewayPortPromise.success(new Tuple2<>(success._1(),webMonitorPort));
+            }
+ else {
+              leaderGatewayPortPromise.failure(new Exception("Received the message " + success._2() + " as response to "+ JobManagerMessages.getRequestWebMonitorPort()+ ". But a message of type "+ ResponseWebMonitorPort.class+ " was expected."));
             }
           }
  else {
-            LOG.warn("Failed to retrieve leader gateway and port.");
+            LOG.warn("Failed to retrieve leader gateway and port.",failure);
+            leaderGatewayPortPromise.failure(failure);
           }
         }
       }

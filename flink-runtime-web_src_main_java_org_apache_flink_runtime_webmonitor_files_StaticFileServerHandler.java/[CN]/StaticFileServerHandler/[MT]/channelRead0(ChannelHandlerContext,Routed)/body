@@ -1,27 +1,32 @@
 {
-  if (localJobManagerAddress == null) {
-    localJobManagerAddress=localJobManagerAddressPromise.future().value().get().get();
-  }
-  final HttpRequest request=routed.request();
-  String requestPath=routed.path();
-  if (requestPath.endsWith("/")) {
-    requestPath=requestPath + "index.html";
-  }
-  if (requestPath.equals("/jobmanager/log")) {
-    requestPath="/" + getFileName(rootPath,WebRuntimeMonitor.LOG_FILE_PATTERN);
-  }
- else   if (requestPath.equals("/jobmanager/stdout")) {
-    requestPath="/" + getFileName(rootPath,WebRuntimeMonitor.STDOUT_FILE_PATTERN);
-  }
-  Option<Tuple2<ActorGateway,Integer>> jobManager=retriever.getJobManagerGatewayAndWebPort();
-  if (jobManager.isDefined()) {
-    String redirectAddress=HandlerRedirectUtils.getRedirectAddress(localJobManagerAddress,jobManager.get());
-    if (redirectAddress != null) {
-      HttpResponse redirect=HandlerRedirectUtils.getRedirectResponse(redirectAddress,requestPath);
-      KeepAliveWrite.flush(ctx,routed.request(),redirect);
+  if (localJobManagerAddressFuture.isCompleted()) {
+    if (localJobManagerAddress == null) {
+      localJobManagerAddress=Await.result(localJobManagerAddressFuture,timeout);
+    }
+    final HttpRequest request=routed.request();
+    String requestPath=routed.path();
+    if (requestPath.endsWith("/")) {
+      requestPath=requestPath + "index.html";
+    }
+    if (requestPath.equals("/jobmanager/log")) {
+      requestPath="/" + getFileName(rootPath,WebRuntimeMonitor.LOG_FILE_PATTERN);
+    }
+ else     if (requestPath.equals("/jobmanager/stdout")) {
+      requestPath="/" + getFileName(rootPath,WebRuntimeMonitor.STDOUT_FILE_PATTERN);
+    }
+    Option<Tuple2<ActorGateway,Integer>> jobManager=retriever.getJobManagerGatewayAndWebPort();
+    if (jobManager.isDefined()) {
+      String redirectAddress=HandlerRedirectUtils.getRedirectAddress(localJobManagerAddress,jobManager.get());
+      if (redirectAddress != null) {
+        HttpResponse redirect=HandlerRedirectUtils.getRedirectResponse(redirectAddress,requestPath);
+        KeepAliveWrite.flush(ctx,routed.request(),redirect);
+      }
+ else {
+        respondAsLeader(ctx,request,requestPath);
+      }
     }
  else {
-      respondAsLeader(ctx,request,requestPath);
+      KeepAliveWrite.flush(ctx,routed.request(),HandlerRedirectUtils.getUnavailableResponse());
     }
   }
  else {
