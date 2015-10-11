@@ -1,12 +1,40 @@
 {
   super.open();
-  windows=new HashMap<>();
-  watermarkTimers=new HashMap<>();
-  processingTimeTimers=new HashMap<>();
   timestampedCollector=new TimestampedCollector<>(output);
   if (inputSerializer == null) {
     throw new IllegalStateException("Input serializer was not set.");
   }
   windowBufferFactory.setRuntimeContext(getRuntimeContext());
   windowBufferFactory.open(getUserFunctionParameters());
+  if (watermarkTimers == null) {
+    watermarkTimers=new HashMap<>();
+  }
+  if (processingTimeTimers == null) {
+    processingTimeTimers=new HashMap<>();
+  }
+  if (windows == null) {
+    windows=new HashMap<>();
+  }
+  for (  Map.Entry<K,Map<W,Context>> entry : windows.entrySet()) {
+    Map<W,Context> keyWindows=entry.getValue();
+    for (    Context context : keyWindows.values()) {
+      if (context.processingTimeTimer > 0) {
+        Set<Context> triggers=processingTimeTimers.get(context.processingTimeTimer);
+        if (triggers == null) {
+          getRuntimeContext().registerTimer(context.processingTimeTimer,WindowOperator.this);
+          triggers=new HashSet<>();
+          processingTimeTimers.put(context.processingTimeTimer,triggers);
+        }
+        triggers.add(context);
+      }
+      if (context.watermarkTimer > 0) {
+        Set<Context> triggers=watermarkTimers.get(context.watermarkTimer);
+        if (triggers == null) {
+          triggers=new HashSet<>();
+          watermarkTimers.put(context.watermarkTimer,triggers);
+        }
+        triggers.add(context);
+      }
+    }
+  }
 }

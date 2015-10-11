@@ -4,22 +4,21 @@
   }
   Collection<W> elementWindows=windowAssigner.assignWindows(element.getValue(),element.getTimestamp());
   K key=keySelector.getKey(element.getValue());
-  Map<W,Tuple2<WindowBuffer<IN>,TriggerContext>> keyWindows=windows.get(key);
+  Map<W,Context> keyWindows=windows.get(key);
   if (keyWindows == null) {
     keyWindows=new HashMap<>();
     windows.put(key,keyWindows);
   }
   for (  W window : elementWindows) {
-    Tuple2<WindowBuffer<IN>,TriggerContext> bufferAndTrigger=keyWindows.get(window);
-    if (bufferAndTrigger == null) {
-      bufferAndTrigger=new Tuple2<>();
-      bufferAndTrigger.f0=windowBufferFactory.create();
-      bufferAndTrigger.f1=new TriggerContext(key,window,triggerTemplate.duplicate());
-      keyWindows.put(window,bufferAndTrigger);
+    Context context=keyWindows.get(window);
+    if (context == null) {
+      WindowBuffer<IN> windowBuffer=windowBufferFactory.create();
+      context=new Context(key,window,windowBuffer);
+      keyWindows.put(window,context);
     }
     StreamRecord<IN> elementCopy=new StreamRecord<>(inputSerializer.copy(element.getValue()),element.getTimestamp());
-    bufferAndTrigger.f0.storeElement(elementCopy);
-    Trigger.TriggerResult triggerResult=bufferAndTrigger.f1.trigger.onElement(elementCopy.getValue(),elementCopy.getTimestamp(),window,bufferAndTrigger.f1);
+    context.windowBuffer.storeElement(elementCopy);
+    Trigger.TriggerResult triggerResult=trigger.onElement(elementCopy.getValue(),elementCopy.getTimestamp(),window,context);
     processTriggerResult(triggerResult,key,window);
   }
 }

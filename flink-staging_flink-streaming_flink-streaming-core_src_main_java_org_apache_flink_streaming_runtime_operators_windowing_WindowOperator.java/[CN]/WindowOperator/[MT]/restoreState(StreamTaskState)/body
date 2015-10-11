@@ -1,0 +1,21 @@
+{
+  super.restoreState(taskState);
+  @SuppressWarnings("unchecked") StateHandle<DataInputView> inputState=(StateHandle<DataInputView>)taskState.getOperatorState();
+  DataInputView in=inputState.getState(getUserCodeClassloader());
+  int numKeys=in.readInt();
+  this.windows=new HashMap<>(numKeys);
+  this.processingTimeTimers=new HashMap<>();
+  this.watermarkTimers=new HashMap<>();
+  for (int i=0; i < numKeys; i++) {
+    int numWindows=in.readInt();
+    for (int j=0; j < numWindows; j++) {
+      Context context=new Context(in);
+      Map<W,Context> keyWindows=windows.get(context.key);
+      if (keyWindows == null) {
+        keyWindows=new HashMap<>(numWindows);
+        windows.put(context.key,keyWindows);
+      }
+      keyWindows.put(context.window,context);
+    }
+  }
+}

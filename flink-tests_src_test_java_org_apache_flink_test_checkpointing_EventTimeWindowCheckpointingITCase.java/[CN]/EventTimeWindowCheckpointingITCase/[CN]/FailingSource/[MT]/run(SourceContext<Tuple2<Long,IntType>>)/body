@@ -1,0 +1,26 @@
+{
+  while (running) {
+    if (!failedBefore) {
+      Thread.sleep(1);
+      if (numSuccessfulCheckpoints >= 2 && numElementsEmitted >= failureAfterNumElements) {
+        failedBefore=true;
+        throw new Exception("Artificial Failure");
+      }
+    }
+    if (numElementsEmitted < numElementsToEmit && (failedBefore || numElementsEmitted <= failureAfterNumElements)) {
+synchronized (ctx.getCheckpointLock()) {
+        int next=numElementsEmitted++;
+        for (long i=0; i < numKeys; i++) {
+          ctx.collectWithTimestamp(new Tuple2<Long,IntType>(i,new IntType(next)),next);
+        }
+        ctx.emitWatermark(new Watermark(next));
+      }
+    }
+ else {
+      if (numElementsEmitted > numElementsToEmit * 5) {
+        System.err.println("Succ Checkpoints: " + numSuccessfulCheckpoints + " numElemEmitted: "+ numElementsEmitted+ "num elements to emit: "+ numElementsToEmit);
+      }
+      Thread.sleep(1);
+    }
+  }
+}
