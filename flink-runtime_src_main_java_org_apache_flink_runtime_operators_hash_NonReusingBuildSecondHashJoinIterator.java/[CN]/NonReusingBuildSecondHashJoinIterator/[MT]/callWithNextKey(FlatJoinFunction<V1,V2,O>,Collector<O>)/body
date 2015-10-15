@@ -1,0 +1,32 @@
+{
+  if (this.hashJoin.nextRecord()) {
+    final MutableHashTable.HashBucketIterator<V2,V1> buildSideIterator=this.hashJoin.getBuildSideIterator();
+    V2 nextBuildSideRecord;
+    if ((nextBuildSideRecord=buildSideIterator.next()) != null) {
+      V2 tmpRec;
+      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
+      if ((tmpRec=buildSideIterator.next()) != null) {
+        V1 probeCopy;
+        probeCopy=this.probeSideSerializer.copy(probeRecord);
+        matchFunction.join(probeCopy,nextBuildSideRecord,collector);
+        probeCopy=this.probeSideSerializer.copy(probeRecord);
+        matchFunction.join(probeCopy,tmpRec,collector);
+        while (this.running && ((nextBuildSideRecord=buildSideIterator.next()) != null)) {
+          probeCopy=this.probeSideSerializer.copy(probeRecord);
+          matchFunction.join(probeCopy,nextBuildSideRecord,collector);
+        }
+      }
+ else {
+        matchFunction.join(probeRecord,nextBuildSideRecord,collector);
+      }
+    }
+ else     if (joinWithEmptyBuildSide) {
+      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
+      matchFunction.join(probeRecord,null,collector);
+    }
+    return true;
+  }
+ else {
+    return false;
+  }
+}
