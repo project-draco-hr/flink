@@ -1,5 +1,26 @@
 {
   producer=new org.apache.kafka.clients.producer.KafkaProducer<>(this.producerConfig);
-  partitioner.open(getRuntimeContext().getIndexOfThisSubtask(),getRuntimeContext().getNumberOfParallelSubtasks(),partitions);
-  LOG.info("Starting FlinkKafkaProducer ({}/{}) to produce into topic {}",getRuntimeContext().getIndexOfThisSubtask(),getRuntimeContext().getNumberOfParallelSubtasks(),topicId);
+  RuntimeContext ctx=getRuntimeContext();
+  partitioner.open(ctx.getIndexOfThisSubtask(),ctx.getNumberOfParallelSubtasks(),partitions);
+  LOG.info("Starting FlinkKafkaProducer ({}/{}) to produce into topic {}",ctx.getIndexOfThisSubtask(),ctx.getNumberOfParallelSubtasks(),topicId);
+  if (logFailuresOnly) {
+    callback=new Callback(){
+      @Override public void onCompletion(      RecordMetadata metadata,      Exception e){
+        if (e != null) {
+          LOG.error("Error while sending record to Kafka: " + e.getMessage(),e);
+        }
+      }
+    }
+;
+  }
+ else {
+    callback=new Callback(){
+      @Override public void onCompletion(      RecordMetadata metadata,      Exception exception){
+        if (exception != null && asyncException == null) {
+          asyncException=exception;
+        }
+      }
+    }
+;
+  }
 }
