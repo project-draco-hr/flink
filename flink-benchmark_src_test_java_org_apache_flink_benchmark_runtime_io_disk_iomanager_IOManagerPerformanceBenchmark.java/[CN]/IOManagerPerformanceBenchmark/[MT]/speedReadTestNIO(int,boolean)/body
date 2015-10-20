@@ -1,0 +1,43 @@
+{
+  File tempFile=null;
+  FileChannel fs=null;
+  if (((bufferSize == 4096) || (bufferSize == 16384) || (bufferSize == 524288)) && (direct)) {
+    tempFile=speedTestNIOTempFile1;
+  }
+  if (((bufferSize == 4096) || (bufferSize == 16384) || (bufferSize == 524288)) && (!direct)) {
+    tempFile=speedTestNIOTempFile2;
+  }
+  if (((bufferSize == 3862) || (bufferSize == 16895) || (bufferSize == 500481)) && (direct)) {
+    tempFile=speedTestNIOTempFile3;
+  }
+  if (((bufferSize == 3862) || (bufferSize == 16895) || (bufferSize == 500481)) && (!direct)) {
+    tempFile=speedTestNIOTempFile4;
+  }
+  try {
+    ByteBuffer buf=direct ? ByteBuffer.allocateDirect(bufferSize) : ByteBuffer.allocate(bufferSize);
+    RandomAccessFile raf=new RandomAccessFile(tempFile,"r");
+    fs=raf.getChannel();
+    buf.clear();
+    fs.read(buf);
+    buf.flip();
+    int valsLeft=NUM_INTS_WRITTEN;
+    while (valsLeft-- > 0) {
+      if (buf.remaining() < 4) {
+        buf.compact();
+        fs.read(buf);
+        buf.flip();
+      }
+      if (buf.getInt() != valsLeft) {
+        throw new IOException();
+      }
+    }
+    fs.close();
+    raf.close();
+  }
+  finally {
+    if (fs != null) {
+      fs.close();
+      fs=null;
+    }
+  }
+}
