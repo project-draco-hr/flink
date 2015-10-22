@@ -1,16 +1,18 @@
 {
   final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
-    final CollectingOutput<Integer> out=new CollectingOutput<>(50);
+    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>(50);
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,150,50);
+    AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,150,50);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     final int numElements=1000;
     for (int i=0; i < numElements; i++) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
       Thread.sleep(1);
     }
@@ -18,21 +20,22 @@ synchronized (lock) {
       op.close();
     }
     op.dispose();
-    List<Integer> result=out.getElements();
+    List<Tuple2<Integer,Integer>> result=out.getElements();
     if (result.size() < numElements || result.size() > 3 * numElements) {
       System.out.println(result);
       fail("Wrong number of results: " + result.size());
     }
-    Collections.sort(result);
+    Collections.sort(result,tupleComparator);
     int lastNum=-1;
     int lastCount=-1;
-    for (    int num : result) {
-      if (num == lastNum) {
+    for (    Tuple2<Integer,Integer> val : result) {
+      assertEquals(val.f0,val.f1);
+      if (val.f0 == lastNum) {
         lastCount++;
         assertTrue(lastCount <= 3);
       }
  else {
-        lastNum=num;
+        lastNum=val.f0;
         lastCount=1;
       }
     }

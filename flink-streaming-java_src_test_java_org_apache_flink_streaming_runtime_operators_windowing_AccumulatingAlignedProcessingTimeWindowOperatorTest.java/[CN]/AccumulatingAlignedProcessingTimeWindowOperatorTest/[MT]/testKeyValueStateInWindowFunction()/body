@@ -1,0 +1,43 @@
+{
+  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  try {
+    final CollectingOutput<Integer> out=new CollectingOutput<>(50);
+    final Object lock=new Object();
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    StatefulFunction.globalCounts.clear();
+    AccumulatingProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(new StatefulFunction(),identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,50,50);
+    op.setup(mockTask,createTaskConfig(identitySelector,IntSerializer.INSTANCE),out);
+    op.open();
+synchronized (lock) {
+      op.processElement(new StreamRecord<Integer>(1));
+      op.processElement(new StreamRecord<Integer>(2));
+    }
+    out.waitForNElements(2,60000);
+synchronized (lock) {
+      op.processElement(new StreamRecord<Integer>(1));
+      op.processElement(new StreamRecord<Integer>(2));
+      op.processElement(new StreamRecord<Integer>(1));
+      op.processElement(new StreamRecord<Integer>(1));
+      op.processElement(new StreamRecord<Integer>(2));
+      op.processElement(new StreamRecord<Integer>(2));
+    }
+    out.waitForNElements(8,60000);
+    List<Integer> result=out.getElements();
+    assertEquals(8,result.size());
+    Collections.sort(result);
+    assertEquals(Arrays.asList(1,1,1,1,2,2,2,2),result);
+    assertEquals(4,StatefulFunction.globalCounts.get(1).intValue());
+    assertEquals(4,StatefulFunction.globalCounts.get(2).intValue());
+synchronized (lock) {
+      op.close();
+    }
+    op.dispose();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+ finally {
+    timerService.shutdown();
+  }
+}

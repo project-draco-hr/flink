@@ -4,22 +4,24 @@
     final int factor=4;
     final int windowSlide=50;
     final int windowSize=factor * windowSlide;
-    final CollectingOutput<Integer> out=new CollectingOutput<>(windowSlide);
+    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>(windowSlide);
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSlide);
+    AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     final int numElements=1000;
     final int numElementsFirst=700;
     for (int i=0; i < numElementsFirst; i++) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
       Thread.sleep(1);
     }
     StreamTaskState state;
-    List<Integer> resultAtSnapshot;
+    List<Tuple2<Integer,Integer>> resultAtSnapshot;
 synchronized (lock) {
       int beforeSnapShot=out.getElements().size();
       state=op.snapshotOperatorState(1L,System.currentTimeMillis());
@@ -30,19 +32,23 @@ synchronized (lock) {
     assertTrue(resultAtSnapshot.size() <= factor * numElementsFirst);
     for (int i=numElementsFirst; i < numElements; i++) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
       Thread.sleep(1);
     }
     op.dispose();
-    final CollectingOutput<Integer> out2=new CollectingOutput<>(windowSlide);
-    op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSlide);
+    final CollectingOutput<Tuple2<Integer,Integer>> out2=new CollectingOutput<>(windowSlide);
+    op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
     op.setup(mockTask,new StreamConfig(new Configuration()),out2);
     op.restoreState(state);
     op.open();
     for (int i=numElementsFirst; i < numElements; i++) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
       Thread.sleep(1);
     }
@@ -55,12 +61,13 @@ synchronized (lock) {
       op.close();
     }
     op.dispose();
-    List<Integer> finalResult=new ArrayList<>(resultAtSnapshot);
+    List<Tuple2<Integer,Integer>> finalResult=new ArrayList<>(resultAtSnapshot);
     finalResult.addAll(out2.getElements());
     assertEquals(factor * numElements,finalResult.size());
-    Collections.sort(finalResult);
+    Collections.sort(finalResult,tupleComparator);
     for (int i=0; i < factor * numElements; i++) {
-      assertEquals(i / factor,finalResult.get(i).intValue());
+      assertEquals(i / factor,finalResult.get(i).f0.intValue());
+      assertEquals(i / factor,finalResult.get(i).f1.intValue());
     }
   }
  catch (  Exception e) {

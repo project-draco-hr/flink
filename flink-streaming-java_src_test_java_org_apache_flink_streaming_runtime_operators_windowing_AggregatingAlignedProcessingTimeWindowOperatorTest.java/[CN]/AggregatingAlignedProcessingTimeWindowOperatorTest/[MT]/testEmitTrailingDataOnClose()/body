@@ -1,26 +1,32 @@
 {
   final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
-    final CollectingOutput<Integer> out=new CollectingOutput<>();
+    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>();
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
     final long oneYear=365L * 24 * 60* 60* 1000;
-    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,oneYear,oneYear);
+    AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,oneYear,oneYear);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     List<Integer> data=Arrays.asList(1,2,3,4,5,6,7,8,9,10);
     for (    Integer i : data) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
     }
 synchronized (lock) {
       op.close();
     }
     op.dispose();
-    List<Integer> result=out.getElements();
-    Collections.sort(result);
-    assertEquals(data,result);
+    List<Tuple2<Integer,Integer>> result=out.getElements();
+    assertEquals(data.size(),result.size());
+    Collections.sort(result,tupleComparator);
+    for (int i=0; i < data.size(); i++) {
+      assertEquals(data.get(i),result.get(i).f0);
+      assertEquals(data.get(i),result.get(i).f1);
+    }
   }
  catch (  Exception e) {
     e.printStackTrace();

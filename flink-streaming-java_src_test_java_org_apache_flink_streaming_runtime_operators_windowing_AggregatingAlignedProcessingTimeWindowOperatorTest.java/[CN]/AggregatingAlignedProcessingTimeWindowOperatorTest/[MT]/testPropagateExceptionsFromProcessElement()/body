@@ -1,21 +1,25 @@
 {
   final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
-    final CollectingOutput<Integer> out=new CollectingOutput<>();
+    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>();
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-    ReduceFunction<Integer> failingFunction=new FailingFunction(100);
+    ReduceFunction<Tuple2<Integer,Integer>> failingFunction=new FailingFunction(100);
     final long hundredYears=100L * 365 * 24* 60* 60* 1000;
-    AggregatingProcessingTimeWindowOperator<Integer,Integer> op=new AggregatingProcessingTimeWindowOperator<>(failingFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,hundredYears,hundredYears);
+    AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(failingFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,hundredYears,hundredYears);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
     for (int i=0; i < 100; i++) {
 synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(1));
+        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(1,1));
+        op.setKeyContextElement(next);
+        op.processElement(next);
       }
     }
     try {
-      op.processElement(new StreamRecord<Integer>(1));
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(1,1));
+      op.setKeyContextElement(next);
+      op.processElement(next);
       fail("This fail with an exception");
     }
  catch (    Exception e) {
