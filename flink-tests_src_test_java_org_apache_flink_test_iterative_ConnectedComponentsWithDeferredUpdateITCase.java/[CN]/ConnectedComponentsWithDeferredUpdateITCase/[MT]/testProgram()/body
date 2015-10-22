@@ -1,0 +1,24 @@
+{
+  boolean extraMapper=config.getBoolean("ExtraMapper",false);
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Tuple1<Long>> vertices=env.readCsvFile(verticesPath).types(Long.class);
+  DataSet<Tuple2<Long,Long>> edges=env.readCsvFile(edgesPath).fieldDelimiter(" ").types(Long.class,Long.class).flatMap(new ConnectedComponents.UndirectEdge());
+  DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new ConnectedComponentsITCase.DuplicateValue<Long>());
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithInitialId.iterateDelta(verticesWithInitialId,100,0);
+  DataSet<Tuple2<Long,Long>> changes=iteration.getWorkset().join(edges).where(0).equalTo(0).with(new ConnectedComponents.NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).with(new UpdateComponentIdMatchNonPreserving());
+  DataSet<Tuple2<Long,Long>> delta;
+  if (extraMapper) {
+    delta=changes.map(new MapFunction<Tuple2<Long,Long>,Tuple2<Long,Long>>(){
+      @Override public Tuple2<Long,Long> map(      Tuple2<Long,Long> v) throws Exception {
+        return v;
+      }
+    }
+);
+  }
+ else {
+    delta=changes;
+  }
+  DataSet<Tuple2<Long,Long>> result=iteration.closeWith(delta,changes);
+  result.writeAsCsv(resultPath,"\n"," ");
+  env.execute("Connected Components Example");
+}

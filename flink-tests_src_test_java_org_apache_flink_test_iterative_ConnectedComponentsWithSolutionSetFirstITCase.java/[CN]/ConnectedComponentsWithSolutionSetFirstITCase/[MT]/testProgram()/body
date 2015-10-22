@@ -1,0 +1,12 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Tuple1<Long>> vertices=env.readCsvFile(verticesPath).types(Long.class);
+  DataSet<Tuple2<Long,Long>> edges=env.readCsvFile(edgesPath).fieldDelimiter(" ").types(Long.class,Long.class).flatMap(new ConnectedComponents.UndirectEdge());
+  DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new ConnectedComponentsITCase.DuplicateValue<Long>());
+  DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithInitialId.iterateDelta(verticesWithInitialId,100,0);
+  DataSet<Tuple2<Long,Long>> minNeighbor=iteration.getWorkset().join(edges).where(0).equalTo(0).with(new ConnectedComponents.NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1);
+  DataSet<Tuple2<Long,Long>> updatedIds=iteration.getSolutionSet().join(minNeighbor).where(0).equalTo(0).with(new UpdateComponentIdMatchMirrored());
+  DataSet<Tuple2<Long,Long>> result=iteration.closeWith(updatedIds,updatedIds);
+  result.writeAsCsv(resultPath,"\n"," ");
+  env.execute("Connected Components Example");
+}
