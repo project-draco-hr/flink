@@ -1,16 +1,23 @@
 {
   Set<Long> toRemove=new HashSet<>();
+  Set<Context> toTrigger=new HashSet<>();
   for (  Map.Entry<Long,Set<Context>> triggers : watermarkTimers.entrySet()) {
     if (triggers.getKey() <= mark.getTimestamp()) {
       for (      Context context : triggers.getValue()) {
-        Trigger.TriggerResult triggerResult=context.onEventTime(triggers.getKey());
-        processTriggerResult(triggerResult,context.window);
+        toTrigger.add(context);
       }
       toRemove.add(triggers.getKey());
+    }
+  }
+  for (  Context context : toTrigger) {
+    if (context.watermarkTimer <= mark.getTimestamp()) {
+      Trigger.TriggerResult triggerResult=context.onEventTime(context.watermarkTimer);
+      processTriggerResult(triggerResult,context.window);
     }
   }
   for (  Long l : toRemove) {
     watermarkTimers.remove(l);
   }
   output.emitWatermark(mark);
+  this.currentWatermark=mark.getTimestamp();
 }
