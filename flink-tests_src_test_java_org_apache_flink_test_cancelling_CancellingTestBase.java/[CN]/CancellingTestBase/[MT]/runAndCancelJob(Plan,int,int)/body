@@ -1,34 +1,11 @@
 {
   try {
     final JobGraph jobGraph=getJobGraph(plan);
-    final Thread currentThread=Thread.currentThread();
-    final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
-    boolean jobSuccessfullyCancelled=false;
-    new Thread(){
-      @Override public void run(){
-        try {
-          Thread.sleep(msecsTillCanceling);
-          executor.getLeaderGateway(TestingUtils.TESTING_DURATION()).tell(new JobManagerMessages.CancelJob(jobGraph.getJobID()));
-        }
- catch (        Throwable t) {
-          error.set(t);
-          currentThread.interrupt();
-        }
-      }
-    }
-.run();
-    try {
-      executor.submitJobAndWait(jobGraph,false);
-    }
- catch (    JobCancellationException exception) {
-      jobSuccessfullyCancelled=true;
-    }
-catch (    Exception e) {
-      throw new IllegalStateException("Job failed.",e);
-    }
-    if (!jobSuccessfullyCancelled) {
-      throw new IllegalStateException("Job was not successfully cancelled.");
-    }
+    executor.submitJobDetached(jobGraph);
+    awaitRunning(executor.getLeaderGateway(TestingUtils.TESTING_DURATION()),jobGraph.getJobID(),TestingUtils.TESTING_DURATION());
+    Thread.sleep(msecsTillCanceling);
+    cancelJob(executor.getLeaderGateway(TestingUtils.TESTING_DURATION()),jobGraph.getJobID(),new FiniteDuration(maxTimeTillCanceled,TimeUnit.MILLISECONDS));
+    JobManagerActorTestUtils.waitForJobStatus(jobGraph.getJobID(),JobStatus.CANCELED,executor.getLeaderGateway(TestingUtils.TESTING_DURATION()),TestingUtils.TESTING_DURATION());
   }
  catch (  Exception e) {
     LOG.error("Exception found in runAndCancelJob.",e);

@@ -1,0 +1,19 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  DataSet<Point> points=env.readCsvFile(args[0]).fieldDelimiter(" ").includeFields(true,true).types(Double.class,Double.class).name(DATAPOINTS).map(new MapFunction<Tuple2<Double,Double>,Point>(){
+    @Override public Point map(    Tuple2<Double,Double> value) throws Exception {
+      return new Point(value.f0,value.f1);
+    }
+  }
+);
+  DataSet<Centroid> centroids=env.readCsvFile(args[1]).fieldDelimiter(" ").includeFields(true,true,true).types(Integer.class,Double.class,Double.class).name(CENTERS).map(new MapFunction<Tuple3<Integer,Double,Double>,Centroid>(){
+    @Override public Centroid map(    Tuple3<Integer,Double,Double> value) throws Exception {
+      return new Centroid(value.f0,value.f1,value.f2);
+    }
+  }
+);
+  DataSet<Tuple3<Integer,Point,Integer>> newCentroids=points.map(new SelectNearestCenter()).name(MAPPER_NAME).withBroadcastSet(centroids,"centroids");
+  DataSet<Tuple3<Integer,Point,Integer>> recomputeClusterCenter=newCentroids.groupBy(0).reduceGroup(new RecomputeClusterCenter()).name(REDUCER_NAME);
+  recomputeClusterCenter.project(0,1).writeAsCsv(args[2],"\n"," ").name(SINK);
+  env.execute("KMeans Example");
+}

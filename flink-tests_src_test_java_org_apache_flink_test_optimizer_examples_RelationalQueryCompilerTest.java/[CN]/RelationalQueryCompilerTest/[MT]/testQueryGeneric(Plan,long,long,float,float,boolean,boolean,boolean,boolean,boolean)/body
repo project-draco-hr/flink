@@ -1,10 +1,10 @@
 {
   try {
     OperatorResolver cr=getContractResolver(p);
-    FileDataSource ordersSource=cr.getNode(ORDERS);
-    FileDataSource lineItemSource=cr.getNode(LINEITEM);
-    MapOperator mapper=cr.getNode(MAPPER_NAME);
-    JoinOperator joiner=cr.getNode(JOIN_NAME);
+    GenericDataSourceBase<?,?> ordersSource=cr.getNode(ORDERS);
+    GenericDataSourceBase<?,?> lineItemSource=cr.getNode(LINEITEM);
+    SingleInputOperator<?,?,?> mapper=cr.getNode(MAPPER_NAME);
+    DualInputOperator<?,?,?,?> joiner=cr.getNode(JOIN_NAME);
     setSourceStatistics(ordersSource,orderSize,100f);
     setSourceStatistics(lineItemSource,lineitemSize,140f);
     mapper.getCompilerHints().setAvgOutputRecordSize(16f);
@@ -12,11 +12,11 @@
     joiner.getCompilerHints().setFilterFactor(joinSelectivity);
     final OptimizedPlan plan=compileWithStats(p);
     final OptimizerPlanNodeResolver or=getOptimizerPlanNodeResolver(plan);
-    final SinkPlanNode sink=or.getNode("Output");
-    final SingleInputPlanNode reducer=or.getNode("AggLio");
+    final SinkPlanNode sink=or.getNode(SINK);
+    final SingleInputPlanNode reducer=or.getNode(REDUCE_NAME);
     final SingleInputPlanNode combiner=reducer.getPredecessor() instanceof SingleInputPlanNode ? (SingleInputPlanNode)reducer.getPredecessor() : null;
-    final DualInputPlanNode join=or.getNode("JoinLiO");
-    final SingleInputPlanNode filteringMapper=or.getNode("FilterO");
+    final DualInputPlanNode join=or.getNode(JOIN_NAME);
+    final SingleInputPlanNode filteringMapper=or.getNode(MAPPER_NAME);
     checkStandardStrategies(filteringMapper,join,combiner,reducer,sink);
     if (checkBroadcastShipStrategies(join,reducer,combiner)) {
       Assert.assertTrue("Broadcast join incorrectly chosen.",broadcastOkay);

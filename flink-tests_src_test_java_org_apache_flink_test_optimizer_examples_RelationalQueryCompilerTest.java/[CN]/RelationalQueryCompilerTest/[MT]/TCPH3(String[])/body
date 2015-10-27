@@ -1,0 +1,11 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(Integer.parseInt(args[0]));
+  DataSet<Tuple5<Long,String,String,String,Integer>> orders=env.readCsvFile(args[1]).fieldDelimiter("|").lineDelimiter("\n").includeFields("101011001").types(Long.class,String.class,String.class,String.class,Integer.class).name(ORDERS);
+  DataSet<Tuple2<Long,Double>> lineItems=env.readCsvFile(args[2]).fieldDelimiter("|").lineDelimiter("\n").includeFields("100001").types(Long.class,Double.class).name(LINEITEM);
+  DataSet<Tuple2<Long,Integer>> filterO=orders.flatMap(new FilterO()).name(MAPPER_NAME);
+  DataSet<Tuple3<Long,Integer,Double>> joinLiO=filterO.join(lineItems).where(0).equalTo(0).with(new JoinLiO()).name(JOIN_NAME);
+  DataSet<Tuple3<Long,Integer,Double>> aggLiO=joinLiO.groupBy(0,1).reduceGroup(new AggLiO()).name(REDUCE_NAME);
+  aggLiO.writeAsCsv(args[3],"\n","|").name(SINK);
+  env.execute();
+}
