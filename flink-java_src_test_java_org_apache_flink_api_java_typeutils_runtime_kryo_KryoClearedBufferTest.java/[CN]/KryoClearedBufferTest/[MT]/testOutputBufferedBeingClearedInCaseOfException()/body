@@ -1,0 +1,29 @@
+{
+  ExecutionConfig executionConfig=new ExecutionConfig();
+  executionConfig.registerTypeWithKryoSerializer(TestRecord.class,new TestRecordSerializer());
+  executionConfig.registerKryoType(TestRecord.class);
+  KryoSerializer<TestRecord> kryoSerializer=new KryoSerializer<TestRecord>(TestRecord.class,executionConfig);
+  int size=94;
+  int bufferSize=150;
+  TestRecord testRecord=new TestRecord(size);
+  TestDataOutputView target=new TestDataOutputView(bufferSize);
+  kryoSerializer.serialize(testRecord,target);
+  try {
+    kryoSerializer.serialize(testRecord,target);
+    Assert.fail("Expected an EOFException.");
+  }
+ catch (  EOFException eofException) {
+  }
+  TestRecord actualRecord=kryoSerializer.deserialize(new ByteArrayInputView(target.getBuffer()));
+  Assert.assertEquals(testRecord,actualRecord);
+  target.clear();
+  kryoSerializer.serialize(testRecord,target);
+  byte[] buffer=target.getBuffer();
+  int counter=0;
+  for (int i=0; i < buffer.length; i++) {
+    if (buffer[i] == 42) {
+      counter++;
+    }
+  }
+  Assert.assertEquals(size,counter);
+}
