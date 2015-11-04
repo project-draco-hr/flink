@@ -1,0 +1,15 @@
+{
+  retry(new Callable<Void>(){
+    public Void call() throws Exception {
+      stateBackend.getConfiguration().getDbAdapter().cleanupFailedCheckpoints(kvStateId,stateBackend.getConnection(),checkpointId,nextId);
+      return null;
+    }
+  }
+,stateBackend.getConfiguration().getMaxNumberOfSqlRetries(),stateBackend.getConfiguration().getSleepBetweenSqlRetries());
+  boolean cleanup=stateBackend.getEnvironment().getIndexInSubtaskGroup() == stateBackend.getShardIndex();
+  LazyDbKvState<K,V> restored=new LazyDbKvState<K,V>(kvStateId,cleanup,stateBackend.getConnection(),stateBackend.getConfiguration(),keySerializer,valueSerializer,defaultValue,nextId);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("KV state({},{}) restored.",kvStateId,nextId);
+  }
+  return restored;
+}

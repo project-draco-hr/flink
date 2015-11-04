@@ -1,0 +1,22 @@
+{
+  if (size() > cacheSize) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("State cache is full for {}, evicting {} elements.",kvStateId,evictionSize);
+    }
+    try {
+      int numEvicted=0;
+      Iterator<Entry<K,Optional<V>>> entryIterator=entrySet().iterator();
+      while (numEvicted++ < evictionSize && entryIterator.hasNext()) {
+        Entry<K,Optional<V>> next=entryIterator.next();
+        if (modified.remove(next.getKey()) != null) {
+          batchInsert.add(next,nextCheckpointId);
+        }
+        entryIterator.remove();
+      }
+      batchInsert.flush(nextCheckpointId);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+}

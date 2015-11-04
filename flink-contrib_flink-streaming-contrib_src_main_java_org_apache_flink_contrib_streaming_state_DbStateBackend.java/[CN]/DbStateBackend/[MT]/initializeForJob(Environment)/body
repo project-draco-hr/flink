@@ -1,0 +1,22 @@
+{
+  this.rnd=new Random();
+  this.env=env;
+  shardIndex=env.getIndexInSubtaskGroup() % dbConfig.getNumberOfShards();
+  con=dbConfig.createConnection(shardIndex);
+  con.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+  if (nonPartitionedStateBackend == null) {
+    insertStatement=retry(new Callable<PreparedStatement>(){
+      public PreparedStatement call() throws SQLException {
+        dbAdapter.createCheckpointsTable(env.getJobID().toString(),getConnection());
+        return dbAdapter.prepareCheckpointInsert(env.getJobID().toString(),getConnection());
+      }
+    }
+,numSqlRetries,sqlRetrySleep);
+  }
+ else {
+    nonPartitionedStateBackend.initializeForJob(env);
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Database state backend successfully initialized");
+  }
+}

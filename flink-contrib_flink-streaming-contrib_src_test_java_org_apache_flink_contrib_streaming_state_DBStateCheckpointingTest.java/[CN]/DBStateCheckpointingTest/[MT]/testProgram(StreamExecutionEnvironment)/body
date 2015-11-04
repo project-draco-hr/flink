@@ -1,0 +1,12 @@
+{
+  env.enableCheckpointing(500);
+  List<String> derbyShards=Lists.newArrayList("jdbc:derby://localhost:1526/" + tempDir.getAbsolutePath() + "/flinkDB1;create=true","jdbc:derby://localhost:1526/" + tempDir.getAbsolutePath() + "/flinkDB2;create=true");
+  DbBackendConfig conf=new DbBackendConfig("flink","flink",derbyShards);
+  conf.setDbAdapterClass(DerbyAdapter.class);
+  conf.setKvStateCompactionFrequency(2);
+  DbStateBackend backend=new DbStateBackend(conf,new MemoryStateBackend());
+  env.setStateBackend(backend);
+  DataStream<Integer> stream1=env.addSource(new IntGeneratingSourceFunction(NUM_STRINGS / 2));
+  DataStream<Integer> stream2=env.addSource(new IntGeneratingSourceFunction(NUM_STRINGS / 2));
+  stream1.union(stream2).keyBy(new IdentityKeySelector<Integer>()).map(new OnceFailingPartitionedSum(NUM_STRINGS)).keyBy(0).addSink(new CounterSink());
+}

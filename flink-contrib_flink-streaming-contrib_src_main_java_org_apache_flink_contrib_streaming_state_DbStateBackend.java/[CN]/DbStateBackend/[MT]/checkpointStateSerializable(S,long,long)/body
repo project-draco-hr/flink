@@ -1,0 +1,16 @@
+{
+  if (nonPartitionedStateBackend == null) {
+    return retry(new Callable<DbStateHandle<S>>(){
+      public DbStateHandle<S> call() throws Exception {
+        long handleId=rnd.nextLong();
+        dbAdapter.setCheckpointInsertParams(env.getJobID().toString(),insertStatement,checkpointID,timestamp,handleId,InstantiationUtil.serializeObject(state));
+        insertStatement.executeUpdate();
+        return new DbStateHandle<S>(env.getJobID().toString(),checkpointID,timestamp,handleId,dbConfig.createConfigForShard(shardIndex));
+      }
+    }
+,numSqlRetries,sqlRetrySleep);
+  }
+ else {
+    return nonPartitionedStateBackend.checkpointStateSerializable(state,checkpointID,timestamp);
+  }
+}

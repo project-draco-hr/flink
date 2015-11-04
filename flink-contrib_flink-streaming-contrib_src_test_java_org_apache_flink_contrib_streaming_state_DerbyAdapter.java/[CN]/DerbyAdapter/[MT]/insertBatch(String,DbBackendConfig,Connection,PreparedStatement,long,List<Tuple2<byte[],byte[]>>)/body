@@ -1,0 +1,30 @@
+{
+  try (PreparedStatement smt=con.prepareStatement("UPDATE kvstate_" + stateId + " SET v=? WHERE k=? AND id=?")){
+    for (    final Tuple2<byte[],byte[]> kv : toInsert) {
+      SQLRetrier.retry(new Callable<Void>(){
+        public Void call() throws Exception {
+          try {
+            setKVInsertParams(stateId,insertStatement,checkpointId,kv.f0,kv.f1);
+            insertStatement.executeUpdate();
+          }
+ catch (          SQLException e) {
+            if (kv.f0 != null) {
+              smt.setBytes(1,kv.f1);
+            }
+ else {
+              smt.setNull(1,Types.BLOB);
+            }
+            smt.setBytes(2,kv.f0);
+            smt.setLong(3,checkpointId);
+            smt.executeUpdate();
+          }
+          return null;
+        }
+      }
+,conf.getMaxNumberOfSqlRetries(),conf.getSleepBetweenSqlRetries());
+    }
+  }
+ catch (  SQLException e) {
+    throw new IOException(e);
+  }
+}
