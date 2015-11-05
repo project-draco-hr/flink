@@ -1,12 +1,19 @@
 {
-  DbBackendConfig conf=DbStateBackendTest.conf.createConfigForShard(0);
+  List<String> urls=Lists.newArrayList(url1,url2);
+  DbBackendConfig conf=new DbBackendConfig("flink","flink",urls);
+  conf.setDbAdapter(new DerbyAdapter());
   conf.setKvCacheSize(3);
   conf.setMaxKvInsertBatchSize(2);
   conf.setMaxKvCacheEvictFraction(0.6f);
   DbStateBackend backend=new DbStateBackend(conf);
   Environment env=new DummyEnvironment("test",2,0);
+  String tableName="kvstate_" + env.getJobID() + "_1_state1";
+  assertFalse(isTableCreated(DriverManager.getConnection(url1,"flink","flink"),tableName));
+  assertFalse(isTableCreated(DriverManager.getConnection(url2,"flink","flink"),tableName));
   backend.initializeForJob(env);
   LazyDbKvState<Integer,String> kv=backend.createKvState(1,"state1",IntSerializer.INSTANCE,StringSerializer.INSTANCE,"a");
+  assertTrue(isTableCreated(DriverManager.getConnection(url1,"flink","flink"),tableName));
+  assertTrue(isTableCreated(DriverManager.getConnection(url2,"flink","flink"),tableName));
   Map<Integer,Optional<String>> cache=kv.getStateCache();
   Map<Integer,Optional<String>> modified=kv.getModified();
   assertEquals(0,kv.size());
@@ -18,6 +25,7 @@
   assertEquals("a",kv.value());
   kv.update("2");
   assertEquals(2,kv.size());
+  assertEquals("2",kv.value());
   kv.setCurrentKey(1);
   assertEquals("a",kv.value());
   kv.setCurrentKey(3);
@@ -37,11 +45,12 @@
   assertEquals(Optional.of("4"),cache.get(4));
   assertFalse(cache.containsKey(1));
   assertFalse(cache.containsKey(2));
-  kv.shapshot(682375462378L,100);
+  kv.snapshot(682375462378L,100);
   assertTrue(modified.isEmpty());
   kv.setCurrentKey(2);
   assertEquals("2",kv.value());
   kv.update(null);
+  assertEquals("a",kv.value());
   assertTrue(modified.containsKey(2));
   assertEquals(1,modified.size());
   assertEquals(Optional.of("3"),cache.get(3));
@@ -49,8 +58,10 @@
   assertEquals(Optional.absent(),cache.get(2));
   assertFalse(cache.containsKey(1));
   assertTrue(modified.containsKey(2));
-  assertTrue(modified.containsKey(3));
-  assertTrue(modified.containsKey(4));
+  assertFalse(modified.containsKey(3));
+  assertFalse(modified.containsKey(4));
+  assertTrue(cache.containsKey(3));
+  assertTrue(cache.containsKey(4));
   kv.setCurrentKey(5);
   kv.value();
   kv.setCurrentKey(6);
@@ -67,7 +78,7 @@
   kv.setCurrentKey(2);
   assertEquals("a",kv.value());
   long checkpointTs=System.currentTimeMillis();
-  KvStateSnapshot<Integer,String,DbStateBackend> snapshot1=kv.shapshot(682375462379L,checkpointTs);
+  KvStateSnapshot<Integer,String,DbStateBackend> snapshot1=kv.snapshot(682375462379L,checkpointTs);
   assertTrue(modified.isEmpty());
   kv.setCurrentKey(1);
   kv.update("123");
@@ -79,7 +90,7 @@
   kv.setCurrentKey(4);
   kv.update("4");
   kv.update("5");
-  kv.shapshot(6823754623710L,checkpointTs + 10);
+  kv.snapshot(6823754623710L,checkpointTs + 10);
   KvState<Integer,String,DbStateBackend> restored=snapshot1.restoreState(backend,IntSerializer.INSTANCE,StringSerializer.INSTANCE,"b",getClass().getClassLoader(),6823754623711L);
   restored.setCurrentKey(1);
   assertEquals("b",restored.value());

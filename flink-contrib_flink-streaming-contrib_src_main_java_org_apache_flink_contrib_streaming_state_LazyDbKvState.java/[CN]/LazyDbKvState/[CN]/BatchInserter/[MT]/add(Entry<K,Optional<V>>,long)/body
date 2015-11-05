@@ -1,0 +1,13 @@
+{
+  K key=next.getKey();
+  V value=next.getValue().orNull();
+  int shardIndex=connections.getShardIndex(key);
+  List<Tuple2<byte[],byte[]>> insertPartition=inserts[shardIndex];
+  byte[] k=InstantiationUtil.serializeToByteArray(keySerializer,key);
+  byte[] v=value != null ? InstantiationUtil.serializeToByteArray(valueSerializer,value) : null;
+  insertPartition.add(Tuple2.of(k,v));
+  if (insertPartition.size() == maxInsertBatchSize) {
+    dbAdapter.insertBatch(kvStateId,conf,connections.getForIndex(shardIndex),insertStatements.getForIndex(shardIndex),checkpointId,insertPartition);
+    insertPartition.clear();
+  }
+}
