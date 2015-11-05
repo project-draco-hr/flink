@@ -1,0 +1,44 @@
+{
+  if (msg instanceof HttpRequest) {
+    request=(HttpRequest)msg;
+    requestPath=new QueryStringDecoder(request.getUri()).path();
+    if (request.getMethod() != HttpMethod.POST) {
+      ctx.fireChannelRead(request);
+    }
+ else {
+      decoder=new HttpPostRequestDecoder(factory,request);
+      readingChunks=HttpHeaders.isTransferEncodingChunked(request);
+      if (readingChunks) {
+        readingChunks=true;
+      }
+    }
+  }
+ else   if (decoder != null && msg instanceof HttpContent) {
+    HttpContent chunk=(HttpContent)msg;
+    decoder.offer(chunk);
+    try {
+      while (decoder.hasNext()) {
+        InterfaceHttpData data=decoder.next();
+        if (data.getHttpDataType() == HttpDataType.FileUpload) {
+          DiskFileUpload file=(DiskFileUpload)data;
+          if (file.isCompleted()) {
+            String newName=UUID.randomUUID() + "_" + file.getFilename();
+            file.renameTo(new File(uploadDir,newName));
+            QueryStringEncoder encoder=new QueryStringEncoder(requestPath);
+            encoder.addParam("file",newName);
+            request.setUri(encoder.toString());
+          }
+        }
+        data.release();
+      }
+    }
+ catch (    EndOfDataDecoderException e) {
+    }
+    if (chunk instanceof LastHttpContent) {
+      readingChunks=false;
+      decoder.destroy();
+      decoder=null;
+      ctx.fireChannelRead(request);
+    }
+  }
+}

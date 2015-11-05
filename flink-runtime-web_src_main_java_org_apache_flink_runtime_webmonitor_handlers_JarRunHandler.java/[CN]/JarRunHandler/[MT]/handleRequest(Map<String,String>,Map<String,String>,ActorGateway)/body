@@ -1,0 +1,27 @@
+{
+  try {
+    Tuple2<JobGraph,ClassLoader> graph=getJobGraphAndClassLoader(pathParams,queryParams);
+    try {
+      JobClient.uploadJarFiles(graph.f0,jobManager,timeout);
+    }
+ catch (    IOException e) {
+      throw new ProgramInvocationException("Failed to upload jar files to the job manager",e);
+    }
+    try {
+      JobClient.submitJobDetached(jobManager,graph.f0,timeout,graph.f1);
+    }
+ catch (    JobExecutionException e) {
+      throw new ProgramInvocationException("Failed to submit the job to the job manager",e);
+    }
+    StringWriter writer=new StringWriter();
+    JsonGenerator gen=JsonFactory.jacksonFactory.createJsonGenerator(writer);
+    gen.writeStartObject();
+    gen.writeStringField("jobid",graph.f0.getJobID().toString());
+    gen.writeEndObject();
+    gen.close();
+    return writer.toString();
+  }
+ catch (  Exception e) {
+    return sendError(e);
+  }
+}

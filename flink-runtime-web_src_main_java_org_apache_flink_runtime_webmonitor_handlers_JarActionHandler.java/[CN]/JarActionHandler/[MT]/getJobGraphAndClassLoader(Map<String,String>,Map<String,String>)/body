@@ -1,0 +1,51 @@
+{
+  JobGraph graph=null;
+  final String file=pathParams.get("jarid");
+  if (file == null) {
+    throw new IllegalArgumentException("No jarid was provided.");
+  }
+  final List<String> programArgs;
+  String param=queryParams.get("program-args");
+  programArgs=(param != null && !param.equals("")) ? tokenizeArguments(param) : new ArrayList<String>();
+  final String entryClassOpt=queryParams.get("entry-class");
+  final String parallelismOpt=queryParams.get("parallelism");
+  int parallelism=1;
+  String entryClass=null;
+  if (parallelismOpt != null && !parallelismOpt.equals("")) {
+    parallelism=Integer.parseInt(parallelismOpt);
+    if (parallelism < 1) {
+      throw new IllegalArgumentException("Parallelism must be a positive number.");
+    }
+  }
+  if (entryClassOpt != null && !entryClassOpt.equals("")) {
+    entryClass=entryClassOpt;
+  }
+  PackagedProgram program=new PackagedProgram(new File(jarDir,file),entryClass,programArgs.toArray(new String[programArgs.size()]));
+  ClassLoader classLoader=program.getUserCodeClassLoader();
+  Optimizer compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),new Configuration());
+  PrintStream out=System.out;
+  PrintStream err=System.err;
+  System.setOut(nullStream);
+  System.setErr(nullStream);
+  FlinkPlan plan=Client.getOptimizedPlan(compiler,program,parallelism);
+  System.setOut(out);
+  System.setErr(err);
+  if (plan instanceof StreamingPlan) {
+    graph=((StreamingPlan)plan).getJobGraph();
+  }
+ else   if (plan instanceof OptimizedPlan) {
+    graph=new JobGraphGenerator().compileJobGraph((OptimizedPlan)plan);
+  }
+  if (graph == null) {
+    throw new CompilerException("A valid job graph couldn't be generated for the jar.");
+  }
+  for (  URL jar : program.getAllLibraries()) {
+    try {
+      graph.addJar(new Path(jar.toURI()));
+    }
+ catch (    URISyntaxException e) {
+      throw new ProgramInvocationException("Invalid jar path. Unexpected error. :(");
+    }
+  }
+  return Tuple2.of(graph,classLoader);
+}
