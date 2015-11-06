@@ -1,0 +1,13 @@
+{
+  final String[] tokens=this.resultPath.split(":");
+  final String outputFile=tokens[tokens.length - 1];
+  final FlinkTopologyBuilder builder=new FlinkTopologyBuilder();
+  builder.setSpout(spoutId,new FiniteRandomSpout(0,10,2));
+  builder.setBolt(boltId,new TaskIdBolt(),2).fieldsGrouping(spoutId,FiniteRandomSpout.STREAM_PREFIX + 0,new Fields("number"));
+  builder.setBolt(sinkId,new BoltFileSink(outputFile)).shuffleGrouping(boltId);
+  final FlinkLocalCluster cluster=FlinkLocalCluster.getLocalCluster();
+  cluster.submitTopology(topologyId,null,builder.createTopology());
+  Utils.sleep(10 * 1000);
+  cluster.killTopology(topologyId);
+  cluster.shutdown();
+}
