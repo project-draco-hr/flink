@@ -1,16 +1,19 @@
 {
-  Set<Long> toRemove=new HashSet<>();
-  for (  Map.Entry<Long,Set<Context>> triggers : processingTimeTimers.entrySet()) {
-    long actualTime=triggers.getKey();
-    if (actualTime <= time) {
-      for (      Context context : triggers.getValue()) {
-        Trigger.TriggerResult triggerResult=context.onProcessingTime(actualTime);
-        processTriggerResult(triggerResult,context.key,context.window);
-      }
-      toRemove.add(triggers.getKey());
+  List<Set<Context>> toTrigger=new ArrayList<>();
+  Iterator<Map.Entry<Long,Set<Context>>> it=processingTimeTimers.entrySet().iterator();
+  while (it.hasNext()) {
+    Map.Entry<Long,Set<Context>> triggers=it.next();
+    if (triggers.getKey() <= time) {
+      toTrigger.add(triggers.getValue());
+      it.remove();
     }
   }
-  for (  Long l : toRemove) {
-    processingTimeTimers.remove(l);
+  for (  Set<Context> ctxs : toTrigger) {
+    for (    Context ctx : ctxs) {
+      if (ctx.processingTimeTimer <= time) {
+        Trigger.TriggerResult triggerResult=ctx.onProcessingTime(ctx.processingTimeTimer);
+        processTriggerResult(triggerResult,ctx.key,ctx.window);
+      }
+    }
   }
 }
