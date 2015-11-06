@@ -1,6 +1,17 @@
 {
   if (fetcher != null) {
+    PeriodicOffsetCommitter offsetCommitter=null;
+    StreamingRuntimeContext streamingRuntimeContext=(StreamingRuntimeContext)getRuntimeContext();
+    if (!streamingRuntimeContext.isCheckpointingEnabled()) {
+      long commitInterval=Long.valueOf(props.getProperty("auto.commit.interval.ms","60000"));
+      offsetCommitter=new PeriodicOffsetCommitter(commitInterval,this);
+      offsetCommitter.start();
+      LOG.info("Starting periodic offset committer, with commit interval of {}ms",commitInterval);
+    }
     fetcher.run(sourceContext,valueDeserializer,lastOffsets);
+    if (offsetCommitter != null) {
+      offsetCommitter.close();
+    }
   }
  else {
     final Object waitLock=new Object();
