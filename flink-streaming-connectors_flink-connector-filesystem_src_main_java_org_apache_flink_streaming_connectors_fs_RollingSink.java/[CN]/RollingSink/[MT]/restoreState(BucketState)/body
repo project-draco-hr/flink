@@ -29,7 +29,46 @@
       refTruncate=reflectTruncate(fs);
       if (refTruncate != null) {
         LOG.debug("Truncating {} to valid length {}",partPath,bucketState.currentFileValidLength);
-        refTruncate.invoke(fs,partPath,bucketState.currentFileValidLength);
+        if (fs instanceof DistributedFileSystem) {
+          DistributedFileSystem dfs=(DistributedFileSystem)fs;
+          LOG.debug("Trying to recover file lease {}",partPath);
+          dfs.recoverLease(partPath);
+          boolean isclosed=dfs.isFileClosed(partPath);
+          StopWatch sw=new StopWatch();
+          sw.start();
+          while (!isclosed) {
+            if (sw.getTime() > asyncTimeout) {
+              break;
+            }
+            try {
+              Thread.sleep(500);
+            }
+ catch (            InterruptedException e1) {
+            }
+            isclosed=dfs.isFileClosed(partPath);
+          }
+        }
+        Boolean truncated=(Boolean)refTruncate.invoke(fs,partPath,bucketState.currentFileValidLength);
+        if (!truncated) {
+          LOG.debug("Truncate did not immediately complete for {}, waiting...",partPath);
+          StopWatch sw=new StopWatch();
+          sw.start();
+          long newLen=fs.getFileStatus(partPath).getLen();
+          while (newLen != bucketState.currentFileValidLength) {
+            if (sw.getTime() > asyncTimeout) {
+              break;
+            }
+            try {
+              Thread.sleep(500);
+            }
+ catch (            InterruptedException e1) {
+            }
+            newLen=fs.getFileStatus(partPath).getLen();
+          }
+          if (newLen != bucketState.currentFileValidLength) {
+            throw new RuntimeException("Truncate did not truncate to right length. Should be " + bucketState.currentFileValidLength + " is "+ newLen+ ".");
+          }
+        }
       }
  else {
         LOG.debug("Writing valid-length file for {} to specify valid length {}",partPath,bucketState.currentFileValidLength);
