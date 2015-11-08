@@ -1,9 +1,13 @@
 {
-  for (  Entry<K,Optional<V>> state : cache.modified.entrySet()) {
-    batchInsert.add(state,checkpointId);
+  if (timestamp <= nextTs) {
+    throw new RuntimeException("Checkpoint timestamp is smaller than previous ts + 1, " + "this should not happen.");
   }
-  batchInsert.flush(checkpointId);
+  for (  Entry<K,Optional<V>> state : cache.modified.entrySet()) {
+    batchInsert.add(state,timestamp);
+  }
+  batchInsert.flush(timestamp);
   cache.modified.clear();
-  nextCheckpointId=checkpointId + 1;
-  return new DbKvStateSnapshot<K,V>(kvStateId,checkpointId);
+  nextTs=timestamp + 1;
+  completedCheckpoints.put(checkpointId,timestamp);
+  return new DbKvStateSnapshot<K,V>(kvStateId,timestamp);
 }
