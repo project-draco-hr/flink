@@ -1,0 +1,34 @@
+{
+  assert(userBolt != null);
+  assert(boltId != null);
+  assert(streamId != null);
+  assert(grouping != null);
+  assert(producer != null);
+  final String producerId=streamId.get_componentId();
+  final String inputStreamId=streamId.get_streamId();
+  DataStream<Tuple> inputStream=producer.get(inputStreamId);
+  final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
+  declarers.put(boltId,declarer);
+  userBolt.declareOutputFields(declarer);
+  this.outputStreams.put(boltId,declarer.outputStreams);
+  if (grouping.is_set_shuffle()) {
+    inputStream=inputStream.rebalance();
+  }
+ else   if (grouping.is_set_fields()) {
+    final List<String> fields=grouping.get_fields();
+    if (fields.size() > 0) {
+      FlinkOutputFieldsDeclarer prodDeclarer=this.declarers.get(producerId);
+      inputStream=inputStream.keyBy(prodDeclarer.getGroupingFieldIndexes(inputStreamId,grouping.get_fields()));
+    }
+ else {
+      inputStream=inputStream.global();
+    }
+  }
+ else   if (grouping.is_set_all()) {
+    inputStream=inputStream.broadcast();
+  }
+ else   if (!grouping.is_set_local_or_shuffle()) {
+    throw new UnsupportedOperationException("Flink only supports (local-or-)shuffle, fields, all, and global grouping");
+  }
+  return inputStream;
+}

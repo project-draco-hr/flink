@@ -1,0 +1,117 @@
+{
+  unprocessdInputsPerBolt.clear();
+  outputStreams.clear();
+  declarers.clear();
+  availableInputs.clear();
+  env.setParallelism(1);
+  for (  final Entry<String,IRichSpout> spout : spouts.entrySet()) {
+    final String spoutId=spout.getKey();
+    final IRichSpout userSpout=spout.getValue();
+    final FlinkOutputFieldsDeclarer declarer=new FlinkOutputFieldsDeclarer();
+    userSpout.declareOutputFields(declarer);
+    final HashMap<String,Fields> sourceStreams=declarer.outputStreams;
+    this.outputStreams.put(spoutId,sourceStreams);
+    declarers.put(spoutId,declarer);
+    final HashMap<String,DataStream<Tuple>> outputStreams=new HashMap<String,DataStream<Tuple>>();
+    final DataStreamSource<?> source;
+    if (sourceStreams.size() == 1) {
+      final SpoutWrapper<Tuple> spoutWrapperSingleOutput=new SpoutWrapper<Tuple>(userSpout,spoutId,null,null);
+      spoutWrapperSingleOutput.setStormTopology(stormTopology);
+      final String outputStreamId=(String)sourceStreams.keySet().toArray()[0];
+      DataStreamSource<Tuple> src=env.addSource(spoutWrapperSingleOutput,spoutId,declarer.getOutputType(outputStreamId));
+      outputStreams.put(outputStreamId,src);
+      source=src;
+    }
+ else {
+      final SpoutWrapper<SplitStreamType<Tuple>> spoutWrapperMultipleOutputs=new SpoutWrapper<SplitStreamType<Tuple>>(userSpout,spoutId,null,null);
+      spoutWrapperMultipleOutputs.setStormTopology(stormTopology);
+      @SuppressWarnings({"unchecked","rawtypes"}) DataStreamSource<SplitStreamType<Tuple>> multiSource=env.addSource(spoutWrapperMultipleOutputs,spoutId,(TypeInformation)TypeExtractor.getForClass(SplitStreamType.class));
+      SplitStream<SplitStreamType<Tuple>> splitSource=multiSource.split(new StormStreamSelector<Tuple>());
+      for (      String streamId : sourceStreams.keySet()) {
+        SingleOutputStreamOperator<Tuple,?> outStream=splitSource.select(streamId).map(new SplitStreamMapper<Tuple>());
+        outStream.getTransformation().setOutputType(declarer.getOutputType(streamId));
+        outputStreams.put(streamId,outStream);
+      }
+      source=multiSource;
+    }
+    availableInputs.put(spoutId,outputStreams);
+    final ComponentCommon common=stormTopology.get_spouts().get(spoutId).get_common();
+    if (common.is_set_parallelism_hint()) {
+      int dop=common.get_parallelism_hint();
+      source.setParallelism(dop);
+    }
+ else {
+      common.set_parallelism_hint(1);
+    }
+  }
+  boolean makeProgress=true;
+  while (bolts.size() > 0) {
+    if (!makeProgress) {
+      throw new RuntimeException("Unable to build Topology. Could not connect the following bolts: " + bolts.keySet());
+    }
+    makeProgress=false;
+    final Iterator<Entry<String,IRichBolt>> boltsIterator=bolts.entrySet().iterator();
+    while (boltsIterator.hasNext()) {
+      final Entry<String,IRichBolt> bolt=boltsIterator.next();
+      final String boltId=bolt.getKey();
+      final IRichBolt userBolt=copyObject(bolt.getValue());
+      final ComponentCommon common=stormTopology.get_bolts().get(boltId).get_common();
+      Set<Entry<GlobalStreamId,Grouping>> unprocessedBoltInputs=unprocessdInputsPerBolt.get(boltId);
+      if (unprocessedBoltInputs == null) {
+        unprocessedBoltInputs=new HashSet<>();
+        unprocessedBoltInputs.addAll(common.get_inputs().entrySet());
+        unprocessdInputsPerBolt.put(boltId,unprocessedBoltInputs);
+      }
+      final int numberOfInputs=unprocessedBoltInputs.size();
+      int inputsAvailable=0;
+      for (      Entry<GlobalStreamId,Grouping> entry : unprocessedBoltInputs) {
+        final String producerId=entry.getKey().get_componentId();
+        final String streamId=entry.getKey().get_streamId();
+        final HashMap<String,DataStream<Tuple>> streams=availableInputs.get(producerId);
+        if (streams != null && streams.get(streamId) != null) {
+          inputsAvailable++;
+        }
+      }
+      if (inputsAvailable != numberOfInputs) {
+        continue;
+      }
+ else {
+        makeProgress=true;
+        boltsIterator.remove();
+      }
+      final Map<GlobalStreamId,DataStream<Tuple>> inputStreams=new HashMap<>(numberOfInputs);
+      for (      Entry<GlobalStreamId,Grouping> input : unprocessedBoltInputs) {
+        final GlobalStreamId streamId=input.getKey();
+        final Grouping grouping=input.getValue();
+        final String producerId=streamId.get_componentId();
+        final Map<String,DataStream<Tuple>> producer=availableInputs.get(producerId);
+        inputStreams.put(streamId,processInput(boltId,userBolt,streamId,grouping,producer));
+      }
+      final Iterator<Entry<GlobalStreamId,DataStream<Tuple>>> iterator=inputStreams.entrySet().iterator();
+      final Entry<GlobalStreamId,DataStream<Tuple>> firstInput=iterator.next();
+      GlobalStreamId streamId=firstInput.getKey();
+      DataStream<Tuple> inputStream=firstInput.getValue();
+      final SingleOutputStreamOperator<?,?> outputStream;
+switch (numberOfInputs) {
+case 1:
+        outputStream=createOutput(boltId,userBolt,streamId,inputStream);
+      break;
+case 2:
+    Entry<GlobalStreamId,DataStream<Tuple>> secondInput=iterator.next();
+  GlobalStreamId streamId2=secondInput.getKey();
+DataStream<Tuple> inputStream2=secondInput.getValue();
+outputStream=createOutput(boltId,userBolt,streamId,inputStream,streamId2,inputStream2);
+break;
+default :
+throw new UnsupportedOperationException("Don't know how to translate a bolt " + boltId + " with "+ numberOfInputs+ " inputs.");
+}
+if (common.is_set_parallelism_hint()) {
+int dop=common.get_parallelism_hint();
+outputStream.setParallelism(dop);
+}
+ else {
+common.set_parallelism_hint(1);
+}
+}
+}
+}

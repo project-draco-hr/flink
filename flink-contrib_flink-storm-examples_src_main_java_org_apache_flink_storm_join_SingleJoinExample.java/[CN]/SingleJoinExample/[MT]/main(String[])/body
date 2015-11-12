@@ -1,0 +1,34 @@
+{
+  final FeederSpout genderSpout=new FeederSpout(new Fields("id","gender","hobbies"));
+  final FeederSpout ageSpout=new FeederSpout(new Fields("id","age"));
+  TopologyBuilder builder=new TopologyBuilder();
+  builder.setSpout("gender",genderSpout);
+  builder.setSpout("age",ageSpout);
+  builder.setBolt("join",new SingleJoinBolt(new Fields("gender","age"))).fieldsGrouping("gender",new Fields("id")).fieldsGrouping("age",new Fields("id"));
+  if (args.length > 0) {
+    builder.setBolt("fileOutput",new BoltFileSink(args[0],new TupleOutputFormatter())).shuffleGrouping("join");
+  }
+ else {
+    builder.setBolt("print",new PrinterBolt()).shuffleGrouping("join");
+  }
+  Config conf=new Config();
+  conf.setDebug(true);
+  String[] hobbies=new String[]{"reading","biking","travelling","watching tv"};
+  for (int i=0; i < 10; i++) {
+    String gender;
+    if (i % 2 == 0) {
+      gender="male";
+    }
+ else {
+      gender="female";
+    }
+    genderSpout.feed(new Values(i,gender,hobbies[i % hobbies.length]));
+  }
+  for (int i=9; i >= 0; i--) {
+    ageSpout.feed(new Values(i,i + 20));
+  }
+  final FlinkLocalCluster cluster=FlinkLocalCluster.getLocalCluster();
+  cluster.submitTopology("joinTopology",conf,FlinkTopology.createTopology(builder));
+  Utils.sleep(10 * 1000);
+  cluster.shutdown();
+}
