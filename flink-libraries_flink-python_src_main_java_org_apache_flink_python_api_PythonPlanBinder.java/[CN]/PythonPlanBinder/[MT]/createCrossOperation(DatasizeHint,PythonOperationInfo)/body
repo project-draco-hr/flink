@@ -1,0 +1,38 @@
+{
+  DataSet op1=(DataSet)sets.get(info.parentID);
+  DataSet op2=(DataSet)sets.get(info.otherID);
+  DefaultCross defaultResult;
+switch (mode) {
+case NONE:
+    defaultResult=op1.cross(op2);
+  break;
+case HUGE:
+defaultResult=op1.crossWithHuge(op2);
+break;
+case TINY:
+defaultResult=op1.crossWithTiny(op2);
+break;
+default :
+throw new IllegalArgumentException("Invalid Cross mode specified: " + mode);
+}
+if (info.types != null && (info.projections == null || info.projections.length == 0)) {
+sets.put(info.setID,defaultResult.mapPartition(new PythonMapPartition(info.setID,info.types)).name(info.name));
+}
+ else if (info.projections.length == 0) {
+sets.put(info.setID,defaultResult.name("DefaultCross"));
+}
+ else {
+ProjectCross project=null;
+for (ProjectionEntry pe : info.projections) {
+switch (pe.side) {
+case FIRST:
+project=project == null ? defaultResult.projectFirst(pe.keys) : project.projectFirst(pe.keys);
+break;
+case SECOND:
+project=project == null ? defaultResult.projectSecond(pe.keys) : project.projectSecond(pe.keys);
+break;
+}
+}
+sets.put(info.setID,project.name("ProjectCross"));
+}
+}
