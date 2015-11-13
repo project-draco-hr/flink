@@ -21,5 +21,13 @@ def _send_field(self, value):
         value = bytes(value)
         size = pack('>I', len(value))
         self._connection.write(''.join([Types.TYPE_BYTES, size, value]))
+    elif isinstance(value, _Dummy):
+        self._connection.write(pack('>i', 127)[3:])
+        self._connection.write(pack('>i', 0))
     else:
+        for entry in self._env._types:
+            if isinstance(value, entry[1]):
+                self._connection.write(entry[0])
+                self._connection.write(CustomTypeSerializer(entry[2]).serialize(value))
+                return
         raise Exception('Unsupported Type encountered.')
