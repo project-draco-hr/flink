@@ -181,12 +181,19 @@
   if (yarnQueue != null) {
     appContext.setQueue(yarnQueue);
   }
+  Runtime.getRuntime().addShutdownHook(deploymentFailureHook);
   LOG.info("Submitting application master " + appId);
   yarnClient.submitApplication(appContext);
   LOG.info("Waiting for the cluster to be allocated");
   int waittime=0;
   loop:   while (true) {
-    ApplicationReport report=yarnClient.getApplicationReport(appId);
+    ApplicationReport report;
+    try {
+      report=yarnClient.getApplicationReport(appId);
+    }
+ catch (    IOException e) {
+      throw new YarnDeploymentException("Failed to deploy the cluster: " + e.getMessage());
+    }
     YarnApplicationState appState=report.getYarnApplicationState();
 switch (appState) {
 case FAILED:
@@ -204,6 +211,14 @@ LOG.info("Deployment took more than 60 seconds. Please check if the requested re
 }
 waittime+=1000;
 Thread.sleep(1000);
+}
+if (isDetached()) {
+LOG.info("The Flink YARN client has been started in detached mode. In order to stop " + "Flink on YARN, use the following command or a YARN web interface to stop " + "it:\nyarn application -kill " + appId + "\nPlease also note that the "+ "temporary files of the YARN session in the home directoy will not be removed.");
+}
+try {
+Runtime.getRuntime().removeShutdownHook(deploymentFailureHook);
+}
+ catch (IllegalStateException e) {
 }
 return new FlinkYarnCluster(yarnClient,appId,conf,flinkConfiguration,sessionFilesDir,detached);
 }
