@@ -1,0 +1,19 @@
+{
+  final String jarFile=args[0];
+  final String host=args[1];
+  final int port=Integer.parseInt(args[2]);
+  final int parallelism=Integer.parseInt(args[3]);
+  Configuration config=new Configuration();
+  config.setString(ConfigConstants.AKKA_ASK_TIMEOUT,"5 s");
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment(host,port,config,jarFile);
+  env.getConfig().disableSysoutLogging();
+  env.setParallelism(parallelism);
+  DataStream<Integer> data=env.createInput(new CustomInputFormat());
+  data.map(new MapFunction<Integer,Tuple2<Integer,Double>>(){
+    @Override public Tuple2<Integer,Double> map(    Integer value) throws Exception {
+      return new Tuple2<Integer,Double>(value,value * 0.5);
+    }
+  }
+).addSink(new NoOpSink());
+  env.execute();
+}

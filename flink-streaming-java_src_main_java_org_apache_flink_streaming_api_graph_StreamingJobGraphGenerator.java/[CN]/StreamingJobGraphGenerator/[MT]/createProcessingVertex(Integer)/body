@@ -1,6 +1,14 @@
 {
-  JobVertex jobVertex=new JobVertex(chainedNames.get(vertexID));
+  JobVertex jobVertex;
   StreamNode vertex=streamGraph.getStreamNode(vertexID);
+  if (vertex.getInputFormat() != null) {
+    jobVertex=new InputFormatVertex(chainedNames.get(vertexID));
+    TaskConfig taskConfig=new TaskConfig(jobVertex.getConfiguration());
+    taskConfig.setStubWrapper(new UserCodeObjectWrapper<Object>(vertex.getInputFormat()));
+  }
+ else {
+    jobVertex=new JobVertex(chainedNames.get(vertexID));
+  }
   jobVertex.setInvokableClass(vertex.getJobVertexClass());
   int parallelism=vertex.getParallelism();
   if (parallelism > 0) {
@@ -8,9 +16,6 @@
   }
   if (LOG.isDebugEnabled()) {
     LOG.debug("Parallelism set: {} for {}",parallelism,vertexID);
-  }
-  if (vertex.getInputFormat() != null) {
-    jobVertex.setInputSplitSource(vertex.getInputFormat());
   }
   jobVertices.put(vertexID,jobVertex);
   builtVertices.add(vertexID);
