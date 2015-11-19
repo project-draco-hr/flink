@@ -4,18 +4,16 @@ synchronized (lock) {
       if (!shutdown) {
         shutdown=true;
         LOG.info("Stopping checkpoint coordinator for job " + job);
+        periodicScheduling=false;
+        triggerRequestQueued=false;
         timer.cancel();
         if (jobStatusListener != null) {
           jobStatusListener.tell(PoisonPill.getInstance());
           jobStatusListener=null;
         }
-        if (periodicScheduler != null) {
-          periodicScheduler.cancel();
-          periodicScheduler=null;
-        }
         checkpointIdCounter.stop();
         for (        PendingCheckpoint pending : pendingCheckpoints.values()) {
-          pending.discard(userClassLoader,true);
+          pending.discard(userClassLoader);
         }
         pendingCheckpoints.clear();
         completedCheckpointStore.discardAllCheckpoints();
@@ -29,7 +27,7 @@ synchronized (lock) {
  catch (        IllegalStateException ignored) {
         }
 catch (        Throwable t) {
-          LOG.warn("Error unregistering checkpoint cooordniator shutdown hook.",t);
+          LOG.warn("Error unregistering checkpoint coordinator shutdown hook.",t);
         }
       }
     }

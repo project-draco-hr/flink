@@ -1,0 +1,59 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final long start=System.currentTimeMillis();
+    final ExecutionAttemptID triggerAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID ackAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID commitAttemptID=new ExecutionAttemptID();
+    ExecutionVertex triggerVertex=mockExecutionVertex(triggerAttemptID);
+    ExecutionVertex ackVertex=mockExecutionVertex(ackAttemptID);
+    ExecutionVertex commitVertex=mockExecutionVertex(commitAttemptID);
+    final AtomicInteger numCalls=new AtomicInteger();
+    doAnswer(new Answer<Void>(){
+      private long lastId=-1;
+      private long lastTs=-1;
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        TriggerCheckpoint message=(TriggerCheckpoint)invocation.getArguments()[0];
+        long id=message.getCheckpointId();
+        long ts=message.getTimestamp();
+        assertTrue(id > lastId);
+        assertTrue(ts >= lastTs);
+        assertTrue(ts >= start);
+        lastId=id;
+        lastTs=ts;
+        numCalls.incrementAndGet();
+        return null;
+      }
+    }
+).when(triggerVertex).sendMessageToCurrentExecution(any(Serializable.class),any(ExecutionAttemptID.class));
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,10,200000,new ExecutionVertex[]{triggerVertex},new ExecutionVertex[]{ackVertex},new ExecutionVertex[]{commitVertex},cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(2,cl),RecoveryMode.STANDALONE);
+    coord.startCheckpointScheduler();
+    long timeout=System.currentTimeMillis() + 60000;
+    do {
+      Thread.sleep(20);
+    }
+ while (timeout > System.currentTimeMillis() && numCalls.get() < 5);
+    assertTrue(numCalls.get() >= 5);
+    coord.stopCheckpointScheduler();
+    int numCallsSoFar=numCalls.get();
+    Thread.sleep(400);
+    assertTrue(numCallsSoFar == numCalls.get() || numCallsSoFar + 1 == numCalls.get());
+    numCalls.set(0);
+    coord.startCheckpointScheduler();
+    timeout=System.currentTimeMillis() + 60000;
+    do {
+      Thread.sleep(20);
+    }
+ while (timeout > System.currentTimeMillis() && numCalls.get() < 5);
+    assertTrue(numCalls.get() >= 5);
+    coord.stopCheckpointScheduler();
+    numCallsSoFar=numCalls.get();
+    Thread.sleep(400);
+    assertTrue(numCallsSoFar == numCalls.get() || numCallsSoFar + 1 == numCalls.get());
+    coord.shutdown();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

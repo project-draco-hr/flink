@@ -1,0 +1,33 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final ExecutionAttemptID triggerAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID ackAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID commitAttemptID=new ExecutionAttemptID();
+    ExecutionVertex triggerVertex=mockExecutionVertex(triggerAttemptID);
+    ExecutionVertex ackVertex=mockExecutionVertex(ackAttemptID);
+    ExecutionVertex commitVertex=mockExecutionVertex(commitAttemptID);
+    final AtomicReference<ExecutionState> currentState=new AtomicReference<>(ExecutionState.CREATED);
+    when(triggerVertex.getCurrentExecutionAttempt().getState()).thenAnswer(new Answer<ExecutionState>(){
+      @Override public ExecutionState answer(      InvocationOnMock invocation){
+        return currentState.get();
+      }
+    }
+);
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,10,200000,0L,2,new ExecutionVertex[]{triggerVertex},new ExecutionVertex[]{ackVertex},new ExecutionVertex[]{commitVertex},cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(2,cl),RecoveryMode.STANDALONE);
+    coord.startCheckpointScheduler();
+    Thread.sleep(200);
+    assertEquals(0,coord.getNumberOfPendingCheckpoints());
+    currentState.set(ExecutionState.RUNNING);
+    final long timeout=System.currentTimeMillis() + 10000;
+    do {
+      Thread.sleep(20);
+    }
+ while (System.currentTimeMillis() < timeout && coord.getNumberOfPendingCheckpoints() == 0);
+    assertTrue(coord.getNumberOfPendingCheckpoints() > 0);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
