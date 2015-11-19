@@ -1,14 +1,9 @@
 {
-  checkArgument(tdd.getNumberOfSubtasks() > 0);
-  checkArgument(tdd.getIndexInSubtaskGroup() >= 0);
-  checkArgument(tdd.getIndexInSubtaskGroup() < tdd.getNumberOfSubtasks());
+  this.taskInfo=checkNotNull(tdd.getTaskInfo());
   this.jobId=checkNotNull(tdd.getJobID());
   this.vertexId=checkNotNull(tdd.getVertexID());
   this.executionId=checkNotNull(tdd.getExecutionId());
-  this.subtaskIndex=tdd.getIndexInSubtaskGroup();
-  this.parallelism=tdd.getNumberOfSubtasks();
-  this.taskName=checkNotNull(tdd.getTaskName());
-  this.taskNameWithSubtask=getTaskNameWithSubtask(taskName,subtaskIndex,parallelism);
+  this.taskNameWithSubtask=taskInfo.getTaskNameWithSubtasks();
   this.jobConfiguration=checkNotNull(tdd.getJobConfiguration());
   this.taskConfiguration=checkNotNull(tdd.getTaskConfiguration());
   this.requiredJarFiles=checkNotNull(tdd.getRequiredJarFiles());
@@ -28,7 +23,7 @@
   this.network=checkNotNull(networkEnvironment);
   this.taskManagerConfig=checkNotNull(taskManagerConfig);
   this.executionListenerActors=new CopyOnWriteArrayList<ActorGateway>();
-  final String taskNameWithSubtasksAndId=Task.getTaskNameWithSubtaskAndID(taskName,subtaskIndex,parallelism,executionId);
+  final String taskNameWithSubtaskAndId=taskNameWithSubtask + " (" + executionId+ ')';
   List<ResultPartitionDeploymentDescriptor> partitions=tdd.getProducedPartitions();
   List<InputGateDeploymentDescriptor> consumedPartitions=tdd.getInputGates();
   this.producedPartitions=new ResultPartition[partitions.size()];
@@ -36,13 +31,13 @@
   for (int i=0; i < this.producedPartitions.length; i++) {
     ResultPartitionDeploymentDescriptor desc=partitions.get(i);
     ResultPartitionID partitionId=new ResultPartitionID(desc.getPartitionId(),executionId);
-    this.producedPartitions[i]=new ResultPartition(taskNameWithSubtasksAndId,jobId,partitionId,desc.getPartitionType(),desc.getNumberOfSubpartitions(),networkEnvironment.getPartitionManager(),networkEnvironment.getPartitionConsumableNotifier(),ioManager,networkEnvironment.getDefaultIOMode());
+    this.producedPartitions[i]=new ResultPartition(taskNameWithSubtaskAndId,jobId,partitionId,desc.getPartitionType(),desc.getNumberOfSubpartitions(),networkEnvironment.getPartitionManager(),networkEnvironment.getPartitionConsumableNotifier(),ioManager,networkEnvironment.getDefaultIOMode());
     this.writers[i]=new ResultPartitionWriter(this.producedPartitions[i]);
   }
   this.inputGates=new SingleInputGate[consumedPartitions.size()];
   this.inputGatesById=new HashMap<IntermediateDataSetID,SingleInputGate>();
   for (int i=0; i < this.inputGates.length; i++) {
-    SingleInputGate gate=SingleInputGate.create(taskNameWithSubtasksAndId,jobId,executionId,consumedPartitions.get(i),networkEnvironment);
+    SingleInputGate gate=SingleInputGate.create(taskNameWithSubtaskAndId,jobId,executionId,consumedPartitions.get(i),networkEnvironment);
     this.inputGates[i]=gate;
     inputGatesById.put(gate.getConsumedResultId(),gate);
   }
