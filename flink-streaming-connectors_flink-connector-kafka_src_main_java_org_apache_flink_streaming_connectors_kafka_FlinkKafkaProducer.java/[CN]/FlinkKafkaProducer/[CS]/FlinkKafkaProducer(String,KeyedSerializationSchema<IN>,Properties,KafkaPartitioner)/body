@@ -1,0 +1,36 @@
+{
+  Preconditions.checkNotNull(topicId,"TopicID not set");
+  Preconditions.checkNotNull(serializationSchema,"serializationSchema not set");
+  Preconditions.checkNotNull(producerConfig,"producerConfig not set");
+  ClosureCleaner.ensureSerializable(customPartitioner);
+  ClosureCleaner.ensureSerializable(serializationSchema);
+  this.topicId=topicId;
+  this.schema=serializationSchema;
+  this.producerConfig=producerConfig;
+  if (!producerConfig.contains(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG)) {
+    this.producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,ByteArraySerializer.class.getCanonicalName());
+  }
+ else {
+    LOG.warn("Overwriting the '{}' is not recommended",ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG);
+  }
+  if (!producerConfig.contains(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG)) {
+    this.producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,ByteArraySerializer.class.getCanonicalName());
+  }
+ else {
+    LOG.warn("Overwriting the '{}' is not recommended",ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
+  }
+  try (KafkaProducer<Void,IN> getPartitionsProd=new KafkaProducer<>(this.producerConfig)){
+    List<PartitionInfo> partitionsList=getPartitionsProd.partitionsFor(topicId);
+    this.partitions=new int[partitionsList.size()];
+    for (int i=0; i < partitions.length; i++) {
+      partitions[i]=partitionsList.get(i).partition();
+    }
+    getPartitionsProd.close();
+  }
+   if (customPartitioner == null) {
+    this.partitioner=new FixedPartitioner();
+  }
+ else {
+    this.partitioner=customPartitioner;
+  }
+}

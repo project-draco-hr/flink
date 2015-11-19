@@ -69,11 +69,18 @@
               continue;
             }
             ByteBuffer payload=msg.message().payload();
-            byte[] valueByte=new byte[payload.remaining()];
-            payload.get(valueByte);
-            final T value=valueDeserializer.deserialize(valueByte);
+            byte[] valueBytes=new byte[payload.remaining()];
+            payload.get(valueBytes);
+            byte[] keyBytes=null;
+            int keySize=msg.message().keySize();
+            if (keySize >= 0) {
+              ByteBuffer keyPayload=msg.message().key();
+              keyBytes=new byte[keySize];
+              keyPayload.get(keyBytes);
+            }
             final long offset=msg.offset();
-synchronized (this.sourceContext.getCheckpointLock()) {
+            final T value=deserializer.deserialize(keyBytes,valueBytes,offset);
+synchronized (sourceContext.getCheckpointLock()) {
               sourceContext.collect(value);
               offsetsState[partition]=offset;
             }
