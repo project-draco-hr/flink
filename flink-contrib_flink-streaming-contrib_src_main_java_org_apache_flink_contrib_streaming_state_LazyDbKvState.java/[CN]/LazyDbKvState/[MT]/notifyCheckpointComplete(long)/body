@@ -1,21 +1,11 @@
 {
-  Long ts=completedCheckpoints.remove(checkpointId);
+  final Long ts=completedCheckpoints.remove(checkpointId);
   if (ts == null) {
     LOG.warn("Complete notification for missing checkpoint: " + checkpointId);
-    ts=0L;
   }
-  if (compactEvery > 0 && compact && checkpointId % compactEvery == 0) {
-    try {
-      for (      Connection c : connections.connections()) {
-        dbAdapter.compactKvStates(kvStateId,c,lastCompactedTs,ts);
-      }
-      lastCompactedTs=ts;
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("State succesfully compacted for {}.",kvStateId);
-      }
-    }
- catch (    SQLException e) {
-      LOG.warn("State compaction failed due: {}",e);
+ else {
+    if (compactEvery > 0 && compact && checkpointId % compactEvery == 0) {
+      executor.execute(new Compactor(ts));
     }
   }
 }

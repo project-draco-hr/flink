@@ -1,0 +1,20 @@
+{
+  try (ShardedConnection sc=conf.createShardedConnection()){
+    for (    final Connection c : sc.connections()) {
+      SQLRetrier.retry(new Callable<Void>(){
+        @Override public Void call() throws Exception {
+          dbAdapter.compactKvStates(kvStateId,c,lastCompactedTs,upperBound);
+          return null;
+        }
+      }
+,numSqlRetries,sqlRetrySleep);
+    }
+    if (LOG.isInfoEnabled()) {
+      LOG.info("State succesfully compacted for {} between {} and {}.",kvStateId,lastCompactedTs,upperBound);
+    }
+    lastCompactedTs=upperBound;
+  }
+ catch (  SQLException|IOException e) {
+    LOG.warn("State compaction failed due: {}",e);
+  }
+}
