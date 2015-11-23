@@ -1,16 +1,10 @@
 def _configure(self, input_file, output_file, port, env):
-    if self._combine:
-        self._connection = Connection.BufferingTCPMappedFileConnection(input_file, output_file, port)
-        self._iterator = Iterator.Iterator(self._connection, env)
-        self._collector = Collector.Collector(self._connection, env)
-        self.context = RuntimeContext.RuntimeContext(self._iterator, self._collector)
-        self._run = self._run_combine
+    self._connection = Connection.BufferingTCPMappedFileConnection(input_file, output_file, port)
+    self._iterator = Iterator.Iterator(self._connection, env)
+    if (self._keys is None):
+        self._run = self._run_all_reduce
     else:
-        self._connection = Connection.BufferingTCPMappedFileConnection(input_file, output_file, port)
-        self._iterator = Iterator.Iterator(self._connection, env)
-        if (self._keys is None):
-            self._run = self._run_allreduce
-        else:
-            self._group_iterator = Iterator.GroupIterator(self._iterator, self._keys)
-        self._configure_chain(Collector.Collector(self._connection, env))
-        self.context = RuntimeContext.RuntimeContext(self._iterator, self._collector)
+        self._run = self._run_grouped_reduce
+        self._group_iterator = Iterator.GroupIterator(self._iterator, self._keys)
+    self._collector = Collector.Collector(self._connection, env)
+    self.context = RuntimeContext.RuntimeContext(self._iterator, self._collector)
