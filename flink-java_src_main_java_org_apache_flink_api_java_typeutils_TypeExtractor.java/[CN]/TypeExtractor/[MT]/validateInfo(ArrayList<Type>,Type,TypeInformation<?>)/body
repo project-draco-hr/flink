@@ -38,8 +38,24 @@
         throw new InvalidTypesException("Tuple arity '" + tti.getArity() + "' expected but was '"+ subTypes.length+ "'.");
       }
       for (int i=0; i < subTypes.length; i++) {
-        validateInfo(new ArrayList<Type>(typeHierarchy),subTypes[i],((TupleTypeInfo<?>)typeInfo).getTypeAt(i));
+        validateInfo(new ArrayList<Type>(typeHierarchy),subTypes[i],tti.getTypeAt(i));
       }
+    }
+ else     if (typeInfo instanceof EitherTypeInfo) {
+      if (!(isClassType(type) && Either.class.isAssignableFrom(typeToClass(type)))) {
+        throw new InvalidTypesException("Either type expected.");
+      }
+      while (!(isClassType(type) && typeToClass(type).equals(Either.class))) {
+        typeHierarchy.add(type);
+        type=typeToClass(type).getGenericSuperclass();
+      }
+      if (type instanceof Class<?>) {
+        throw new InvalidTypesException("Parameterized Either type expected.");
+      }
+      EitherTypeInfo<?,?> eti=(EitherTypeInfo<?,?>)typeInfo;
+      Type[] subTypes=((ParameterizedType)type).getActualTypeArguments();
+      validateInfo(new ArrayList<Type>(typeHierarchy),subTypes[0],eti.getLeftType());
+      validateInfo(new ArrayList<Type>(typeHierarchy),subTypes[1],eti.getRightType());
     }
  else     if (typeInfo instanceof WritableTypeInfo<?>) {
       if (!(type instanceof Class<?> && Writable.class.isAssignableFrom((Class<?>)type))) {

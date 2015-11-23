@@ -1,0 +1,35 @@
+{
+  Type[] subtypes=new Type[definingType.getActualTypeArguments().length];
+  for (int i=0; i < subtypes.length; i++) {
+    if (definingType.getActualTypeArguments()[i] instanceof TypeVariable<?>) {
+      subtypes[i]=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)definingType.getActualTypeArguments()[i]);
+    }
+ else {
+      subtypes[i]=definingType.getActualTypeArguments()[i];
+    }
+  }
+  TypeInformation<?>[] subTypesInfo=new TypeInformation<?>[subtypes.length];
+  for (int i=0; i < subtypes.length; i++) {
+    ArrayList<Type> subTypeHierarchy=new ArrayList<Type>(typeHierarchy);
+    subTypeHierarchy.add(subtypes[i]);
+    if (subtypes[i] instanceof TypeVariable<?>) {
+      subTypesInfo[i]=createTypeInfoFromInputs((TypeVariable<?>)subtypes[i],subTypeHierarchy,in1Type,in2Type);
+      if (subTypesInfo[i] == null) {
+        throw new InvalidTypesException("Type of TypeVariable '" + ((TypeVariable<?>)subtypes[i]).getName() + "' in '"+ ((TypeVariable<?>)subtypes[i]).getGenericDeclaration()+ "' could not be determined. This is most likely a type erasure problem. "+ "The type extraction currently supports types with generic variables only in cases where "+ "all variables in the return type can be deduced from the input type(s).");
+      }
+    }
+ else {
+      subTypesInfo[i]=createTypeInfoWithTypeHierarchy(subTypeHierarchy,subtypes[i],in1Type,in2Type);
+    }
+  }
+  Class<?> originalTypeAsClass=null;
+  if (isClassType(originalType)) {
+    originalTypeAsClass=typeToClass(originalType);
+  }
+  Preconditions.checkNotNull(originalTypeAsClass,"originalType has an unexpected type");
+  int fieldCount=countFieldsInClass(originalTypeAsClass);
+  if (fieldCount > subTypesInfo.length) {
+    return null;
+  }
+  return subTypesInfo;
+}

@@ -15,45 +15,37 @@
       throw new InvalidTypesException("Tuple needs to be parameterized by using generics.");
     }
     typeHierarchy.add(curT);
-    ParameterizedType tupleChild=(ParameterizedType)curT;
-    Type[] subtypes=new Type[tupleChild.getActualTypeArguments().length];
-    for (int i=0; i < subtypes.length; i++) {
-      if (tupleChild.getActualTypeArguments()[i] instanceof TypeVariable<?>) {
-        subtypes[i]=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)tupleChild.getActualTypeArguments()[i]);
-      }
- else {
-        subtypes[i]=tupleChild.getActualTypeArguments()[i];
-      }
-    }
-    TypeInformation<?>[] tupleSubTypes=new TypeInformation<?>[subtypes.length];
-    for (int i=0; i < subtypes.length; i++) {
-      ArrayList<Type> subTypeHierarchy=new ArrayList<Type>(typeHierarchy);
-      subTypeHierarchy.add(subtypes[i]);
-      if (subtypes[i] instanceof TypeVariable<?>) {
-        tupleSubTypes[i]=createTypeInfoFromInputs((TypeVariable<?>)subtypes[i],subTypeHierarchy,in1Type,in2Type);
-        if (tupleSubTypes[i] == null) {
-          throw new InvalidTypesException("Type of TypeVariable '" + ((TypeVariable<?>)subtypes[i]).getName() + "' in '"+ ((TypeVariable<?>)subtypes[i]).getGenericDeclaration()+ "' could not be determined. This is most likely a type erasure problem. "+ "The type extraction currently supports types with generic variables only in cases where "+ "all variables in the return type can be deduced from the input type(s).");
-        }
-      }
- else {
-        tupleSubTypes[i]=createTypeInfoWithTypeHierarchy(subTypeHierarchy,subtypes[i],in1Type,in2Type);
-      }
-    }
-    Class<?> tAsClass=null;
-    if (isClassType(t)) {
-      tAsClass=typeToClass(t);
-    }
-    Preconditions.checkNotNull(tAsClass,"t has a unexpected type");
-    int fieldCount=countFieldsInClass(tAsClass);
-    if (fieldCount != tupleSubTypes.length) {
+    TypeInformation<?>[] subTypesInfo=createSubTypesInfo(t,(ParameterizedType)curT,typeHierarchy,in1Type,in2Type);
+    if (subTypesInfo == null) {
       if (t instanceof ParameterizedType) {
-        return (TypeInformation<OUT>)analyzePojo(tAsClass,new ArrayList<Type>(typeHierarchy),(ParameterizedType)t,in1Type,in2Type);
+        return (TypeInformation<OUT>)analyzePojo(typeToClass(t),new ArrayList<Type>(typeHierarchy),(ParameterizedType)t,in1Type,in2Type);
       }
  else {
-        return (TypeInformation<OUT>)analyzePojo(tAsClass,new ArrayList<Type>(typeHierarchy),null,in1Type,in2Type);
+        return (TypeInformation<OUT>)analyzePojo(typeToClass(t),new ArrayList<Type>(typeHierarchy),null,in1Type,in2Type);
       }
     }
-    return new TupleTypeInfo(tAsClass,tupleSubTypes);
+    return new TupleTypeInfo(typeToClass(t),subTypesInfo);
+  }
+ else   if (isClassType(t) && Either.class.isAssignableFrom(typeToClass(t))) {
+    Type curT=t;
+    while (!(isClassType(curT) && typeToClass(curT).equals(Either.class))) {
+      typeHierarchy.add(curT);
+      curT=typeToClass(curT).getGenericSuperclass();
+    }
+    if (curT instanceof Class<?>) {
+      throw new InvalidTypesException("Either needs to be parameterized by using generics.");
+    }
+    typeHierarchy.add(curT);
+    TypeInformation<?>[] subTypesInfo=createSubTypesInfo(t,(ParameterizedType)curT,typeHierarchy,in1Type,in2Type);
+    if (subTypesInfo == null) {
+      if (t instanceof ParameterizedType) {
+        return (TypeInformation<OUT>)analyzePojo(typeToClass(t),new ArrayList<Type>(typeHierarchy),(ParameterizedType)t,in1Type,in2Type);
+      }
+ else {
+        return (TypeInformation<OUT>)analyzePojo(typeToClass(t),new ArrayList<Type>(typeHierarchy),null,in1Type,in2Type);
+      }
+    }
+    return (TypeInformation<OUT>)new EitherTypeInfo(subTypesInfo[0],subTypesInfo[1]);
   }
  else   if (t instanceof TypeVariable) {
     Type typeVar=materializeTypeVariable(typeHierarchy,(TypeVariable<?>)t);
