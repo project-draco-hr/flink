@@ -1,22 +1,10 @@
 {
   checkFileSystemInitialized();
-  final Path checkpointDir=createCheckpointDirPath(checkpointID);
-  filesystem.mkdirs(checkpointDir);
-  Exception latestException=null;
-  for (int attempt=0; attempt < 10; attempt++) {
-    Path targetPath=new Path(checkpointDir,UUID.randomUUID().toString());
-    FSDataOutputStream outStream;
-    try {
-      outStream=filesystem.create(targetPath,false);
-    }
- catch (    Exception e) {
-      latestException=e;
-      continue;
-    }
-    try (ObjectOutputStream os=new ObjectOutputStream(outStream)){
-      os.writeObject(state);
-    }
-     return new FileSerializableStateHandle<S>(targetPath);
+  Path checkpointDir=createCheckpointDirPath(checkpointID);
+  int bufferSize=Math.max(DEFAULT_WRITE_BUFFER_SIZE,fileStateThreshold);
+  FsCheckpointStateOutputStream stream=new FsCheckpointStateOutputStream(checkpointDir,filesystem,bufferSize,fileStateThreshold);
+  try (ObjectOutputStream os=new ObjectOutputStream(stream)){
+    os.writeObject(state);
+    return stream.closeAndGetHandle().toSerializableHandle();
   }
-  throw new Exception("Could not open output stream for state backend",latestException);
-}
+ }

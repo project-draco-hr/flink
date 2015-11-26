@@ -1,6 +1,6 @@
 {
   try {
-    FsStateBackend backend=CommonTestUtils.createCopySerializable(new FsStateBackend(randomHdfsFileUri()));
+    FsStateBackend backend=CommonTestUtils.createCopySerializable(new FsStateBackend(randomHdfsFileUri(),15));
     backend.initializeForJob(new DummyEnvironment("test",0,0));
     Path checkpointDir=backend.getCheckpointDirectory();
     byte[] state1=new byte[1274673];
@@ -19,9 +19,9 @@
     stream1.write(state1);
     stream2.write(state2);
     stream3.write(state3);
-    FileStreamStateHandle handle1=stream1.closeAndGetHandle();
-    FileStreamStateHandle handle2=stream2.closeAndGetHandle();
-    FileStreamStateHandle handle3=stream3.closeAndGetHandle();
+    FileStreamStateHandle handle1=(FileStreamStateHandle)stream1.closeAndGetHandle();
+    ByteStreamStateHandle handle2=(ByteStreamStateHandle)stream2.closeAndGetHandle();
+    ByteStreamStateHandle handle3=(ByteStreamStateHandle)stream3.closeAndGetHandle();
     StreamStateHandle handle4;
     try (StateBackend.CheckpointStateOutputStream stream4=backend.createCheckpointStateOutputStream(checkpointId,System.currentTimeMillis())){
       stream4.write(state4);
@@ -42,12 +42,8 @@
     ensureFileDeleted(handle1.getFilePath());
     validateBytesInStream(handle2.getState(getClass().getClassLoader()),state2);
     handle2.discardState();
-    assertFalse(isDirectoryEmpty(checkpointDir));
-    ensureFileDeleted(handle2.getFilePath());
     validateBytesInStream(handle3.getState(getClass().getClassLoader()),state3);
     handle3.discardState();
-    assertFalse(isDirectoryEmpty(checkpointDir));
-    ensureFileDeleted(handle3.getFilePath());
     validateBytesInStream(handle4.getState(getClass().getClassLoader()),state4);
     handle4.discardState();
     assertTrue(isDirectoryEmpty(checkpointDir));

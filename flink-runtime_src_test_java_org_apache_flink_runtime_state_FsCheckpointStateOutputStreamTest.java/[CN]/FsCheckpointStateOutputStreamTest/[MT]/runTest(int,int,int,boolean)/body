@@ -1,0 +1,35 @@
+{
+  StateBackend.CheckpointStateOutputStream stream=new FsStateBackend.FsCheckpointStateOutputStream(TEMP_DIR_PATH,FileSystem.getLocalFileSystem(),bufferSize,threshold);
+  Random rnd=new Random();
+  byte[] original=new byte[numBytes];
+  byte[] bytes=new byte[original.length];
+  rnd.nextBytes(original);
+  System.arraycopy(original,0,bytes,0,original.length);
+  int pos=0;
+  while (pos < bytes.length) {
+    boolean single=rnd.nextBoolean();
+    if (single) {
+      stream.write(bytes[pos++]);
+    }
+ else {
+      int num=rnd.nextInt(Math.min(10,bytes.length - pos));
+      stream.write(bytes,pos,num);
+      pos+=num;
+    }
+  }
+  StreamStateHandle handle=stream.closeAndGetHandle();
+  if (expectFile) {
+    assertTrue(handle instanceof FileStreamStateHandle);
+  }
+ else {
+    assertTrue(handle instanceof ByteStreamStateHandle);
+  }
+  assertArrayEquals(original,bytes);
+  InputStream inStream=handle.getState(ClassLoader.getSystemClassLoader());
+  byte[] validation=new byte[bytes.length];
+  int bytesRead=inStream.read(validation);
+  assertEquals(numBytes,bytesRead);
+  assertEquals(-1,inStream.read());
+  assertArrayEquals(bytes,validation);
+  handle.discardState();
+}
