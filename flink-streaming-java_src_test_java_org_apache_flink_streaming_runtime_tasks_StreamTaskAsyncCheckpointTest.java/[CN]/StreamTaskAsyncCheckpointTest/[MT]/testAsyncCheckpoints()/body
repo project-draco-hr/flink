@@ -1,0 +1,46 @@
+{
+  final OneShotLatch delayCheckpointLatch=new OneShotLatch();
+  final OneShotLatch ensureCheckpointLatch=new OneShotLatch();
+  final OneInputStreamTask<String,String> task=new OneInputStreamTask<>();
+  final OneInputStreamTaskTestHarness<String,String> testHarness=new OneInputStreamTaskTestHarness<>(task,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  streamConfig.setStreamOperator(new AsyncCheckpointOperator());
+  StreamMockEnvironment mockEnv=new StreamMockEnvironment(testHarness.jobConfig,testHarness.taskConfig,testHarness.memorySize,new MockInputSplitProvider(),testHarness.bufferSize){
+    @Override public void acknowledgeCheckpoint(    long checkpointId){
+      super.acknowledgeCheckpoint(checkpointId);
+    }
+    @Override public void acknowledgeCheckpoint(    long checkpointId,    StateHandle<?> state){
+      super.acknowledgeCheckpoint(checkpointId,state);
+      try {
+        delayCheckpointLatch.await();
+      }
+ catch (      InterruptedException e) {
+        e.printStackTrace();
+      }
+      assertTrue(state instanceof StreamTaskStateList);
+      StreamTaskStateList stateList=(StreamTaskStateList)state;
+      StreamTaskState taskState=stateList.getState(this.getUserClassLoader())[0];
+      StateHandle<?> operatorState=taskState.getOperatorState();
+      assertTrue("It must be a TestStateHandle",operatorState instanceof TestStateHandle);
+      TestStateHandle testState=(TestStateHandle)operatorState;
+      assertEquals(42,testState.checkpointId);
+      assertEquals(17,testState.timestamp);
+      ensureCheckpointLatch.trigger();
+    }
+  }
+;
+  testHarness.invoke(mockEnv);
+  for (  Field field : StreamTask.class.getDeclaredFields()) {
+    if (field.getName().equals("isRunning")) {
+      field.setAccessible(true);
+      while (!field.getBoolean(task)) {
+        Thread.sleep(10);
+      }
+    }
+  }
+  task.triggerCheckpoint(42,17);
+  delayCheckpointLatch.trigger();
+  ensureCheckpointLatch.await();
+  testHarness.endInput();
+  testHarness.waitForTaskCompletion();
+}
