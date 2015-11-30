@@ -1,0 +1,31 @@
+{
+  source.autoAck=false;
+  sourceThread.start();
+  Thread.sleep(5);
+  final Random random=new Random(System.currentTimeMillis());
+  int numSnapshots=50;
+  long previousSnapshotId;
+  long lastSnapshotId=0;
+  long totalNumberOfAcks=0;
+  for (int i=0; i < numSnapshots; i++) {
+    long snapshotId=random.nextLong();
+    SerializedCheckpointData[] data;
+synchronized (DummySourceContext.lock) {
+      data=source.snapshotState(snapshotId,System.currentTimeMillis());
+      previousSnapshotId=lastSnapshotId;
+      lastSnapshotId=messageId;
+    }
+    Thread.sleep(5);
+    final long numIds=lastSnapshotId - previousSnapshotId;
+    assertEquals(numIds,data[0].getNumIds());
+    ArrayDeque<Tuple2<Long,List<String>>> deque=SerializedCheckpointData.toDeque(data,new StringSerializer());
+    List<String> messageIds=deque.getLast().f1;
+    if (messageIds.size() > 0) {
+      assertEquals(lastSnapshotId,(long)Long.valueOf(messageIds.get(messageIds.size() - 1)));
+    }
+    source.notifyCheckpointComplete(snapshotId);
+    totalNumberOfAcks+=numIds;
+  }
+  Mockito.verify(source.channel,Mockito.times((int)totalNumberOfAcks)).basicAck(Mockito.anyLong(),Mockito.eq(false));
+  Mockito.verify(source.channel,Mockito.times(numSnapshots)).txCommit();
+}

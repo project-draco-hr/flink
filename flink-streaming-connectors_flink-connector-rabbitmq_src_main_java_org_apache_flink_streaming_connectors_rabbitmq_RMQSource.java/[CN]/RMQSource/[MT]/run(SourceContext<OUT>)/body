@@ -1,11 +1,21 @@
 {
   while (running) {
-    delivery=consumer.nextDelivery();
+    QueueingConsumer.Delivery delivery=consumer.nextDelivery();
 synchronized (ctx.getCheckpointLock()) {
       OUT result=schema.deserialize(delivery.getBody());
-      addId(ctx,delivery.getEnvelope().getDeliveryTag());
       if (schema.isEndOfStream(result)) {
         break;
+      }
+      if (!autoAck) {
+        final long deliveryTag=delivery.getEnvelope().getDeliveryTag();
+        if (usesCorrelationId) {
+          final String correlationId=delivery.getProperties().getCorrelationId();
+          Preconditions.checkNotNull(correlationId,"RabbitMQ source was instantiated " + "with usesCorrelationId set to true but a message was received with " + "correlation id set to null!");
+          if (!addId(correlationId)) {
+            continue;
+          }
+        }
+        sessionIds.add(deliveryTag);
       }
       ctx.collect(result);
     }
