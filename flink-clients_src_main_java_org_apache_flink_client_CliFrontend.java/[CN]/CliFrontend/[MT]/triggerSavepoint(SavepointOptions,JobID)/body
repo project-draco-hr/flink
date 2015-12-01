@@ -1,0 +1,30 @@
+{
+  try {
+    ActorGateway jobManager=getJobManagerGateway(options);
+    Future<Object> response=jobManager.ask(new TriggerSavepoint(jobId),askTimeout);
+    Object result;
+    try {
+      logAndSysout("Triggering savepoint for job " + jobId + ". Waiting for response...");
+      result=Await.result(response,askTimeout);
+    }
+ catch (    Exception e) {
+      throw new Exception("Triggering a savepoint for the job " + jobId + " failed.",e);
+    }
+    if (result instanceof TriggerSavepointSuccess) {
+      TriggerSavepointSuccess success=(TriggerSavepointSuccess)result;
+      logAndSysout("Savepoint completed. Path: " + success.savepointPath());
+      logAndSysout("You can resume your program from this savepoint with the run command.");
+      return 0;
+    }
+ else     if (result instanceof TriggerSavepointFailure) {
+      TriggerSavepointFailure failure=(TriggerSavepointFailure)result;
+      throw failure.cause();
+    }
+ else {
+      throw new IllegalStateException("Unknown JobManager response of type " + result.getClass());
+    }
+  }
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+}

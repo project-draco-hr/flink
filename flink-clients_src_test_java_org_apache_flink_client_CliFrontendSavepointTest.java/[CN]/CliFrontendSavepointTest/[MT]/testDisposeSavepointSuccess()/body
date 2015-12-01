@@ -1,0 +1,21 @@
+{
+  replaceStdOutAndStdErr();
+  try {
+    String savepointPath="expectedSavepointPath";
+    ActorGateway jobManager=mock(ActorGateway.class);
+    Promise<Object> triggerResponse=new scala.concurrent.impl.Promise.DefaultPromise<>();
+    when(jobManager.ask(Mockito.eq(new JobManagerMessages.DisposeSavepoint(savepointPath)),Mockito.any(FiniteDuration.class))).thenReturn(triggerResponse.future());
+    triggerResponse.success(JobManagerMessages.getDisposeSavepointSuccess());
+    CliFrontend frontend=new MockCliFrontend(CliFrontendTestUtils.getConfigDir(),jobManager);
+    String[] parameters={"-d",savepointPath};
+    int returnCode=frontend.savepoint(parameters);
+    assertEquals(0,returnCode);
+    verify(jobManager,times(1)).ask(Mockito.eq(new JobManagerMessages.DisposeSavepoint(savepointPath)),Mockito.any(FiniteDuration.class));
+    String outMsg=buffer.toString();
+    assertTrue(outMsg.contains(savepointPath));
+    assertTrue(outMsg.contains("disposed"));
+  }
+  finally {
+    restoreStdOutAndStdErr();
+  }
+}

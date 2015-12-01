@@ -1,0 +1,28 @@
+{
+  try {
+    ActorGateway jobManager=getJobManagerGateway(options);
+    Future<Object> response=jobManager.ask(new DisposeSavepoint(savepointPath),askTimeout);
+    Object result;
+    try {
+      logAndSysout("Disposing savepoint '" + savepointPath + "'. Waiting for response...");
+      result=Await.result(response,askTimeout);
+    }
+ catch (    Exception e) {
+      throw new Exception("Disposing the savepoint with path" + savepointPath + " failed.",e);
+    }
+    if (result.getClass() == JobManagerMessages.getDisposeSavepointSuccess().getClass()) {
+      logAndSysout("Savepoint '" + savepointPath + "' disposed.");
+      return 0;
+    }
+ else     if (result instanceof DisposeSavepointFailure) {
+      DisposeSavepointFailure failure=(DisposeSavepointFailure)result;
+      throw failure.cause();
+    }
+ else {
+      throw new IllegalStateException("Unknown JobManager response of type " + result.getClass());
+    }
+  }
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+}

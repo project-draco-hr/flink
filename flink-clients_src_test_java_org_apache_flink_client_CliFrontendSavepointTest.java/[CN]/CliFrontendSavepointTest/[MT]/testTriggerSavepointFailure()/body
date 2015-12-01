@@ -1,0 +1,20 @@
+{
+  replaceStdOutAndStdErr();
+  try {
+    JobID jobId=new JobID();
+    ActorGateway jobManager=mock(ActorGateway.class);
+    Promise<Object> triggerResponse=new scala.concurrent.impl.Promise.DefaultPromise<>();
+    when(jobManager.ask(Mockito.eq(new JobManagerMessages.TriggerSavepoint(jobId)),Mockito.any(FiniteDuration.class))).thenReturn(triggerResponse.future());
+    Exception testException=new Exception("expectedTestException");
+    triggerResponse.success(new JobManagerMessages.TriggerSavepointFailure(jobId,testException));
+    CliFrontend frontend=new MockCliFrontend(CliFrontendTestUtils.getConfigDir(),jobManager);
+    String[] parameters={jobId.toString()};
+    int returnCode=frontend.savepoint(parameters);
+    assertTrue(returnCode != 0);
+    verify(jobManager,times(1)).ask(Mockito.eq(new JobManagerMessages.TriggerSavepoint(jobId)),Mockito.any(FiniteDuration.class));
+    assertTrue(buffer.toString().contains("expectedTestException"));
+  }
+  finally {
+    restoreStdOutAndStdErr();
+  }
+}
