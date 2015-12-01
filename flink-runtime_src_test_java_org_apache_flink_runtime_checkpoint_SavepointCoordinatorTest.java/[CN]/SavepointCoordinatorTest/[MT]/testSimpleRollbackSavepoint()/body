@@ -1,0 +1,28 @@
+{
+  ApplicationID appId=new ApplicationID();
+  JobID jobId=new JobID();
+  ExecutionJobVertex[] jobVertices=new ExecutionJobVertex[]{mockExecutionJobVertex(jobId,new JobVertexID(),4),mockExecutionJobVertex(jobId,new JobVertexID(),4)};
+  ExecutionVertex[] triggerVertices=jobVertices[0].getTaskVertices();
+  ExecutionVertex[] ackVertices=new ExecutionVertex[8];
+  int i=0;
+  for (  ExecutionJobVertex jobVertex : jobVertices) {
+    for (    ExecutionVertex vertex : jobVertex.getTaskVertices()) {
+      ackVertices[i++]=vertex;
+    }
+  }
+  StateStore<Savepoint> savepointStore=new HeapStateStore<>();
+  SavepointCoordinator coordinator=createSavepointCoordinator(appId,jobId,60 * 1000,triggerVertices,ackVertices,new ExecutionVertex[]{},new MockCheckpointIdCounter(),savepointStore);
+  Future<String> savepointPathFuture=coordinator.triggerSavepoint(1231273123);
+  for (  ExecutionVertex vertex : ackVertices) {
+    ExecutionAttemptID attemptId=vertex.getCurrentExecutionAttempt().getAttemptId();
+    coordinator.receiveAcknowledgeMessage(new AcknowledgeCheckpoint(jobId,attemptId,0,createSerializedStateHandle(vertex),0));
+  }
+  String savepointPath=Await.result(savepointPathFuture,FiniteDuration.Zero());
+  assertNotNull(savepointPath);
+  assertEquals(appId,coordinator.restoreSavepoint(createExecutionJobVertexMap(jobVertices),savepointPath));
+  for (  ExecutionVertex vertex : ackVertices) {
+    verify(vertex.getCurrentExecutionAttempt(),times(1)).setInitialState(any(SerializedValue.class),anyLong());
+  }
+  assertEquals(0,getSavepointPromises(coordinator).size());
+  coordinator.shutdown();
+}
