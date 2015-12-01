@@ -1,0 +1,17 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.setParallelism(4);
+  env.addSource(new NoOpSourceFunction()).map(new NoOpMapFunction()).name("map").startNewChain().filter(new NoOpFilterFunction()).addSink(new NoOpSinkFunction());
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  JobVertex chainedMap=jobGraph.getVerticesSortedTopologicallyFromSources().get(1);
+  assertTrue(chainedMap.getName().startsWith("map"));
+  JobVertexID chainedMapId=chainedMap.getID();
+  env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.setParallelism(4);
+  env.addSource(new NoOpSourceFunction()).map(new NoOpMapFunction()).name("map").startNewChain().filter(new NoOpFilterFunction()).startNewChain().addSink(new NoOpSinkFunction());
+  jobGraph=env.getStreamGraph().getJobGraph();
+  JobVertex unchainedMap=jobGraph.getVerticesSortedTopologicallyFromSources().get(1);
+  assertEquals("map",unchainedMap.getName());
+  JobVertexID unchainedMapId=unchainedMap.getID();
+  assertNotEquals(chainedMapId,unchainedMapId);
+}

@@ -1,0 +1,29 @@
+{
+  JobVertex jobVertex;
+  StreamNode streamNode=streamGraph.getStreamNode(streamNodeId);
+  byte[] hash=hashes.get(streamNodeId);
+  if (hash == null) {
+    throw new IllegalStateException("Cannot find node hash. " + "Did you generate them before calling this method?");
+  }
+  JobVertexID jobVertexId=new JobVertexID(hash);
+  if (streamNode.getInputFormat() != null) {
+    jobVertex=new InputFormatVertex(chainedNames.get(streamNodeId),jobVertexId);
+    TaskConfig taskConfig=new TaskConfig(jobVertex.getConfiguration());
+    taskConfig.setStubWrapper(new UserCodeObjectWrapper<Object>(streamNode.getInputFormat()));
+  }
+ else {
+    jobVertex=new JobVertex(chainedNames.get(streamNodeId),jobVertexId);
+  }
+  jobVertex.setInvokableClass(streamNode.getJobVertexClass());
+  int parallelism=streamNode.getParallelism();
+  if (parallelism > 0) {
+    jobVertex.setParallelism(parallelism);
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Parallelism set: {} for {}",parallelism,streamNodeId);
+  }
+  jobVertices.put(streamNodeId,jobVertex);
+  builtVertices.add(streamNodeId);
+  jobGraph.addVertex(jobVertex);
+  return new StreamConfig(jobVertex.getConfiguration());
+}

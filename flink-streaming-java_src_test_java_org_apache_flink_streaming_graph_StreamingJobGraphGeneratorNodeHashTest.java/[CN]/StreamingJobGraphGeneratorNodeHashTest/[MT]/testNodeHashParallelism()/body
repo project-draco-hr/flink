@@ -1,0 +1,25 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.disableOperatorChaining();
+  env.addSource(new NoOpSourceFunction(),"src").setParallelism(4).addSink(new NoOpSink<String>()).name("sink").setParallelism(4);
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  Map<JobVertexID,String> ids=rememberIds(jobGraph);
+  env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.disableOperatorChaining();
+  env.addSource(new NoOpSourceFunction(),"src").setParallelism(8).addSink(new NoOpSink<String>()).name("sink").setParallelism(4);
+  jobGraph=env.getStreamGraph().getJobGraph();
+  verifyIdsNotEqual(jobGraph,ids);
+  env=StreamExecutionEnvironment.createLocalEnvironment();
+  env.disableOperatorChaining();
+  env.addSource(new NoOpSourceFunction(),"src").setParallelism(4).addSink(new NoOpSink<String>()).name("sink").setParallelism(8);
+  jobGraph=env.getStreamGraph().getJobGraph();
+  JobVertex[] vertices=jobGraph.getVerticesAsArray();
+  if (vertices[0].isInputVertex()) {
+    assertTrue(ids.containsKey(vertices[0].getID()));
+    assertFalse(ids.containsKey(vertices[1].getID()));
+  }
+ else {
+    assertTrue(ids.containsKey(vertices[1].getID()));
+    assertFalse(ids.containsKey(vertices[0].getID()));
+  }
+}

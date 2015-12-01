@@ -1,0 +1,27 @@
+{
+  generateNodeLocalHash(node,hasher,hashes.size());
+  for (  StreamEdge outEdge : node.getOutEdges()) {
+    if (isChainable(outEdge)) {
+      StreamNode chainedNode=outEdge.getTargetVertex();
+      generateNodeLocalHash(chainedNode,hasher,hashes.size());
+    }
+  }
+  byte[] hash=hasher.hash().asBytes();
+  for (  StreamEdge inEdge : node.getInEdges()) {
+    byte[] otherHash=hashes.get(inEdge.getSourceId());
+    if (otherHash == null) {
+      throw new IllegalStateException("Missing hash for input node " + inEdge.getSourceVertex() + ". Cannot generate hash for "+ node+ ".");
+    }
+    for (int j=0; j < hash.length; j++) {
+      hash[j]=(byte)(hash[j] * 37 ^ otherHash[j]);
+    }
+  }
+  if (LOG.isDebugEnabled()) {
+    String udfClassName="";
+    if (node.getOperator() instanceof AbstractUdfStreamOperator) {
+      udfClassName=((AbstractUdfStreamOperator)node.getOperator()).getUserFunction().getClass().getName();
+    }
+    LOG.debug("Generated hash '" + byteToHexString(hash) + "' for node "+ "'"+ node.toString()+ "' {id: "+ node.getId()+ ", "+ "parallelism: "+ node.getParallelism()+ ", "+ "user function: "+ udfClassName+ "}");
+  }
+  return hash;
+}
