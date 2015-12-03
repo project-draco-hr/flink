@@ -1,0 +1,22 @@
+{
+  Map<TopicAndPartition,PartitionOffsetRequestInfo> requestInfo=new HashMap<>();
+  for (  FetchPartition fp : partitions) {
+    TopicAndPartition topicAndPartition=new TopicAndPartition(fp.topic,fp.partition);
+    requestInfo.put(topicAndPartition,new PartitionOffsetRequestInfo(whichTime,1));
+  }
+  kafka.javaapi.OffsetRequest request=new kafka.javaapi.OffsetRequest(requestInfo,kafka.api.OffsetRequest.CurrentVersion(),consumer.clientId());
+  OffsetResponse response=consumer.getOffsetsBefore(request);
+  if (response.hasError()) {
+    String exception="";
+    for (    FetchPartition fp : partitions) {
+      short code;
+      if ((code=response.errorCode(fp.topic,fp.partition)) != ErrorMapping.NoError()) {
+        exception+="\nException for partition " + fp.partition + ": "+ StringUtils.stringifyException(ErrorMapping.exceptionFor(code));
+      }
+    }
+    throw new RuntimeException("Unable to get last offset for partitions " + partitions + ". "+ exception);
+  }
+  for (  FetchPartition fp : partitions) {
+    fp.nextOffsetToRead=response.offsets(fp.topic,fp.partition)[0];
+  }
+}

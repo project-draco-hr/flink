@@ -1,0 +1,86 @@
+{
+  if (partitionsToRead == null || partitionsToRead.size() == 0) {
+    throw new IllegalArgumentException("No partitions set");
+  }
+  this.mainThread=Thread.currentThread();
+  LOG.info("Reading from partitions " + partitionsToRead + " using the legacy fetcher");
+  if (partitionsToReadWithoutLeader != null && partitionsToReadWithoutLeader.size() > 0) {
+    LOG.info("Refreshing leader information for partitions {}",KafkaTopicPartition.toString(partitionsToReadWithoutLeader));
+    PartitionInfoFetcher infoFetcher=new PartitionInfoFetcher(KafkaTopicPartition.getTopics(partitionsToReadWithoutLeader),config);
+    infoFetcher.start();
+    KillerWatchDog watchDog=new KillerWatchDog(infoFetcher,60000);
+    watchDog.start();
+    List<KafkaTopicPartitionLeader> topicPartitionWithLeaderList=infoFetcher.getPartitions();
+    for (    Map.Entry<KafkaTopicPartition,Long> pt : partitionsToReadWithoutLeader.entrySet()) {
+      KafkaTopicPartitionLeader topicPartitionWithLeader=null;
+      for (      KafkaTopicPartitionLeader withLeader : topicPartitionWithLeaderList) {
+        if (withLeader.getTopicPartition().equals(pt.getKey())) {
+          topicPartitionWithLeader=withLeader;
+          break;
+        }
+      }
+      if (topicPartitionWithLeader == null) {
+        throw new IllegalStateException("Unable to find topic/partition leader information");
+      }
+      Long removed=KafkaTopicPartitionLeader.replaceIgnoringLeader(topicPartitionWithLeader,pt.getValue(),partitionsToRead);
+      if (removed == null) {
+        throw new IllegalStateException("Seek request on unknown topic partition");
+      }
+    }
+  }
+  Map<Node,List<FetchPartition>> fetchBrokers=new HashMap<>();
+  for (  Map.Entry<KafkaTopicPartitionLeader,Long> entry : partitionsToRead.entrySet()) {
+    final KafkaTopicPartitionLeader topicPartition=entry.getKey();
+    final long offset=entry.getValue();
+    List<FetchPartition> partitions=fetchBrokers.get(topicPartition.getLeader());
+    if (partitions == null) {
+      partitions=new ArrayList<>();
+      fetchBrokers.put(topicPartition.getLeader(),partitions);
+    }
+    partitions.add(new FetchPartition(topicPartition.getTopicPartition().getTopic(),topicPartition.getTopicPartition().getPartition(),offset));
+  }
+  ArrayList<SimpleConsumerThread<?>> consumers=new ArrayList<>(fetchBrokers.size());
+  for (  Map.Entry<Node,List<FetchPartition>> brokerInfo : fetchBrokers.entrySet()) {
+    final Node broker=brokerInfo.getKey();
+    final List<FetchPartition> partitionsList=brokerInfo.getValue();
+    FetchPartition[] partitions=partitionsList.toArray(new FetchPartition[partitionsList.size()]);
+    SimpleConsumerThread<T> thread=new SimpleConsumerThread<>(this,config,broker,partitions,sourceContext,deserializer,lastOffsets);
+    thread.setName(String.format("SimpleConsumer - %s - broker-%s (%s:%d)",taskName,broker.id(),broker.host(),broker.port()));
+    thread.setDaemon(true);
+    consumers.add(thread);
+  }
+  if (!running) {
+    return;
+  }
+  for (  SimpleConsumerThread<?> t : consumers) {
+    LOG.info("Starting thread {}",t.getName());
+    t.start();
+  }
+  try {
+    boolean someConsumersRunning=true;
+    while (running && error.get() == null && someConsumersRunning) {
+      try {
+        for (        SimpleConsumerThread<?> t : consumers) {
+          t.join();
+        }
+        someConsumersRunning=false;
+        for (        SimpleConsumerThread<?> t : consumers) {
+          someConsumersRunning|=t.isAlive();
+        }
+      }
+ catch (      InterruptedException e) {
+      }
+    }
+    Throwable error=this.error.get();
+    if (error != null) {
+      throw new Exception(error.getMessage(),error);
+    }
+  }
+  finally {
+    for (    SimpleConsumerThread<?> t : consumers) {
+      if (t.isAlive()) {
+        t.cancel();
+      }
+    }
+  }
+}

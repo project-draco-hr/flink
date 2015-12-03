@@ -1,4 +1,5 @@
 {
+  LOG.info("Starting to fetch from {}",Arrays.toString(this.partitions));
   try {
     final String clientId="flink-kafka-consumer-legacy-" + broker.id();
     final int soTimeout=Integer.valueOf(config.getProperty("socket.timeout.ms","30000"));
@@ -15,28 +16,27 @@
         }
       }
       if (partitionsToGetOffsetsFor.size() > 0) {
-        getLastOffset(consumer,topic,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
-        LOG.info("No prior offsets found for some partitions in topic {}. Fetched the following start offsets {}",topic,partitionsToGetOffsetsFor);
+        getLastOffset(consumer,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
+        LOG.info("No prior offsets found for some partitions. Fetched the following start offsets {}",partitionsToGetOffsetsFor);
       }
     }
-    int OffsetOutOfRangeCount=0;
+    int offsetOutOfRangeCount=0;
     while (running) {
       FetchRequestBuilder frb=new FetchRequestBuilder();
       frb.clientId(clientId);
       frb.maxWait(maxWait);
       frb.minBytes(minBytes);
       for (      FetchPartition fp : partitions) {
-        frb.addFetch(topic,fp.partition,fp.nextOffsetToRead,fetchSize);
+        frb.addFetch(fp.topic,fp.partition,fp.nextOffsetToRead,fetchSize);
       }
       kafka.api.FetchRequest fetchRequest=frb.build();
       LOG.debug("Issuing fetch request {}",fetchRequest);
-      FetchResponse fetchResponse;
-      fetchResponse=consumer.fetch(fetchRequest);
+      FetchResponse fetchResponse=consumer.fetch(fetchRequest);
       if (fetchResponse.hasError()) {
         String exception="";
         List<FetchPartition> partitionsToGetOffsetsFor=new ArrayList<>();
         for (        FetchPartition fp : partitions) {
-          short code=fetchResponse.errorCode(topic,fp.partition);
+          short code=fetchResponse.errorCode(fp.topic,fp.partition);
           if (code == ErrorMapping.OffsetOutOfRangeCode()) {
             partitionsToGetOffsetsFor.add(fp);
           }
@@ -45,11 +45,11 @@
           }
         }
         if (partitionsToGetOffsetsFor.size() > 0) {
-          if (OffsetOutOfRangeCount++ > 0) {
+          if (offsetOutOfRangeCount++ > 0) {
             throw new RuntimeException("Found invalid offsets more than once in partitions " + partitionsToGetOffsetsFor.toString() + " "+ "Exceptions: "+ exception);
           }
           LOG.warn("The following partitions had an invalid offset: {}",partitionsToGetOffsetsFor);
-          getLastOffset(consumer,topic,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
+          getLastOffset(consumer,partitionsToGetOffsetsFor,getInvalidOffsetBehavior(config));
           LOG.warn("The new partition offsets are {}",partitionsToGetOffsetsFor);
           continue;
         }
@@ -58,9 +58,10 @@
         }
       }
       int messagesInFetch=0;
+      int deletedMessages=0;
       for (      FetchPartition fp : partitions) {
-        final ByteBufferMessageSet messageSet=fetchResponse.messageSet(topic,fp.partition);
-        final int partition=fp.partition;
+        final ByteBufferMessageSet messageSet=fetchResponse.messageSet(fp.topic,fp.partition);
+        final KafkaTopicPartition topicPartition=new KafkaTopicPartition(fp.topic,fp.partition);
         for (        MessageAndOffset msg : messageSet) {
           if (running) {
             messagesInFetch++;
@@ -68,7 +69,15 @@
               LOG.info("Skipping message with offset " + msg.offset() + " because we have seen messages until "+ fp.nextOffsetToRead+ " from partition "+ fp.partition+ " already");
               continue;
             }
+            final long offset=msg.offset();
             ByteBuffer payload=msg.message().payload();
+            if (payload == null) {
+              deletedMessages++;
+synchronized (sourceContext.getCheckpointLock()) {
+                offsetsState.put(topicPartition,offset);
+              }
+              continue;
+            }
             byte[] valueBytes=new byte[payload.remaining()];
             payload.get(valueBytes);
             byte[] keyBytes=null;
@@ -78,11 +87,10 @@
               keyBytes=new byte[keySize];
               keyPayload.get(keyBytes);
             }
-            final long offset=msg.offset();
-            final T value=deserializer.deserialize(keyBytes,valueBytes,offset);
+            final T value=deserializer.deserialize(keyBytes,valueBytes,fp.topic,offset);
 synchronized (sourceContext.getCheckpointLock()) {
               sourceContext.collect(value);
-              offsetsState[partition]=offset;
+              offsetsState.put(topicPartition,offset);
             }
             fp.nextOffsetToRead=offset + 1;
           }
@@ -91,7 +99,7 @@ synchronized (sourceContext.getCheckpointLock()) {
           }
         }
       }
-      LOG.debug("This fetch contained {} messages",messagesInFetch);
+      LOG.debug("This fetch contained {} messages ({} deleted messages)",messagesInFetch,deletedMessages);
     }
   }
  catch (  Throwable t) {

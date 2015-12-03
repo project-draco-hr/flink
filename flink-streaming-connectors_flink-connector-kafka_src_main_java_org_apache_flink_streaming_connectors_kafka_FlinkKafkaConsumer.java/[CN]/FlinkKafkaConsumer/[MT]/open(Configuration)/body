@@ -1,25 +1,24 @@
 {
   super.open(parameters);
   final int numConsumers=getRuntimeContext().getNumberOfParallelSubtasks();
-  final int thisComsumerIndex=getRuntimeContext().getIndexOfThisSubtask();
-  subscribedPartitions=assignPartitions(this.partitions,this.topic,numConsumers,thisComsumerIndex);
+  final int thisConsumerIndex=getRuntimeContext().getIndexOfThisSubtask();
+  subscribedPartitions=assignPartitions(this.partitionInfos,numConsumers,thisConsumerIndex);
   if (LOG.isInfoEnabled()) {
-    LOG.info("Kafka consumer {} will read partitions {} out of partitions {}",thisComsumerIndex,subscribedPartitions,Arrays.toString(partitions));
+    LOG.info("Kafka consumer {} will read partitions {} out of partitions {}",thisConsumerIndex,KafkaTopicPartitionLeader.toString(subscribedPartitions),this.partitionInfos.size());
   }
   if (subscribedPartitions.isEmpty()) {
-    LOG.info("Kafka consumer {} has no partitions (empty source)",thisComsumerIndex);
+    LOG.info("Kafka consumer {} has no partitions (empty source)",thisConsumerIndex);
     return;
   }
 switch (fetcherType) {
 case NEW_HIGH_LEVEL:
     throw new UnsupportedOperationException("Currently unsupported");
 case LEGACY_LOW_LEVEL:
-  fetcher=new LegacyFetcher(topic,props,getRuntimeContext().getTaskName());
+  fetcher=new LegacyFetcher(this.subscribedPartitions,props,getRuntimeContext().getTaskName());
 break;
 default :
 throw new RuntimeException("Requested unknown fetcher " + fetcher);
 }
-fetcher.setPartitionsToRead(subscribedPartitions);
 switch (offsetStore) {
 case FLINK_ZOOKEEPER:
 offsetHandler=new ZookeeperOffsetHandler(props);
@@ -29,23 +28,19 @@ throw new Exception("Kafka offset handler cannot work with legacy fetcher");
 default :
 throw new RuntimeException("Requested unknown offset store " + offsetStore);
 }
-lastOffsets=new long[partitions.length];
-commitedOffsets=new long[partitions.length];
-Arrays.fill(lastOffsets,OFFSET_NOT_SET);
-Arrays.fill(commitedOffsets,OFFSET_NOT_SET);
+committedOffsets=new HashMap<>();
 if (restoreToOffset != null) {
 if (LOG.isInfoEnabled()) {
-LOG.info("Consumer {} found offsets from previous checkpoint: {}",thisComsumerIndex,Arrays.toString(restoreToOffset));
+LOG.info("Consumer {} is restored from previous checkpoint: {}",thisConsumerIndex,KafkaTopicPartition.toString(restoreToOffset));
 }
-for (int i=0; i < restoreToOffset.length; i++) {
-long restoredOffset=restoreToOffset[i];
-if (restoredOffset != OFFSET_NOT_SET) {
-fetcher.seek(new TopicPartition(topic,i),restoredOffset + 1);
-lastOffsets[i]=restoredOffset;
+for (Map.Entry<KafkaTopicPartition,Long> restorePartition : restoreToOffset.entrySet()) {
+fetcher.seek(restorePartition.getKey(),restorePartition.getValue() + 1);
 }
-}
+this.lastOffsets=restoreToOffset;
+restoreToOffset=null;
 }
  else {
+lastOffsets=new HashMap<>();
 offsetHandler.seekFetcherToInitialOffsets(subscribedPartitions,fetcher);
 }
 }
