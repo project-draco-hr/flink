@@ -1,23 +1,28 @@
 {
   final String topic="concurrentProducerConsumerTopic_" + UUID.randomUUID().toString();
+  final String additionalEmptyTopic="additionalEmptyTopic_" + UUID.randomUUID().toString();
   final int parallelism=3;
   final int elementsPerPartition=100;
   final int totalElements=parallelism * elementsPerPartition;
   createTestTopic(topic,parallelism,2);
+  createTestTopic(additionalEmptyTopic,parallelism,1);
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
   env.setParallelism(parallelism);
+  env.enableCheckpointing(500);
+  env.setNumberOfExecutionRetries(0);
   env.getConfig().disableSysoutLogging();
   TypeInformation<Tuple2<Long,String>> longStringType=TypeInfoParser.parse("Tuple2<Long, String>");
   TypeInformationSerializationSchema<Tuple2<Long,String>> sourceSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
   TypeInformationSerializationSchema<Tuple2<Long,String>> sinkSchema=new TypeInformationSerializationSchema<>(longStringType,env.getConfig());
   DataStream<Tuple2<Long,String>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Long,String>>(){
     private boolean running=true;
-    @Override public void run(    SourceContext<Tuple2<Long,String>> ctx){
+    @Override public void run(    SourceContext<Tuple2<Long,String>> ctx) throws InterruptedException {
       int cnt=getRuntimeContext().getIndexOfThisSubtask() * elementsPerPartition;
       int limit=cnt + elementsPerPartition;
       while (running && cnt < limit) {
         ctx.collect(new Tuple2<>(1000L + cnt,"kafka-" + cnt));
         cnt++;
+        Thread.sleep(50);
       }
     }
     @Override public void cancel(){
@@ -26,7 +31,10 @@
   }
 );
   stream.addSink(new FlinkKafkaProducer<>(brokerConnectionStrings,topic,sinkSchema));
-  FlinkKafkaConsumer<Tuple2<Long,String>> source=getConsumer(topic,sourceSchema,standardProps);
+  List<String> topics=new ArrayList<>();
+  topics.add(topic);
+  topics.add(additionalEmptyTopic);
+  FlinkKafkaConsumer<Tuple2<Long,String>> source=getConsumer(topics,sourceSchema,standardProps);
   DataStreamSource<Tuple2<Long,String>> consuming=env.addSource(source).setParallelism(parallelism);
   consuming.addSink(new RichSinkFunction<Tuple2<Long,String>>(){
     private int elCnt=0;
