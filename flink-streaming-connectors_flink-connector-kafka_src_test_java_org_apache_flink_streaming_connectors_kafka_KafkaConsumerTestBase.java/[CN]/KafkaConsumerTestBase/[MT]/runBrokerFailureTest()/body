@@ -6,18 +6,20 @@
   final int failAfterElements=numElementsPerPartition / 3;
   createTestTopic(topic,parallelism,2);
   DataGenerators.generateRandomizedIntegerSequence(StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort),brokerConnectionStrings,topic,parallelism,numElementsPerPartition,true);
-  ZkClient zkClient=createZookeeperClient();
   PartitionMetadata firstPart=null;
-  do {
-    if (firstPart != null) {
-      LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
-      Thread.sleep(150);
+{
+    ZkClient zkClient=new ZkClient(standardCC.zkConnect(),standardCC.zkSessionTimeoutMs(),standardCC.zkConnectionTimeoutMs(),new ZooKeeperStringSerializer());
+    do {
+      if (firstPart != null) {
+        LOG.info("Unable to find leader. error code {}",firstPart.errorCode());
+        Thread.sleep(150);
+      }
+      Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
+      firstPart=partitionMetadata.head();
     }
-    Seq<PartitionMetadata> partitionMetadata=AdminUtils.fetchTopicMetadataFromZk(topic,zkClient).partitionsMetadata();
-    firstPart=partitionMetadata.head();
-  }
  while (firstPart.errorCode() != 0);
-  zkClient.close();
+    zkClient.close();
+  }
   final kafka.cluster.Broker leaderToShutDown=firstPart.leader().get();
   final String leaderToShutDownConnection=NetUtils.hostAndPortToUrlString(leaderToShutDown.host(),leaderToShutDown.port());
   final int leaderIdToShutDown=firstPart.leader().get().id();

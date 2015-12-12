@@ -7,5 +7,11 @@
   if (zkConnect == null) {
     throw new IllegalArgumentException("Required property 'zookeeper.connect' has not been set");
   }
-  zkClient=new ZkClient(zkConnect,Integer.valueOf(props.getProperty("zookeeper.session.timeout.ms","6000")),Integer.valueOf(props.getProperty("zookeeper.connection.timeout.ms","6000")),new ZooKeeperStringSerializer());
+  int sessionTimeoutMs=Integer.valueOf(props.getProperty("zookeeper.session.timeout.ms","60000"));
+  int connectionTimeoutMs=Integer.valueOf(props.getProperty("zookeeper.connection.timeout.ms","15000"));
+  int backoffBaseSleepTime=Integer.valueOf(props.getProperty("flink.zookeeper.base-sleep-time.ms","100"));
+  int backoffMaxRetries=Integer.valueOf(props.getProperty("flink.zookeeper.max-retries","10"));
+  RetryPolicy retryPolicy=new ExponentialBackoffRetry(backoffBaseSleepTime,backoffMaxRetries);
+  curatorClient=CuratorFrameworkFactory.newClient(zkConnect,sessionTimeoutMs,connectionTimeoutMs,retryPolicy);
+  curatorClient.start();
 }
