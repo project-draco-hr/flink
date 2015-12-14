@@ -1,0 +1,77 @@
+{
+  JobCheckpointsHandler handler=new JobCheckpointsHandler(mock(ExecutionGraphHolder.class));
+  ExecutionGraph graph=mock(ExecutionGraph.class);
+  CheckpointStatsTracker tracker=mock(CheckpointStatsTracker.class);
+  when(graph.getCheckpointStatsTracker()).thenReturn(tracker);
+  final List<CheckpointStats> history=new ArrayList<>();
+  history.add(new CheckpointStats(0,1,1,124));
+  history.add(new CheckpointStats(1,5,177,0));
+  history.add(new CheckpointStats(2,6,8282,2));
+  history.add(new CheckpointStats(3,6812,2800,1024));
+  JobCheckpointStats stats=new JobCheckpointStats(){
+    @Override public List<CheckpointStats> getRecentHistory(){
+      return history;
+    }
+    @Override public long getCount(){
+      return 4;
+    }
+    @Override public long getMinDuration(){
+      return 1;
+    }
+    @Override public long getMaxDuration(){
+      return 8282;
+    }
+    @Override public long getAverageDuration(){
+      return 2815;
+    }
+    @Override public long getMinStateSize(){
+      return 0;
+    }
+    @Override public long getMaxStateSize(){
+      return 1024;
+    }
+    @Override public long getAverageStateSize(){
+      return 287;
+    }
+  }
+;
+  when(tracker.getJobStats()).thenReturn(Option.apply(stats));
+  String response=handler.handleRequest(graph,Collections.<String,String>emptyMap());
+  ObjectMapper mapper=new ObjectMapper();
+  JsonNode rootNode=mapper.readTree(response);
+  int count=rootNode.get("count").getIntValue();
+  assertEquals(stats.getCount(),count);
+  JsonNode durationNode=rootNode.get("duration");
+  assertNotNull(durationNode);
+  long minDuration=durationNode.get("min").getLongValue();
+  long maxDuration=durationNode.get("max").getLongValue();
+  long avgDuration=durationNode.get("avg").getLongValue();
+  assertEquals(stats.getMinDuration(),minDuration);
+  assertEquals(stats.getMaxDuration(),maxDuration);
+  assertEquals(stats.getAverageDuration(),avgDuration);
+  JsonNode sizeNode=rootNode.get("size");
+  assertNotNull(sizeNode);
+  long minSize=sizeNode.get("min").getLongValue();
+  long maxSize=sizeNode.get("max").getLongValue();
+  long avgSize=sizeNode.get("avg").getLongValue();
+  assertEquals(stats.getMinStateSize(),minSize);
+  assertEquals(stats.getMaxStateSize(),maxSize);
+  assertEquals(stats.getAverageStateSize(),avgSize);
+  JsonNode historyNode=rootNode.get("history");
+  assertNotNull(historyNode);
+  assertTrue(historyNode.isArray());
+  Iterator<JsonNode> it=historyNode.getElements();
+  for (int i=0; i < history.size(); i++) {
+    CheckpointStats s=history.get(i);
+    JsonNode node=it.next();
+    long checkpointId=node.get("id").getLongValue();
+    long timestamp=node.get("timestamp").getLongValue();
+    long duration=node.get("duration").getLongValue();
+    long size=node.get("size").getLongValue();
+    assertEquals(s.getCheckpointId(),checkpointId);
+    assertEquals(s.getTriggerTimestamp(),timestamp);
+    assertEquals(s.getDuration(),duration);
+    assertEquals(s.getStateSize(),size);
+  }
+  assertFalse(it.hasNext());
+}

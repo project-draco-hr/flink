@@ -1,0 +1,37 @@
+{
+  StringWriter writer=new StringWriter();
+  JsonGenerator gen=JsonFactory.jacksonFactory.createGenerator(writer);
+  CheckpointStatsTracker tracker=graph.getCheckpointStatsTracker();
+  gen.writeStartObject();
+  if (tracker != null) {
+    Option<JobCheckpointStats> stats=tracker.getJobStats();
+    if (stats.isDefined()) {
+      gen.writeNumberField("count",stats.get().getCount());
+      gen.writeFieldName("duration");
+      gen.writeStartObject();
+      gen.writeNumberField("min",stats.get().getMinDuration());
+      gen.writeNumberField("max",stats.get().getMaxDuration());
+      gen.writeNumberField("avg",stats.get().getAverageDuration());
+      gen.writeEndObject();
+      gen.writeFieldName("size");
+      gen.writeStartObject();
+      gen.writeNumberField("min",stats.get().getMinStateSize());
+      gen.writeNumberField("max",stats.get().getMaxStateSize());
+      gen.writeNumberField("avg",stats.get().getAverageStateSize());
+      gen.writeEndObject();
+      gen.writeArrayFieldStart("history");
+      for (      CheckpointStats checkpoint : stats.get().getRecentHistory()) {
+        gen.writeStartObject();
+        gen.writeNumberField("id",checkpoint.getCheckpointId());
+        gen.writeNumberField("timestamp",checkpoint.getTriggerTimestamp());
+        gen.writeNumberField("duration",checkpoint.getDuration());
+        gen.writeNumberField("size",checkpoint.getStateSize());
+        gen.writeEndObject();
+      }
+      gen.writeEndArray();
+    }
+  }
+  gen.writeEndObject();
+  gen.close();
+  return writer.toString();
+}

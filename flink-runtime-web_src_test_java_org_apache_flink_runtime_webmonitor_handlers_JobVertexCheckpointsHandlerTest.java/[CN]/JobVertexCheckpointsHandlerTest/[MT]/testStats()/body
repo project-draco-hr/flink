@@ -1,0 +1,37 @@
+{
+  JobVertexCheckpointsHandler handler=new JobVertexCheckpointsHandler(mock(ExecutionGraphHolder.class));
+  JobVertexID vertexId=new JobVertexID();
+  ExecutionGraph graph=mock(ExecutionGraph.class);
+  ExecutionJobVertex vertex=mock(ExecutionJobVertex.class);
+  CheckpointStatsTracker tracker=mock(CheckpointStatsTracker.class);
+  when(vertex.getJobVertexId()).thenReturn(vertexId);
+  when(vertex.getGraph()).thenReturn(graph);
+  when(graph.getCheckpointStatsTracker()).thenReturn(tracker);
+  long[][] subTaskStats=new long[][]{new long[]{1,10},new long[]{2,9},new long[]{3,8},new long[]{4,7},new long[]{5,6},new long[]{6,5},new long[]{7,4},new long[]{8,3},new long[]{9,2},new long[]{10,1}};
+  OperatorCheckpointStats stats=new OperatorCheckpointStats(3,6812,2800,1024,subTaskStats);
+  when(tracker.getOperatorStats(eq(vertexId))).thenReturn(Option.apply(stats));
+  String response=handler.handleRequest(vertex,Collections.<String,String>emptyMap());
+  ObjectMapper mapper=new ObjectMapper();
+  JsonNode rootNode=mapper.readTree(response);
+  long checkpointId=rootNode.get("id").getLongValue();
+  long timestamp=rootNode.get("timestamp").getLongValue();
+  long duration=rootNode.get("duration").getLongValue();
+  long size=rootNode.get("size").getLongValue();
+  long parallelism=rootNode.get("parallelism").getLongValue();
+  assertEquals(stats.getCheckpointId(),checkpointId);
+  assertEquals(stats.getTriggerTimestamp(),timestamp);
+  assertEquals(stats.getDuration(),duration);
+  assertEquals(stats.getStateSize(),size);
+  assertEquals(subTaskStats.length,parallelism);
+  JsonNode subTasksNode=rootNode.get("subtasks");
+  assertNotNull(subTasksNode);
+  assertTrue(subTasksNode.isArray());
+  Iterator<JsonNode> it=subTasksNode.getElements();
+  for (int i=0; i < subTaskStats.length; i++) {
+    JsonNode node=it.next();
+    assertEquals(i,node.get("subtask").getIntValue());
+    assertEquals(subTaskStats[i][0],node.get("duration").getLongValue());
+    assertEquals(subTaskStats[i][1],node.get("size").getLongValue());
+  }
+  assertFalse(it.hasNext());
+}
