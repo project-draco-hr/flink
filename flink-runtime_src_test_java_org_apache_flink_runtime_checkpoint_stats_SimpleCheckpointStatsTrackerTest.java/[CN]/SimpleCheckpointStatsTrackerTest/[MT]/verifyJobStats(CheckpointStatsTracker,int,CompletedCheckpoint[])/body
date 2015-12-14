@@ -1,0 +1,57 @@
+{
+  assertTrue(tracker.getJobStats().isDefined());
+  JobCheckpointStats jobStats=tracker.getJobStats().get();
+  List<CheckpointStats> history=jobStats.getRecentHistory();
+  if (historySize > checkpoints.length) {
+    assertEquals(checkpoints.length,history.size());
+  }
+ else {
+    assertEquals(historySize,history.size());
+  }
+  assertTrue(checkpoints.length >= history.size());
+  for (int i=0; i < history.size(); i++) {
+    CheckpointStats actualStats=history.get(history.size() - i - 1);
+    CompletedCheckpoint checkpoint=checkpoints[checkpoints.length - 1 - i];
+    long stateSize=0;
+    for (    StateForTask state : checkpoint.getStates()) {
+      stateSize+=state.getStateSize();
+    }
+    CheckpointStats expectedStats=new CheckpointStats(checkpoint.getCheckpointID(),checkpoint.getTimestamp(),checkpoint.getDuration(),stateSize);
+    assertEquals(expectedStats,actualStats);
+  }
+  long minDuration=Long.MAX_VALUE;
+  long maxDuration=Long.MIN_VALUE;
+  long totalDuration=0;
+  long minStateSize=Long.MAX_VALUE;
+  long maxStateSize=Long.MIN_VALUE;
+  long totalStateSize=0;
+  long count=0;
+  for (  CompletedCheckpoint checkpoint : checkpoints) {
+    count++;
+    if (checkpoint.getDuration() < minDuration) {
+      minDuration=checkpoint.getDuration();
+    }
+    if (checkpoint.getDuration() > maxDuration) {
+      maxDuration=checkpoint.getDuration();
+    }
+    totalDuration+=checkpoint.getDuration();
+    long stateSize=0;
+    for (    StateForTask state : checkpoint.getStates()) {
+      stateSize+=state.getStateSize();
+    }
+    if (stateSize < minStateSize) {
+      minStateSize=stateSize;
+    }
+    if (stateSize > maxStateSize) {
+      maxStateSize=stateSize;
+    }
+    totalStateSize+=stateSize;
+  }
+  assertEquals(count,jobStats.getCount());
+  assertEquals(minDuration,jobStats.getMinDuration());
+  assertEquals(maxDuration,jobStats.getMaxDuration());
+  assertEquals(totalDuration / count,jobStats.getAverageDuration());
+  assertEquals(minStateSize,jobStats.getMinStateSize());
+  assertEquals(maxStateSize,jobStats.getMaxStateSize());
+  assertEquals(totalStateSize / count,jobStats.getAverageStateSize());
+}

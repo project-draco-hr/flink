@@ -1,0 +1,24 @@
+{
+  for (  ExecutionVertex vertex : tasksToWaitFor) {
+    JobVertexID operatorId=vertex.getJobvertexId();
+    int parallelism=vertex.getTotalNumberOfParallelSubtasks();
+    OperatorCheckpointStats actualStats=tracker.getOperatorStats(operatorId).get();
+    long operatorDuration=Long.MIN_VALUE;
+    long operatorStateSize=0;
+    long[][] expectedSubTaskStats=new long[parallelism][2];
+    for (int i=0; i < parallelism; i++) {
+      long duration=-1;
+      long stateSize=-1;
+      for (      StateForTask state : checkpoint.getStates()) {
+        if (state.getOperatorId().equals(operatorId) && state.getSubtask() == i) {
+          duration=state.getDuration();
+          stateSize=state.getStateSize();
+        }
+      }
+      expectedSubTaskStats[i][0]=duration;
+      expectedSubTaskStats[i][1]=stateSize;
+    }
+    OperatorCheckpointStats expectedStats=new OperatorCheckpointStats(checkpoint.getCheckpointID(),checkpoint.getTimestamp(),operatorDuration,operatorStateSize,expectedSubTaskStats);
+    assertEquals(expectedStats,actualStats);
+  }
+}

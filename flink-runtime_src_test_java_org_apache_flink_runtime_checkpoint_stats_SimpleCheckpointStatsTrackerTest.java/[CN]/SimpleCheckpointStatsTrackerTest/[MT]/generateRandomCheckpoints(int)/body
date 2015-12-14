@@ -1,0 +1,36 @@
+{
+  JobID jobId=new JobID();
+  int minNumOperators=4;
+  int maxNumOperators=32;
+  int minParallelism=4;
+  int maxParallelism=16;
+  int maxStateSize=32 * 1024;
+  CompletedCheckpoint[] checkpoints=new CompletedCheckpoint[numCheckpoints];
+  int numOperators=RAND.nextInt(maxNumOperators - minNumOperators + 1) + minNumOperators;
+  JobVertexID[] operatorIds=new JobVertexID[numOperators];
+  int[] operatorParallelism=new int[numOperators];
+  for (int i=0; i < numOperators; i++) {
+    operatorIds[i]=new JobVertexID();
+    operatorParallelism[i]=RAND.nextInt(maxParallelism - minParallelism + 1) + minParallelism;
+  }
+  for (int i=0; i < numCheckpoints; i++) {
+    long triggerTimestamp=System.currentTimeMillis();
+    int maxDuration=RAND.nextInt(128 + 1);
+    ArrayList<StateForTask> states=new ArrayList<>();
+    int completionDuration=0;
+    for (int operatorIndex=0; operatorIndex < numOperators; operatorIndex++) {
+      JobVertexID operatorId=operatorIds[operatorIndex];
+      int parallelism=operatorParallelism[operatorIndex];
+      for (int subtaskIndex=0; subtaskIndex < parallelism; subtaskIndex++) {
+        int duration=RAND.nextInt(maxDuration + 1);
+        if (duration > completionDuration) {
+          completionDuration=duration;
+        }
+        states.add(new StateForTask(new SerializedValue<StateHandle<?>>(null),RAND.nextInt(maxStateSize + 1),operatorId,subtaskIndex,duration));
+      }
+    }
+    final long completionTimestamp=triggerTimestamp + completionDuration + RAND.nextInt(10);
+    checkpoints[i]=new CompletedCheckpoint(jobId,i,triggerTimestamp,completionTimestamp,states);
+  }
+  return checkpoints;
+}

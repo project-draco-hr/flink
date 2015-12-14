@@ -15,11 +15,11 @@ synchronized (lock) {
     }
     checkpoint=pendingCheckpoints.get(checkpointId);
     if (checkpoint != null && !checkpoint.isDiscarded()) {
-      if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState())) {
+      if (checkpoint.acknowledgeTask(message.getTaskExecutionId(),message.getState(),message.getStateSize())) {
         if (checkpoint.isFullyAcknowledged()) {
           completed=checkpoint.toCompletedCheckpoint();
           completedCheckpointStore.addCheckpoint(completed);
-          LOG.info("Completed checkpoint " + checkpointId);
+          LOG.info("Completed checkpoint " + checkpointId + " (in "+ completed.getDuration()+ " ms)");
           LOG.debug(completed.getStates().toString());
           pendingCheckpoints.remove(checkpointId);
           rememberRecentCheckpointId(checkpointId);
@@ -53,5 +53,6 @@ synchronized (lock) {
         ev.sendMessageToCurrentExecution(notifyMessage,ee.getAttemptId());
       }
     }
+    statsTracker.onCompletedCheckpoint(completed);
   }
 }

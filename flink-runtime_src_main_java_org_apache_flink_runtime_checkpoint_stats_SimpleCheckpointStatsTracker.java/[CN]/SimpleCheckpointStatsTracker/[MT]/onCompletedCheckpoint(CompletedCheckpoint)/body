@@ -1,0 +1,74 @@
+{
+  if (taskParallelism.isEmpty()) {
+    return;
+  }
+synchronized (statsLock) {
+    int overallStateSize=0;
+    Map<JobVertexID,long[][]> statsForSubTasks=new HashMap<>();
+    for (    StateForTask state : checkpoint.getStates()) {
+      overallStateSize+=state.getStateSize();
+      JobVertexID opId=state.getOperatorId();
+      long[][] statsPerSubtask=statsForSubTasks.get(opId);
+      if (statsPerSubtask == null) {
+        int parallelism=taskParallelism.get(opId);
+        statsPerSubtask=new long[parallelism][2];
+        statsForSubTasks.put(opId,statsPerSubtask);
+      }
+      int subTaskIndex=state.getSubtask();
+      if (subTaskIndex < statsPerSubtask.length) {
+        statsPerSubtask[subTaskIndex][0]=state.getDuration();
+        statsPerSubtask[subTaskIndex][1]=state.getStateSize();
+      }
+    }
+    boolean isInOrder=latestCompletedCheckpoint != null && checkpoint.getCheckpointID() > latestCompletedCheckpoint.getCheckpointID();
+    lastJobStats=null;
+    if (overallCount == 0 || isInOrder) {
+      latestCompletedCheckpoint=checkpoint;
+      operatorStatsCache.clear();
+      subTaskStats=statsForSubTasks;
+    }
+    long checkpointId=checkpoint.getCheckpointID();
+    long checkpointTriggerTimestamp=checkpoint.getTimestamp();
+    long checkpointDuration=checkpoint.getDuration();
+    overallCount++;
+    if (checkpointDuration > overallMaxDuration) {
+      overallMaxDuration=checkpointDuration;
+    }
+    if (checkpointDuration < overallMinDuration) {
+      overallMinDuration=checkpointDuration;
+    }
+    overallTotalDuration+=checkpointDuration;
+    if (overallStateSize < overallMinStateSize) {
+      overallMinStateSize=overallStateSize;
+    }
+    if (overallStateSize > overallMaxStateSize) {
+      overallMaxStateSize=overallStateSize;
+    }
+    this.overallTotalStateSize+=overallStateSize;
+    if (historySize > 0) {
+      CheckpointStats stats=new CheckpointStats(checkpointId,checkpointTriggerTimestamp,checkpointDuration,overallStateSize);
+      if (isInOrder) {
+        if (history.size() == historySize) {
+          history.remove(0);
+        }
+        history.add(stats);
+      }
+ else {
+        final int size=history.size();
+        if (size == historySize) {
+          if (checkpointId > history.get(0).getCheckpointId()) {
+            history.remove(0);
+          }
+        }
+        int pos=0;
+        for (int i=0; i < size; i++) {
+          pos=i;
+          if (checkpointId < history.get(i).getCheckpointId()) {
+            break;
+          }
+        }
+        history.add(pos,stats);
+      }
+    }
+  }
+}

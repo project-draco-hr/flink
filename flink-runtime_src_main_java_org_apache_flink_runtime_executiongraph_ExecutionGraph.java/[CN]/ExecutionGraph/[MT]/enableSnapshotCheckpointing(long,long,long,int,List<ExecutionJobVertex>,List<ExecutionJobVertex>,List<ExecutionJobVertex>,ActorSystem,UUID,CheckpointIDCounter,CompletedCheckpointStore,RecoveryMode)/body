@@ -9,6 +9,15 @@
   ExecutionVertex[] tasksToWaitFor=collectExecutionVertices(verticesToWaitFor);
   ExecutionVertex[] tasksToCommitTo=collectExecutionVertices(verticesToCommitTo);
   disableSnaphotCheckpointing();
-  checkpointCoordinator=new CheckpointCoordinator(jobID,interval,checkpointTimeout,minPauseBetweenCheckpoints,maxConcurrentCheckpoints,tasksToTrigger,tasksToWaitFor,tasksToCommitTo,userClassLoader,checkpointIDCounter,completedCheckpointStore,recoveryMode);
+  boolean isStatsDisabled=jobConfiguration.getBoolean(ConfigConstants.JOB_MANAGER_WEB_CHECKPOINTS_DISABLE,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_CHECKPOINTS_DISABLE);
+  CheckpointStatsTracker statsTracker;
+  if (isStatsDisabled) {
+    checkpointStatsTracker=new DisabledCheckpointStatsTracker();
+  }
+ else {
+    int historySize=jobConfiguration.getInteger(ConfigConstants.JOB_MANAGER_WEB_CHECKPOINTS_HISTORY_SIZE,ConfigConstants.DEFAULT_JOB_MANAGER_WEB_CHECKPOINTS_HISTORY_SIZE);
+    checkpointStatsTracker=new SimpleCheckpointStatsTracker(historySize,tasksToWaitFor);
+  }
+  checkpointCoordinator=new CheckpointCoordinator(jobID,interval,checkpointTimeout,minPauseBetweenCheckpoints,maxConcurrentCheckpoints,tasksToTrigger,tasksToWaitFor,tasksToCommitTo,userClassLoader,checkpointIDCounter,completedCheckpointStore,recoveryMode,checkpointStatsTracker);
   registerJobStatusListener(checkpointCoordinator.createActivatorDeactivator(actorSystem,leaderSessionID));
 }
