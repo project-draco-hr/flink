@@ -2,19 +2,26 @@
   if (!triggerResult.isFire() && !triggerResult.isPurge()) {
     return;
   }
+  AppendingState<IN,ACC> windowState;
+  MergingWindowSet<W> mergingWindows=null;
+  if (windowAssigner instanceof MergingWindowAssigner) {
+    mergingWindows=mergingWindowsByKey.get(key);
+    W stateWindow=mergingWindows.getStateWindow(window);
+    windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
+  }
+ else {
+    windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+  }
   if (triggerResult.isFire()) {
     timestampedCollector.setAbsoluteTimestamp(window.maxTimestamp());
-    MergingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
     ACC contents=windowState.get();
     userFunction.apply(context.key,context.window,contents,timestampedCollector);
-    if (triggerResult.isPurge()) {
-      windowState.clear();
-      context.clear();
-    }
   }
- else   if (triggerResult.isPurge()) {
-    MergingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+  if (triggerResult.isPurge()) {
     windowState.clear();
+    if (mergingWindows != null) {
+      mergingWindows.retireWindow(window);
+    }
     context.clear();
   }
 }

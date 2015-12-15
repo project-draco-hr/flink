@@ -1,0 +1,38 @@
+{
+  List<TimeWindow> sortedWindows=new ArrayList<>(windows);
+  Collections.sort(sortedWindows,new Comparator<TimeWindow>(){
+    @Override public int compare(    TimeWindow o1,    TimeWindow o2){
+      return Long.compare(o1.getStart(),o2.getStart());
+    }
+  }
+);
+  List<Tuple2<TimeWindow,Set<TimeWindow>>> merged=new ArrayList<>();
+  Tuple2<TimeWindow,Set<TimeWindow>> currentMerge=null;
+  for (  TimeWindow candidate : sortedWindows) {
+    if (currentMerge == null) {
+      currentMerge=new Tuple2<>();
+      currentMerge.f0=candidate;
+      currentMerge.f1=new HashSet<>();
+      currentMerge.f1.add(candidate);
+    }
+ else     if (currentMerge.f0.intersects(candidate)) {
+      currentMerge.f0=currentMerge.f0.cover(candidate);
+      currentMerge.f1.add(candidate);
+    }
+ else {
+      merged.add(currentMerge);
+      currentMerge=new Tuple2<>();
+      currentMerge.f0=candidate;
+      currentMerge.f1=new HashSet<>();
+      currentMerge.f1.add(candidate);
+    }
+  }
+  if (currentMerge != null) {
+    merged.add(currentMerge);
+  }
+  for (  Tuple2<TimeWindow,Set<TimeWindow>> m : merged) {
+    if (m.f1.size() > 1) {
+      c.merge(m.f1,m.f0);
+    }
+  }
+}

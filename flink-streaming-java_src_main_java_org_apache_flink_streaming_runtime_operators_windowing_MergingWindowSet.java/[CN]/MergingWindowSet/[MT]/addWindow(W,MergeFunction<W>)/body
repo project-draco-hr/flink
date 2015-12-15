@@ -1,0 +1,40 @@
+{
+  List<W> windows=new ArrayList<>();
+  windows.addAll(this.windows.keySet());
+  windows.add(newWindow);
+  final Map<W,Collection<W>> mergeResults=new HashMap<>();
+  windowAssigner.mergeWindows(windows,new MergingWindowAssigner.MergeCallback<W>(){
+    @Override public void merge(    Collection<W> toBeMerged,    W mergeResult){
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Merging {} into {}",toBeMerged,mergeResult);
+      }
+      mergeResults.put(mergeResult,toBeMerged);
+    }
+  }
+);
+  W resultWindow=newWindow;
+  for (  Map.Entry<W,Collection<W>> c : mergeResults.entrySet()) {
+    W mergeResult=c.getKey();
+    Collection<W> mergedWindows=c.getValue();
+    if (mergedWindows.remove(newWindow)) {
+      resultWindow=mergeResult;
+    }
+    W mergedStateWindow=this.windows.get(mergedWindows.iterator().next());
+    List<W> mergedStateWindows=new ArrayList<>();
+    for (    W mergedWindow : mergedWindows) {
+      W res=this.windows.remove(mergedWindow);
+      if (res != null) {
+        mergedStateWindows.add(res);
+      }
+    }
+    this.windows.put(mergeResult,mergedStateWindow);
+    mergedStateWindows.remove(mergedStateWindow);
+    if (!(mergedWindows.contains(mergeResult) && mergedWindows.size() == 1)) {
+      mergeFunction.merge(mergeResult,mergedWindows,this.windows.get(mergeResult),mergedStateWindows);
+    }
+  }
+  if (resultWindow.equals(newWindow)) {
+    this.windows.put(resultWindow,resultWindow);
+  }
+  return resultWindow;
+}

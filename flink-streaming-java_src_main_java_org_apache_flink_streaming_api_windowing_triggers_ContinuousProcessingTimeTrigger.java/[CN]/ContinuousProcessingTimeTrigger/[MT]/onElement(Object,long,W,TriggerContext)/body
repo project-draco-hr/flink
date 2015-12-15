@@ -1,18 +1,12 @@
 {
-  long currentTime=System.currentTimeMillis();
-  ValueState<Long> fireState=ctx.getPartitionedState(stateDesc);
-  long nextFireTimestamp=fireState.value();
-  if (nextFireTimestamp == 0) {
-    long start=currentTime - (currentTime % interval);
-    fireState.update(start + interval);
-    ctx.registerProcessingTimeTimer((start + interval));
+  ReducingState<Long> fireTimestamp=ctx.getPartitionedState(stateDesc);
+  timestamp=System.currentTimeMillis();
+  if (fireTimestamp.get() == null) {
+    long start=timestamp - (timestamp % interval);
+    long nextFireTimestamp=start + interval;
+    ctx.registerProcessingTimeTimer(nextFireTimestamp);
+    fireTimestamp.add(nextFireTimestamp);
     return TriggerResult.CONTINUE;
-  }
-  if (currentTime > nextFireTimestamp) {
-    long start=currentTime - (currentTime % interval);
-    fireState.update(start + interval);
-    ctx.registerProcessingTimeTimer((start + interval));
-    return TriggerResult.FIRE;
   }
   return TriggerResult.CONTINUE;
 }
