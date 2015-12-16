@@ -1,0 +1,23 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.getConfig().disableSysoutLogging();
+  env.setNumberOfExecutionRetries(4);
+  env.setParallelism(2);
+  ParameterTool parameterTool=ParameterTool.fromArgs(args);
+  DataStream<String> messageStream=env.addSource(new SourceFunction<String>(){
+    public boolean running=true;
+    @Override public void run(    SourceContext<String> ctx) throws Exception {
+      long i=0;
+      while (this.running) {
+        ctx.collect("Element - " + i++);
+        Thread.sleep(500);
+      }
+    }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
+);
+  messageStream.addSink(new FlinkKafkaProducer09<>(parameterTool.getRequired("topic"),new SimpleStringSchema(),parameterTool.getProperties()));
+  env.execute("Write into Kafka example");
+}

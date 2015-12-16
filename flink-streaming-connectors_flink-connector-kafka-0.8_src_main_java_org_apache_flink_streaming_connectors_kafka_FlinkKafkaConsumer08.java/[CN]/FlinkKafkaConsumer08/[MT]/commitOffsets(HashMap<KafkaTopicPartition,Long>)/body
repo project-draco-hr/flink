@@ -1,0 +1,27 @@
+{
+  Map<KafkaTopicPartition,Long> offsetsToCommit=new HashMap<>();
+  for (  KafkaTopicPartitionLeader tp : this.subscribedPartitions) {
+    Long offset=toCommit.get(tp.getTopicPartition());
+    if (offset == null) {
+      continue;
+    }
+    Long lastCommitted=this.committedOffsets.get(tp.getTopicPartition());
+    if (lastCommitted == null) {
+      lastCommitted=OFFSET_NOT_SET;
+    }
+    if (offset != OFFSET_NOT_SET) {
+      if (offset > lastCommitted) {
+        offsetsToCommit.put(tp.getTopicPartition(),offset);
+        this.committedOffsets.put(tp.getTopicPartition(),offset);
+        LOG.debug("Committing offset {} for partition {}",offset,tp.getTopicPartition());
+      }
+ else {
+        LOG.debug("Ignoring offset {} for partition {} because it is already committed",offset,tp.getTopicPartition());
+      }
+    }
+  }
+  if (LOG.isDebugEnabled() && offsetsToCommit.size() > 0) {
+    LOG.debug("Committing offsets {} to Zookeeper",KafkaTopicPartition.toString(offsetsToCommit));
+  }
+  this.offsetHandler.commit(offsetsToCommit);
+}

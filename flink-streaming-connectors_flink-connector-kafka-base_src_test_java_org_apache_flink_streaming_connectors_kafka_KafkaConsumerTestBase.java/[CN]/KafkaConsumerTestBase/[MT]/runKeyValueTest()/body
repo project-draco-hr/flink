@@ -1,0 +1,53 @@
+{
+  final String topic="keyvaluetest";
+  createTestTopic(topic,1,1);
+  final int ELEMENT_COUNT=5000;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(1);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  DataStream<Tuple2<Long,PojoValue>> kvStream=env.addSource(new SourceFunction<Tuple2<Long,PojoValue>>(){
+    @Override public void run(    SourceContext<Tuple2<Long,PojoValue>> ctx) throws Exception {
+      Random rnd=new Random(1337);
+      for (long i=0; i < ELEMENT_COUNT; i++) {
+        PojoValue pojo=new PojoValue();
+        pojo.when=new Date(rnd.nextLong());
+        pojo.lon=rnd.nextLong();
+        pojo.lat=i;
+        Long key=(i % 2 == 0) ? null : i;
+        ctx.collect(new Tuple2<>(key,pojo));
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  KeyedSerializationSchema<Tuple2<Long,PojoValue>> schema=new TypeInformationKeyValueSerializationSchema<>(Long.class,PojoValue.class,env.getConfig());
+  kvStream.addSink(kafkaServer.getProducer(topic,schema,FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings),null));
+  env.execute("Write KV to Kafka");
+  env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(1);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  KeyedDeserializationSchema<Tuple2<Long,PojoValue>> readSchema=new TypeInformationKeyValueSerializationSchema<>(Long.class,PojoValue.class,env.getConfig());
+  DataStream<Tuple2<Long,PojoValue>> fromKafka=env.addSource(kafkaServer.getConsumer(topic,readSchema,standardProps));
+  fromKafka.flatMap(new RichFlatMapFunction<Tuple2<Long,PojoValue>,Object>(){
+    long counter=0;
+    @Override public void flatMap(    Tuple2<Long,PojoValue> value,    Collector<Object> out) throws Exception {
+      Assert.assertTrue("Wrong value " + value.f1.lat,value.f1.lat == counter);
+      if (value.f1.lat % 2 == 0) {
+        assertNull("key was not null",value.f0);
+      }
+ else {
+        Assert.assertTrue("Wrong value " + value.f0,value.f0 == counter);
+      }
+      counter++;
+      if (counter == ELEMENT_COUNT) {
+        throw new SuccessException();
+      }
+    }
+  }
+);
+  tryExecute(env,"Read KV from Kafka");
+  deleteTestTopic(topic);
+}

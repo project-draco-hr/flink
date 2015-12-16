@@ -1,0 +1,21 @@
+{
+  final String topic="oneToManyTopic";
+  final int numPartitions=5;
+  final int numElementsPerPartition=1000;
+  final int totalElements=numPartitions * numElementsPerPartition;
+  final int failAfterElements=numElementsPerPartition / 3;
+  final int parallelism=2;
+  createTestTopic(topic,numPartitions,1);
+  DataGenerators.generateRandomizedIntegerSequence(StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort),kafkaServer,topic,numPartitions,numElementsPerPartition,true);
+  DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.enableCheckpointing(500);
+  env.setParallelism(parallelism);
+  env.setNumberOfExecutionRetries(3);
+  env.getConfig().disableSysoutLogging();
+  FlinkKafkaConsumerBase<Integer> kafkaSource=kafkaServer.getConsumer(topic,schema,standardProps);
+  env.addSource(kafkaSource).map(new PartitionValidatingMapper(numPartitions,3)).map(new FailingIdentityMapper<Integer>(failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
+  FailingIdentityMapper.failedBefore=false;
+  tryExecute(env,"One-source-multi-partitions exactly once test");
+  deleteTestTopic(topic);
+}

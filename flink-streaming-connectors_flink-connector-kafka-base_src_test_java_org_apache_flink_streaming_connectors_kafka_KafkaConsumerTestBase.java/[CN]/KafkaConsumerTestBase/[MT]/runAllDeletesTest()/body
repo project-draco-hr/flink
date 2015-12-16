@@ -1,0 +1,45 @@
+{
+  final String topic="alldeletestest";
+  createTestTopic(topic,1,1);
+  final int ELEMENT_COUNT=300;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(1);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  DataStream<Tuple2<byte[],PojoValue>> kvStream=env.addSource(new SourceFunction<Tuple2<byte[],PojoValue>>(){
+    @Override public void run(    SourceContext<Tuple2<byte[],PojoValue>> ctx) throws Exception {
+      Random rnd=new Random(1337);
+      for (long i=0; i < ELEMENT_COUNT; i++) {
+        final byte[] key=new byte[200];
+        rnd.nextBytes(key);
+        ctx.collect(new Tuple2<>(key,(PojoValue)null));
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  TypeInformationKeyValueSerializationSchema<byte[],PojoValue> schema=new TypeInformationKeyValueSerializationSchema<>(byte[].class,PojoValue.class,env.getConfig());
+  kvStream.addSink(kafkaServer.getProducer(topic,schema,FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings),null));
+  JobExecutionResult result=env.execute("Write deletes to Kafka");
+  Map<String,Object> accuResults=result.getAllAccumulatorResults();
+  Assert.assertTrue("Not enough accumulators from Kafka Producer: " + accuResults.size(),accuResults.size() > 33);
+  env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(1);
+  env.setNumberOfExecutionRetries(0);
+  env.getConfig().disableSysoutLogging();
+  DataStream<Tuple2<byte[],PojoValue>> fromKafka=env.addSource(kafkaServer.getConsumer(topic,schema,standardProps));
+  fromKafka.flatMap(new RichFlatMapFunction<Tuple2<byte[],PojoValue>,Object>(){
+    long counter=0;
+    @Override public void flatMap(    Tuple2<byte[],PojoValue> value,    Collector<Object> out) throws Exception {
+      assertNull(value.f1);
+      counter++;
+      if (counter == ELEMENT_COUNT) {
+        throw new SuccessException();
+      }
+    }
+  }
+);
+  tryExecute(env,"Read deletes from Kafka");
+  deleteTestTopic(topic);
+}

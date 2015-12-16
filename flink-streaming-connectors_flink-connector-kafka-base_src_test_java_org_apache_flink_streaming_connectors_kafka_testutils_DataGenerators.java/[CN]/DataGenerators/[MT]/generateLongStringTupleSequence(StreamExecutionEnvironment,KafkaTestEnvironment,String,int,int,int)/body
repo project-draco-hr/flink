@@ -1,0 +1,23 @@
+{
+  TypeInformation<Tuple2<Integer,Integer>> resultType=TypeInfoParser.parse("Tuple2<Integer, Integer>");
+  env.setParallelism(numPartitions);
+  env.getConfig().disableSysoutLogging();
+  env.setNumberOfExecutionRetries(0);
+  DataStream<Tuple2<Integer,Integer>> stream=env.addSource(new RichParallelSourceFunction<Tuple2<Integer,Integer>>(){
+    private volatile boolean running=true;
+    @Override public void run(    SourceContext<Tuple2<Integer,Integer>> ctx) throws Exception {
+      int cnt=from;
+      int partition=getRuntimeContext().getIndexOfThisSubtask();
+      while (running && cnt <= to) {
+        ctx.collect(new Tuple2<Integer,Integer>(partition,cnt));
+        cnt++;
+      }
+    }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
+);
+  stream.addSink(testServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(new TypeInformationSerializationSchema<>(resultType,env.getConfig())),FlinkKafkaProducerBase.getPropertiesFromBrokerList(testServer.getBrokerConnectionString()),new Tuple2Partitioner(numPartitions)));
+  env.execute("Data generator (Int, Int) stream to topic " + topic);
+}

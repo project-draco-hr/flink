@@ -1,0 +1,37 @@
+{
+  if (consumer != null) {
+    consumerThread=new ConsumerThread<>(this,sourceContext);
+    consumerThread.start();
+    while (consumerThread.isAlive()) {
+      if (consumerThreadException != null) {
+        throw new RuntimeException("ConsumerThread threw an exception",consumerThreadException);
+      }
+      try {
+        consumerThread.join(50);
+      }
+ catch (      InterruptedException ie) {
+        consumerThread.shutdown();
+      }
+    }
+    if (consumerThreadException != null) {
+      throw new RuntimeException("ConsumerThread threw an exception",consumerThreadException);
+    }
+  }
+ else {
+    if (getRuntimeContext().getExecutionConfig().areTimestampsEnabled()) {
+      sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
+    }
+    final Object waitLock=new Object();
+    this.waitThread=Thread.currentThread();
+    while (running) {
+      try {
+synchronized (waitLock) {
+          waitLock.wait();
+        }
+      }
+ catch (      InterruptedException e) {
+      }
+    }
+  }
+  sourceContext.close();
+}

@@ -1,0 +1,35 @@
+{
+  createTestTopic("testCheckpointing",1,1);
+  FlinkKafkaConsumerBase<String> source=kafkaServer.getConsumer("testCheckpointing",new SimpleStringSchema(),standardProps);
+  Field pendingCheckpointsField=FlinkKafkaConsumerBase.class.getDeclaredField("pendingCheckpoints");
+  pendingCheckpointsField.setAccessible(true);
+  LinkedMap pendingCheckpoints=(LinkedMap)pendingCheckpointsField.get(source);
+  Assert.assertEquals(0,pendingCheckpoints.size());
+  source.setRuntimeContext(new MockRuntimeContext(1,0));
+  final HashMap<KafkaTopicPartition,Long> initialOffsets=new HashMap<>();
+  initialOffsets.put(new KafkaTopicPartition("testCheckpointing",0),1337L);
+  source.restoreState(initialOffsets);
+  source.open(new Configuration());
+  HashMap<KafkaTopicPartition,Long> state1=source.snapshotState(1,15);
+  assertEquals(initialOffsets,state1);
+  HashMap<KafkaTopicPartition,Long> state2=source.snapshotState(2,30);
+  Assert.assertEquals(initialOffsets,state2);
+  Assert.assertEquals(2,pendingCheckpoints.size());
+  source.notifyCheckpointComplete(1);
+  Assert.assertEquals(1,pendingCheckpoints.size());
+  source.notifyCheckpointComplete(2);
+  Assert.assertEquals(0,pendingCheckpoints.size());
+  source.notifyCheckpointComplete(666);
+  Assert.assertEquals(0,pendingCheckpoints.size());
+  for (int i=100; i < 600; i++) {
+    source.snapshotState(i,15 * i);
+  }
+  Assert.assertEquals(FlinkKafkaConsumerBase.MAX_NUM_PENDING_CHECKPOINTS,pendingCheckpoints.size());
+  source.notifyCheckpointComplete(598);
+  Assert.assertEquals(1,pendingCheckpoints.size());
+  source.notifyCheckpointComplete(590);
+  source.notifyCheckpointComplete(599);
+  Assert.assertEquals(0,pendingCheckpoints.size());
+  source.close();
+  deleteTestTopic("testCheckpointing");
+}

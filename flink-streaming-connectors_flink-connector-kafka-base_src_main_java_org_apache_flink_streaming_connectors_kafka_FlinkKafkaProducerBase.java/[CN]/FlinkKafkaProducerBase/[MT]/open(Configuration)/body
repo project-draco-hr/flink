@@ -1,0 +1,43 @@
+{
+  producer=new org.apache.kafka.clients.producer.KafkaProducer<>(this.producerConfig);
+  RuntimeContext ctx=getRuntimeContext();
+  if (partitioner != null) {
+    partitioner.open(ctx.getIndexOfThisSubtask(),ctx.getNumberOfParallelSubtasks(),partitions);
+  }
+  LOG.info("Starting FlinkKafkaProducer ({}/{}) to produce into topic {}",ctx.getIndexOfThisSubtask(),ctx.getNumberOfParallelSubtasks(),topicId);
+  if (!Boolean.getBoolean(producerConfig.getProperty(KEY_DISABLE_METRICS,"false"))) {
+    Map<MetricName,? extends Metric> metrics=this.producer.metrics();
+    if (metrics == null) {
+      LOG.info("Producer implementation does not support metrics");
+    }
+ else {
+      for (      Map.Entry<MetricName,? extends Metric> metric : metrics.entrySet()) {
+        String name="producer-" + metric.getKey().name();
+        DefaultKafkaMetricAccumulator kafkaAccumulator=DefaultKafkaMetricAccumulator.createFor(metric.getValue());
+        if (kafkaAccumulator != null) {
+          getRuntimeContext().addAccumulator(name,kafkaAccumulator);
+        }
+      }
+    }
+  }
+  if (logFailuresOnly) {
+    callback=new Callback(){
+      @Override public void onCompletion(      RecordMetadata metadata,      Exception e){
+        if (e != null) {
+          LOG.error("Error while sending record to Kafka: " + e.getMessage(),e);
+        }
+      }
+    }
+;
+  }
+ else {
+    callback=new Callback(){
+      @Override public void onCompletion(      RecordMetadata metadata,      Exception exception){
+        if (exception != null && asyncException == null) {
+          asyncException=exception;
+        }
+      }
+    }
+;
+  }
+}

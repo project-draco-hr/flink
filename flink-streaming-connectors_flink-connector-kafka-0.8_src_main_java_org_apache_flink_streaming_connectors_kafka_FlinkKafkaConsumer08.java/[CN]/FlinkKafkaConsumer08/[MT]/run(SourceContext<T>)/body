@@ -1,0 +1,42 @@
+{
+  if (fetcher != null) {
+    PeriodicOffsetCommitter<T> offsetCommitter=null;
+    StreamingRuntimeContext streamingRuntimeContext=(StreamingRuntimeContext)getRuntimeContext();
+    if (!streamingRuntimeContext.isCheckpointingEnabled()) {
+      long commitInterval=Long.valueOf(props.getProperty("auto.commit.interval.ms","60000"));
+      offsetCommitter=new PeriodicOffsetCommitter<>(commitInterval,this);
+      offsetCommitter.setDaemon(true);
+      offsetCommitter.start();
+      LOG.info("Starting periodic offset committer, with commit interval of {}ms",commitInterval);
+    }
+    try {
+      fetcher.run(sourceContext,deserializer,offsetsState);
+    }
+  finally {
+      if (offsetCommitter != null) {
+        offsetCommitter.close();
+        try {
+          offsetCommitter.join();
+        }
+ catch (        InterruptedException ie) {
+        }
+      }
+    }
+  }
+ else {
+    if (getRuntimeContext().getExecutionConfig().areTimestampsEnabled()) {
+      sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
+    }
+    final Object waitLock=new Object();
+    while (running) {
+      try {
+synchronized (waitLock) {
+          waitLock.wait();
+        }
+      }
+ catch (      InterruptedException e) {
+      }
+    }
+  }
+  sourceContext.close();
+}

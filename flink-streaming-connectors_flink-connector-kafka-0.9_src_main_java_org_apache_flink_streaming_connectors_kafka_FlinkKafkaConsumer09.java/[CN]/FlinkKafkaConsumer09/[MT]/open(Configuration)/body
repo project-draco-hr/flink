@@ -1,0 +1,42 @@
+{
+  super.open(parameters);
+  final int numConsumers=getRuntimeContext().getNumberOfParallelSubtasks();
+  final int thisConsumerIndex=getRuntimeContext().getIndexOfThisSubtask();
+  this.subscribedPartitionsAsFlink=assignPartitions(this.partitionInfos,numConsumers,thisConsumerIndex);
+  if (this.subscribedPartitionsAsFlink.isEmpty()) {
+    LOG.info("This consumer doesn't have any partitions assigned");
+    this.offsetsState=null;
+    return;
+  }
+ else {
+    StreamingRuntimeContext streamingRuntimeContext=(StreamingRuntimeContext)getRuntimeContext();
+    properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,Boolean.toString(!streamingRuntimeContext.isCheckpointingEnabled()));
+    this.consumer=new KafkaConsumer<>(properties);
+  }
+  subscribedPartitions=convertToKafkaTopicPartition(subscribedPartitionsAsFlink);
+  this.consumer.assign(this.subscribedPartitions);
+  if (!Boolean.getBoolean(properties.getProperty(KEY_DISABLE_METRICS,"false"))) {
+    Map<MetricName,? extends Metric> metrics=this.consumer.metrics();
+    if (metrics == null) {
+      LOG.info("Consumer implementation does not support metrics");
+    }
+ else {
+      for (      Map.Entry<MetricName,? extends Metric> metric : metrics.entrySet()) {
+        String name="consumer-" + metric.getKey().name();
+        DefaultKafkaMetricAccumulator kafkaAccumulator=DefaultKafkaMetricAccumulator.createFor(metric.getValue());
+        if (kafkaAccumulator != null) {
+          getRuntimeContext().addAccumulator(name,kafkaAccumulator);
+        }
+      }
+    }
+  }
+  if (restoreToOffset != null) {
+    for (    Map.Entry<KafkaTopicPartition,Long> offset : restoreToOffset.entrySet()) {
+      this.consumer.seek(new TopicPartition(offset.getKey().getTopic(),offset.getKey().getPartition()),offset.getValue() + 1);
+    }
+    this.offsetsState=restoreToOffset;
+  }
+ else {
+    this.offsetsState=new HashMap<>();
+  }
+}

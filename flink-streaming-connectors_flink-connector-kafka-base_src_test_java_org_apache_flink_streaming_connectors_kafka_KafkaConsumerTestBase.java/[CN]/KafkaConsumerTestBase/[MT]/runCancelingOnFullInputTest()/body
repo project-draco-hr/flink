@@ -1,0 +1,53 @@
+{
+  final String topic="cancelingOnFullTopic";
+  final int parallelism=3;
+  createTestTopic(topic,parallelism,1);
+  DataGenerators.InfiniteStringsGenerator generator=new DataGenerators.InfiniteStringsGenerator(kafkaServer,topic);
+  generator.start();
+  final AtomicReference<Throwable> jobError=new AtomicReference<>();
+  final Runnable jobRunner=new Runnable(){
+    @Override public void run(){
+      try {
+        final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+        env.setParallelism(parallelism);
+        env.enableCheckpointing(100);
+        env.getConfig().disableSysoutLogging();
+        FlinkKafkaConsumerBase<String> source=kafkaServer.getConsumer(topic,new SimpleStringSchema(),standardProps);
+        env.addSource(source).addSink(new DiscardingSink<String>());
+        env.execute();
+      }
+ catch (      Throwable t) {
+        jobError.set(t);
+      }
+    }
+  }
+;
+  Thread runnerThread=new Thread(jobRunner,"program runner thread");
+  runnerThread.start();
+  Thread.sleep(8000);
+  Throwable failueCause=jobError.get();
+  if (failueCause != null) {
+    failueCause.printStackTrace();
+    Assert.fail("Test failed prematurely with: " + failueCause.getMessage());
+  }
+  JobManagerCommunicationUtils.cancelCurrentJob(flink.getLeaderGateway(timeout));
+  runnerThread.join();
+  failueCause=jobError.get();
+  assertNotNull("program did not fail properly due to canceling",failueCause);
+  assertTrue(failueCause.getMessage().contains("Job was cancelled"));
+  if (generator.isAlive()) {
+    generator.shutdown();
+    generator.join();
+  }
+ else {
+    Throwable t=generator.getError();
+    if (t != null) {
+      t.printStackTrace();
+      fail("Generator failed: " + t.getMessage());
+    }
+ else {
+      fail("Generator failed with no exception");
+    }
+  }
+  deleteTestTopic(topic);
+}

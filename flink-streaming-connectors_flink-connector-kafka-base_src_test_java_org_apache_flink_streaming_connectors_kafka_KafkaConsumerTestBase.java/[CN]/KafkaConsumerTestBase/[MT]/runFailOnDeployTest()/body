@@ -1,0 +1,28 @@
+{
+  final String topic="failOnDeployTopic";
+  createTestTopic(topic,2,1);
+  DeserializationSchema<Integer> schema=new TypeInformationSerializationSchema<>(BasicTypeInfo.INT_TYPE_INFO,new ExecutionConfig());
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setParallelism(12);
+  env.getConfig().disableSysoutLogging();
+  FlinkKafkaConsumerBase<Integer> kafkaSource=kafkaServer.getConsumer(topic,schema,standardProps);
+  env.addSource(kafkaSource).addSink(new DiscardingSink<Integer>());
+  try {
+    env.execute();
+    fail("this test should fail with an exception");
+  }
+ catch (  ProgramInvocationException e) {
+    Throwable cause=e.getCause();
+    int depth=0;
+    boolean foundResourceException=false;
+    while (cause != null && depth++ < 20) {
+      if (cause instanceof NoResourceAvailableException) {
+        foundResourceException=true;
+        break;
+      }
+      cause=cause.getCause();
+    }
+    assertTrue("Wrong exception",foundResourceException);
+  }
+  deleteTestTopic(topic);
+}

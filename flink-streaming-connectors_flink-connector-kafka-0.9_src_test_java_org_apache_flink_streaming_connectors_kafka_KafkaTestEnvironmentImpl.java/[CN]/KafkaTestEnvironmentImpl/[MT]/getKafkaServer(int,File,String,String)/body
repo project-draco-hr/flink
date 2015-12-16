@@ -1,0 +1,31 @@
+{
+  Properties kafkaProperties=new Properties();
+  kafkaProperties.put("advertised.host.name",kafkaHost);
+  kafkaProperties.put("broker.id",Integer.toString(brokerId));
+  kafkaProperties.put("log.dir",tmpFolder.toString());
+  kafkaProperties.put("zookeeper.connect",zookeeperConnectionString);
+  kafkaProperties.put("message.max.bytes",String.valueOf(50 * 1024 * 1024));
+  kafkaProperties.put("replica.fetch.max.bytes",String.valueOf(50 * 1024 * 1024));
+  kafkaProperties.put("zookeeper.session.timeout.ms","20000");
+  final int numTries=5;
+  for (int i=1; i <= numTries; i++) {
+    int kafkaPort=NetUtils.getAvailablePort();
+    kafkaProperties.put("port",Integer.toString(kafkaPort));
+    KafkaConfig kafkaConfig=new KafkaConfig(kafkaProperties);
+    try {
+      scala.Option<String> stringNone=scala.Option.apply(null);
+      KafkaServer server=new KafkaServer(kafkaConfig,SystemTime$.MODULE$,stringNone);
+      server.startup();
+      return server;
+    }
+ catch (    KafkaException e) {
+      if (e.getCause() instanceof BindException) {
+        LOG.info("Port conflict when starting Kafka Broker. Retrying...");
+      }
+ else {
+        throw e;
+      }
+    }
+  }
+  throw new Exception("Could not start Kafka after " + numTries + " retries due to port conflicts.");
+}
