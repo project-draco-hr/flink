@@ -1,8 +1,18 @@
 {
-  final Iterable<Channel> inputChannels=visitable.getInputs();
+  if (node instanceof IterationPlanNode) {
+    IterationPlanNode iNode=(IterationPlanNode)node;
+    if (!visitedIterationNodes.contains(iNode)) {
+      visitedIterationNodes.add(iNode);
+      iNode.acceptForStepFunction(this);
+    }
+  }
+  final Iterable<Channel> inputChannels=node.getInputs();
   for (  Channel channel : inputChannels) {
     ShipStrategyType shipStrategy=channel.getShipStrategy();
-    if (shipStrategy == ShipStrategyType.PARTITION_RANGE && isOptimized(visitable)) {
+    if (shipStrategy == ShipStrategyType.PARTITION_RANGE) {
+      if (node.isOnDynamicPath()) {
+        throw new InvalidProgramException("Range Partitioning not supported within iterations.");
+      }
       PlanNode channelSource=channel.getSource();
       List<Channel> newSourceOutputChannels=rewriteRangePartitionChannel(channel);
       channelSource.getOutgoingChannels().remove(channel);
