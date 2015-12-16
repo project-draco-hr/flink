@@ -21,7 +21,8 @@ synchronized (progressLock) {
           }
         }
  else         if (current == JobStatus.FAILING) {
-          if (numberOfRetriesLeft > 0 && transitionState(current,JobStatus.RESTARTING)) {
+          boolean isRecoverable=!(failureCause instanceof UnrecoverableException);
+          if (isRecoverable && numberOfRetriesLeft > 0 && transitionState(current,JobStatus.RESTARTING)) {
             numberOfRetriesLeft--;
             if (delayBeforeRetrying > 0) {
               future(new Callable<Object>(){
@@ -49,7 +50,7 @@ synchronized (progressLock) {
             }
             break;
           }
- else           if (numberOfRetriesLeft <= 0 && transitionState(current,JobStatus.FAILED,failureCause)) {
+ else           if ((!isRecoverable || numberOfRetriesLeft <= 0) && transitionState(current,JobStatus.FAILED,failureCause)) {
             postRunCleanup();
             break;
           }
