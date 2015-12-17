@@ -6,8 +6,7 @@
   sender.setInvokableClass(Tasks.NoOpInvokable.class);
   sender.setParallelism(NUM_TASKS);
   JobGraph jobGraph=new JobGraph("Pointwise job",sender);
-  ExecutionGraph eg=spy(new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"Test job",new Configuration(),AkkaUtils.getDefaultTimeout()));
-  eg.setNumberOfRetriesLeft(1);
+  ExecutionGraph eg=spy(new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"Test job",new Configuration(),AkkaUtils.getDefaultTimeout(),new FixedDelayRestartStrategy(1,1000)));
   eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
   assertEquals(JobStatus.CREATED,eg.getState());
   eg.scheduleForExecution(scheduler);
@@ -24,5 +23,7 @@
   }
   assertEquals(JobStatus.FAILED,eg.getState());
   verify(eg,never()).restart();
-  assertEquals(1,eg.getNumberOfRetriesLeft());
+  RestartStrategy restartStrategy=eg.getRestartStrategy();
+  assertTrue(restartStrategy instanceof FixedDelayRestartStrategy);
+  assertEquals(0,((FixedDelayRestartStrategy)restartStrategy).getCurrentRestartAttempt());
 }
