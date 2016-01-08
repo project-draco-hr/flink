@@ -8,11 +8,13 @@
     if (file.getLen() < blockInfo.getInfoSize()) {
       continue;
     }
-    FSDataInputStream fdis=file.getPath().getFileSystem().open(file.getPath(),blockInfo.getInfoSize());
-    fdis.seek(file.getLen() - blockInfo.getInfoSize());
-    blockInfo.read(new DataInputViewStreamWrapper(fdis));
-    totalCount+=blockInfo.getAccumulatedRecordCount();
-  }
+    FileSystem fs=file.getPath().getFileSystem();
+    try (FSDataInputStream fdis=fs.open(file.getPath(),blockInfo.getInfoSize())){
+      fdis.seek(file.getLen() - blockInfo.getInfoSize());
+      blockInfo.read(new DataInputViewStreamWrapper(fdis));
+      totalCount+=blockInfo.getAccumulatedRecordCount();
+    }
+   }
   final float avgWidth=totalCount == 0 ? 0 : ((float)stats.getTotalInputSize() / totalCount);
   return new SequentialStatistics(stats.getLastModificationTime(),stats.getTotalInputSize(),avgWidth,totalCount);
 }
