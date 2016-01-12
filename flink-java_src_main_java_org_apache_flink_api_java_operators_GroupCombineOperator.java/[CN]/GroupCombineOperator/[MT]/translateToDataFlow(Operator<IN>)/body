@@ -1,38 +1,32 @@
 {
   String name=getName() != null ? getName() : "GroupCombine at " + defaultName;
   if (grouper == null) {
-    UnaryOperatorInformation<IN,OUT> operatorInfo=new UnaryOperatorInformation<IN,OUT>(getInputType(),getResultType());
-    GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>> po=new GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>>(function,operatorInfo,new int[0],name);
+    UnaryOperatorInformation<IN,OUT> operatorInfo=new UnaryOperatorInformation<>(getInputType(),getResultType());
+    GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>> po=new GroupCombineOperatorBase<>(function,operatorInfo,new int[0],name);
     po.setInput(input);
     po.setParallelism(1);
     return po;
   }
-  if (grouper.getKeys() instanceof Keys.SelectorFunctionKeys) {
-    @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<IN,?> selectorKeys=(Keys.SelectorFunctionKeys<IN,?>)grouper.getKeys();
+  if (grouper.getKeys() instanceof SelectorFunctionKeys) {
+    @SuppressWarnings("unchecked") SelectorFunctionKeys<IN,?> selectorKeys=(SelectorFunctionKeys<IN,?>)grouper.getKeys();
     if (grouper instanceof SortedGrouping) {
-      SortedGrouping<IN> sortedGrouper=(SortedGrouping<IN>)grouper;
-      Keys.SelectorFunctionKeys<IN,?> sortKeys=sortedGrouper.getSortSelectionFunctionKey();
-      PlanUnwrappingSortedGroupCombineOperator<IN,OUT,?,?> po=translateSelectorFunctionSortedReducer(selectorKeys,sortKeys,function,getInputType(),getResultType(),name,input);
-      int[] sortKeyPositions=sortedGrouper.getGroupSortKeyPositions();
-      Order[] sortOrders=sortedGrouper.getGroupSortOrders();
-      Ordering o=new Ordering();
-      for (int i=0; i < sortKeyPositions.length; i++) {
-        o.appendOrdering(sortKeyPositions[i],null,sortOrders[i]);
-      }
-      po.setGroupOrder(o);
+      SortedGrouping<IN> sortedGrouping=(SortedGrouping<IN>)grouper;
+      SelectorFunctionKeys<IN,?> sortKeys=sortedGrouping.getSortSelectionFunctionKey();
+      Ordering groupOrder=sortedGrouping.getGroupOrdering();
+      PlanUnwrappingSortedGroupCombineOperator<IN,OUT,?,?> po=translateSelectorFunctionSortedReducer(selectorKeys,sortKeys,groupOrder,function,getResultType(),name,input);
       po.setParallelism(this.getParallelism());
       return po;
     }
  else {
-      PlanUnwrappingGroupCombineOperator<IN,OUT,?> po=translateSelectorFunctionReducer(selectorKeys,function,getInputType(),getResultType(),name,input);
+      PlanUnwrappingGroupCombineOperator<IN,OUT,?> po=translateSelectorFunctionReducer(selectorKeys,function,getResultType(),name,input);
       po.setParallelism(this.getParallelism());
       return po;
     }
   }
  else   if (grouper.getKeys() instanceof Keys.ExpressionKeys) {
     int[] logicalKeyPositions=grouper.getKeys().computeLogicalKeyPositions();
-    UnaryOperatorInformation<IN,OUT> operatorInfo=new UnaryOperatorInformation<IN,OUT>(getInputType(),getResultType());
-    GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>> po=new GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>>(function,operatorInfo,logicalKeyPositions,name);
+    UnaryOperatorInformation<IN,OUT> operatorInfo=new UnaryOperatorInformation<>(getInputType(),getResultType());
+    GroupCombineOperatorBase<IN,OUT,GroupCombineFunction<IN,OUT>> po=new GroupCombineOperatorBase<>(function,operatorInfo,logicalKeyPositions,name);
     po.setInput(input);
     po.setParallelism(getParallelism());
     if (grouper instanceof SortedGrouping) {

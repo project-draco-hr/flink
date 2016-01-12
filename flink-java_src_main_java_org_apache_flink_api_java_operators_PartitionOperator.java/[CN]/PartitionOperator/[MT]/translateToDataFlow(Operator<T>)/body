@@ -1,26 +1,25 @@
 {
   String name="Partition at " + partitionLocationName;
   if (pMethod == PartitionMethod.REBALANCE) {
-    UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<T,T>(getType(),getType());
-    PartitionOperatorBase<T> noop=new PartitionOperatorBase<T>(operatorInfo,pMethod,name);
-    noop.setInput(input);
-    noop.setParallelism(getParallelism());
-    return noop;
+    UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<>(getType(),getType());
+    PartitionOperatorBase<T> rebalancedInput=new PartitionOperatorBase<>(operatorInfo,pMethod,name);
+    rebalancedInput.setInput(input);
+    rebalancedInput.setParallelism(getParallelism());
+    return rebalancedInput;
   }
  else   if (pMethod == PartitionMethod.HASH || pMethod == PartitionMethod.CUSTOM || pMethod == PartitionMethod.RANGE) {
     if (pKeys instanceof Keys.ExpressionKeys) {
       int[] logicalKeyPositions=pKeys.computeLogicalKeyPositions();
-      UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<T,T>(getType(),getType());
-      PartitionOperatorBase<T> noop=new PartitionOperatorBase<T>(operatorInfo,pMethod,logicalKeyPositions,name);
-      noop.setInput(input);
-      noop.setParallelism(getParallelism());
-      noop.setCustomPartitioner(customPartitioner);
-      return noop;
+      UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<>(getType(),getType());
+      PartitionOperatorBase<T> partitionedInput=new PartitionOperatorBase<>(operatorInfo,pMethod,logicalKeyPositions,name);
+      partitionedInput.setInput(input);
+      partitionedInput.setParallelism(getParallelism());
+      partitionedInput.setCustomPartitioner(customPartitioner);
+      return partitionedInput;
     }
  else     if (pKeys instanceof Keys.SelectorFunctionKeys) {
       @SuppressWarnings("unchecked") Keys.SelectorFunctionKeys<T,?> selectorKeys=(Keys.SelectorFunctionKeys<T,?>)pKeys;
-      MapOperatorBase<?,T,?> po=translateSelectorFunctionPartitioner(selectorKeys,pMethod,getType(),name,input,getParallelism(),customPartitioner);
-      return po;
+      return translateSelectorFunctionPartitioner(selectorKeys,pMethod,name,input,getParallelism(),customPartitioner);
     }
  else {
       throw new UnsupportedOperationException("Unrecognized key type.");
