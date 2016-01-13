@@ -1,7 +1,12 @@
 {
   LOG.info("Running Storm topology on FlinkLocalCluster");
+  boolean submitBlocking=false;
   if (conf != null) {
     topology.getExecutionEnvironment().getConfig().setGlobalJobParameters(new StormConfig(conf));
+    Object blockingFlag=conf.get(SUBMIT_BLOCKING);
+    if (blockingFlag != null && blockingFlag instanceof Boolean) {
+      submitBlocking=((Boolean)blockingFlag).booleanValue();
+    }
   }
   StreamGraph streamGraph=topology.getExecutionEnvironment().getStreamGraph();
   streamGraph.setJobName(topologyName);
@@ -14,5 +19,10 @@
     flink=new LocalFlinkMiniCluster(configuration,true);
     this.flink.start();
   }
-  this.flink.submitJobDetached(jobGraph);
+  if (submitBlocking) {
+    this.flink.submitJobAndWait(jobGraph,false);
+  }
+ else {
+    this.flink.submitJobDetached(jobGraph);
+  }
 }
