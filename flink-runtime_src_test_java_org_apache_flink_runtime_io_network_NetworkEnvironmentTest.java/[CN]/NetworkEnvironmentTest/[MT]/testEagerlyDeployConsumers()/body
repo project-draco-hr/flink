@@ -1,0 +1,21 @@
+{
+  ActorGateway jobManager=mock(ActorGateway.class);
+  when(jobManager.ask(anyObject(),any(FiniteDuration.class))).thenReturn(new Promise.DefaultPromise<>().future());
+  NetworkEnvironmentConfiguration config=new NetworkEnvironmentConfiguration(20,1024,MemoryType.HEAP,IOManager.IOMode.SYNC,Some.<NettyConfig>empty(),new Tuple2<>(0,0));
+  NetworkEnvironment env=new NetworkEnvironment(TestingUtils.defaultExecutionContext(),new FiniteDuration(30,TimeUnit.SECONDS),config);
+  env.associateWithTaskManagerAndJobManager(jobManager,DummyActorGateway.INSTANCE);
+  JobID jobId=new JobID();
+  ResultPartition[] partitions=new ResultPartition[2];
+  partitions[0]=createPartition("p1",jobId,true,env);
+  partitions[1]=createPartition("p2",jobId,false,env);
+  ResultPartitionWriter[] writers=new ResultPartitionWriter[2];
+  writers[0]=new ResultPartitionWriter(partitions[0]);
+  writers[1]=new ResultPartitionWriter(partitions[1]);
+  Task mockTask=mock(Task.class);
+  when(mockTask.getAllInputGates()).thenReturn(new SingleInputGate[0]);
+  when(mockTask.getAllWriters()).thenReturn(writers);
+  when(mockTask.getProducedPartitions()).thenReturn(partitions);
+  env.registerTask(mockTask);
+  ResultPartitionID eagerPartitionId=partitions[0].getPartitionId();
+  verify(jobManager,times(1)).ask(eq(new ScheduleOrUpdateConsumers(jobId,eagerPartitionId)),any(FiniteDuration.class));
+}
