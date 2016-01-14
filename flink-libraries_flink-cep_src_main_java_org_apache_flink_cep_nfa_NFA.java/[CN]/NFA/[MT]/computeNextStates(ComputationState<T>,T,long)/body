@@ -1,0 +1,62 @@
+{
+  Stack<State<T>> states=new Stack<>();
+  ArrayList<ComputationState<T>> resultingComputationStates=new ArrayList<>();
+  State<T> state=computationState.getState();
+  states.push(state);
+  while (!states.isEmpty()) {
+    State<T> currentState=states.pop();
+    Collection<StateTransition<T>> stateTransitions=currentState.getStateTransitions();
+    for (    StateTransition<T> stateTransition : stateTransitions) {
+      try {
+        if (stateTransition.getCondition() == null || stateTransition.getCondition().filter(event)) {
+switch (stateTransition.getAction()) {
+case PROCEED:
+            states.push(stateTransition.getTargetState());
+          break;
+case IGNORE:
+        resultingComputationStates.add(computationState);
+      sharedBuffer.lock(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
+    break;
+case TAKE:
+  final State<T> newState=stateTransition.getTargetState();
+final DeweyNumber newVersion;
+final State<T> previousState=computationState.getState();
+final T previousEvent=computationState.getEvent();
+final long previousTimestamp;
+final long startTimestamp;
+if (computationState.isStartState()) {
+newVersion=new DeweyNumber(startEventCounter++);
+startTimestamp=timestamp;
+previousTimestamp=-1L;
+}
+ else {
+startTimestamp=computationState.getStartTimestamp();
+previousTimestamp=computationState.getTimestamp();
+if (newState.equals(computationState.getState())) {
+newVersion=computationState.getVersion().increase();
+}
+ else {
+newVersion=computationState.getVersion().addStage();
+}
+}
+sharedBuffer.put(newState,event,timestamp,previousState,previousEvent,previousTimestamp,newVersion);
+sharedBuffer.lock(newState,event,timestamp);
+resultingComputationStates.add(new ComputationState<T>(newState,event,timestamp,newVersion,startTimestamp));
+break;
+}
+}
+}
+ catch (Exception e) {
+throw new RuntimeException("Failure happened in filter function.",e);
+}
+}
+}
+if (computationState.isStartState()) {
+resultingComputationStates.add(computationState);
+}
+ else {
+sharedBuffer.release(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
+sharedBuffer.remove(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
+}
+return resultingComputationStates;
+}

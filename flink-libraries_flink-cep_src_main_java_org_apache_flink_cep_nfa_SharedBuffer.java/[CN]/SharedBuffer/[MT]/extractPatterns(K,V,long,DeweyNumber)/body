@@ -1,0 +1,40 @@
+{
+  Collection<LinkedHashMultimap<K,V>> result=new ArrayList<>();
+  Stack<ExtractionState<K,V>> extractionStates=new Stack<>();
+  SharedBufferEntry<K,V> entry=get(key,value,timestamp);
+  if (entry != null) {
+    extractionStates.add(new ExtractionState<K,V>(entry,version,new Stack<SharedBufferEntry<K,V>>()));
+    while (!extractionStates.isEmpty()) {
+      ExtractionState<K,V> extractionState=extractionStates.pop();
+      DeweyNumber currentVersion=extractionState.getVersion();
+      Stack<SharedBufferEntry<K,V>> currentPath=extractionState.getPath();
+      if (currentVersion.length() == 1) {
+        LinkedHashMultimap<K,V> completePath=LinkedHashMultimap.create();
+        while (!currentPath.isEmpty()) {
+          SharedBufferEntry<K,V> currentEntry=currentPath.pop();
+          completePath.put(currentEntry.getKey(),currentEntry.getValueTime().getValue());
+        }
+        result.add(completePath);
+      }
+ else {
+        SharedBufferEntry<K,V> currentEntry=extractionState.getEntry();
+        currentPath.push(currentEntry);
+        boolean firstMatch=true;
+        for (        SharedBufferEdge<K,V> edge : currentEntry.getEdges()) {
+          if (currentVersion.isCompatibleWith(edge.getVersion())) {
+            if (firstMatch) {
+              extractionStates.push(new ExtractionState<K,V>(edge.getTarget(),edge.getVersion(),currentPath));
+              firstMatch=false;
+            }
+ else {
+              Stack<SharedBufferEntry<K,V>> copy=new Stack<>();
+              copy.addAll(currentPath);
+              extractionStates.push(new ExtractionState<K,V>(edge.getTarget(),edge.getVersion(),copy));
+            }
+          }
+        }
+      }
+    }
+  }
+  return result;
+}

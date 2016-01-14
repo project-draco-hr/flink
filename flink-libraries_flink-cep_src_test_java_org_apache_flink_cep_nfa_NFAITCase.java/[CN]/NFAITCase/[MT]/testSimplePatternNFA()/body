@@ -1,0 +1,42 @@
+{
+  List<StreamEvent<Event>> inputEvents=new ArrayList<StreamEvent<Event>>();
+  Event startEvent=new Event(42,"start",1.0);
+  SubEvent middleEvent=new SubEvent(42,"foo",1.0,10.0);
+  Event endEvent=new Event(43,"end",1.0);
+  inputEvents.add(new StreamEvent<Event>(startEvent,1));
+  inputEvents.add(new StreamEvent<Event>(new Event(43,"foobar",1.0),2));
+  inputEvents.add(new StreamEvent<Event>(new SubEvent(41,"barfoo",1.0,5.0),3));
+  inputEvents.add(new StreamEvent<Event>(middleEvent,3));
+  inputEvents.add(new StreamEvent<Event>(new Event(43,"start",1.0),4));
+  inputEvents.add(new StreamEvent<Event>(endEvent,5));
+  Pattern<Event,?> pattern=Pattern.<Event>begin("start").where(new FilterFunction<Event>(){
+    private static final long serialVersionUID=5726188262756267490L;
+    @Override public boolean filter(    Event value) throws Exception {
+      return value.getName().equals("start");
+    }
+  }
+).followedBy("middle").subtype(SubEvent.class).where(new FilterFunction<SubEvent>(){
+    private static final long serialVersionUID=6215754202506583964L;
+    @Override public boolean filter(    SubEvent value) throws Exception {
+      return value.getVolume() > 5.0;
+    }
+  }
+).followedBy("end").where(new FilterFunction<Event>(){
+    private static final long serialVersionUID=7056763917392056548L;
+    @Override public boolean filter(    Event value) throws Exception {
+      return value.getName().equals("end");
+    }
+  }
+);
+  NFA<Event> nfa=NFACompiler.compile(pattern,Event.createTypeSerializer());
+  List<Map<String,Event>> resultingPatterns=new ArrayList<>();
+  for (  StreamEvent<Event> inputEvent : inputEvents) {
+    Collection<Map<String,Event>> patterns=nfa.process(inputEvent.getEvent(),inputEvent.getTimestamp());
+    resultingPatterns.addAll(patterns);
+  }
+  assertEquals(1,resultingPatterns.size());
+  Map<String,Event> patternMap=resultingPatterns.get(0);
+  assertEquals(startEvent,patternMap.get("start"));
+  assertEquals(middleEvent,patternMap.get("middle"));
+  assertEquals(endEvent,patternMap.get("end"));
+}

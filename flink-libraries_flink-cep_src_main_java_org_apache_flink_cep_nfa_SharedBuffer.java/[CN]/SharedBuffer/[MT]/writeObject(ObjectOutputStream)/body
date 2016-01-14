@@ -1,0 +1,54 @@
+{
+  DataOutputViewStreamWrapper target=new DataOutputViewStreamWrapper(oos);
+  Map<SharedBufferEntry<K,V>,Integer> entryIDs=new HashMap<>();
+  int totalEdges=0;
+  int entryCounter=0;
+  oos.defaultWriteObject();
+  oos.writeInt(pages.size());
+  for (  Map.Entry<K,SharedBufferPage<K,V>> pageEntry : pages.entrySet()) {
+    SharedBufferPage<K,V> page=pageEntry.getValue();
+    oos.writeObject(page.getKey());
+    oos.writeInt(page.entries.size());
+    for (    Map.Entry<ValueTimeWrapper<V>,SharedBufferEntry<K,V>> sharedBufferEntry : page.entries.entrySet()) {
+      SharedBufferEntry<K,V> sharedBuffer=sharedBufferEntry.getValue();
+      entryIDs.put(sharedBuffer,entryCounter++);
+      ValueTimeWrapper<V> valueTimeWrapper=sharedBuffer.getValueTime();
+      valueSerializer.serialize(valueTimeWrapper.value,target);
+      oos.writeLong(valueTimeWrapper.getTimestamp());
+      int edges=sharedBuffer.edges.size();
+      totalEdges+=edges;
+      oos.writeInt(sharedBuffer.referenceCounter);
+    }
+  }
+  oos.writeInt(totalEdges);
+  for (  Map.Entry<K,SharedBufferPage<K,V>> pageEntry : pages.entrySet()) {
+    SharedBufferPage<K,V> page=pageEntry.getValue();
+    for (    Map.Entry<ValueTimeWrapper<V>,SharedBufferEntry<K,V>> sharedBufferEntry : page.entries.entrySet()) {
+      SharedBufferEntry<K,V> sharedBuffer=sharedBufferEntry.getValue();
+      if (!entryIDs.containsKey(sharedBuffer)) {
+        throw new RuntimeException("Could not find id for entry: " + sharedBuffer);
+      }
+ else {
+        int id=entryIDs.get(sharedBuffer);
+        for (        SharedBufferEdge<K,V> edge : sharedBuffer.edges) {
+          if (edge.target != null) {
+            if (!entryIDs.containsKey(edge.getTarget())) {
+              throw new RuntimeException("Could not find id for entry: " + edge.getTarget());
+            }
+ else {
+              int targetId=entryIDs.get(edge.getTarget());
+              oos.writeInt(id);
+              oos.writeInt(targetId);
+              oos.writeObject(edge.version);
+            }
+          }
+ else {
+            oos.writeInt(id);
+            oos.writeInt(-1);
+            oos.writeObject(edge.version);
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  List<StreamEvent<Event>> events=new ArrayList<>();
+  List<Map<String,Event>> resultingPatterns=new ArrayList<>();
+  final Event startEvent;
+  final Event middleEvent;
+  final Event endEvent;
+  events.add(new StreamEvent<Event>(new Event(1,"start",1.0),1));
+  events.add(new StreamEvent<Event>(startEvent=new Event(2,"start",1.0),2));
+  events.add(new StreamEvent<Event>(middleEvent=new Event(3,"middle",1.0),3));
+  events.add(new StreamEvent<Event>(new Event(4,"foobar",1.0),4));
+  events.add(new StreamEvent<Event>(endEvent=new Event(5,"end",1.0),12));
+  events.add(new StreamEvent<Event>(new Event(6,"end",1.0),13));
+  Pattern<Event,?> pattern=Pattern.<Event>begin("start").where(new FilterFunction<Event>(){
+    private static final long serialVersionUID=7907391379273505897L;
+    @Override public boolean filter(    Event value) throws Exception {
+      return value.getName().equals("start");
+    }
+  }
+).followedBy("middle").where(new FilterFunction<Event>(){
+    private static final long serialVersionUID=-3268741540234334074L;
+    @Override public boolean filter(    Event value) throws Exception {
+      return value.getName().equals("middle");
+    }
+  }
+).followedBy("end").where(new FilterFunction<Event>(){
+    private static final long serialVersionUID=-8995174172182138608L;
+    @Override public boolean filter(    Event value) throws Exception {
+      return value.getName().equals("end");
+    }
+  }
+).within(Time.milliseconds(10));
+  NFA<Event> nfa=NFACompiler.compile(pattern,Event.createTypeSerializer());
+  for (  StreamEvent<Event> event : events) {
+    Collection<Map<String,Event>> patterns=nfa.process(event.getEvent(),event.getTimestamp());
+    resultingPatterns.addAll(patterns);
+  }
+  assertEquals(1,resultingPatterns.size());
+  Map<String,Event> patternMap=resultingPatterns.get(0);
+  assertEquals(startEvent,patternMap.get("start"));
+  assertEquals(middleEvent,patternMap.get("middle"));
+  assertEquals(endEvent,patternMap.get("end"));
+}

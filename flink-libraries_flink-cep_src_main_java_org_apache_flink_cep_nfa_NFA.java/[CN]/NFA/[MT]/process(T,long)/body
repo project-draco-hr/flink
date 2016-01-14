@@ -1,0 +1,32 @@
+{
+  final int numberComputationStates=computationStates.size();
+  final List<Map<String,T>> result=new ArrayList<>();
+  for (int i=0; i < numberComputationStates; i++) {
+    ComputationState<T> computationState=computationStates.poll();
+    final Collection<ComputationState<T>> newComputationStates;
+    if (!computationState.isStartState() && windowTime > 0 && timestamp - computationState.getStartTimestamp() > windowTime) {
+      sharedBuffer.release(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
+      sharedBuffer.remove(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
+      newComputationStates=Collections.emptyList();
+    }
+ else {
+      newComputationStates=computeNextStates(computationState,event,timestamp);
+    }
+    for (    ComputationState<T> newComputationState : newComputationStates) {
+      if (newComputationState.isFinalState()) {
+        Collection<Map<String,T>> matches=extractPatternMatches(newComputationState);
+        result.addAll(matches);
+        sharedBuffer.release(newComputationState.getState(),newComputationState.getEvent(),newComputationState.getTimestamp());
+        sharedBuffer.remove(newComputationState.getState(),newComputationState.getEvent(),newComputationState.getTimestamp());
+      }
+ else {
+        computationStates.add(newComputationState);
+      }
+    }
+    if (windowTime > 0) {
+      long pruningTimestamp=timestamp - windowTime;
+      sharedBuffer.prune(pruningTimestamp);
+    }
+  }
+  return result;
+}
