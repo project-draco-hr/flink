@@ -1,47 +1,33 @@
 {
-  if (!type.isTupleType()) {
+  if (!type.isTupleType() || !(type instanceof CompositeType)) {
     throw new InvalidProgramException("Specifying keys via field positions is only valid " + "for tuple data types. Type: " + type);
   }
   if (type.getArity() == 0) {
     throw new InvalidProgramException("Tuple size must be greater than 0. Size: " + type.getArity());
   }
-  if (!allowEmpty && (groupingFields == null || groupingFields.length == 0)) {
+  if (!allowEmpty && (keyPositions == null || keyPositions.length == 0)) {
     throw new IllegalArgumentException("The grouping fields must not be empty.");
   }
-  if (groupingFields == null || groupingFields.length == 0) {
-    groupingFields=new int[type.getArity()];
-    for (int i=0; i < groupingFields.length; i++) {
-      groupingFields[i]=i;
-    }
+  this.keyFields=new ArrayList<>();
+  if (keyPositions == null || keyPositions.length == 0) {
+    keyPositions=createIncrIntArray(type.getArity());
   }
  else {
-    groupingFields=rangeCheckFields(groupingFields,type.getArity() - 1);
+    rangeCheckFields(keyPositions,type.getArity() - 1);
   }
-  Preconditions.checkArgument(groupingFields.length > 0,"Grouping fields can not be empty at this point");
-  keyFields=new ArrayList<>(type.getTotalFields());
-  for (  int keyPos : groupingFields) {
-    int offset=0;
-    for (int i=0; i < type.getArity(); i++) {
-      TypeInformation<?> fieldType=((CompositeType<?>)type).getTypeAt(i);
-      if (i < keyPos) {
-        offset+=fieldType.getTotalFields();
-      }
- else {
-        if (!fieldType.isKeyType()) {
-          throw new InvalidProgramException("This type (" + fieldType + ") cannot be used as key.");
-        }
-        if (fieldType instanceof CompositeType) {
-          ((CompositeType<?>)fieldType).getFlatFields("*",offset,keyFields);
-        }
- else         if (fieldType instanceof AtomicType) {
-          keyFields.add(new FlatFieldDescriptor(offset,fieldType));
-        }
- else {
-          throw new InvalidProgramException("Field type is neither CompositeType nor AtomicType: " + fieldType);
-        }
-        break;
+  Preconditions.checkArgument(keyPositions.length > 0,"Grouping fields can not be empty at this point");
+  CompositeType<T> cType=(CompositeType<T>)type;
+  this.keyFields=new ArrayList<>(type.getTotalFields());
+  String[] fieldNames=cType.getFieldNames();
+  ArrayList<FlatFieldDescriptor> tmpList=new ArrayList<>();
+  for (  int keyPos : keyPositions) {
+    tmpList.clear();
+    cType.getFlatFields(fieldNames[keyPos],0,tmpList);
+    for (    FlatFieldDescriptor ffd : tmpList) {
+      if (!ffd.getType().isKeyType()) {
+        throw new InvalidProgramException("This type (" + ffd.getType() + ") cannot be used as key.");
       }
     }
+    this.keyFields.addAll(tmpList);
   }
-  keyFields=removeNullElementsFromList(keyFields);
 }

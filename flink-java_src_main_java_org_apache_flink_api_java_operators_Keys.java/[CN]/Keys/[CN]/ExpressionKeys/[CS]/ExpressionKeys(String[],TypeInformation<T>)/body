@@ -1,37 +1,38 @@
 {
-  Preconditions.checkNotNull(expressionsIn,"Field expression cannot be null.");
-  if (type instanceof AtomicType) {
+  Preconditions.checkNotNull(keyExpressions,"Field expression cannot be null.");
+  this.keyFields=new ArrayList<>(keyExpressions.length);
+  if (type instanceof CompositeType) {
+    CompositeType<T> cType=(CompositeType<T>)type;
+    for (    String keyExpr : keyExpressions) {
+      if (keyExpr == null) {
+        throw new InvalidProgramException("Expression key may not be null.");
+      }
+      keyExpr=keyExpr.trim();
+      List<FlatFieldDescriptor> flatFields=cType.getFlatFields(keyExpr);
+      if (flatFields.size() == 0) {
+        throw new InvalidProgramException("Unable to extract key from expression '" + keyExpr + "' on key "+ cType);
+      }
+      for (      FlatFieldDescriptor field : flatFields) {
+        if (!field.getType().isKeyType()) {
+          throw new InvalidProgramException("This type (" + field.getType() + ") cannot be used as key.");
+        }
+      }
+      keyFields.addAll(flatFields);
+    }
+  }
+ else {
     if (!type.isKeyType()) {
       throw new InvalidProgramException("This type (" + type + ") cannot be used as key.");
     }
- else     if (expressionsIn.length != 1 || !(Keys.ExpressionKeys.SELECT_ALL_CHAR.equals(expressionsIn[0]) || Keys.ExpressionKeys.SELECT_ALL_CHAR_SCALA.equals(expressionsIn[0]))) {
-      throw new InvalidProgramException("Field expression for atomic type must be equal to '*' or '_'.");
-    }
-    keyFields=new ArrayList<>(1);
-    keyFields.add(new FlatFieldDescriptor(0,type));
-  }
- else {
-    CompositeType<T> cType=(CompositeType<T>)type;
-    String[] expressions=removeDuplicates(expressionsIn);
-    if (expressionsIn.length != expressions.length) {
-      LOG.warn("The key expressions contained duplicates. They are now unique");
-    }
-    keyFields=new ArrayList<>(expressions.length);
-    for (    String expression : expressions) {
-      List<FlatFieldDescriptor> keys=cType.getFlatFields(expression);
-      for (      FlatFieldDescriptor key : keys) {
-        TypeInformation<?> keyType=key.getType();
-        if (!keyType.isKeyType()) {
-          throw new InvalidProgramException("This type (" + key.getType() + ") cannot be used as key.");
-        }
-        if (!(keyType instanceof AtomicType || keyType instanceof CompositeType)) {
-          throw new InvalidProgramException("Field type is neither CompositeType nor AtomicType: " + keyType);
-        }
+    for (    String keyExpr : keyExpressions) {
+      if (keyExpr == null) {
+        throw new InvalidProgramException("Expression key may not be null.");
       }
-      if (keys.size() == 0) {
-        throw new InvalidProgramException("Unable to extract key from expression '" + expression + "' on key "+ cType);
+      keyExpr=keyExpr.trim();
+      if (!(SELECT_ALL_CHAR.equals(keyExpr) || SELECT_ALL_CHAR_SCALA.equals(keyExpr))) {
+        throw new InvalidProgramException("Field expression must be equal to '" + SELECT_ALL_CHAR + "' or '"+ SELECT_ALL_CHAR_SCALA+ "' for non-composite types.");
       }
-      keyFields.addAll(keys);
+      keyFields.add(new FlatFieldDescriptor(0,type));
     }
   }
 }
