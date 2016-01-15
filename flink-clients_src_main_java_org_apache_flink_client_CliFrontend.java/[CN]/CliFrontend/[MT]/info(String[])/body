@@ -30,35 +30,29 @@ catch (  Throwable t) {
     LOG.info("Creating program plan dump");
     Optimizer compiler=new Optimizer(new DataStatistics(),new DefaultCostEstimator(),config);
     FlinkPlan flinkPlan=Client.getOptimizedPlan(compiler,program,parallelism);
-    if (webFrontend) {
-      this.optimizedPlan=flinkPlan;
-      this.packagedProgram=program;
+    String jsonPlan=null;
+    if (flinkPlan instanceof OptimizedPlan) {
+      jsonPlan=new PlanJSONDumpGenerator().getOptimizerPlanAsJSON((OptimizedPlan)flinkPlan);
+    }
+ else     if (flinkPlan instanceof StreamingPlan) {
+      jsonPlan=((StreamingPlan)flinkPlan).getStreamingPlanAsJSON();
+    }
+    if (jsonPlan != null) {
+      System.out.println("----------------------- Execution Plan -----------------------");
+      System.out.println(jsonPlan);
+      System.out.println("--------------------------------------------------------------");
     }
  else {
-      String jsonPlan=null;
-      if (flinkPlan instanceof OptimizedPlan) {
-        jsonPlan=new PlanJSONDumpGenerator().getOptimizerPlanAsJSON((OptimizedPlan)flinkPlan);
-      }
- else       if (flinkPlan instanceof StreamingPlan) {
-        jsonPlan=((StreamingPlan)flinkPlan).getStreamingPlanAsJSON();
-      }
-      if (jsonPlan != null) {
-        System.out.println("----------------------- Execution Plan -----------------------");
-        System.out.println(jsonPlan);
-        System.out.println("--------------------------------------------------------------");
-      }
+      System.out.println("JSON plan could not be generated.");
+    }
+    String description=program.getDescription();
+    if (description != null) {
+      System.out.println();
+      System.out.println(description);
+    }
  else {
-        System.out.println("JSON plan could not be generated.");
-      }
-      String description=program.getDescription();
-      if (description != null) {
-        System.out.println();
-        System.out.println(description);
-      }
- else {
-        System.out.println();
-        System.out.println("No description provided.");
-      }
+      System.out.println();
+      System.out.println("No description provided.");
     }
     return 0;
   }
