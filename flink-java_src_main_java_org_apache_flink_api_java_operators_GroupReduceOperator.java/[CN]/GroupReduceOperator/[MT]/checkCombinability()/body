@@ -1,5 +1,34 @@
 {
-  if (function instanceof GroupCombineFunction && function.getClass().getAnnotation(RichGroupReduceFunction.Combinable.class) != null) {
-    this.combinable=true;
+  if (function instanceof GroupCombineFunction) {
+    Type[] reduceTypes=null;
+    Type[] combineTypes=null;
+    Type[] genInterfaces=function.getClass().getGenericInterfaces();
+    for (    Type genInterface : genInterfaces) {
+      if (genInterface instanceof ParameterizedType) {
+        if (((ParameterizedType)genInterface).getRawType().equals(GroupReduceFunction.class)) {
+          reduceTypes=((ParameterizedType)genInterface).getActualTypeArguments();
+        }
+ else         if (((ParameterizedType)genInterface).getRawType().equals(GroupCombineFunction.class)) {
+          combineTypes=((ParameterizedType)genInterface).getActualTypeArguments();
+        }
+      }
+    }
+    if (reduceTypes != null && reduceTypes.length == 2 && combineTypes != null && combineTypes.length == 2) {
+      if (reduceTypes[0].equals(combineTypes[0]) && reduceTypes[0].equals(combineTypes[1])) {
+        this.combinable=true;
+      }
+ else {
+        LOG.warn("GroupCombineFunction cannot be used as combiner for GroupReduceFunction. " + "Generic types are incompatible.");
+        this.combinable=false;
+      }
+    }
+ else     if (reduceTypes == null || reduceTypes.length != 2) {
+      LOG.warn("Cannot check generic types of GroupReduceFunction. " + "Enabling combiner but combine function might fail at runtime.");
+      this.combinable=true;
+    }
+ else {
+      LOG.warn("Cannot check generic types of GroupCombineFunction. " + "Enabling combiner but combine function might fail at runtime.");
+      this.combinable=true;
+    }
   }
 }
