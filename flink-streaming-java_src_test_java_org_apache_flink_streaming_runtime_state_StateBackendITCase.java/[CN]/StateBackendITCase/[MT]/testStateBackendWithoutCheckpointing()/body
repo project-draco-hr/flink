@@ -1,0 +1,30 @@
+{
+  StreamExecutionEnvironment see=StreamExecutionEnvironment.getExecutionEnvironment();
+  see.setParallelism(1);
+  see.setNumberOfExecutionRetries(0);
+  see.setStateBackend(new FailingStateBackend());
+  see.fromElements(new Tuple2<>("Hello",1)).keyBy(0).map(new RichMapFunction<Tuple2<String,Integer>,String>(){
+    private static final long serialVersionUID=1L;
+    @Override public void open(    Configuration parameters) throws Exception {
+      super.open(parameters);
+      getRuntimeContext().getKeyValueState("test",String.class,"");
+    }
+    @Override public String map(    Tuple2<String,Integer> value) throws Exception {
+      return value.f0;
+    }
+  }
+).print();
+  boolean caughtSuccess=false;
+  try {
+    see.execute();
+  }
+ catch (  JobExecutionException e) {
+    if (e.getCause() instanceof SuccessException) {
+      caughtSuccess=true;
+    }
+ else {
+      throw e;
+    }
+  }
+  assertTrue(caughtSuccess);
+}
