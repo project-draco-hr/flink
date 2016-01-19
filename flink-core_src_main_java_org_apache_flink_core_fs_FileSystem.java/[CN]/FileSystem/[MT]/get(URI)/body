@@ -1,18 +1,27 @@
 {
   FileSystem fs;
+  URI asked=uri;
 synchronized (SYNCHRONIZATION_OBJECT) {
     if (uri.getScheme() == null) {
       try {
-        uri=new URI("file",null,uri.getPath(),null);
+        if (defaultScheme == null) {
+          defaultScheme=new URI(ConfigConstants.DEFAULT_FILESYSTEM_SCHEME);
+        }
+        uri=new URI(defaultScheme.getScheme(),null,defaultScheme.getHost(),defaultScheme.getPort(),uri.getPath(),null,null);
       }
  catch (      URISyntaxException e) {
         try {
-          uri=new URI("file",null,new Path(new File(uri.getPath()).getAbsolutePath()).toUri().getPath(),null);
+          if (defaultScheme.getScheme().equals("file")) {
+            uri=new URI("file",null,new Path(new File(uri.getPath()).getAbsolutePath()).toUri().getPath(),null);
+          }
         }
  catch (        URISyntaxException ex) {
-          throw new IOException("The file URI '" + uri.toString() + "' is not valid.");
+          throw new IOException("The URI '" + uri.toString() + "' is not valid.");
         }
       }
+    }
+    if (uri.getScheme() == null) {
+      throw new IOException("The URI '" + uri + "' is invalid.\n"+ "The fs.default-scheme = "+ defaultScheme+ ", the requested URI = "+ asked+ ", and the final URI = "+ uri+ ".");
     }
     if (uri.getScheme().equals("file") && uri.getAuthority() != null && !uri.getAuthority().isEmpty()) {
       String supposedUri="file:///" + uri.getAuthority() + uri.getPath();

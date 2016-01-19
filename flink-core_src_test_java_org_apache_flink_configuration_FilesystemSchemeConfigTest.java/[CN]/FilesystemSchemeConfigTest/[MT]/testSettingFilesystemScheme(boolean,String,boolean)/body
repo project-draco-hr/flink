@@ -1,0 +1,51 @@
+{
+  final File tmpDir=getTmpDir();
+  final File confFile=createRandomFile(tmpDir,".yaml");
+  final File testFile=new File(tmpDir.getAbsolutePath() + File.separator + "testing.txt");
+  try {
+    try {
+      final PrintWriter pw1=new PrintWriter(confFile);
+      if (!useDefaultScheme) {
+        pw1.println(configFileScheme);
+      }
+      pw1.close();
+      final PrintWriter pwTest=new PrintWriter(testFile);
+      pwTest.close();
+    }
+ catch (    FileNotFoundException e) {
+      fail(e.getMessage());
+    }
+    GlobalConfiguration.loadConfiguration(tmpDir.getAbsolutePath());
+    Configuration conf=GlobalConfiguration.getConfiguration();
+    try {
+      FileSystem.setDefaultScheme(conf);
+      String noSchemePath=testFile.toURI().getPath();
+      URI uri=new URI(noSchemePath);
+      assertTrue(uri.getScheme() == null);
+      FileSystem fs=useExplicitScheme ? FileSystem.get(testFile.toURI()) : FileSystem.get(uri);
+      assertTrue(fs.exists(new Path(noSchemePath)));
+    }
+ catch (    IOException e) {
+      fail(e.getMessage());
+    }
+catch (    URISyntaxException e) {
+      e.printStackTrace();
+    }
+  }
+  finally {
+    try {
+      Field f=FileSystem.class.getDeclaredField("defaultScheme");
+      f.setAccessible(true);
+      f.set(null,null);
+    }
+ catch (    IllegalAccessException e) {
+      e.printStackTrace();
+    }
+catch (    NoSuchFieldException e) {
+      e.printStackTrace();
+    }
+    confFile.delete();
+    testFile.delete();
+    tmpDir.delete();
+  }
+}
