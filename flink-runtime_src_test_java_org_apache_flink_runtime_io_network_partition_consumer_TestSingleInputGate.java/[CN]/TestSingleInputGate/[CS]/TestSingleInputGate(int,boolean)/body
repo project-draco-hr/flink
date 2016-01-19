@@ -1,6 +1,26 @@
 {
   checkArgument(numberOfInputChannels >= 1);
-  this.inputGate=spy(new SingleInputGate("Test Task Name",new JobID(),new ExecutionAttemptID(),new IntermediateDataSetID(),0,numberOfInputChannels,mock(PartitionStateChecker.class)));
+  SingleInputGate realGate=new SingleInputGate("Test Task Name",new JobID(),new ExecutionAttemptID(),new IntermediateDataSetID(),0,numberOfInputChannels,mock(PartitionStateChecker.class));
+  this.inputGate=spy(realGate);
+  try {
+    Field f=realGate.getClass().getDeclaredField("inputChannelsWithData");
+    f.setAccessible(true);
+    final BlockingQueue<InputChannel> notifications=(BlockingQueue<InputChannel>)f.get(realGate);
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        invocation.callRealMethod();
+        if (!notifications.isEmpty()) {
+          EventListener<InputGate> listener=(EventListener<InputGate>)invocation.getArguments()[0];
+          listener.onEvent(inputGate);
+        }
+        return null;
+      }
+    }
+).when(inputGate).registerListener(any(EventListener.class));
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
   this.inputChannels=new TestInputChannel[numberOfInputChannels];
   if (initialize) {
     for (int i=0; i < numberOfInputChannels; i++) {

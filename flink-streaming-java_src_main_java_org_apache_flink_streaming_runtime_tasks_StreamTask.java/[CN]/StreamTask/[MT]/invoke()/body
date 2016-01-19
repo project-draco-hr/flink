@@ -1,4 +1,31 @@
 {
+  LOG.debug("Initializing {}",getName());
+  boolean initializationCompleted=false;
+  try {
+    AccumulatorRegistry accumulatorRegistry=getEnvironment().getAccumulatorRegistry();
+    userClassLoader=getUserCodeClassLoader();
+    configuration=new StreamConfig(getTaskConfiguration());
+    accumulatorMap=accumulatorRegistry.getUserMap();
+    headOperator=configuration.getStreamOperator(userClassLoader);
+    operatorChain=new OperatorChain<>(this,headOperator,accumulatorRegistry.getReadWriteReporter());
+    if (headOperator != null) {
+      headOperator.setup(this,configuration,operatorChain.getChainEntryPoint());
+    }
+    timerService=Executors.newSingleThreadScheduledExecutor(new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
+    asyncCheckpointThreads=new HashSet<>();
+    init();
+    initializationCompleted=true;
+  }
+  finally {
+    if (!initializationCompleted) {
+      if (timerService != null) {
+        timerService.shutdownNow();
+      }
+      if (operatorChain != null) {
+        operatorChain.releaseOutputs();
+      }
+    }
+  }
   LOG.debug("Invoking {}",getName());
   boolean disposed=false;
   try {
