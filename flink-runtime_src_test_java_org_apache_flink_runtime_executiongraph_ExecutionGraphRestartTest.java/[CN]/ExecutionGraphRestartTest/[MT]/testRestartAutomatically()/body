@@ -12,36 +12,5 @@
   assertEquals(JobStatus.CREATED,eg.getState());
   eg.scheduleForExecution(scheduler);
   assertEquals(JobStatus.RUNNING,eg.getState());
-  eg.getAllExecutionVertices().iterator().next().fail(new Exception("Test Exception"));
-  assertEquals(JobStatus.FAILING,eg.getState());
-  for (  ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-    vertex.getCurrentExecutionAttempt().cancelingComplete();
-  }
-  FiniteDuration timeout=new FiniteDuration(2,TimeUnit.MINUTES);
-  Deadline deadline=timeout.fromNow();
-  while (deadline.hasTimeLeft() && eg.getState() != JobStatus.RUNNING) {
-    Thread.sleep(100);
-  }
-  assertEquals(JobStatus.RUNNING,eg.getState());
-  deadline=timeout.fromNow();
-  boolean success=false;
-  while (deadline.hasTimeLeft() && !success) {
-    success=true;
-    for (    ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-      if (vertex.getCurrentExecutionAttempt().getAssignedResource() == null) {
-        success=false;
-        Thread.sleep(100);
-        break;
-      }
-    }
-  }
-  if (deadline.hasTimeLeft()) {
-    for (    ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-      vertex.getCurrentExecutionAttempt().markFinished();
-    }
-    assertEquals(JobStatus.FINISHED,eg.getState());
-  }
- else {
-    fail("Failed to wait until all execution attempts left the state DEPLOYING.");
-  }
+  restartAfterFailure(eg,new FiniteDuration(2,TimeUnit.MINUTES),true);
 }

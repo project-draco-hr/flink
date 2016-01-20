@@ -1,0 +1,26 @@
+{
+  Instance instance=ExecutionGraphTestUtils.getInstance(new SimpleActorGateway(TestingUtils.directExecutionContext()),NUM_TASKS);
+  Scheduler scheduler=new Scheduler(TestingUtils.defaultExecutionContext());
+  scheduler.newInstanceAvailable(instance);
+  JobVertex groupVertex=new JobVertex("Task1");
+  groupVertex.setInvokableClass(Tasks.NoOpInvokable.class);
+  groupVertex.setParallelism(NUM_TASKS);
+  JobVertex groupVertex2=new JobVertex("Task2");
+  groupVertex2.setInvokableClass(Tasks.NoOpInvokable.class);
+  groupVertex2.setParallelism(NUM_TASKS);
+  SlotSharingGroup sharingGroup=new SlotSharingGroup();
+  groupVertex.setSlotSharingGroup(sharingGroup);
+  groupVertex2.setSlotSharingGroup(sharingGroup);
+  groupVertex.setStrictlyCoLocatedWith(groupVertex2);
+  JobGraph jobGraph=new JobGraph("Pointwise job",groupVertex,groupVertex2);
+  ExecutionGraph eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"test job",new Configuration(),AkkaUtils.getDefaultTimeout());
+  eg.setNumberOfRetriesLeft(1);
+  eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+  assertEquals(JobStatus.CREATED,eg.getState());
+  eg.scheduleForExecution(scheduler);
+  assertEquals(JobStatus.RUNNING,eg.getState());
+  validateConstraints(eg);
+  restartAfterFailure(eg,new FiniteDuration(2,TimeUnit.MINUTES),false);
+  validateConstraints(eg);
+  haltExecution(eg);
+}
