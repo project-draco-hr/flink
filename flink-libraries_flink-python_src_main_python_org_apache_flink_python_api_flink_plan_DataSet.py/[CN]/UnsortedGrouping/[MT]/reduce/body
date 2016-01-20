@@ -1,15 +1,18 @@
 def reduce(self, operator):
     '\n        Applies a Reduce transformation on a non-grouped DataSet.\n\n        The transformation consecutively calls a ReduceFunction until only a single element remains which is the result\n        of the transformation. A ReduceFunction combines two elements into one new element of the same type.\n\n        :param operator:The ReduceFunction that is applied on the DataSet.\n        :return:A ReduceOperator that represents the reduced DataSet.\n        '
-    operator._set_grouping_keys(self._child_chain[0].keys)
-    for i in self._child_chain:
-        self._env._sets.append(i)
+    self._finalize()
+    if isinstance(operator, TYPES.FunctionType):
+        f = operator
+        operator = ReduceFunction()
+        operator.reduce = f
     child = OperationInfo()
     child_set = OperatorSet(self._env, child)
     child.identifier = _Identifier.REDUCE
     child.parent = self._info
     child.operator = operator
     child.name = 'PythonReduce'
-    child.types = deduct_output_type(self._info)
+    child.types = _createArrayTypeInfo()
+    child.key1 = self._child_chain[0].keys
     self._info.children.append(child)
     self._env._sets.append(child)
     return child_set

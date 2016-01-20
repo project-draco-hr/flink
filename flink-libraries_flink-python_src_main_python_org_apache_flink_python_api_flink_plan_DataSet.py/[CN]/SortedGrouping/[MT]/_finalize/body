@@ -1,0 +1,37 @@
+def _finalize(self):
+    grouping = self._child_chain[0]
+    sortings = self._child_chain[1:]
+    index_keys = set()
+    if (not isinstance(grouping.keys[0], (TYPES.FunctionType, KeySelectorFunction))):
+        index_keys = index_keys.union(set(grouping.keys))
+    index_sorts = []
+    ksl_sorts = []
+    for s in sortings:
+        if (not isinstance(s.field, (TYPES.FunctionType, KeySelectorFunction))):
+            index_keys.add(s.field)
+            index_sorts.append(s)
+        else:
+            ksl_sorts.append(s)
+    used_keys = sorted(index_keys)
+    lambdas = []
+    i = 0
+    for key in used_keys:
+        lambdas.append((lambda x, k=key: x[k]))
+        i += 1
+    if isinstance(grouping.keys[0], (TYPES.FunctionType, KeySelectorFunction)):
+        lambdas.append(grouping.keys[0])
+    for ksl_op in ksl_sorts:
+        lambdas.append(ksl_op.field)
+    grouping.parent.operator.map = (lambda x: (tuple([l(x) for l in lambdas]), x))
+    grouping.parent.types = _createKeyValueTypeInfo(len(lambdas))
+    ksl_offset = len(used_keys)
+    if (not isinstance(grouping.keys[0], (TYPES.FunctionType, KeySelectorFunction))):
+        grouping.keys = tuple([used_keys.index(key) for key in grouping.keys])
+    else:
+        grouping.keys = (ksl_offset,)
+        ksl_offset += 1
+    for iop in index_sorts:
+        iop.field = used_keys.index(iop.field)
+    for kop in ksl_sorts:
+        kop.field = ksl_offset
+        ksl_offset += 1

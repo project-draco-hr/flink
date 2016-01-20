@@ -1,14 +1,17 @@
 def _receive_broadcast_variables(self):
-    broadcast_count = self._iterator.next()
-    self._iterator._reset()
-    self._connection.reset()
+    con = self._connection
+    deserializer_int = IntegerDeserializer()
+    broadcast_count = deserializer_int.deserialize(con.read_secondary)
+    deserializer_string = StringDeserializer()
     for _ in range(broadcast_count):
-        name = self._iterator.next()
-        self._iterator._reset()
-        self._connection.reset()
+        name = deserializer_string.deserialize(con.read_secondary)
         bc = deque()
-        while self._iterator.has_next():
-            bc.append(self._iterator.next())
+        if (con.read_secondary(1) == '\x01'):
+            serializer_data = _get_deserializer(con.read_secondary, self._env._types)
+            value = serializer_data.deserialize(con.read_secondary)
+            bc.append(value)
+            while (con.read_secondary(1) == '\x01'):
+                con.read_secondary(serializer_data.get_type_info_size())
+                value = serializer_data.deserialize(con.read_secondary)
+                bc.append(value)
         self.context._add_broadcast_variable(name, bc)
-        self._iterator._reset()
-        self._connection.reset()

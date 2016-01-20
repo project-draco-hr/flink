@@ -1,4 +1,15 @@
 def where(self, *fields):
     '\n        Continues a Join transformation.\n\n        Defines the Tuple fields of the first join DataSet that should be used as join keys.\n        Note: Fields can only be selected as join keys on Tuple DataSets.\n\n        :param fields: The indexes of the Tuple fields of the first join DataSets that should be used as keys.\n        :return:An incomplete Join transformation.\n\n        '
-    self._info.key1 = fields
+    f = None
+    if isinstance(fields[0], TYPES.FunctionType):
+        f = (lambda x: (fields[0](x),))
+    if isinstance(fields[0], KeySelectorFunction):
+        f = (lambda x: (fields[0].get_key(x),))
+    if (f is None):
+        f = (lambda x: tuple([x[key] for key in fields]))
+    new_parent_set = self._info.parent_set.map((lambda x: (f(x), x)))
+    new_parent_set._info.types = _createKeyValueTypeInfo(len(fields))
+    self._info.parent = new_parent_set._info
+    self._info.parent.children.append(self._info)
+    self._info.key1 = tuple([x for x in range(len(fields))])
     return JoinOperatorTo(self._env, self._info)
