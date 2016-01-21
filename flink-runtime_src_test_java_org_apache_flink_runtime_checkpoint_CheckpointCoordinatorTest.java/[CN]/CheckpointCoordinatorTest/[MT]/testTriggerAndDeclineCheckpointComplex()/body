@@ -1,0 +1,76 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final long timestamp=System.currentTimeMillis();
+    final ExecutionAttemptID attemptID1=new ExecutionAttemptID();
+    final ExecutionAttemptID attemptID2=new ExecutionAttemptID();
+    ExecutionVertex vertex1=mockExecutionVertex(attemptID1);
+    ExecutionVertex vertex2=mockExecutionVertex(attemptID2);
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,600000,600000,new ExecutionVertex[]{vertex1,vertex2},new ExecutionVertex[]{vertex1,vertex2},new ExecutionVertex[]{vertex1,vertex2},cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(1,cl),RecoveryMode.STANDALONE);
+    assertEquals(0,coord.getNumberOfPendingCheckpoints());
+    assertEquals(0,coord.getNumberOfRetainedSuccessfulCheckpoints());
+    assertTrue(coord.triggerCheckpoint(timestamp));
+    assertTrue(coord.triggerCheckpoint(timestamp + 2));
+    assertEquals(2,coord.getNumberOfPendingCheckpoints());
+    assertEquals(0,coord.getNumberOfRetainedSuccessfulCheckpoints());
+    Iterator<Map.Entry<Long,PendingCheckpoint>> it=coord.getPendingCheckpoints().entrySet().iterator();
+    long checkpoint1Id=it.next().getKey();
+    long checkpoint2Id=it.next().getKey();
+    PendingCheckpoint checkpoint1=coord.getPendingCheckpoints().get(checkpoint1Id);
+    PendingCheckpoint checkpoint2=coord.getPendingCheckpoints().get(checkpoint2Id);
+    assertNotNull(checkpoint1);
+    assertEquals(checkpoint1Id,checkpoint1.getCheckpointId());
+    assertEquals(timestamp,checkpoint1.getCheckpointTimestamp());
+    assertEquals(jid,checkpoint1.getJobId());
+    assertEquals(2,checkpoint1.getNumberOfNonAcknowledgedTasks());
+    assertEquals(0,checkpoint1.getNumberOfAcknowledgedTasks());
+    assertEquals(0,checkpoint1.getCollectedStates().size());
+    assertFalse(checkpoint1.isDiscarded());
+    assertFalse(checkpoint1.isFullyAcknowledged());
+    assertNotNull(checkpoint2);
+    assertEquals(checkpoint2Id,checkpoint2.getCheckpointId());
+    assertEquals(timestamp + 2,checkpoint2.getCheckpointTimestamp());
+    assertEquals(jid,checkpoint2.getJobId());
+    assertEquals(2,checkpoint2.getNumberOfNonAcknowledgedTasks());
+    assertEquals(0,checkpoint2.getNumberOfAcknowledgedTasks());
+    assertEquals(0,checkpoint2.getCollectedStates().size());
+    assertFalse(checkpoint2.isDiscarded());
+    assertFalse(checkpoint2.isFullyAcknowledged());
+{
+      TriggerCheckpoint expectedMessage1=new TriggerCheckpoint(jid,attemptID1,checkpoint1Id,timestamp);
+      TriggerCheckpoint expectedMessage2=new TriggerCheckpoint(jid,attemptID2,checkpoint1Id,timestamp);
+      verify(vertex1,times(1)).sendMessageToCurrentExecution(eq(expectedMessage1),eq(attemptID1));
+      verify(vertex2,times(1)).sendMessageToCurrentExecution(eq(expectedMessage2),eq(attemptID2));
+    }
+{
+      TriggerCheckpoint expectedMessage1=new TriggerCheckpoint(jid,attemptID1,checkpoint2Id,timestamp + 2);
+      TriggerCheckpoint expectedMessage2=new TriggerCheckpoint(jid,attemptID2,checkpoint2Id,timestamp + 2);
+      verify(vertex1,times(1)).sendMessageToCurrentExecution(eq(expectedMessage1),eq(attemptID1));
+      verify(vertex2,times(1)).sendMessageToCurrentExecution(eq(expectedMessage2),eq(attemptID2));
+    }
+    coord.receiveDeclineMessage(new DeclineCheckpoint(jid,attemptID1,checkpoint1Id,checkpoint1.getCheckpointTimestamp()));
+    assertTrue(checkpoint1.isDiscarded());
+    assertEquals(1,coord.getNumberOfPendingCheckpoints());
+    assertEquals(0,coord.getNumberOfRetainedSuccessfulCheckpoints());
+    long checkpointIdNew=coord.getPendingCheckpoints().entrySet().iterator().next().getKey();
+    PendingCheckpoint checkpointNew=coord.getPendingCheckpoints().get(checkpointIdNew);
+    assertEquals(checkpoint2Id,checkpointIdNew);
+    assertNotNull(checkpointNew);
+    assertEquals(checkpointIdNew,checkpointNew.getCheckpointId());
+    assertEquals(jid,checkpointNew.getJobId());
+    assertEquals(2,checkpointNew.getNumberOfNonAcknowledgedTasks());
+    assertEquals(0,checkpointNew.getNumberOfAcknowledgedTasks());
+    assertEquals(0,checkpointNew.getCollectedStates().size());
+    assertFalse(checkpointNew.isDiscarded());
+    assertFalse(checkpointNew.isFullyAcknowledged());
+    assertNotEquals(checkpoint1.getCheckpointId(),checkpointNew.getCheckpointId());
+    coord.receiveDeclineMessage(new DeclineCheckpoint(jid,attemptID1,checkpoint1Id,checkpoint1.getCheckpointTimestamp()));
+    coord.receiveDeclineMessage(new DeclineCheckpoint(jid,attemptID2,checkpoint1Id,checkpoint1.getCheckpointTimestamp()));
+    assertTrue(checkpoint1.isDiscarded());
+    coord.shutdown();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
