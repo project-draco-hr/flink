@@ -1,0 +1,25 @@
+{
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  DataOutputViewStreamWrapper out=new DataOutputViewStreamWrapper(baos);
+  try {
+    writeKeyAndNamespace(out);
+    byte[] key=baos.toByteArray();
+    byte[] valueBytes=db.get(key);
+    if (valueBytes == null) {
+      return Collections.emptyList();
+    }
+    ByteArrayInputStream bais=new ByteArrayInputStream(valueBytes);
+    DataInputViewStreamWrapper in=new DataInputViewStreamWrapper(bais);
+    List<V> result=new ArrayList<>();
+    while (in.available() > 0) {
+      result.add(valueSerializer.deserialize(in));
+      if (in.available() > 0) {
+        in.readByte();
+      }
+    }
+    return result;
+  }
+ catch (  IOException|RocksDBException e) {
+    throw new RuntimeException("Error while retrieving data from RocksDB",e);
+  }
+}

@@ -1,0 +1,29 @@
+{
+  this.keySerializer=requireNonNull(keySerializer);
+  this.namespaceSerializer=namespaceSerializer;
+  this.dbPath=dbPath;
+  this.checkpointPath=checkpointPath;
+  RocksDB.loadLibrary();
+  Options options=new Options().setCreateIfMissing(true);
+  options.setMergeOperator(new StringAppendOperator());
+  if (!dbPath.exists()) {
+    if (!dbPath.mkdirs()) {
+      throw new RuntimeException("Could not create RocksDB data directory.");
+    }
+  }
+  try {
+    File db=new File(dbPath,"db");
+    LOG.warn("Deleting already existing db directory {}.",db);
+    FileUtils.deleteDirectory(db);
+  }
+ catch (  IOException e) {
+    throw new RuntimeException("Error cleaning RocksDB data directory.",e);
+  }
+  try {
+    db=RocksDB.open(options,new File(dbPath,"db").getAbsolutePath());
+  }
+ catch (  RocksDBException e) {
+    throw new RuntimeException("Error while opening RocksDB instance.",e);
+  }
+  options.dispose();
+}
