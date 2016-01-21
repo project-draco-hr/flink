@@ -1,19 +1,21 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: ConnectedComponents --vertices <path> --edges <path> --output <path> --iterations <n>");
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Long> vertices=getVertexDataSet(env);
-  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env).flatMap(new UndirectEdge());
+  final int maxIterations=params.getInt("iterations",10);
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Long> vertices=getVertexDataSet(env,params);
+  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env,params).flatMap(new UndirectEdge());
   DataSet<Tuple2<Long,Long>> verticesWithInitialId=vertices.map(new DuplicateValue<Long>());
   DeltaIteration<Tuple2<Long,Long>,Tuple2<Long,Long>> iteration=verticesWithInitialId.iterateDelta(verticesWithInitialId,maxIterations,0);
   DataSet<Tuple2<Long,Long>> changes=iteration.getWorkset().join(edges).where(0).equalTo(0).with(new NeighborWithComponentIDJoin()).groupBy(0).aggregate(Aggregations.MIN,1).join(iteration.getSolutionSet()).where(0).equalTo(0).with(new ComponentIdFilter());
   DataSet<Tuple2<Long,Long>> result=iteration.closeWith(changes,changes);
-  if (fileOutput) {
-    result.writeAsCsv(outputPath,"\n"," ");
+  if (params.has("output")) {
+    result.writeAsCsv(params.get("output"),"\n"," ");
     env.execute("Connected Components Example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     result.print();
   }
 }

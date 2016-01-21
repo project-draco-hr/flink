@@ -1,21 +1,22 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Tuple2<String,String>> documents=getDocumentsDataSet(env);
-  DataSet<Tuple3<Integer,String,Integer>> ranks=getRanksDataSet(env);
-  DataSet<Tuple2<String,String>> visits=getVisitsDataSet(env);
+  System.out.println("Usage: WebLogAnalysis --documents <path> --ranks <path> --visits <path> --output <path>");
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Tuple2<String,String>> documents=getDocumentsDataSet(env,params);
+  DataSet<Tuple3<Integer,String,Integer>> ranks=getRanksDataSet(env,params);
+  DataSet<Tuple2<String,String>> visits=getVisitsDataSet(env,params);
   DataSet<Tuple1<String>> filterDocs=documents.filter(new FilterDocByKeyWords()).project(0);
   DataSet<Tuple3<Integer,String,Integer>> filterRanks=ranks.filter(new FilterByRank());
   DataSet<Tuple1<String>> filterVisits=visits.filter(new FilterVisitsByDate()).project(0);
   DataSet<Tuple3<Integer,String,Integer>> joinDocsRanks=filterDocs.join(filterRanks).where(0).equalTo(1).projectSecond(0,1,2);
   DataSet<Tuple3<Integer,String,Integer>> result=joinDocsRanks.coGroup(filterVisits).where(1).equalTo(0).with(new AntiJoinVisits());
-  if (fileOutput) {
-    result.writeAsCsv(outputPath,"\n","|");
+  if (params.has("output")) {
+    result.writeAsCsv(params.get("output"),"\n","|");
     env.execute("WebLogAnalysis Example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     result.print();
   }
 }

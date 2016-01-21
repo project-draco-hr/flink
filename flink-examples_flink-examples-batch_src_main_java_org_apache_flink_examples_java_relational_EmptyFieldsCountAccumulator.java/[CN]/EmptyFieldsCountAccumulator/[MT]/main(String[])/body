@@ -1,18 +1,19 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  final DataSet<Tuple> file=getDataSet(env);
-  final DataSet<Tuple> filteredLines=file.filter(new EmptyFieldFilter());
+  System.out.println("Usage: EmptyFieldsCountAccumulator --input <path> --output <path>");
+  env.getConfig().setGlobalJobParameters(params);
+  final DataSet<StringTriple> file=getDataSet(env,params);
+  final DataSet<StringTriple> filteredLines=file.filter(new EmptyFieldFilter());
   JobExecutionResult result;
-  if (outputPath == null) {
-    filteredLines.print();
-    result=env.getLastJobExecutionResult();
+  if (params.has("output")) {
+    filteredLines.writeAsCsv(params.get("output"));
+    result=env.execute("Accumulator example");
   }
  else {
-    filteredLines.writeAsCsv(outputPath);
-    result=env.execute("Accumulator example");
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
+    filteredLines.print();
+    result=env.getLastJobExecutionResult();
   }
   final List<Integer> emptyFields=result.getAccumulatorResult(EMPTY_FIELD_ACCUMULATOR);
   System.out.format("Number of detected empty fields per column: %s\n",emptyFields);

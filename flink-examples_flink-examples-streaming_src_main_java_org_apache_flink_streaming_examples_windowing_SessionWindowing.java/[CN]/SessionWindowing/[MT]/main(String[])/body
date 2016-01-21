@@ -1,10 +1,11 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  System.out.println("Usage: SessionWindowing --output <path>");
+  env.getConfig().setGlobalJobParameters(params);
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
   env.setParallelism(1);
+  final boolean fileOutput=params.has("output");
   final List<Tuple3<String,Long,Integer>> input=new ArrayList<>();
   input.add(new Tuple3<>("a",1L,1));
   input.add(new Tuple3<>("b",1L,1));
@@ -31,9 +32,10 @@
 );
   DataStream<Tuple3<String,Long,Integer>> aggregated=source.keyBy(0).window(GlobalWindows.create()).trigger(new SessionTrigger(3L)).sum(2);
   if (fileOutput) {
-    aggregated.writeAsText(outputPath);
+    aggregated.writeAsText(params.get("output"));
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     aggregated.print();
   }
   env.execute();

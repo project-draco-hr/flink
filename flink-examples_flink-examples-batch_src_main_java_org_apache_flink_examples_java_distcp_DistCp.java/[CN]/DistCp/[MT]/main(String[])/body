@@ -1,13 +1,22 @@
 {
-  if (args.length != 3) {
-    printHelp();
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  ParameterTool params=ParameterTool.fromArgs(args);
+  if (!params.has("input") || !params.has("output")) {
+    System.err.println("Usage: --input <path> --output <path> [--parallelism <n>]");
     return;
   }
-  final Path sourcePath=new Path(args[0]);
-  final Path targetPath=new Path(args[1]);
-  int parallelism=Integer.valueOf(args[2],10);
-  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  checkInputParams(env,sourcePath,targetPath,parallelism);
+  final Path sourcePath=new Path(params.get("input"));
+  final Path targetPath=new Path(params.get("output"));
+  if (!isLocal(env) && !(isOnDistributedFS(sourcePath) && isOnDistributedFS(targetPath))) {
+    System.out.println("In a distributed mode only HDFS input/output paths are supported");
+    return;
+  }
+  final int parallelism=params.getInt("parallelism",10);
+  if (parallelism <= 0) {
+    System.err.println("Parallelism should be greater than 0");
+    return;
+  }
+  env.getConfig().setGlobalJobParameters(params);
   env.setParallelism(parallelism);
   long startTime=System.currentTimeMillis();
   LOGGER.info("Initializing copy tasks");

@@ -1,14 +1,25 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("  Usage: WindowWordCount --input <path> --output <path> --window <n> --slide <n>");
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  DataStream<String> text=getTextDataStream(env);
-  DataStream<Tuple2<String,Integer>> counts=text.flatMap(new WordCount.Tokenizer()).keyBy(0).countWindow(windowSize,slideSize).sum(1);
-  if (fileOutput) {
-    counts.writeAsText(outputPath);
+  DataStream<String> text;
+  if (params.has("input")) {
+    text=env.readTextFile(params.get("input"));
   }
  else {
+    System.out.println("Executing WindowWordCount example with default input data set.");
+    System.out.println("Use --input to specify file input.");
+    text=env.fromElements(WordCountData.WORDS);
+  }
+  env.getConfig().setGlobalJobParameters(params);
+  final int windowSize=params.getInt("window",250);
+  final int slideSize=params.getInt("slide",150);
+  DataStream<Tuple2<String,Integer>> counts=text.flatMap(new WordCount.Tokenizer()).keyBy(0).countWindow(windowSize,slideSize).sum(1);
+  if (params.has("output")) {
+    counts.writeAsText(params.get("output"));
+  }
+ else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     counts.print();
   }
   env.execute("WindowWordCount");

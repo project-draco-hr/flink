@@ -1,11 +1,17 @@
 {
-  if (!parseParameters(args)) {
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  if (!params.has("lineitem") && !params.has("customer") && !params.has("orders")) {
+    System.err.println("  This program expects data from the TPC-H benchmark as input data.");
+    System.err.println("  Due to legal restrictions, we can not ship generated data.");
+    System.out.println("  You can find the TPC-H data generator at http://www.tpc.org/tpch/.");
+    System.out.println("  Usage: TPCHQuery3 --lineitem <path> --customer <path> --orders <path> [--output <path>]");
     return;
   }
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Lineitem> lineitems=getLineitemDataSet(env);
-  DataSet<Order> orders=getOrdersDataSet(env);
-  DataSet<Customer> customers=getCustomerDataSet(env);
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Lineitem> lineitems=getLineitemDataSet(env,params.get("lineitem"));
+  DataSet<Order> orders=getOrdersDataSet(env,params.get("customer"));
+  DataSet<Customer> customers=getCustomerDataSet(env,params.get("orders"));
   customers=customers.filter(new FilterFunction<Customer>(){
     @Override public boolean filter(    Customer c){
       return c.getMktsegment().equals("AUTOMOBILE");
@@ -41,6 +47,12 @@
     }
   }
 ).groupBy(0,2,3).aggregate(Aggregations.SUM,1);
-  result.writeAsCsv(outputPath,"\n","|");
-  env.execute("TPCH Query 3 Example");
+  if (params.has("output")) {
+    result.writeAsCsv(params.get("output"),"\n","|");
+    env.execute("TPCH Query 3 Example");
+  }
+ else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
+    result.print();
+  }
 }

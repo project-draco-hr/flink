@@ -1,16 +1,17 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.err.println("Usage: TopSpeedWindowingExample --input <path> --output <path>");
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+  env.getConfig().setGlobalJobParameters(params);
   @SuppressWarnings({"rawtypes","serial"}) DataStream<Tuple4<Integer,Integer,Double,Long>> carData;
-  if (fileInput) {
-    carData=env.readTextFile(inputPath).map(new ParseCarData());
+  if (params.has("input")) {
+    carData=env.readTextFile(params.get("input")).map(new ParseCarData());
   }
  else {
-    int numOfCars=2;
-    carData=env.addSource(CarSource.create(numOfCars));
+    System.out.println("Executing TopSpeedWindowing example with default input data set.");
+    System.out.println("Use --input to specify file input.");
+    carData=env.addSource(CarSource.create(2));
   }
   int evictionSec=10;
   double triggerMeters=50;
@@ -21,11 +22,11 @@
     }
   }
 ,carData.getType().createSerializer(env.getConfig()))).maxBy(1);
-  if (fileOutput) {
-    topSpeeds.print();
-    topSpeeds.writeAsText(outputPath);
+  if (params.has("output")) {
+    topSpeeds.writeAsText(params.get("output"));
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     topSpeeds.print();
   }
   env.execute("CarTopSpeedWindowingExample");

@@ -1,9 +1,18 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: TransitiveClosure --edges <path> --output <path> --iterations <n>");
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Tuple2<Long,Long>> edges=getEdgeDataSet(env);
+  env.getConfig().setGlobalJobParameters(params);
+  final int maxIterations=params.getInt("iterations",10);
+  DataSet<Tuple2<Long,Long>> edges;
+  if (params.has("edges")) {
+    edges=env.readCsvFile(params.get("edges")).fieldDelimiter(" ").types(Long.class,Long.class);
+  }
+ else {
+    System.out.println("Executing TransitiveClosureNaive example with default edges data set.");
+    System.out.println("Use --edges to specify file input.");
+    edges=ConnectedComponentsData.getDefaultEdgeDataSet(env);
+  }
   IterativeDataSet<Tuple2<Long,Long>> paths=edges.iterate(maxIterations);
   DataSet<Tuple2<Long,Long>> nextPaths=paths.join(edges).where(1).equalTo(0).with(new JoinFunction<Tuple2<Long,Long>,Tuple2<Long,Long>,Tuple2<Long,Long>>(){
     @Override public Tuple2<Long,Long> join(    Tuple2<Long,Long> left,    Tuple2<Long,Long> right) throws Exception {
@@ -31,11 +40,12 @@
   }
 ).withForwardedFieldsFirst("0").withForwardedFieldsSecond("0");
   DataSet<Tuple2<Long,Long>> transitiveClosure=paths.closeWith(nextPaths,newPaths);
-  if (fileOutput) {
-    transitiveClosure.writeAsCsv(outputPath,"\n"," ");
+  if (params.has("output")) {
+    transitiveClosure.writeAsCsv(params.get("output"),"\n"," ");
     env.execute("Transitive Closure Example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     transitiveClosure.print();
   }
 }

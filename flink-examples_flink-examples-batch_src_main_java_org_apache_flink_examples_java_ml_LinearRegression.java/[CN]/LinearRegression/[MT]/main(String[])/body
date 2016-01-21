@@ -1,18 +1,28 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: LinearRegression --input <path> --output <path> --iterations <n>");
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Data> data=getDataSet(env);
-  DataSet<Params> parameters=getParamsDataSet(env);
-  IterativeDataSet<Params> loop=parameters.iterate(numIterations);
+  final int iterations=params.getInt("iterations",10);
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Data> data;
+  if (params.has("input")) {
+    data=env.readCsvFile(params.get("input")).fieldDelimiter(" ").includeFields(true,true).pojoType(Data.class);
+  }
+ else {
+    System.out.println("Executing LinearRegression example with default input data set.");
+    System.out.println("Use --input to specify file input.");
+    data=LinearRegressionData.getDefaultDataDataSet(env);
+  }
+  DataSet<Params> parameters=LinearRegressionData.getDefaultParamsDataSet(env);
+  IterativeDataSet<Params> loop=parameters.iterate(iterations);
   DataSet<Params> new_parameters=data.map(new SubUpdate()).withBroadcastSet(loop,"parameters").reduce(new UpdateAccumulator()).map(new Update());
   DataSet<Params> result=loop.closeWith(new_parameters);
-  if (fileOutput) {
-    result.writeAsText(outputPath);
+  if (params.has("output")) {
+    result.writeAsText(params.get("output"));
     env.execute("Linear Regression example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     result.print();
   }
 }

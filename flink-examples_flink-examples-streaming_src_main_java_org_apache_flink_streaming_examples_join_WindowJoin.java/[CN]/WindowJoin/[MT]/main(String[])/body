@@ -1,19 +1,19 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: WindowJoin --grades <path> --salaries <path> --output <path>");
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.getConfig().setGlobalJobParameters(params);
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-  Tuple2<DataStream<Tuple3<Long,String,Integer>>,DataStream<Tuple3<Long,String,Integer>>> input=getInputStreams(env);
-  DataStream<Tuple3<Long,String,Integer>> grades=input.f0;
-  DataStream<Tuple3<Long,String,Integer>> salaries=input.f1;
+  DataStream<Tuple3<Long,String,Integer>> grades=getGradesPath(env,params);
+  DataStream<Tuple3<Long,String,Integer>> salaries=getSalariesPath(env,params);
   grades=grades.assignTimestampsAndWatermarks(new MyTimestampExtractor());
   salaries=salaries.assignTimestampsAndWatermarks(new MyTimestampExtractor());
   DataStream<Tuple3<String,Integer,Integer>> joinedStream=grades.join(salaries).where(new NameKeySelector()).equalTo(new NameKeySelector()).window(TumblingTimeWindows.of(Time.of(5,TimeUnit.MILLISECONDS))).apply(new MyJoinFunction());
-  if (fileOutput) {
-    joinedStream.writeAsText(outputPath);
+  if (params.has("output")) {
+    joinedStream.writeAsText(params.get("output"));
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     joinedStream.print();
   }
   env.execute("Windowed Join Example");

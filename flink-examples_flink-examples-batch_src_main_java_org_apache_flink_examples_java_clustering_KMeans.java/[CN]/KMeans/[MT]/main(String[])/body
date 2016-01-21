@@ -1,19 +1,20 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: KMeans --points <path> --centroids <path> --output <path> --iterations <n>");
   ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Point> points=getPointDataSet(env);
-  DataSet<Centroid> centroids=getCentroidDataSet(env);
-  IterativeDataSet<Centroid> loop=centroids.iterate(numIterations);
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Point> points=getPointDataSet(params,env);
+  DataSet<Centroid> centroids=getCentroidDataSet(params,env);
+  IterativeDataSet<Centroid> loop=centroids.iterate(params.getInt("iterations",10));
   DataSet<Centroid> newCentroids=points.map(new SelectNearestCenter()).withBroadcastSet(loop,"centroids").map(new CountAppender()).groupBy(0).reduce(new CentroidAccumulator()).map(new CentroidAverager());
   DataSet<Centroid> finalCentroids=loop.closeWith(newCentroids);
   DataSet<Tuple2<Integer,Point>> clusteredPoints=points.map(new SelectNearestCenter()).withBroadcastSet(finalCentroids,"centroids");
-  if (fileOutput) {
-    clusteredPoints.writeAsCsv(outputPath,"\n"," ");
+  if (params.has("output")) {
+    clusteredPoints.writeAsCsv(params.get("output"),"\n"," ");
     env.execute("KMeans Example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     clusteredPoints.print();
   }
 }

@@ -1,16 +1,25 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: EnumTriangleBasic --edges <path> --output <path>");
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
-  DataSet<Edge> edges=getEdgeDataSet(env);
+  env.getConfig().setGlobalJobParameters(params);
+  DataSet<Edge> edges;
+  if (params.has("edges")) {
+    edges=env.readCsvFile(params.get("edges")).fieldDelimiter(" ").includeFields(true,true).types(Integer.class,Integer.class).map(new TupleEdgeConverter());
+  }
+ else {
+    System.out.println("Executing EnumTriangles example with default edges data set.");
+    System.out.println("Use --edges to specify file input.");
+    edges=EnumTrianglesData.getDefaultEdgeDataSet(env);
+  }
   DataSet<Edge> edgesById=edges.map(new EdgeByIdProjector());
   DataSet<Triad> triangles=edgesById.groupBy(Edge.V1).sortGroup(Edge.V2,Order.ASCENDING).reduceGroup(new TriadBuilder()).join(edgesById).where(Triad.V2,Triad.V3).equalTo(Edge.V1,Edge.V2).with(new TriadFilter());
-  if (fileOutput) {
-    triangles.writeAsCsv(outputPath,"\n",",");
+  if (params.has("output")) {
+    triangles.writeAsCsv(params.get("output"),"\n",",");
     env.execute("Basic Triangle Enumeration Example");
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     triangles.print();
   }
 }

@@ -1,23 +1,26 @@
 {
-  if (!parseParameters(args)) {
-    return;
-  }
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("  Usage: IterateExample --input <path> --output <path>");
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment().setBufferTimeout(1);
+  env.getConfig().setGlobalJobParameters(params);
   DataStream<Tuple2<Integer,Integer>> inputStream;
-  if (fileInput) {
-    inputStream=env.readTextFile(inputPath).map(new FibonacciInputMap());
+  if (params.has("input")) {
+    inputStream=env.readTextFile(params.get("input")).map(new FibonacciInputMap());
   }
  else {
+    System.out.println("Executing Iterate example with default input data set.");
+    System.out.println("Use --input to specify file input.");
     inputStream=env.addSource(new RandomFibonacciSource());
   }
   IterativeStream<Tuple5<Integer,Integer,Integer,Integer,Integer>> it=inputStream.map(new InputMap()).iterate(5000);
   SplitStream<Tuple5<Integer,Integer,Integer,Integer,Integer>> step=it.map(new Step()).split(new MySelector());
   it.closeWith(step.select("iterate"));
   DataStream<Tuple2<Tuple2<Integer,Integer>,Integer>> numbers=step.select("output").map(new OutputMap());
-  if (fileOutput) {
-    numbers.writeAsText(outputPath);
+  if (params.has("output")) {
+    numbers.writeAsText(params.get("output"));
   }
  else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
     numbers.print();
   }
   env.execute("Streaming Iteration Example");
