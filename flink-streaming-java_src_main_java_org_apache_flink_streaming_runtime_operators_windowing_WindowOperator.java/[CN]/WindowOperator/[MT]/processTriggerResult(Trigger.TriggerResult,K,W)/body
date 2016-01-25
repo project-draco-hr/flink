@@ -2,26 +2,19 @@
   if (!triggerResult.isFire() && !triggerResult.isPurge()) {
     return;
   }
-  Context context;
-  Map<W,Context> keyWindows=windows.get(key);
-  if (keyWindows == null) {
-    LOG.debug("Window {} for key {} already gone.",window,key);
-    return;
-  }
-  if (triggerResult.isPurge()) {
-    context=keyWindows.remove(window);
-    if (keyWindows.isEmpty()) {
-      windows.remove(key);
+  if (triggerResult.isFire()) {
+    timestampedCollector.setTimestamp(window.maxTimestamp());
+    setKeyContext(key);
+    MergingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+    ACC contents=windowState.get();
+    userFunction.apply(context.key,context.window,contents,timestampedCollector);
+    if (triggerResult.isPurge()) {
+      windowState.clear();
     }
   }
- else {
-    context=keyWindows.get(window);
-  }
-  if (context == null) {
-    LOG.debug("Window {} for key {} already gone.",window,key);
-    return;
-  }
-  if (triggerResult.isFire()) {
-    emitWindow(context);
+ else   if (triggerResult.isPurge()) {
+    setKeyContext(key);
+    MergingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+    windowState.clear();
   }
 }

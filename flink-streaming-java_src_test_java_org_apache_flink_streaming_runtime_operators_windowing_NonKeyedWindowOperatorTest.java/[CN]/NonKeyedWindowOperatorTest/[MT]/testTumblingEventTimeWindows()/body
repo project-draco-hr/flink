@@ -1,7 +1,7 @@
 {
   closeCalled.set(0);
   final int WINDOW_SIZE=3;
-  NonKeyedWindowOperator<Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new NonKeyedWindowOperator<>(TumblingTimeWindows.of(Time.of(WINDOW_SIZE,TimeUnit.SECONDS)),new TimeWindow.Serializer(),windowBufferFactory,new ReduceAllWindowFunction<TimeWindow,Tuple2<String,Integer>>(new SumReducer()),EventTimeTrigger.create());
+  NonKeyedWindowOperator<Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new NonKeyedWindowOperator<>(TumblingTimeWindows.of(Time.of(WINDOW_SIZE,TimeUnit.SECONDS)),new TimeWindow.Serializer(),windowBufferFactory,new ReduceIterableAllWindowFunction<TimeWindow,Tuple2<String,Integer>>(new SumReducer()),EventTimeTrigger.create());
   operator.setInputType(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),new ExecutionConfig());
   OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
   long initialTime=0L;
@@ -38,10 +38,4 @@
   expectedOutput.add(new Watermark(7999));
   TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new ResultSortComparator());
   testHarness.close();
-  if (windowBufferFactory instanceof PreAggregatingHeapWindowBuffer.Factory) {
-    Assert.assertEquals("Close was not called.",2,closeCalled.get());
-  }
- else {
-    Assert.assertEquals("Close was not called.",1,closeCalled.get());
-  }
 }

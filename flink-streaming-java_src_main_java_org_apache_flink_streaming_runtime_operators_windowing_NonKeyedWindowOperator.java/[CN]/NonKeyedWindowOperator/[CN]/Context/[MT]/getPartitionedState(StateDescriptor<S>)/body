@@ -1,0 +1,27 @@
+{
+  if (!(stateDescriptor instanceof ValueStateDescriptor)) {
+    throw new UnsupportedOperationException("NonKeyedWindowOperator Triggers only " + "support ValueState.");
+  }
+  @SuppressWarnings("unchecked") final ValueStateDescriptor<?> valueStateDescriptor=(ValueStateDescriptor<?>)stateDescriptor;
+  ValueState valueState=new ValueState(){
+    @Override public Object value() throws IOException {
+      Object value=state.get(stateDescriptor.getName());
+      if (value == null) {
+        value=valueStateDescriptor.getDefaultValue();
+        state.put(stateDescriptor.getName(),(Serializable)value);
+      }
+      return value;
+    }
+    @Override public void update(    Object value) throws IOException {
+      if (!(value instanceof Serializable)) {
+        throw new UnsupportedOperationException("Value state of NonKeyedWindowOperator must be serializable.");
+      }
+      state.put(stateDescriptor.getName(),(Serializable)value);
+    }
+    @Override public void clear(){
+      state.remove(stateDescriptor.getName());
+    }
+  }
+;
+  return (S)valueState;
+}

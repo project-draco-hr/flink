@@ -1,4 +1,7 @@
 {
+  if (preAggregator instanceof RichFunction) {
+    throw new UnsupportedOperationException("Pre-aggregator of apply can not be a RichFunction.");
+  }
   function=input.getExecutionEnvironment().clean(function);
   preAggregator=input.getExecutionEnvironment().clean(preAggregator);
   String callLocation=Utils.getCallLocationName();
@@ -7,10 +10,10 @@
   OneInputStreamOperator<T,R> operator;
   boolean setProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
   if (evictor != null) {
-    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),function,trigger,evictor).enableSetProcessingTime(setProcessingTime);
+    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger,evictor).enableSetProcessingTime(setProcessingTime);
   }
  else {
-    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new PreAggregatingHeapWindowBuffer.Factory<>(preAggregator),function,trigger).enableSetProcessingTime(setProcessingTime);
+    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new PreAggregatingHeapWindowBuffer.Factory<>(preAggregator),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger).enableSetProcessingTime(setProcessingTime);
   }
   return input.transform(opName,resultType,operator).setParallelism(1);
 }

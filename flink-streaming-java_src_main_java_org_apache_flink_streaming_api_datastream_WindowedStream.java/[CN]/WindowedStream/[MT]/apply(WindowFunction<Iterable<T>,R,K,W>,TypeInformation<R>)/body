@@ -1,0 +1,22 @@
+{
+  function=input.getExecutionEnvironment().clean(function);
+  String callLocation=Utils.getCallLocationName();
+  String udfName="WindowApply at " + callLocation;
+  SingleOutputStreamOperator<R,?> result=createFastTimeOperatorIfValid(function,resultType,udfName);
+  if (result != null) {
+    return result;
+  }
+  String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
+  KeySelector<T,K> keySel=input.getKeySelector();
+  WindowOperator<K,T,Iterable<T>,R,W> operator;
+  boolean setProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
+  if (evictor != null) {
+    ListStateDescriptor<StreamRecord<T>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(input.getType().createSerializer(getExecutionEnvironment().getConfig())));
+    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,function,trigger,evictor).enableSetProcessingTime(setProcessingTime);
+  }
+ else {
+    ListStateDescriptor<T> stateDesc=new ListStateDescriptor<>("window-contents",input.getType().createSerializer(getExecutionEnvironment().getConfig()));
+    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,function,trigger).enableSetProcessingTime(setProcessingTime);
+  }
+  return input.transform(opName,resultType,operator);
+}

@@ -3,20 +3,12 @@
     element.replace(element.getValue(),System.currentTimeMillis());
   }
   Collection<W> elementWindows=windowAssigner.assignWindows(element.getValue(),element.getTimestamp());
-  K key=keySelector.getKey(element.getValue());
-  Map<W,Context> keyWindows=windows.get(key);
-  if (keyWindows == null) {
-    keyWindows=new HashMap<>();
-    windows.put(key,keyWindows);
-  }
+  K key=(K)getStateBackend().getCurrentKey();
   for (  W window : elementWindows) {
-    Context context=keyWindows.get(window);
-    if (context == null) {
-      WindowBuffer<IN> windowBuffer=windowBufferFactory.create();
-      context=new Context(key,window,windowBuffer);
-      keyWindows.put(window,context);
-    }
-    context.windowBuffer.storeElement(element);
+    MergingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+    windowState.add(element.getValue());
+    context.key=key;
+    context.window=window;
     Trigger.TriggerResult triggerResult=context.onElement(element);
     processTriggerResult(triggerResult,key,window);
   }

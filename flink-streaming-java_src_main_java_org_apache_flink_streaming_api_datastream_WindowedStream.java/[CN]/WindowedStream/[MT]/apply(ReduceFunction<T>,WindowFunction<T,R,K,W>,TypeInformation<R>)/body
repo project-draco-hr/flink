@@ -1,6 +1,9 @@
 {
+  if (reduceFunction instanceof RichFunction) {
+    throw new UnsupportedOperationException("Pre-aggregator of apply can not be a RichFunction.");
+  }
   function=input.getExecutionEnvironment().clean(function);
-  preAggregator=input.getExecutionEnvironment().clean(preAggregator);
+  reduceFunction=input.getExecutionEnvironment().clean(reduceFunction);
   String callLocation=Utils.getCallLocationName();
   String udfName="WindowApply at " + callLocation;
   String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
@@ -8,10 +11,12 @@
   OneInputStreamOperator<T,R> operator;
   boolean setProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
   if (evictor != null) {
-    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),function,trigger,evictor).enableSetProcessingTime(setProcessingTime);
+    ListStateDescriptor<StreamRecord<T>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(input.getType().createSerializer(getExecutionEnvironment().getConfig())));
+    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new ReduceApplyWindowFunction<>(reduceFunction,function),trigger,evictor).enableSetProcessingTime(setProcessingTime);
   }
  else {
-    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),new PreAggregatingHeapWindowBuffer.Factory<>(preAggregator),function,trigger).enableSetProcessingTime(setProcessingTime);
+    ReducingStateDescriptor<T> stateDesc=new ReducingStateDescriptor<>("window-contents",reduceFunction,input.getType().createSerializer(getExecutionEnvironment().getConfig()));
+    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,function,trigger).enableSetProcessingTime(setProcessingTime);
   }
   return input.transform(opName,resultType,operator);
 }

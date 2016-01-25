@@ -1,9 +1,12 @@
 {
   closeCalled.set(0);
   final int WINDOW_SIZE=4;
-  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,GlobalWindow> operator=new WindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),windowBufferFactory,new ReduceWindowFunction<String,GlobalWindow,Tuple2<String,Integer>>(new SumReducer()),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)));
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  ReducingStateDescriptor<Tuple2<String,Integer>> stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
+  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,GlobalWindow> operator=new WindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new ReduceWindowFunction<String,GlobalWindow,Tuple2<String,Integer>>(),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)));
   operator.setInputType(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),new ExecutionConfig());
   OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
   long initialTime=0L;
   ConcurrentLinkedQueue<Object> expectedOutput=new ConcurrentLinkedQueue<>();
   testHarness.open();
@@ -25,10 +28,4 @@
   expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2",4),Long.MAX_VALUE));
   TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new ResultSortComparator());
   testHarness.close();
-  if (windowBufferFactory instanceof PreAggregatingHeapWindowBuffer.Factory) {
-    Assert.assertEquals("Close was not called.",2,closeCalled.get());
-  }
- else {
-    Assert.assertEquals("Close was not called.",1,closeCalled.get());
-  }
 }

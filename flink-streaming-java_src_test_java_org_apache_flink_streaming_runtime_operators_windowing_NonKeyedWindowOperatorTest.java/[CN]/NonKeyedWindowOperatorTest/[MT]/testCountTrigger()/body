@@ -1,7 +1,7 @@
 {
   closeCalled.set(0);
   final int WINDOW_SIZE=4;
-  NonKeyedWindowOperator<Tuple2<String,Integer>,Tuple2<String,Integer>,GlobalWindow> operator=new NonKeyedWindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),windowBufferFactory,new ReduceAllWindowFunction<GlobalWindow,Tuple2<String,Integer>>(new SumReducer()),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)));
+  NonKeyedWindowOperator<Tuple2<String,Integer>,Tuple2<String,Integer>,GlobalWindow> operator=new NonKeyedWindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),windowBufferFactory,new ReduceIterableAllWindowFunction<GlobalWindow,Tuple2<String,Integer>>(new SumReducer()),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)));
   operator.setInputType(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),new ExecutionConfig());
   OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
   long initialTime=0L;
@@ -20,10 +20,4 @@
   expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2",4),Long.MAX_VALUE));
   TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new ResultSortComparator());
   testHarness.close();
-  if (windowBufferFactory instanceof PreAggregatingHeapWindowBuffer.Factory) {
-    Assert.assertEquals("Close was not called.",2,closeCalled.get());
-  }
- else {
-    Assert.assertEquals("Close was not called.",1,closeCalled.get());
-  }
 }

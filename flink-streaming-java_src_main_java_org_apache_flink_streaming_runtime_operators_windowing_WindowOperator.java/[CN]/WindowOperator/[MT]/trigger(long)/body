@@ -1,19 +1,20 @@
 {
-  List<Set<Context>> toTrigger=new ArrayList<>();
-  Iterator<Map.Entry<Long,Set<Context>>> it=processingTimeTimers.entrySet().iterator();
-  while (it.hasNext()) {
-    Map.Entry<Long,Set<Context>> triggers=it.next();
-    if (triggers.getKey() <= time) {
-      toTrigger.add(triggers.getValue());
-      it.remove();
+  boolean fire;
+  do {
+    Timer<K,W> timer=processingTimeTimersQueue.peek();
+    if (timer != null && timer.timestamp <= time) {
+      fire=true;
+      processingTimeTimers.remove(timer);
+      processingTimeTimersQueue.remove();
+      context.key=timer.key;
+      context.window=timer.window;
+      Trigger.TriggerResult triggerResult=context.onProcessingTime(time);
+      processTriggerResult(triggerResult,context.key,context.window);
+    }
+ else {
+      fire=false;
     }
   }
-  for (  Set<Context> ctxs : toTrigger) {
-    for (    Context ctx : ctxs) {
-      if (ctx.processingTimeTimer <= time) {
-        Trigger.TriggerResult triggerResult=ctx.onProcessingTime(ctx.processingTimeTimer);
-        processTriggerResult(triggerResult,ctx.key,ctx.window);
-      }
-    }
-  }
+ while (fire);
+  processWatermark(new Watermark(currentWatermark));
 }

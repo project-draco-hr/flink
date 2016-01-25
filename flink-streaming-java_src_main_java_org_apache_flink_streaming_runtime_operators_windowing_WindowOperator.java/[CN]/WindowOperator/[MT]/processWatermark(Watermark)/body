@@ -1,21 +1,21 @@
 {
-  List<Set<Context>> toTrigger=new ArrayList<>();
-  Iterator<Map.Entry<Long,Set<Context>>> it=watermarkTimers.entrySet().iterator();
-  while (it.hasNext()) {
-    Map.Entry<Long,Set<Context>> triggers=it.next();
-    if (triggers.getKey() <= mark.getTimestamp()) {
-      toTrigger.add(triggers.getValue());
-      it.remove();
+  boolean fire;
+  do {
+    Timer<K,W> timer=watermarkTimersQueue.peek();
+    if (timer != null && timer.timestamp <= mark.getTimestamp()) {
+      fire=true;
+      watermarkTimers.remove(timer);
+      watermarkTimersQueue.remove();
+      context.key=timer.key;
+      context.window=timer.window;
+      Trigger.TriggerResult triggerResult=context.onEventTime(mark.getTimestamp());
+      processTriggerResult(triggerResult,context.key,context.window);
+    }
+ else {
+      fire=false;
     }
   }
-  for (  Set<Context> ctxs : toTrigger) {
-    for (    Context ctx : ctxs) {
-      if (ctx.watermarkTimer <= mark.getTimestamp()) {
-        Trigger.TriggerResult triggerResult=ctx.onEventTime(ctx.watermarkTimer);
-        processTriggerResult(triggerResult,ctx.key,ctx.window);
-      }
-    }
-  }
+ while (fire);
   output.emitWatermark(mark);
   this.currentWatermark=mark.getTimestamp();
 }

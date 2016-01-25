@@ -1,0 +1,33 @@
+{
+  if (!triggerResult.isFire() && !triggerResult.isPurge()) {
+    return;
+  }
+  if (triggerResult.isFire()) {
+    timestampedCollector.setTimestamp(window.maxTimestamp());
+    setKeyContext(key);
+    ListState<StreamRecord<IN>> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+    Iterable<StreamRecord<IN>> contents=windowState.get();
+    int toEvict=evictor.evict((Iterable)contents,Iterables.size(contents),context.window);
+    FluentIterable<IN> projectedContents=FluentIterable.from(contents).skip(toEvict).transform(new Function<StreamRecord<IN>,IN>(){
+      @Override public IN apply(      StreamRecord<IN> input){
+        return input.getValue();
+      }
+    }
+);
+    userFunction.apply(context.key,context.window,projectedContents,timestampedCollector);
+    if (triggerResult.isPurge()) {
+      windowState.clear();
+    }
+ else {
+      windowState.clear();
+      for (      StreamRecord<IN> rec : FluentIterable.from(contents).skip(toEvict)) {
+        windowState.add(rec);
+      }
+    }
+  }
+ else   if (triggerResult.isPurge()) {
+    setKeyContext(key);
+    ListState<StreamRecord<IN>> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+    windowState.clear();
+  }
+}
