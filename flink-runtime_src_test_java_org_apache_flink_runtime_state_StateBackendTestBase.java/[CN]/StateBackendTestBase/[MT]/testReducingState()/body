@@ -1,0 +1,57 @@
+{
+  try {
+    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+    ReducingStateDescriptor<String> kvId=new ReducingStateDescriptor<>("id",new ReduceFunction<String>(){
+      private static final long serialVersionUID=1L;
+      @Override public String reduce(      String value1,      String value2) throws Exception {
+        return value1 + "," + value2;
+      }
+    }
+,StringSerializer.INSTANCE);
+    ReducingState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> kv=(KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B>)state;
+    Joiner joiner=Joiner.on(",");
+    kv.setCurrentKey(1);
+    assertEquals(null,state.get());
+    state.add("1");
+    kv.setCurrentKey(2);
+    assertEquals(null,state.get());
+    state.add("2");
+    kv.setCurrentKey(1);
+    assertEquals("1",state.get());
+    KvStateSnapshot<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> snapshot1=kv.snapshot(682375462378L,2);
+    kv.setCurrentKey(1);
+    state.add("u1");
+    kv.setCurrentKey(2);
+    state.add("u2");
+    kv.setCurrentKey(3);
+    state.add("u3");
+    KvStateSnapshot<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> snapshot2=kv.snapshot(682375462379L,4);
+    kv.setCurrentKey(1);
+    assertEquals("1,u1",state.get());
+    kv.setCurrentKey(2);
+    assertEquals("2,u2",state.get());
+    kv.setCurrentKey(3);
+    assertEquals("u3",state.get());
+    kv.dispose();
+    KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> restored1=snapshot1.restoreState(backend,IntSerializer.INSTANCE,this.getClass().getClassLoader(),10);
+    @SuppressWarnings("unchecked") ReducingState<String> restored1State=(ReducingState<String>)restored1;
+    restored1.setCurrentKey(1);
+    assertEquals("1",restored1State.get());
+    restored1.setCurrentKey(2);
+    assertEquals("2",restored1State.get());
+    restored1.dispose();
+    KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> restored2=snapshot2.restoreState(backend,IntSerializer.INSTANCE,this.getClass().getClassLoader(),20);
+    @SuppressWarnings("unchecked") ReducingState<String> restored2State=(ReducingState<String>)restored2;
+    restored2.setCurrentKey(1);
+    assertEquals("1,u1",restored2State.get());
+    restored2.setCurrentKey(2);
+    assertEquals("2,u2",restored2State.get());
+    restored2.setCurrentKey(3);
+    assertEquals("u3",restored2State.get());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

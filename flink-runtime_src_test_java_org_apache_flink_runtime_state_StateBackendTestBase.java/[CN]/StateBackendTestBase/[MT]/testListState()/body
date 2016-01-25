@@ -1,0 +1,51 @@
+{
+  try {
+    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+    ListStateDescriptor<String> kvId=new ListStateDescriptor<>("id",StringSerializer.INSTANCE);
+    ListState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> kv=(KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B>)state;
+    Joiner joiner=Joiner.on(",");
+    kv.setCurrentKey(1);
+    assertEquals("",joiner.join(state.get()));
+    state.add("1");
+    kv.setCurrentKey(2);
+    assertEquals("",joiner.join(state.get()));
+    state.add("2");
+    kv.setCurrentKey(1);
+    assertEquals("1",joiner.join(state.get()));
+    KvStateSnapshot<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> snapshot1=kv.snapshot(682375462378L,2);
+    kv.setCurrentKey(1);
+    state.add("u1");
+    kv.setCurrentKey(2);
+    state.add("u2");
+    kv.setCurrentKey(3);
+    state.add("u3");
+    KvStateSnapshot<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> snapshot2=kv.snapshot(682375462379L,4);
+    kv.setCurrentKey(1);
+    assertEquals("1,u1",joiner.join(state.get()));
+    kv.setCurrentKey(2);
+    assertEquals("2,u2",joiner.join(state.get()));
+    kv.setCurrentKey(3);
+    assertEquals("u3",joiner.join(state.get()));
+    kv.dispose();
+    KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> restored1=snapshot1.restoreState(backend,IntSerializer.INSTANCE,this.getClass().getClassLoader(),10);
+    @SuppressWarnings("unchecked") ListState<String> restored1State=(ListState<String>)restored1;
+    restored1.setCurrentKey(1);
+    assertEquals("1",joiner.join(restored1State.get()));
+    restored1.setCurrentKey(2);
+    assertEquals("2",joiner.join(restored1State.get()));
+    restored1.dispose();
+    KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> restored2=snapshot2.restoreState(backend,IntSerializer.INSTANCE,this.getClass().getClassLoader(),20);
+    @SuppressWarnings("unchecked") ListState<String> restored2State=(ListState<String>)restored2;
+    restored2.setCurrentKey(1);
+    assertEquals("1,u1",joiner.join(restored2State.get()));
+    restored2.setCurrentKey(2);
+    assertEquals("2,u2",joiner.join(restored2State.get()));
+    restored2.setCurrentKey(3);
+    assertEquals("u3",joiner.join(restored2State.get()));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

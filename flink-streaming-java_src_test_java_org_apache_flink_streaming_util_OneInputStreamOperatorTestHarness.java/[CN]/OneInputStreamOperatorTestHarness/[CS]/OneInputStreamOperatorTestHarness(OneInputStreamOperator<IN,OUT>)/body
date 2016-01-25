@@ -4,14 +4,26 @@
   this.config=new StreamConfig(new Configuration());
   this.executionConfig=new ExecutionConfig();
   this.checkpointLock=new Object();
-  Environment env=new MockEnvironment("MockTwoInputTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024);
-  StreamTask<?,?> mockTask=mock(StreamTask.class);
+  final Environment env=new MockEnvironment("MockTwoInputTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024);
+  mockTask=mock(StreamTask.class);
   when(mockTask.getName()).thenReturn("Mock Task");
   when(mockTask.getCheckpointLock()).thenReturn(checkpointLock);
   when(mockTask.getConfiguration()).thenReturn(config);
   when(mockTask.getEnvironment()).thenReturn(env);
   when(mockTask.getExecutionConfig()).thenReturn(executionConfig);
-  @SuppressWarnings("unchecked") OngoingStubbing<StateBackend<?>> stubbing=(OngoingStubbing<StateBackend<?>>)(OngoingStubbing<?>)when(mockTask.getStateBackend());
-  stubbing.thenReturn(MemoryStateBackend.defaultInstance());
-  operator.setup(mockTask,config,new MockOutput());
+  try {
+    doAnswer(new Answer<AbstractStateBackend>(){
+      @Override public AbstractStateBackend answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        final String operatorIdentifier=(String)invocationOnMock.getArguments()[0];
+        final TypeSerializer<?> keySerializer=(TypeSerializer<?>)invocationOnMock.getArguments()[1];
+        MemoryStateBackend backend=MemoryStateBackend.create();
+        backend.initializeForJob(env,operatorIdentifier,keySerializer);
+        return backend;
+      }
+    }
+).when(mockTask).createStateBackend(any(String.class),any(TypeSerializer.class));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
 }

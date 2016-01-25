@@ -4,11 +4,13 @@
     FsStateBackend fileBackend=new FsStateBackend(localFileUri(tempDir));
     DbStateBackend backend=new DbStateBackend(conf,fileBackend);
     Environment env=new DummyEnvironment("test",2,0);
-    backend.initializeForJob(env);
-    LazyDbKvState<Integer,String> kv=backend.createKvState("state1_1","state1",IntSerializer.INSTANCE,StringSerializer.INSTANCE,null);
-    String tableName="state1_1_" + env.getApplicationID().toShortString();
+    backend.initializeForJob(env,"dummy_test_kv",IntSerializer.INSTANCE);
+    ValueState<String> state=backend.createValueState(IntSerializer.INSTANCE,new ValueStateDescriptor<>("state1",null,StringSerializer.INSTANCE));
+    LazyDbValueState<Integer,Integer,String> kv=(LazyDbValueState<Integer,Integer,String>)state;
+    String tableName="dummy_test_kv_state1";
     assertTrue(isTableCreated(backend.getConnections().getFirst(),tableName));
     assertEquals(0,kv.size());
+    kv.setCurrentNamespace(1);
     kv.setCurrentKey(1);
     assertNull(kv.value());
     kv.update("1");
@@ -27,7 +29,7 @@
     kv.update("u2");
     kv.setCurrentKey(3);
     kv.update("u3");
-    KvStateSnapshot<Integer,String,DbStateBackend> snapshot2=kv.snapshot(682375462379L,200);
+    KvStateSnapshot<Integer,Integer,ValueState<String>,ValueStateDescriptor<String>,DbStateBackend> snapshot2=kv.snapshot(682375462379L,200);
     assertEquals(3,kv.size());
     kv.setCurrentKey(1);
     assertEquals("u1",kv.value());
@@ -35,14 +37,15 @@
     assertEquals("u2",kv.value());
     kv.setCurrentKey(3);
     assertEquals("u3",kv.value());
-    KvState<Integer,String,DbStateBackend> restored2=snapshot2.restoreState(backend,IntSerializer.INSTANCE,StringSerializer.INSTANCE,null,getClass().getClassLoader(),6823754623710L);
-    assertEquals(0,restored2.size());
+    KvState<Integer,Integer,ValueState<String>,ValueStateDescriptor<String>,DbStateBackend> restored2=snapshot2.restoreState(backend,IntSerializer.INSTANCE,getClass().getClassLoader(),6823754623710L);
+    restored2.setCurrentNamespace(1);
+    @SuppressWarnings("unchecked") ValueState<String> restoredState2=(ValueState<String>)restored2;
     restored2.setCurrentKey(1);
-    assertEquals("u1",restored2.value());
+    assertEquals("u1",restoredState2.value());
     restored2.setCurrentKey(2);
-    assertEquals("u2",restored2.value());
+    assertEquals("u2",restoredState2.value());
     restored2.setCurrentKey(3);
-    assertEquals("u3",restored2.value());
+    assertEquals("u3",restoredState2.value());
     backend.close();
   }
   finally {

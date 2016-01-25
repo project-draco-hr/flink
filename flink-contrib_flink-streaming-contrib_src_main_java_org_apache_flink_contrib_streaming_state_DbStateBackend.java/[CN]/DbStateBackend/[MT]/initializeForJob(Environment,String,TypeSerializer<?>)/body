@@ -1,0 +1,23 @@
+{
+  super.initializeForJob(env,operatorIdentifier,keySerializer);
+  this.operatorIdentifier=operatorIdentifier;
+  this.rnd=new Random();
+  this.env=env;
+  connections=dbConfig.createShardedConnection();
+  connections.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+  if (nonPartitionedStateBackend == null) {
+    insertStatement=retry(new Callable<PreparedStatement>(){
+      public PreparedStatement call() throws SQLException {
+        dbAdapter.createCheckpointsTable(env.getApplicationID().toShortString(),getConnections().getFirst());
+        return dbAdapter.prepareCheckpointInsert(env.getApplicationID().toShortString(),getConnections().getFirst());
+      }
+    }
+,numSqlRetries,sqlRetrySleep);
+  }
+ else {
+    nonPartitionedStateBackend.initializeForJob(env,operatorIdentifier,keySerializer);
+  }
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Database state backend successfully initialized");
+  }
+}

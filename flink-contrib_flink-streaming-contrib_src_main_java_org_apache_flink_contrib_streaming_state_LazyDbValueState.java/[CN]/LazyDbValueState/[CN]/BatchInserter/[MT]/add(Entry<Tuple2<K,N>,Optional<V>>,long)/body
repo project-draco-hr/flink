@@ -1,0 +1,19 @@
+{
+  K key=next.getKey().f0;
+  N namespace=next.getKey().f1;
+  V value=next.getValue().orNull();
+  int shardIndex=connections.getShardIndex(key);
+  List<Tuple2<byte[],byte[]>> insertPartition=inserts[shardIndex];
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  DataOutputViewStreamWrapper out=new DataOutputViewStreamWrapper(baos);
+  keySerializer.serialize(key,out);
+  namespaceSerializer.serialize(namespace,out);
+  out.close();
+  byte[] kn=baos.toByteArray();
+  byte[] v=value != null ? InstantiationUtil.serializeToByteArray(valueSerializer,value) : null;
+  insertPartition.add(Tuple2.of(kn,v));
+  if (insertPartition.size() == maxInsertBatchSize) {
+    dbAdapter.insertBatch(kvStateId,conf,connections.getForIndex(shardIndex),insertStatements.getForIndex(shardIndex),timestamp,insertPartition);
+    insertPartition.clear();
+  }
+}

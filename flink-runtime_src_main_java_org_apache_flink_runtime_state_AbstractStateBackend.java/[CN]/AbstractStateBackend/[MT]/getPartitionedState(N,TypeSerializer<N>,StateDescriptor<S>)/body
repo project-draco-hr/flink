@@ -1,0 +1,38 @@
+{
+  if (keySerializer == null) {
+    throw new Exception("State key serializer has not been configured in the config. " + "This operation cannot use partitioned state.");
+  }
+  if (keyValueStatesByName == null) {
+    keyValueStatesByName=new HashMap<>();
+  }
+  if (lastName != null && lastName.equals(stateDescriptor.getName())) {
+    lastState.setCurrentNamespace(namespace);
+    return (S)lastState;
+  }
+  KvState<?,?,?,?,?> previous=keyValueStatesByName.get(stateDescriptor.getName());
+  if (previous != null) {
+    lastState=previous;
+    lastState.setCurrentNamespace(namespace);
+    lastName=stateDescriptor.getName();
+    return (S)previous;
+  }
+  S kvstate=stateDescriptor.bind(new StateBackend(){
+    @Override public <T>ValueState<T> createValueState(    ValueStateDescriptor<T> stateDesc) throws Exception {
+      return AbstractStateBackend.this.createValueState(namespaceSerializer,stateDesc);
+    }
+    @Override public <T>ListState<T> createListState(    ListStateDescriptor<T> stateDesc) throws Exception {
+      return AbstractStateBackend.this.createListState(namespaceSerializer,stateDesc);
+    }
+    @Override public <T>ReducingState<T> createReducingState(    ReducingStateDescriptor<T> stateDesc) throws Exception {
+      return AbstractStateBackend.this.createReducingState(namespaceSerializer,stateDesc);
+    }
+  }
+);
+  keyValueStatesByName.put(stateDescriptor.getName(),(KvState)kvstate);
+  keyValueStates=keyValueStatesByName.values().toArray(new KvState[keyValueStatesByName.size()]);
+  lastName=stateDescriptor.getName();
+  lastState=(KvState<?,?,?,?,?>)kvstate;
+  ((KvState)kvstate).setCurrentKey(currentKey);
+  ((KvState)kvstate).setCurrentNamespace(namespace);
+  return kvstate;
+}
