@@ -1,10 +1,10 @@
 {
   if (this.hashJoin.nextRecord()) {
-    final MutableHashTable.HashBucketIterator<V2,V1> buildSideIterator=this.hashJoin.getBuildSideIterator();
-    V2 nextBuildSideRecord;
-    if ((nextBuildSideRecord=buildSideIterator.next()) != null) {
+    final MutableObjectIterator<V2> buildSideIterator=this.hashJoin.getBuildSideIterator();
+    final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
+    V2 nextBuildSideRecord=buildSideIterator.next();
+    if (probeRecord != null && nextBuildSideRecord != null) {
       V2 tmpRec;
-      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
       if ((tmpRec=buildSideIterator.next()) != null) {
         V1 probeCopy;
         probeCopy=this.probeSideSerializer.copy(probeRecord);
@@ -20,9 +20,16 @@
         matchFunction.join(probeRecord,nextBuildSideRecord,collector);
       }
     }
- else     if (joinWithEmptyBuildSide) {
-      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
-      matchFunction.join(probeRecord,null,collector);
+ else {
+      if (probeSideOuterJoin && probeRecord != null && nextBuildSideRecord == null) {
+        matchFunction.join(probeRecord,null,collector);
+      }
+      if (buildSideOuterJoin && probeRecord == null && nextBuildSideRecord != null) {
+        matchFunction.join(null,nextBuildSideRecord,collector);
+        while (this.running && ((nextBuildSideRecord=buildSideIterator.next()) != null)) {
+          matchFunction.join(null,nextBuildSideRecord,collector);
+        }
+      }
     }
     return true;
   }

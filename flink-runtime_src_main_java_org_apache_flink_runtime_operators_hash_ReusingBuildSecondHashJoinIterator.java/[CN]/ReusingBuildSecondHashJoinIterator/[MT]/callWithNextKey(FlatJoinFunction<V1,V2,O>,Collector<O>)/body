@@ -1,24 +1,24 @@
 {
   if (this.hashJoin.nextRecord()) {
-    final MutableHashTable.HashBucketIterator<V2,V1> buildSideIterator=this.hashJoin.getBuildSideIterator();
-    V2 nextBuildSideRecord=this.nextBuildSideObject;
-    if ((nextBuildSideRecord=buildSideIterator.next(nextBuildSideRecord)) != null) {
-      V2 tmpRec=this.tempBuildSideRecord;
-      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
-      if ((tmpRec=buildSideIterator.next(tmpRec)) != null) {
-        matchFunction.join(probeRecord,nextBuildSideRecord,collector);
-        matchFunction.join(probeRecord,tmpRec,collector);
-        while (this.running && ((nextBuildSideRecord=buildSideIterator.next(nextBuildSideRecord)) != null)) {
-          matchFunction.join(probeRecord,nextBuildSideRecord,collector);
-        }
-      }
- else {
+    final MutableObjectIterator<V2> buildSideIterator=this.hashJoin.getBuildSideIterator();
+    final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
+    V2 nextBuildSideRecord=buildSideIterator.next(this.nextBuildSideObject);
+    if (probeRecord != null && nextBuildSideRecord != null) {
+      matchFunction.join(probeRecord,nextBuildSideRecord,collector);
+      while (this.running && ((nextBuildSideRecord=buildSideIterator.next(nextBuildSideRecord)) != null)) {
         matchFunction.join(probeRecord,nextBuildSideRecord,collector);
       }
     }
- else     if (joinWithEmptyBuildSide) {
-      final V1 probeRecord=this.hashJoin.getCurrentProbeRecord();
-      matchFunction.join(probeRecord,null,collector);
+ else {
+      if (probeSideOuterJoin && probeRecord != null && nextBuildSideRecord == null) {
+        matchFunction.join(probeRecord,null,collector);
+      }
+      if (buildSideOuterJoin && probeRecord == null && nextBuildSideRecord != null) {
+        matchFunction.join(null,nextBuildSideRecord,collector);
+        while (this.running && ((nextBuildSideRecord=buildSideIterator.next(nextBuildSideRecord)) != null)) {
+          matchFunction.join(null,nextBuildSideRecord,collector);
+        }
+      }
     }
     return true;
   }

@@ -1,0 +1,32 @@
+{
+  while (true) {
+    while (this.numInSegment < this.countInSegment) {
+      boolean probed=probedSet.get(numInSegment);
+      if (!probed) {
+        final long pointer=this.bucketSegment.getLong(this.bucketInSegmentOffset + BUCKET_POINTER_START_OFFSET + (this.numInSegment * POINTER_LEN));
+        try {
+          this.partition.setReadPosition(pointer);
+          BT result=this.accessor.deserialize(this.partition);
+          this.numInSegment++;
+          return result;
+        }
+ catch (        IOException ioex) {
+          throw new RuntimeException("Error deserializing key or value from the hashtable: " + ioex.getMessage(),ioex);
+        }
+      }
+ else {
+        this.numInSegment++;
+      }
+    }
+    final long forwardPointer=this.bucketSegment.getLong(this.bucketInSegmentOffset + HEADER_FORWARD_OFFSET);
+    if (forwardPointer == BUCKET_FORWARD_POINTER_NOT_SET) {
+      return null;
+    }
+    final int overflowSegNum=(int)(forwardPointer >>> 32);
+    this.bucketSegment=this.overflowSegments[overflowSegNum];
+    this.bucketInSegmentOffset=(int)forwardPointer;
+    this.countInSegment=this.bucketSegment.getShort(this.bucketInSegmentOffset + HEADER_COUNT_OFFSET);
+    this.numInSegment=0;
+    this.probedSet.setMemorySegment(bucketSegment,this.bucketInSegmentOffset + HEADER_PROBED_FLAGS_OFFSET);
+  }
+}
