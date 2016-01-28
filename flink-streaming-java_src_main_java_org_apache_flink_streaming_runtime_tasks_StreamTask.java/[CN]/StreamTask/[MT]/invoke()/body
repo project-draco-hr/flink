@@ -1,37 +1,21 @@
 {
-  LOG.debug("Initializing {}",getName());
-  boolean initializationCompleted=false;
+  boolean disposed=false;
   try {
-    AccumulatorRegistry accumulatorRegistry=getEnvironment().getAccumulatorRegistry();
+    LOG.debug("Initializing {}",getName());
     userClassLoader=getUserCodeClassLoader();
     configuration=new StreamConfig(getTaskConfiguration());
-    accumulatorMap=accumulatorRegistry.getUserMap();
+    accumulatorMap=getEnvironment().getAccumulatorRegistry().getUserMap();
     headOperator=configuration.getStreamOperator(userClassLoader);
-    operatorChain=new OperatorChain<>(this,headOperator,accumulatorRegistry.getReadWriteReporter());
+    operatorChain=new OperatorChain<>(this,headOperator,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
     if (headOperator != null) {
       headOperator.setup(this,configuration,operatorChain.getChainEntryPoint());
     }
     timerService=Executors.newSingleThreadScheduledExecutor(new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
-    asyncCheckpointThreads=new HashSet<>();
     init();
-    initializationCompleted=true;
-  }
-  finally {
-    if (!initializationCompleted) {
-      if (timerService != null) {
-        timerService.shutdownNow();
-      }
-      if (operatorChain != null) {
-        operatorChain.releaseOutputs();
-      }
-    }
-  }
-  LOG.debug("Invoking {}",getName());
-  boolean disposed=false;
-  try {
+    LOG.debug("Invoking {}",getName());
     stateBackend=createStateBackend();
     stateBackend.initializeForJob(getEnvironment());
-    restoreStateLazy();
+    restoreState();
 synchronized (lock) {
       openAllOperators();
     }
@@ -50,11 +34,23 @@ synchronized (lock) {
   }
   finally {
     isRunning=false;
-    timerService.shutdownNow();
-    for (    Thread checkpointThread : asyncCheckpointThreads) {
-      checkpointThread.interrupt();
+    if (timerService != null) {
+      try {
+        timerService.shutdownNow();
+      }
+ catch (      Throwable t) {
+        LOG.error("Could not shut down timer service",t);
+      }
     }
-    asyncCheckpointThreads.clear();
+    try {
+      for (      Thread checkpointThread : asyncCheckpointThreads) {
+        checkpointThread.interrupt();
+      }
+      asyncCheckpointThreads.clear();
+    }
+ catch (    Throwable t) {
+      LOG.error("Could not shut down async checkpoint threads",t);
+    }
     if (operatorChain != null) {
       operatorChain.releaseOutputs();
     }
@@ -62,7 +58,7 @@ synchronized (lock) {
       cleanup();
     }
  catch (    Throwable t) {
-      LOG.error("Error during cleanup of stream task.");
+      LOG.error("Error during cleanup of stream task",t);
     }
     if (!disposed) {
       disposeAllOperators();

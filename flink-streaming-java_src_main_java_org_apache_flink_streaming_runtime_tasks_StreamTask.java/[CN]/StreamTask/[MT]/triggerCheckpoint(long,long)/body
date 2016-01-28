@@ -30,18 +30,19 @@ synchronized (lock) {
         getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
       }
  else {
-        Thread checkpointThread=new Thread(){
+        String threadName="Materialize checkpoint " + checkpointId + " for "+ getName();
+        Thread checkpointThread=new Thread(threadName){
           @Override public void run(){
             try {
               for (              StreamTaskState state : states) {
                 if (state != null) {
                   if (state.getFunctionState() instanceof AsynchronousStateHandle) {
-                    AsynchronousStateHandle<?> asyncState=(AsynchronousStateHandle<?>)state.getFunctionState();
-                    state.setFunctionState((StateHandle)asyncState.materialize());
+                    AsynchronousStateHandle<Serializable> asyncState=(AsynchronousStateHandle<Serializable>)state.getFunctionState();
+                    state.setFunctionState(asyncState.materialize());
                   }
                   if (state.getOperatorState() instanceof AsynchronousStateHandle) {
                     AsynchronousStateHandle<?> asyncState=(AsynchronousStateHandle<?>)state.getOperatorState();
-                    state.setOperatorState((StateHandle)asyncState.materialize());
+                    state.setOperatorState(asyncState.materialize());
                   }
                 }
               }
@@ -49,7 +50,9 @@ synchronized (lock) {
               getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
             }
  catch (            Exception e) {
-              LOG.error("Caught exception while materializing asynchronous checkpoints.",e);
+              if (isRunning()) {
+                LOG.error("Caught exception while materializing asynchronous checkpoints.",e);
+              }
               if (asyncException == null) {
                 asyncException=new AsynchronousException(e);
               }
@@ -60,6 +63,7 @@ synchronized (lock) {
         }
 ;
         asyncCheckpointThreads.add(checkpointThread);
+        checkpointThread.setDaemon(true);
         checkpointThread.start();
       }
       return true;
