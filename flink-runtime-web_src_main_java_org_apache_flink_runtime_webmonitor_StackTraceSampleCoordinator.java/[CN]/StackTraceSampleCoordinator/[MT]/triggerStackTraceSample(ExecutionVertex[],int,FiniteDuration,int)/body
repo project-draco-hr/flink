@@ -1,0 +1,68 @@
+{
+  checkNotNull(tasksToSample,"Tasks to sample");
+  checkArgument(tasksToSample.length >= 1,"No tasks to sample");
+  checkArgument(numSamples >= 1,"No number of samples");
+  checkArgument(maxStackTraceDepth >= 0,"Negative maximum stack trace depth");
+  ExecutionAttemptID[] triggerIds=new ExecutionAttemptID[tasksToSample.length];
+  for (int i=0; i < triggerIds.length; i++) {
+    Execution execution=tasksToSample[i].getCurrentExecutionAttempt();
+    if (execution != null && execution.getState() == ExecutionState.RUNNING) {
+      triggerIds[i]=execution.getAttemptId();
+    }
+ else {
+      Promise failedPromise=new scala.concurrent.impl.Promise.DefaultPromise<>().failure(new IllegalStateException("Task " + tasksToSample[i].getTaskNameWithSubtaskIndex() + " is not running."));
+      return failedPromise.future();
+    }
+  }
+synchronized (lock) {
+    if (isShutDown) {
+      Promise failedPromise=new scala.concurrent.impl.Promise.DefaultPromise<>().failure(new IllegalStateException("Shut down"));
+      return failedPromise.future();
+    }
+    if (timer == null) {
+      timer=new Timer("Stack trace sample coordinator timer");
+    }
+    int sampleId=sampleIdCounter++;
+    LOG.debug("Triggering stack trace sample {}",sampleId);
+    final PendingStackTraceSample pending=new PendingStackTraceSample(sampleId,triggerIds);
+    long expectedDuration=numSamples * delayBetweenSamples.toMillis();
+    long discardDelay=expectedDuration + sampleTimeout;
+    TimerTask discardTask=new TimerTask(){
+      @Override public void run(){
+        try {
+synchronized (lock) {
+            if (!pending.isDiscarded()) {
+              LOG.info("Sample {} expired before completing",pending.getSampleId());
+              pending.discard(new RuntimeException("Time out"));
+              pendingSamples.remove(pending.getSampleId());
+            }
+          }
+        }
+ catch (        Throwable t) {
+          LOG.error("Exception while handling sample timeout",t);
+        }
+      }
+    }
+;
+    pendingSamples.put(sampleId,pending);
+    timer.schedule(discardTask,discardDelay);
+    boolean success=true;
+    try {
+      for (int i=0; i < tasksToSample.length; i++) {
+        TriggerStackTraceSample msg=new TriggerStackTraceSample(sampleId,triggerIds[i],numSamples,delayBetweenSamples,maxStackTraceDepth);
+        if (!tasksToSample[i].sendMessageToCurrentExecution(msg,triggerIds[i],responseActor)) {
+          success=false;
+          break;
+        }
+      }
+      return pending.getStackTraceSampleFuture();
+    }
+  finally {
+      if (!success) {
+        pending.discard(new RuntimeException("Failed to trigger sample, " + "because task has been reset."));
+        pendingSamples.remove(sampleId);
+        rememberRecentSampleId(sampleId);
+      }
+    }
+  }
+}

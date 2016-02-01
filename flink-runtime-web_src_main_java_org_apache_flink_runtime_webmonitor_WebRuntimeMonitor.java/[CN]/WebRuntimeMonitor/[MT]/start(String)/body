@@ -3,5 +3,17 @@
 synchronized (startupShutdownLock) {
     jobManagerAddressPromise.success(jobManagerAkkaUrl);
     leaderRetrievalService.start(retriever);
+    long delay=backPressureStatsTracker.getCleanUpInterval();
+    bootstrap.childGroup().scheduleWithFixedDelay(new Runnable(){
+      @Override public void run(){
+        try {
+          backPressureStatsTracker.cleanUpOperatorStatsCache();
+        }
+ catch (        Throwable t) {
+          LOG.error("Error during back pressure stats cache cleanup.",t);
+        }
+      }
+    }
+,delay,delay,TimeUnit.MILLISECONDS);
   }
 }

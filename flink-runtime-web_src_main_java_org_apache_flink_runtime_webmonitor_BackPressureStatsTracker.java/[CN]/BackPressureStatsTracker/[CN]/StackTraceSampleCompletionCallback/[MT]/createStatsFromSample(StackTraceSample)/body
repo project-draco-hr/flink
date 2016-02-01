@@ -1,0 +1,33 @@
+{
+  Map<ExecutionAttemptID,List<StackTraceElement[]>> traces=sample.getStackTraces();
+  Map<ExecutionAttemptID,Integer> subtaskIndexMap=Maps.newHashMapWithExpectedSize(traces.size());
+  Set<ExecutionAttemptID> sampledTasks=sample.getStackTraces().keySet();
+  for (  ExecutionVertex task : vertex.getTaskVertices()) {
+    ExecutionAttemptID taskId=task.getCurrentExecutionAttempt().getAttemptId();
+    if (sampledTasks.contains(taskId)) {
+      subtaskIndexMap.put(taskId,task.getParallelSubtaskIndex());
+    }
+ else {
+      throw new RuntimeException("Outdated sample. A task, which is part of the " + "sample has been reset.");
+    }
+  }
+  double[] backPressureRatio=new double[traces.size()];
+  for (  Entry<ExecutionAttemptID,List<StackTraceElement[]>> entry : traces.entrySet()) {
+    int backPressureSamples=0;
+    List<StackTraceElement[]> taskTraces=entry.getValue();
+    for (    StackTraceElement[] trace : taskTraces) {
+      for (int i=trace.length - 1; i >= 0; i--) {
+        StackTraceElement elem=trace[i];
+        if (elem.getClassName().equals(EXPECTED_CLASS_NAME) && elem.getMethodName().equals(EXPECTED_METHOD_NAME)) {
+          backPressureSamples++;
+          break;
+        }
+      }
+    }
+    int subtaskIndex=subtaskIndexMap.get(entry.getKey());
+    int size=taskTraces.size();
+    double ratio=(size > 0) ? ((double)backPressureSamples) / size : 0;
+    backPressureRatio[subtaskIndex]=ratio;
+  }
+  return new OperatorBackPressureStats(sample.getSampleId(),sample.getEndTime(),backPressureRatio);
+}

@@ -1,0 +1,159 @@
+{
+  new JavaTestKit(system){
+{
+      ActorGateway taskManagerActorGateway=null;
+      ActorGateway jobManagerActorGateway=TestingUtils.createForwardingJobManager(system,getTestActor(),Option.<String>empty());
+      final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),leaderSessionID);
+      try {
+        final ActorGateway jobManager=jobManagerActorGateway;
+        final ActorGateway taskManager=TestingUtils.createTaskManager(system,jobManager,new Configuration(),true,false);
+        new Within(d){
+          @Override protected void run(){
+            expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
+            assertEquals(taskManager.actor(),getLastSender());
+            taskManager.tell(new RegistrationMessages.AcknowledgeRegistration(new InstanceID(),12345),jobManager);
+          }
+        }
+;
+        final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(new ApplicationID(),new JobID(),new JobVertexID(),new ExecutionAttemptID(),"Task",0,1,0,new Configuration(),new Configuration(),Tasks.BlockingNoOpInvokable.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),Collections.<BlobKey>emptyList(),Collections.<URL>emptyList(),0);
+        new Within(d){
+          @Override protected void run(){
+            try {
+              Future<Object> taskRunningFuture=taskManager.ask(new TestingTaskManagerMessages.NotifyWhenTaskIsRunning(tdd.getExecutionId()),timeout);
+              taskManager.tell(new SubmitTask(tdd));
+              Await.ready(taskRunningFuture,d);
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+        new Within(d){
+          @Override protected void run(){
+            try {
+              ExecutionAttemptID taskId=new ExecutionAttemptID();
+              taskManager.tell(new TriggerStackTraceSample(112223,taskId,100,d,0),testActorGateway);
+              Object[] msg=receiveN(1);
+              while (!(msg[0] instanceof ResponseStackTraceSampleFailure)) {
+                msg=receiveN(1);
+              }
+              ResponseStackTraceSampleFailure response=(ResponseStackTraceSampleFailure)msg[0];
+              assertEquals(112223,response.sampleId());
+              assertEquals(taskId,response.executionId());
+              assertEquals(IllegalStateException.class,response.cause().getClass());
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+        new Within(d){
+          @Override protected void run(){
+            boolean success=false;
+            Throwable lastError=null;
+            for (int i=0; i < 100 && !success; i++) {
+              try {
+                int numSamples=5;
+                taskManager.tell(new TriggerStackTraceSample(19230,tdd.getExecutionId(),numSamples,new FiniteDuration(100,TimeUnit.MILLISECONDS),0),testActorGateway);
+                Object[] msg=receiveN(1);
+                while (!(msg[0] instanceof ResponseStackTraceSampleSuccess)) {
+                  msg=receiveN(1);
+                }
+                ResponseStackTraceSampleSuccess response=(ResponseStackTraceSampleSuccess)msg[0];
+                assertEquals(19230,response.sampleId());
+                assertEquals(tdd.getExecutionId(),response.executionId());
+                List<StackTraceElement[]> traces=response.samples();
+                assertEquals("Number of samples",numSamples,traces.size());
+                for (                StackTraceElement[] trace : traces) {
+                  for (                  StackTraceElement elem : trace) {
+                    if (elem.getClassName().equals(Tasks.BlockingNoOpInvokable.class.getName())) {
+                      assertEquals("invoke",elem.getMethodName());
+                      success=true;
+                      break;
+                    }
+                  }
+                  assertTrue("Unexpected stack trace: " + Arrays.toString(trace),success);
+                }
+              }
+ catch (              Throwable t) {
+                lastError=t;
+                LOG.warn("Failed to find invokable.",t);
+              }
+              try {
+                Thread.sleep(100);
+              }
+ catch (              InterruptedException e) {
+                LOG.error("Interrupted while sleeping before retry.",e);
+                break;
+              }
+            }
+            if (!success) {
+              if (lastError == null) {
+                fail("Failed to find invokable");
+              }
+ else {
+                fail(lastError.getMessage());
+              }
+            }
+          }
+        }
+;
+        new Within(d){
+          @Override protected void run(){
+            try {
+              int numSamples=5;
+              int maxDepth=2;
+              taskManager.tell(new TriggerStackTraceSample(1337,tdd.getExecutionId(),numSamples,new FiniteDuration(100,TimeUnit.MILLISECONDS),maxDepth),testActorGateway);
+              Object[] msg=receiveN(1);
+              while (!(msg[0] instanceof ResponseStackTraceSampleSuccess)) {
+                msg=receiveN(1);
+              }
+              ResponseStackTraceSampleSuccess response=(ResponseStackTraceSampleSuccess)msg[0];
+              assertEquals(1337,response.sampleId());
+              assertEquals(tdd.getExecutionId(),response.executionId());
+              List<StackTraceElement[]> traces=response.samples();
+              assertEquals("Number of samples",numSamples,traces.size());
+              for (              StackTraceElement[] trace : traces) {
+                assertEquals("Max depth",maxDepth,trace.length);
+              }
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+        new Within(d){
+          @Override protected void run(){
+            try {
+              taskManager.tell(new TriggerStackTraceSample(0,tdd.getExecutionId(),10000,new FiniteDuration(100,TimeUnit.MILLISECONDS),0),testActorGateway);
+              taskManager.tell(new CancelTask(tdd.getExecutionId()));
+              Object[] msg=receiveN(1);
+              while (!(msg[0] instanceof ResponseStackTraceSampleFailure)) {
+                msg=receiveN(1);
+              }
+              ResponseStackTraceSampleFailure response=(ResponseStackTraceSampleFailure)msg[0];
+              assertEquals(tdd.getExecutionId(),response.executionId());
+              assertEquals(IllegalStateException.class,response.cause().getClass());
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+      }
+  finally {
+        TestingUtils.stopActor(taskManagerActorGateway);
+        TestingUtils.stopActor(jobManagerActorGateway);
+      }
+    }
+  }
+;
+}

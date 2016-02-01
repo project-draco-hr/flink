@@ -1,0 +1,114 @@
+{
+  new JavaTestKit(testActorSystem){
+{
+      final FiniteDuration deadline=new FiniteDuration(60,TimeUnit.SECONDS);
+      final JobGraph jobGraph=new JobGraph();
+      final int parallelism=4;
+      final JobVertex task=new JobVertex("Task");
+      task.setInvokableClass(BackPressuredTask.class);
+      task.setParallelism(parallelism);
+      jobGraph.addVertex(task);
+      ActorGateway jobManger=null;
+      ActorGateway taskManager=null;
+      testBufferPool=networkBufferPool.createBufferPool(1,false);
+      final List<Buffer> buffers=new ArrayList<>();
+      while (true) {
+        Buffer buffer=testBufferPool.requestBuffer();
+        if (buffer != null) {
+          buffers.add(buffer);
+        }
+ else {
+          break;
+        }
+      }
+      try {
+        jobManger=TestingUtils.createJobManager(testActorSystem,new Configuration());
+        Configuration config=new Configuration();
+        config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,parallelism);
+        taskManager=TestingUtils.createTaskManager(testActorSystem,jobManger,config,true,true);
+        final ActorGateway jm=jobManger;
+        new Within(deadline){
+          @Override protected void run(){
+            try {
+              ActorGateway testActor=new AkkaActorGateway(getTestActor(),null);
+              JobClient.submitJobDetached(jm,jobGraph,deadline,ClassLoader.getSystemClassLoader());
+              jm.tell(new WaitForAllVerticesToBeRunning(jobGraph.getJobID()),testActor);
+              expectMsgEquals(new AllVerticesRunning(jobGraph.getJobID()));
+              jm.tell(new RequestExecutionGraph(jobGraph.getJobID()),testActor);
+              ExecutionGraphFound executionGraphResponse=expectMsgClass(ExecutionGraphFound.class);
+              ExecutionGraph executionGraph=executionGraphResponse.executionGraph();
+              ExecutionJobVertex vertex=executionGraph.getJobVertex(task.getID());
+              StackTraceSampleCoordinator coordinator=new StackTraceSampleCoordinator(testActorSystem,60000);
+              BackPressureStatsTracker statsTracker=new BackPressureStatsTracker(coordinator,100 * 1000,20,new FiniteDuration(10,TimeUnit.MILLISECONDS));
+              int numAttempts=10;
+              int nextSampleId=0;
+              for (int attempt=0; attempt < numAttempts; attempt++) {
+                try {
+                  OperatorBackPressureStats stats=triggerStatsSample(statsTracker,vertex);
+                  assertEquals(nextSampleId + attempt,stats.getSampleId());
+                  assertEquals(parallelism,stats.getNumberOfSubTasks());
+                  assertEquals(1.0,stats.getMaxBackPressureRatio(),0.0);
+                  for (int i=0; i < parallelism; i++) {
+                    assertEquals(1.0,stats.getBackPressureRatio(i),0.0);
+                  }
+                  nextSampleId=stats.getSampleId() + 1;
+                  break;
+                }
+ catch (                Throwable t) {
+                  if (attempt == numAttempts - 1) {
+                    throw t;
+                  }
+ else {
+                    Thread.sleep(500);
+                  }
+                }
+              }
+              for (              Buffer buf : buffers) {
+                buf.recycle();
+              }
+              while (testBufferPool.getNumberOfAvailableMemorySegments() < 100) {
+                Thread.sleep(100);
+              }
+              for (int attempt=0; attempt < numAttempts; attempt++) {
+                try {
+                  OperatorBackPressureStats stats=triggerStatsSample(statsTracker,vertex);
+                  assertEquals(nextSampleId + attempt,stats.getSampleId());
+                  assertEquals(parallelism,stats.getNumberOfSubTasks());
+                  for (int i=0; i < parallelism; i++) {
+                    assertEquals(0.0,stats.getBackPressureRatio(i),0.0);
+                  }
+                  break;
+                }
+ catch (                Throwable t) {
+                  if (attempt == numAttempts - 1) {
+                    throw t;
+                  }
+ else {
+                    Thread.sleep(500);
+                  }
+                }
+              }
+              jm.tell(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobGraph.getJobID()),testActor);
+              jm.tell(new JobManagerMessages.CancelJob(jobGraph.getJobID()));
+              expectMsgEquals(true);
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+      }
+  finally {
+        TestingUtils.stopActor(jobManger);
+        TestingUtils.stopActor(taskManager);
+        for (        Buffer buf : buffers) {
+          buf.recycle();
+        }
+        testBufferPool.lazyDestroy();
+      }
+    }
+  }
+;
+}

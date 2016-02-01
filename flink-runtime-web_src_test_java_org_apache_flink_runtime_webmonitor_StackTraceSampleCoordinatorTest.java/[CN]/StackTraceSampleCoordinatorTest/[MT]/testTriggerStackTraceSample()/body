@@ -1,0 +1,40 @@
+{
+  ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(new ExecutionAttemptID(),ExecutionState.RUNNING,true),mockExecutionVertex(new ExecutionAttemptID(),ExecutionState.RUNNING,true),mockExecutionVertex(new ExecutionAttemptID(),ExecutionState.RUNNING,true),mockExecutionVertex(new ExecutionAttemptID(),ExecutionState.RUNNING,true)};
+  int numSamples=1;
+  FiniteDuration delayBetweenSamples=new FiniteDuration(100,TimeUnit.MILLISECONDS);
+  int maxStackTraceDepth=0;
+  Future<StackTraceSample> sampleFuture=coord.triggerStackTraceSample(vertices,numSamples,delayBetweenSamples,maxStackTraceDepth);
+  for (  ExecutionVertex vertex : vertices) {
+    ExecutionAttemptID expectedExecutionId=vertex.getCurrentExecutionAttempt().getAttemptId();
+    TriggerStackTraceSample expectedMsg=new TriggerStackTraceSample(0,expectedExecutionId,numSamples,delayBetweenSamples,maxStackTraceDepth);
+    verify(vertex).sendMessageToCurrentExecution(eq(expectedMsg),eq(expectedExecutionId),any(AkkaActorGateway.class));
+  }
+  assertFalse(sampleFuture.isCompleted());
+  StackTraceElement[] stackTraceSample=Thread.currentThread().getStackTrace();
+  List<StackTraceElement[]> traces=new ArrayList<>();
+  traces.add(stackTraceSample);
+  traces.add(stackTraceSample);
+  traces.add(stackTraceSample);
+  for (int i=0; i < vertices.length; i++) {
+    ExecutionAttemptID executionId=vertices[i].getCurrentExecutionAttempt().getAttemptId();
+    coord.collectStackTraces(0,executionId,traces);
+    if (i == vertices.length - 1) {
+      assertTrue(sampleFuture.isCompleted());
+    }
+ else {
+      assertFalse(sampleFuture.isCompleted());
+    }
+  }
+  StackTraceSample sample=sampleFuture.value().get().get();
+  assertEquals(0,sample.getSampleId());
+  assertTrue(sample.getEndTime() >= sample.getStartTime());
+  Map<ExecutionAttemptID,List<StackTraceElement[]>> tracesByTask=sample.getStackTraces();
+  for (  ExecutionVertex vertex : vertices) {
+    ExecutionAttemptID executionId=vertex.getCurrentExecutionAttempt().getAttemptId();
+    List<StackTraceElement[]> sampleTraces=tracesByTask.get(executionId);
+    assertNotNull("Task not found",sampleTraces);
+    assertTrue(traces.equals(sampleTraces));
+  }
+  assertEquals(0,coord.getNumberOfPendingSamples());
+  coord.collectStackTraces(0,vertices[0].getCurrentExecutionAttempt().getAttemptId(),traces);
+}

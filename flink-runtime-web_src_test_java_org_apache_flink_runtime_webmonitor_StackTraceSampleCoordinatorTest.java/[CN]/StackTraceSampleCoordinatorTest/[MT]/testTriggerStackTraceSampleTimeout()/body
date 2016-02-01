@@ -1,0 +1,25 @@
+{
+  int timeout=100;
+  coord=new StackTraceSampleCoordinator(system,timeout);
+  ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(new ExecutionAttemptID(),ExecutionState.RUNNING,true)};
+  Future<StackTraceSample> sampleFuture=coord.triggerStackTraceSample(vertices,1,new FiniteDuration(100,TimeUnit.MILLISECONDS),0);
+  Thread.sleep(timeout * 2);
+  boolean success=false;
+  for (int i=0; i < 10; i++) {
+    if (sampleFuture.isCompleted()) {
+      success=true;
+      break;
+    }
+    Thread.sleep(timeout);
+  }
+  assertTrue("Sample did not time out",success);
+  Throwable cause=sampleFuture.failed().value().get().get();
+  assertTrue(cause.getCause().getMessage().contains("Time out"));
+  try {
+    ExecutionAttemptID executionId=vertices[0].getCurrentExecutionAttempt().getAttemptId();
+    coord.collectStackTraces(0,executionId,new ArrayList<StackTraceElement[]>());
+    fail("Did not throw expected Exception");
+  }
+ catch (  IllegalStateException ignored) {
+  }
+}

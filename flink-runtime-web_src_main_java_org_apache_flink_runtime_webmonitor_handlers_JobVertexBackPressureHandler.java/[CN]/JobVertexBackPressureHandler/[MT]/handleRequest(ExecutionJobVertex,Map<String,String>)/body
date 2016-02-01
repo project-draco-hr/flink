@@ -1,0 +1,36 @@
+{
+  try (StringWriter writer=new StringWriter();JsonGenerator gen=JsonFactory.jacksonFactory.createGenerator(writer)){
+    gen.writeStartObject();
+    Option<OperatorBackPressureStats> statsOption=backPressureStatsTracker.getOperatorBackPressureStats(jobVertex);
+    if (statsOption.isDefined()) {
+      OperatorBackPressureStats stats=statsOption.get();
+      if (refreshInterval <= System.currentTimeMillis() - stats.getEndTimestamp()) {
+        backPressureStatsTracker.triggerStackTraceSample(jobVertex);
+        gen.writeStringField("status","deprecated");
+      }
+ else {
+        gen.writeStringField("status","ok");
+      }
+      gen.writeStringField("backpressure-level",getBackPressureLevel(stats.getMaxBackPressureRatio()));
+      gen.writeNumberField("end-timestamp",stats.getEndTimestamp());
+      gen.writeArrayFieldStart("subtasks");
+      int numSubTasks=stats.getNumberOfSubTasks();
+      for (int i=0; i < numSubTasks; i++) {
+        double ratio=stats.getBackPressureRatio(i);
+        gen.writeStartObject();
+        gen.writeNumberField("subtask",i);
+        gen.writeStringField("backpressure-level",getBackPressureLevel(ratio));
+        gen.writeNumberField("ratio",ratio);
+        gen.writeEndObject();
+      }
+      gen.writeEndArray();
+    }
+ else {
+      backPressureStatsTracker.triggerStackTraceSample(jobVertex);
+      gen.writeStringField("status","deprecated");
+    }
+    gen.writeEndObject();
+    gen.close();
+    return writer.toString();
+  }
+ }

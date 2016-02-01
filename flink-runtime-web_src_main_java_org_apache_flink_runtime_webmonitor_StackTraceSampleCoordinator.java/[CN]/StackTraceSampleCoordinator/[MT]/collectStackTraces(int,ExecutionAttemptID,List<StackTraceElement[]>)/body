@@ -1,0 +1,27 @@
+{
+synchronized (lock) {
+    if (isShutDown) {
+      return;
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Collecting stack trace sample {} of task {}",sampleId,executionId);
+    }
+    PendingStackTraceSample pending=pendingSamples.get(sampleId);
+    if (pending != null) {
+      pending.collectStackTraces(executionId,stackTraces);
+      if (pending.isComplete()) {
+        pendingSamples.remove(sampleId);
+        rememberRecentSampleId(sampleId);
+        pending.completePromiseAndDiscard();
+      }
+    }
+ else     if (recentPendingSamples.contains(sampleId)) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Received late stack trace sample {} of task {}",sampleId,executionId);
+      }
+    }
+ else {
+      throw new IllegalStateException("Unknown sample ID " + sampleId);
+    }
+  }
+}
