@@ -4,7 +4,8 @@
   }
   StreamTransformation<T> input=iterate.getInput();
   List<Integer> resultIds=new ArrayList<>();
-  resultIds.addAll(transform(input));
+  Collection<Integer> inputIds=transform(input);
+  resultIds.addAll(inputIds);
   if (alreadyTransformed.containsKey(iterate)) {
     return alreadyTransformed.get(iterate);
   }
@@ -15,11 +16,16 @@
   streamGraph.setSerializers(itSink.getId(),iterate.getOutputType().createSerializer(env.getConfig()),null,null);
   resultIds.add(itSource.getId());
   alreadyTransformed.put(iterate,resultIds);
+  List<Integer> allFeedbackIds=new ArrayList<>();
   for (  StreamTransformation<T> feedbackEdge : iterate.getFeedbackEdges()) {
     Collection<Integer> feedbackIds=transform(feedbackEdge);
+    allFeedbackIds.addAll(feedbackIds);
     for (    Integer feedbackId : feedbackIds) {
       streamGraph.addEdge(feedbackId,itSink.getId(),0);
     }
   }
+  String slotSharingGroup=determineSlotSharingGroup(null,allFeedbackIds);
+  itSink.setSlotSharingGroup(slotSharingGroup);
+  itSource.setSlotSharingGroup(slotSharingGroup);
   return resultIds;
 }
