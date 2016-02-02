@@ -1,0 +1,23 @@
+{
+  try {
+    StreamConfig cfg=new StreamConfig(new Configuration());
+    cfg.setStreamOperator(new SlowlyDeserializingOperator());
+    Task task=createTask(SourceStreamTask.class,cfg);
+    task.startTaskThread();
+    while (task.getExecutionState() == ExecutionState.CREATED || task.getExecutionState() == ExecutionState.DEPLOYING) {
+      Thread.sleep(5);
+    }
+    if (task.getExecutionState() != ExecutionState.RUNNING) {
+      fail("Task entered state " + task.getExecutionState() + " with error "+ ExceptionUtils.stringifyException(task.getFailureCause()));
+    }
+    task.cancelExecution();
+    assertTrue(task.getExecutionState() == ExecutionState.CANCELING || task.getExecutionState() == ExecutionState.CANCELED);
+    task.getExecutingThread().join(60000);
+    assertFalse("Task did not cancel",task.getExecutingThread().isAlive());
+    assertEquals(ExecutionState.CANCELED,task.getExecutionState());
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
