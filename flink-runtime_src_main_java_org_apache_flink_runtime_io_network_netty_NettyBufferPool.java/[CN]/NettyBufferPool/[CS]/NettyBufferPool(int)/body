@@ -1,0 +1,26 @@
+{
+  checkArgument(numberOfArenas >= 1,"Number of arenas");
+  this.numberOfArenas=numberOfArenas;
+  if (!PlatformDependent.hasUnsafe()) {
+    LOG.warn("Using direct buffers, but sun.misc.Unsafe not available.");
+  }
+  boolean preferDirect=true;
+  int pageSize=8192;
+  int maxOrder=11;
+  this.chunkSize=pageSize << maxOrder;
+  int numDirectArenas=numberOfArenas;
+  int numHeapArenas=0;
+  this.alloc=new PooledByteBufAllocator(preferDirect,numHeapArenas,numDirectArenas,pageSize,maxOrder);
+  Object[] allocDirectArenas=null;
+  try {
+    Field directArenasField=alloc.getClass().getDeclaredField("directArenas");
+    directArenasField.setAccessible(true);
+    allocDirectArenas=(Object[])directArenasField.get(alloc);
+  }
+ catch (  Exception ignored) {
+    LOG.warn("Memory statistics not available");
+  }
+ finally {
+    this.directArenas=allocDirectArenas;
+  }
+}

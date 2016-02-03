@@ -1,0 +1,31 @@
+{
+  int numberOfSlots=2;
+  NettyConfig config=new NettyConfig(InetAddress.getLocalHost(),NetUtils.getAvailablePort(),1024,numberOfSlots,new Configuration());
+  NettyConnectionManager connectionManager=new NettyConnectionManager(config);
+  connectionManager.start(mock(ResultPartitionProvider.class),mock(TaskEventDispatcher.class),mock(NetworkBufferPool.class));
+  assertEquals(numberOfSlots,connectionManager.getBufferPool().getNumberOfArenas());
+{
+    Bootstrap boostrap=connectionManager.getClient().getBootstrap();
+    EventLoopGroup group=boostrap.group();
+    Field f=group.getClass().getSuperclass().getSuperclass().getDeclaredField("children");
+    f.setAccessible(true);
+    Object[] eventExecutors=(Object[])f.get(group);
+    assertEquals(numberOfSlots,eventExecutors.length);
+  }
+{
+    ServerBootstrap bootstrap=connectionManager.getServer().getBootstrap();
+    EventLoopGroup group=bootstrap.group();
+    Field f=group.getClass().getSuperclass().getSuperclass().getDeclaredField("children");
+    f.setAccessible(true);
+    Object[] eventExecutors=(Object[])f.get(group);
+    assertEquals(numberOfSlots,eventExecutors.length);
+  }
+{
+    ServerBootstrap bootstrap=connectionManager.getServer().getBootstrap();
+    EventLoopGroup group=bootstrap.childGroup();
+    Field f=group.getClass().getSuperclass().getSuperclass().getDeclaredField("children");
+    f.setAccessible(true);
+    Object[] eventExecutors=(Object[])f.get(group);
+    assertEquals(numberOfSlots,eventExecutors.length);
+  }
+}
