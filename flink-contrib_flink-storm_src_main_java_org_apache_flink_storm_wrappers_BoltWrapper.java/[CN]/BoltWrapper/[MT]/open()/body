@@ -1,7 +1,6 @@
 {
   super.open();
   this.flinkCollector=new TimestampedCollector<>(this.output);
-  final OutputCollector stormCollector=new OutputCollector(new BoltCollector<OUT>(this.numberOfAttributes,this.flinkCollector));
   GlobalJobParameters config=getExecutionConfig().getGlobalJobParameters();
   StormConfig stormConfig=new StormConfig();
   if (config != null) {
@@ -13,5 +12,16 @@
     }
   }
   this.topologyContext=WrapperSetupHelper.createTopologyContext(getRuntimeContext(),this.bolt,this.name,this.stormTopology,stormConfig);
+  final OutputCollector stormCollector=new OutputCollector(new BoltCollector<OUT>(this.numberOfAttributes,this.topologyContext.getThisTaskId(),this.flinkCollector));
+  if (this.stormTopology != null) {
+    Map<GlobalStreamId,Grouping> inputs=this.topologyContext.getThisSources();
+    for (    GlobalStreamId inputStream : inputs.keySet()) {
+      for (      Integer tid : this.topologyContext.getComponentTasks(inputStream.get_componentId())) {
+        this.inputComponentIds.put(tid,inputStream.get_componentId());
+        this.inputStreamIds.put(tid,inputStream.get_streamId());
+        this.inputSchemas.put(tid,this.topologyContext.getComponentOutputFields(inputStream));
+      }
+    }
+  }
   this.bolt.prepare(stormConfig,this.topologyContext,stormCollector);
 }
