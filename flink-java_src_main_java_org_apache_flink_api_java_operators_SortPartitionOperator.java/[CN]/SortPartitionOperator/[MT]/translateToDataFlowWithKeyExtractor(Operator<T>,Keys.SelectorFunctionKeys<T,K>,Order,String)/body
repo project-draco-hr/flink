@@ -1,0 +1,20 @@
+{
+  TypeInformation<Tuple2<K,T>> typeInfoWithKey=KeyFunctions.createTypeWithKey(keys);
+  Keys.ExpressionKeys<Tuple2<K,T>> newKey=new Keys.ExpressionKeys<>(0,typeInfoWithKey);
+  Operator<Tuple2<K,T>> keyedInput=KeyFunctions.appendKeyExtractor(input,keys);
+  int[] sortKeyPositions=newKey.computeLogicalKeyPositions();
+  Ordering partitionOrdering=new Ordering();
+  for (  int keyPosition : sortKeyPositions) {
+    partitionOrdering.appendOrdering(keyPosition,null,order);
+  }
+  UnaryOperatorInformation<Tuple2<K,T>,Tuple2<K,T>> operatorInfo=new UnaryOperatorInformation<>(typeInfoWithKey,typeInfoWithKey);
+  SortPartitionOperatorBase<Tuple2<K,T>> noop=new SortPartitionOperatorBase<>(operatorInfo,partitionOrdering,name);
+  noop.setInput(keyedInput);
+  if (this.getParallelism() < 0) {
+    noop.setParallelism(input.getParallelism());
+  }
+ else {
+    noop.setParallelism(this.getParallelism());
+  }
+  return KeyFunctions.appendKeyRemover(noop,keys);
+}
