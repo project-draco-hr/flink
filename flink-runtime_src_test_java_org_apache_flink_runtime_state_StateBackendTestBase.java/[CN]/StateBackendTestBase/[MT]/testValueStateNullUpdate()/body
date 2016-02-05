@@ -1,0 +1,29 @@
+{
+  try {
+    LongSerializer.INSTANCE.serialize(null,new DataOutputViewStreamWrapper(new ByteArrayOutputStream()));
+    fail("Should faill with NullPointerException");
+  }
+ catch (  NullPointerException e) {
+  }
+  backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+  ValueStateDescriptor<Long> kvId=new ValueStateDescriptor<>("id",LongSerializer.INSTANCE,42L);
+  kvId.initializeSerializerUnlessSet(new ExecutionConfig());
+  ValueState<Long> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+  @SuppressWarnings("unchecked") KvState<Integer,Void,ValueState<Long>,ValueStateDescriptor<Long>,B> kv=(KvState<Integer,Void,ValueState<Long>,ValueStateDescriptor<Long>,B>)state;
+  kv.setCurrentKey(1);
+  assertEquals(42L,(long)state.value());
+  state.update(1L);
+  assertEquals(1L,(long)state.value());
+  kv.setCurrentKey(2);
+  assertEquals(42L,(long)state.value());
+  kv.setCurrentKey(1);
+  state.clear();
+  assertEquals(42L,(long)state.value());
+  state.update(17L);
+  assertEquals(17L,(long)state.value());
+  state.update(null);
+  assertEquals(42L,(long)state.value());
+  KvStateSnapshot<Integer,Void,ValueState<Long>,ValueStateDescriptor<Long>,B> snapshot1=kv.snapshot(682375462378L,2);
+  kv.dispose();
+  snapshot1.restoreState(backend,IntSerializer.INSTANCE,this.getClass().getClassLoader(),10);
+}
