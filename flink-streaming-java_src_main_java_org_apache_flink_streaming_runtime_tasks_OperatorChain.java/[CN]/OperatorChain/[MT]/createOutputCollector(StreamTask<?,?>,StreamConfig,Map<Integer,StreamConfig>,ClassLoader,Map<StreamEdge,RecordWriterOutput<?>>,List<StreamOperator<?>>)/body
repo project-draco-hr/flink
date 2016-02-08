@@ -1,15 +1,29 @@
 {
-  OutputSelectorWrapper<T> outputSelectorWrapper=operatorConfig.getOutputSelectorWrapper(userCodeClassloader);
-  CollectorWrapper<T> wrapper=new CollectorWrapper<T>(outputSelectorWrapper);
+  List<Tuple2<Output<StreamRecord<T>>,StreamEdge>> allOutputs=new ArrayList<>(4);
   for (  StreamEdge outputEdge : operatorConfig.getNonChainedOutputs(userCodeClassloader)) {
     @SuppressWarnings("unchecked") RecordWriterOutput<T> output=(RecordWriterOutput<T>)streamOutputs.get(outputEdge);
-    wrapper.addCollector(output,outputEdge);
+    allOutputs.add(new Tuple2<Output<StreamRecord<T>>,StreamEdge>(output,outputEdge));
   }
   for (  StreamEdge outputEdge : operatorConfig.getChainedOutputs(userCodeClassloader)) {
     int outputId=outputEdge.getTargetId();
     StreamConfig chainedOpConfig=chainedConfigs.get(outputId);
     Output<StreamRecord<T>> output=createChainedOperator(containingTask,chainedOpConfig,chainedConfigs,userCodeClassloader,streamOutputs,allOperators);
-    wrapper.addCollector(output,outputEdge);
+    allOutputs.add(new Tuple2<>(output,outputEdge));
   }
-  return wrapper;
+  List<OutputSelector<T>> selectors=operatorConfig.getOutputSelectors(userCodeClassloader);
+  if (selectors == null || selectors.isEmpty()) {
+    if (allOutputs.size() == 1) {
+      return allOutputs.get(0).f0;
+    }
+ else {
+      @SuppressWarnings({"unchecked","rawtypes"}) Output<StreamRecord<T>>[] asArray=new Output[allOutputs.size()];
+      for (int i=0; i < allOutputs.size(); i++) {
+        asArray[i]=allOutputs.get(i).f0;
+      }
+      return new BroadcastingOutputCollector<T>(asArray);
+    }
+  }
+ else {
+    return new DirectedOutput<T>(selectors,allOutputs);
+  }
 }
