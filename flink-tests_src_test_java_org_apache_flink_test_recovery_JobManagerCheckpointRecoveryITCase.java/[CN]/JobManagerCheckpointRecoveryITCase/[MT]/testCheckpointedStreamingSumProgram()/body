@@ -9,6 +9,7 @@
   JobGraph jobGraph=env.getStreamGraph().getJobGraph();
   Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(ZooKeeper.getConnectString(),FileStateBackendBasePath.getAbsoluteFile().toURI().toString());
   config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,Parallelism);
+  config.setString(ConfigConstants.AKKA_ASK_TIMEOUT,"100 s");
   ActorSystem testSystem=null;
   JobManagerProcess[] jobManagerProcess=new JobManagerProcess[2];
   LeaderRetrievalService leaderRetrievalService=null;
@@ -23,7 +24,7 @@
     TestingListener leaderListener=new TestingListener();
     leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(config);
     leaderRetrievalService.start(leaderListener);
-    taskManagerSystem=AkkaUtils.createActorSystem(AkkaUtils.getDefaultAkkaConfig());
+    taskManagerSystem=AkkaUtils.createActorSystem(config,Option.apply(new Tuple2<String,Object>("localhost",0)));
     TaskManager.startTaskManagerComponentsAndActor(config,taskManagerSystem,"localhost",Option.<String>empty(),Option.<LeaderRetrievalService>empty(),false,TaskManager.class);
 {
       leaderListener.waitForNewLeader(deadline.timeLeft().toMillis());

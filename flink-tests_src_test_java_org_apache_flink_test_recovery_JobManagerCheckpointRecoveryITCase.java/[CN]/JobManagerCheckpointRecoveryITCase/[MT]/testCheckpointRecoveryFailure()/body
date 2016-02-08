@@ -4,6 +4,7 @@
   final String fileStateBackendPath=FileStateBackendBasePath.getAbsoluteFile().toString();
   Configuration config=ZooKeeperTestUtils.createZooKeeperRecoveryModeConfig(zooKeeperQuorum,fileStateBackendPath);
   config.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,2);
+  config.setString(ConfigConstants.AKKA_ASK_TIMEOUT,"100 s");
   JobManagerProcess[] jobManagerProcess=new JobManagerProcess[2];
   LeaderRetrievalService leaderRetrievalService=null;
   ActorSystem taskManagerSystem=null;
@@ -17,7 +18,7 @@
     TestingListener leaderListener=new TestingListener();
     leaderRetrievalService=ZooKeeperUtils.createLeaderRetrievalService(config);
     leaderRetrievalService.start(leaderListener);
-    taskManagerSystem=AkkaUtils.createActorSystem(AkkaUtils.getDefaultAkkaConfig());
+    taskManagerSystem=AkkaUtils.createActorSystem(config,Option.apply(new Tuple2<String,Object>("localhost",0)));
     TaskManager.startTaskManagerComponentsAndActor(config,taskManagerSystem,"localhost",Option.<String>empty(),Option.<LeaderRetrievalService>empty(),false,TaskManager.class);
     leaderListener.waitForNewLeader(testDeadline.timeLeft().toMillis());
     String leaderAddress=leaderListener.getAddress();
