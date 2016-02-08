@@ -1,0 +1,23 @@
+{
+  if (!this.keySerializer.equals(keySerializer)) {
+    throw new IllegalArgumentException("Cannot restore the state from the snapshot with the given serializers. " + "State (K/V) was serialized with " + "(" + keySerializer + ") "+ "now is ("+ keySerializer+ ")");
+  }
+  if (!dbPath.exists()) {
+    if (!dbPath.mkdirs()) {
+      throw new RuntimeException("Could not create RocksDB base path " + dbPath);
+    }
+  }
+  FileSystem fs=FileSystem.get(backupUri,new Configuration());
+  final File localBackupPath=new File(dbPath,"chk-" + checkpointId);
+  if (localBackupPath.exists()) {
+    try {
+      LOG.warn("Deleting already existing local backup directory {}.",localBackupPath);
+      FileUtils.deleteDirectory(localBackupPath);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error cleaning RocksDB local backup directory.",e);
+    }
+  }
+  HDFSCopyToLocal.copyToLocal(backupUri,dbPath);
+  return createRocksDBState(keySerializer,namespaceSerializer,stateDesc,dbPath,checkpointPath,localBackupPath.getAbsolutePath(),stateBackend.getRocksDBOptions());
+}
