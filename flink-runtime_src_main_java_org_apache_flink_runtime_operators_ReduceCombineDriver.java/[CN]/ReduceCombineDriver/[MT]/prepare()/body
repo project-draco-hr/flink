@@ -1,25 +1,33 @@
 {
-  if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_PARTIAL_REDUCE) {
-    throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
-  }
-  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
-  final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
-  this.comparator=this.taskContext.getDriverComparator(0);
-  this.serializer=serializerFactory.getSerializer();
-  this.reducer=this.taskContext.getStub();
-  this.output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
-  MemoryManager memManager=this.taskContext.getMemoryManager();
-  final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
-  this.memory=memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);
-  if (this.comparator.supportsSerializationWithKeyNormalization() && this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
-    this.sorter=new FixedLengthRecordSorter<T>(this.serializer,this.comparator,memory);
-  }
- else {
-    this.sorter=new NormalizedKeySorter<T>(this.serializer,this.comparator.duplicate(),memory);
-  }
+  final Counter numRecordsOut=taskContext.getMetricGroup().counter("numRecordsOut");
+  strategy=taskContext.getTaskConfig().getDriverStrategy();
+  final TypeSerializerFactory<T> serializerFactory=taskContext.getInputSerializer(0);
+  comparator=taskContext.getDriverComparator(0);
+  serializer=serializerFactory.getSerializer();
+  reducer=taskContext.getStub();
+  output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
+  MemoryManager memManager=taskContext.getMemoryManager();
+  final int numMemoryPages=memManager.computeNumberOfPages(taskContext.getTaskConfig().getRelativeMemoryDriver());
+  memory=memManager.allocatePages(taskContext.getOwningNepheleTask(),numMemoryPages);
   ExecutionConfig executionConfig=taskContext.getExecutionConfig();
-  this.objectReuseEnabled=executionConfig.isObjectReuseEnabled();
+  objectReuseEnabled=executionConfig.isObjectReuseEnabled();
   if (LOG.isDebugEnabled()) {
-    LOG.debug("ReduceCombineDriver object reuse: " + (this.objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+    LOG.debug("ReduceCombineDriver object reuse: " + (objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
   }
+switch (strategy) {
+case SORTED_PARTIAL_REDUCE:
+    if (comparator.supportsSerializationWithKeyNormalization() && serializer.getLength() > 0 && serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+      sorter=new FixedLengthRecordSorter<T>(serializer,comparator.duplicate(),memory);
+    }
+ else {
+      sorter=new NormalizedKeySorter<T>(serializer,comparator.duplicate(),memory);
+    }
+  break;
+case HASHED_PARTIAL_REDUCE:
+table=new InPlaceMutableHashTable<T>(serializer,comparator,memory);
+reduceFacade=table.new ReduceFacade(reducer,output,objectReuseEnabled);
+break;
+default :
+throw new Exception("Invalid strategy " + taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
+}
 }

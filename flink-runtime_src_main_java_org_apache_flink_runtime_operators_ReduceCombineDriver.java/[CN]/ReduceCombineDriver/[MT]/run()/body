@@ -2,36 +2,73 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("Combiner starting.");
   }
-  final Counter numRecordsIn=this.taskContext.getMetricGroup().counter("numRecordsIn");
-  final MutableObjectIterator<T> in=this.taskContext.getInput(0);
+  final Counter numRecordsIn=taskContext.getMetricGroup().counter("numRecordsIn");
+  final MutableObjectIterator<T> in=taskContext.getInput(0);
   final TypeSerializer<T> serializer=this.serializer;
-  if (objectReuseEnabled) {
-    T value=serializer.createInstance();
-    while (running && (value=in.next(value)) != null) {
-      numRecordsIn.inc();
-      if (this.sorter.write(value)) {
-        continue;
-      }
-      sortAndCombine();
-      this.sorter.reset();
-      if (!this.sorter.write(value)) {
-        throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+switch (strategy) {
+case SORTED_PARTIAL_REDUCE:
+    if (objectReuseEnabled) {
+      T value=serializer.createInstance();
+      while (running && (value=in.next(value)) != null) {
+        numRecordsIn.inc();
+        if (sorter.write(value)) {
+          continue;
+        }
+        sortAndCombine();
+        sorter.reset();
+        if (!sorter.write(value)) {
+          throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+        }
       }
     }
-  }
  else {
-    T value;
-    while (running && (value=in.next()) != null) {
-      numRecordsIn.inc();
-      if (this.sorter.write(value)) {
-        continue;
-      }
-      sortAndCombine();
-      this.sorter.reset();
-      if (!this.sorter.write(value)) {
-        throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+      T value;
+      while (running && (value=in.next()) != null) {
+        numRecordsIn.inc();
+        if (sorter.write(value)) {
+          continue;
+        }
+        sortAndCombine();
+        sorter.reset();
+        if (!sorter.write(value)) {
+          throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+        }
       }
     }
-  }
   sortAndCombine();
+break;
+case HASHED_PARTIAL_REDUCE:
+table.open();
+if (objectReuseEnabled) {
+T value=serializer.createInstance();
+while (running && (value=in.next(value)) != null) {
+numRecordsIn.inc();
+try {
+  reduceFacade.updateTableEntryWithReduce(value);
+}
+ catch (EOFException ex) {
+  reduceFacade.emitAndReset();
+  reduceFacade.updateTableEntryWithReduce(value);
+}
+}
+}
+ else {
+T value;
+while (running && (value=in.next()) != null) {
+numRecordsIn.inc();
+try {
+  reduceFacade.updateTableEntryWithReduce(value);
+}
+ catch (EOFException ex) {
+  reduceFacade.emitAndReset();
+  reduceFacade.updateTableEntryWithReduce(value);
+}
+}
+}
+reduceFacade.emit();
+table.close();
+break;
+default :
+throw new Exception("Invalid strategy " + taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
+}
 }

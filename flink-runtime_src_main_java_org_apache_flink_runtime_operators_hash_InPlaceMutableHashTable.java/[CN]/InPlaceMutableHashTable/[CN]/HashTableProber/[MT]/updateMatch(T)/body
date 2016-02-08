@@ -1,0 +1,33 @@
+{
+  if (closed) {
+    return;
+  }
+  if (curElemPtr == END_OF_LIST) {
+    throw new RuntimeException("updateMatch was called after getMatchFor returned no match");
+  }
+  try {
+    stagingSegmentsOutView.reset();
+    buildSideSerializer.serialize(newRecord,stagingSegmentsOutView);
+    final int newRecordSize=(int)stagingSegmentsOutView.getWritePosition();
+    stagingSegmentsInView.setReadPosition(0);
+    final int oldRecordSize=(int)(recordEnd - (curElemPtr + RECORD_OFFSET_IN_LINK));
+    if (newRecordSize == oldRecordSize) {
+      recordArea.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK,stagingSegmentsInView,newRecordSize);
+    }
+ else {
+      final long pointerToAppended=recordArea.appendPointerAndCopyRecord(nextPtr,stagingSegmentsInView,newRecordSize);
+      if (prevElemPtr == INVALID_PREV_POINTER) {
+        bucketSegments[bucketSegmentIndex].putLong(bucketOffset,pointerToAppended);
+      }
+ else {
+        recordArea.overwritePointerAt(prevElemPtr,pointerToAppended);
+      }
+      recordArea.overwritePointerAt(curElemPtr,-oldRecordSize - 1);
+      holes+=oldRecordSize;
+    }
+  }
+ catch (  EOFException ex) {
+    compactOrThrow();
+    insertOrReplaceRecord(newRecord);
+  }
+}

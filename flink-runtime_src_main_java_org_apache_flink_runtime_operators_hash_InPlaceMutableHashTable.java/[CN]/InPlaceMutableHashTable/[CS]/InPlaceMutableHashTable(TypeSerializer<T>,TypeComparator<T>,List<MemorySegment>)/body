@@ -1,0 +1,22 @@
+{
+  super(serializer,comparator);
+  this.numAllMemorySegments=memory.size();
+  this.freeMemorySegments=new ArrayList<>(memory);
+  if (freeMemorySegments.size() < MIN_NUM_MEMORY_SEGMENTS) {
+    throw new IllegalArgumentException("Too few memory segments provided. InPlaceMutableHashTable needs at least " + MIN_NUM_MEMORY_SEGMENTS + " memory segments.");
+  }
+  segmentSize=freeMemorySegments.get(0).size();
+  if ((segmentSize & segmentSize - 1) != 0) {
+    throw new IllegalArgumentException("Hash Table requires buffers whose size is a power of 2.");
+  }
+  this.numBucketsPerSegment=segmentSize / bucketSize;
+  this.numBucketsPerSegmentBits=MathUtils.log2strict(this.numBucketsPerSegment);
+  this.numBucketsPerSegmentMask=(1 << this.numBucketsPerSegmentBits) - 1;
+  recordArea=new RecordArea(segmentSize);
+  stagingSegments=new ArrayList<>();
+  stagingSegments.add(forcedAllocateSegment());
+  stagingSegmentsInView=new RandomAccessInputView(stagingSegments,segmentSize);
+  stagingSegmentsOutView=new StagingOutputView(stagingSegments,segmentSize);
+  prober=new HashTableProber<>(buildSideComparator,new SameTypePairComparator<>(buildSideComparator));
+  enableResize=buildSideSerializer.getLength() == -1;
+}

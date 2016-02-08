@@ -1,0 +1,31 @@
+{
+  if (closed) {
+    return null;
+  }
+  final int hashCode=MathUtils.jenkinsHash(probeTypeComparator.hash(record));
+  final int bucket=hashCode & numBucketsMask;
+  bucketSegmentIndex=bucket >>> numBucketsPerSegmentBits;
+  final MemorySegment bucketSegment=bucketSegments[bucketSegmentIndex];
+  bucketOffset=(bucket & numBucketsPerSegmentMask) << bucketSizeBits;
+  curElemPtr=bucketSegment.getLong(bucketOffset);
+  pairComparator.setReference(record);
+  T currentRecordInList=targetForMatch;
+  prevElemPtr=INVALID_PREV_POINTER;
+  try {
+    while (curElemPtr != END_OF_LIST && !closed) {
+      recordArea.setReadPosition(curElemPtr);
+      nextPtr=recordArea.readPointer();
+      currentRecordInList=recordArea.readRecord(currentRecordInList);
+      recordEnd=recordArea.getReadPosition();
+      if (pairComparator.equalToReference(currentRecordInList)) {
+        return currentRecordInList;
+      }
+      prevElemPtr=curElemPtr;
+      curElemPtr=nextPtr;
+    }
+  }
+ catch (  IOException ex) {
+    throw new RuntimeException("Error deserializing record from the hashtable: " + ex.getMessage(),ex);
+  }
+  return null;
+}

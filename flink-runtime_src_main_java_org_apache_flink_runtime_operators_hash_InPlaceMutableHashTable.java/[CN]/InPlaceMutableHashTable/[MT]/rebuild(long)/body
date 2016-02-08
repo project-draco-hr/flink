@@ -1,0 +1,25 @@
+{
+  releaseBucketSegments();
+  allocateBucketSegments((int)newNumBucketSegments);
+  T record=buildSideSerializer.createInstance();
+  try {
+    EntryIterator iter=getEntryIterator();
+    recordArea.resetAppendPosition();
+    recordArea.setWritePosition(0);
+    while ((record=iter.next(record)) != null && !closed) {
+      final int hashCode=MathUtils.jenkinsHash(buildSideComparator.hash(record));
+      final int bucket=hashCode & numBucketsMask;
+      final int bucketSegmentIndex=bucket >>> numBucketsPerSegmentBits;
+      final MemorySegment bucketSegment=bucketSegments[bucketSegmentIndex];
+      final int bucketOffset=(bucket & numBucketsPerSegmentMask) << bucketSizeBits;
+      final long firstPointer=bucketSegment.getLong(bucketOffset);
+      long ptrToAppended=recordArea.noSeekAppendPointerAndRecord(firstPointer,record);
+      bucketSegment.putLong(bucketOffset,ptrToAppended);
+    }
+    recordArea.freeSegmentsAfterAppendPosition();
+    holes=0;
+  }
+ catch (  EOFException ex) {
+    throw new RuntimeException("Bug in InPlaceMutableHashTable: we shouldn't get out of memory during a rebuild, " + "because we aren't allocating any new memory.");
+  }
+}

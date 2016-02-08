@@ -1,0 +1,22 @@
+{
+  if (closed) {
+    return;
+  }
+  final int hashCode=MathUtils.jenkinsHash(buildSideComparator.hash(record));
+  final int bucket=hashCode & numBucketsMask;
+  final int bucketSegmentIndex=bucket >>> numBucketsPerSegmentBits;
+  final MemorySegment bucketSegment=bucketSegments[bucketSegmentIndex];
+  final int bucketOffset=(bucket & numBucketsPerSegmentMask) << bucketSizeBits;
+  final long firstPointer=bucketSegment.getLong(bucketOffset);
+  try {
+    final long newFirstPointer=recordArea.appendPointerAndRecord(firstPointer,record);
+    bucketSegment.putLong(bucketOffset,newFirstPointer);
+  }
+ catch (  EOFException ex) {
+    compactOrThrow();
+    insert(record);
+    return;
+  }
+  numElements++;
+  resizeTableIfNecessary();
+}
