@@ -1,0 +1,21 @@
+{
+  if (foldFunction instanceof RichFunction) {
+    throw new UnsupportedOperationException("ReduceFunction of apply can not be a RichFunction.");
+  }
+  function=input.getExecutionEnvironment().clean(function);
+  foldFunction=input.getExecutionEnvironment().clean(foldFunction);
+  String callLocation=Utils.getCallLocationName();
+  String udfName="AllWindowedStream." + callLocation;
+  String opName;
+  OneInputStreamOperator<T,R> operator;
+  boolean setProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
+  if (evictor != null) {
+    opName="NonParallelTriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ evictor+ ", "+ udfName+ ")";
+    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),new FoldApplyAllWindowFunction<>(initialValue,foldFunction,function),trigger,evictor).enableSetProcessingTime(setProcessingTime);
+  }
+ else {
+    opName="NonParallelTriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
+    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),new FoldApplyAllWindowFunction<>(initialValue,foldFunction,function),trigger).enableSetProcessingTime(setProcessingTime);
+  }
+  return input.transform(opName,resultType,operator).setParallelism(1);
+}

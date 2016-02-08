@@ -4,22 +4,10 @@
   }
   function=input.getExecutionEnvironment().clean(function);
   String callLocation=Utils.getCallLocationName();
-  String udfName="Reduce at " + callLocation;
+  String udfName="WindowedStream." + callLocation;
   SingleOutputStreamOperator<T,?> result=createFastTimeOperatorIfValid(function,input.getType(),udfName);
   if (result != null) {
     return result;
   }
-  String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
-  KeySelector<T,K> keySel=input.getKeySelector();
-  OneInputStreamOperator<T,T> operator;
-  boolean setProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
-  if (evictor != null) {
-    ListStateDescriptor<StreamRecord<T>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(input.getType().createSerializer(getExecutionEnvironment().getConfig())));
-    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new ReduceIterableWindowFunction<K,W,T>(function),trigger,evictor).enableSetProcessingTime(setProcessingTime);
-  }
- else {
-    ReducingStateDescriptor<T> stateDesc=new ReducingStateDescriptor<>("window-contents",function,input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new ReduceWindowFunction<K,W,T>(),trigger).enableSetProcessingTime(setProcessingTime);
-  }
-  return input.transform(opName,input.getType(),operator);
+  return apply(function,new PassThroughWindowFunction<K,W,T>());
 }
