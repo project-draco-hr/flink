@@ -1,0 +1,25 @@
+{
+  final Configuration stubConfig=config.getStubParameters();
+  BatchTask.openUserCode(reducer,stubConfig);
+  serializer=config.<T>getInputSerializer(0,userCodeClassLoader).getSerializer();
+  comparator=config.<T>getDriverComparator(0,userCodeClassLoader).createComparator();
+  MemoryManager memManager=parent.getEnvironment().getMemoryManager();
+  final int numMemoryPages=memManager.computeNumberOfPages(config.getRelativeMemoryDriver());
+  memory=memManager.allocatePages(parent,numMemoryPages);
+  LOG.debug("ChainedReduceCombineDriver object reuse: " + (objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+switch (strategy) {
+case SORTED_PARTIAL_REDUCE:
+    if (comparator.supportsSerializationWithKeyNormalization() && serializer.getLength() > 0 && serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+      sorter=new FixedLengthRecordSorter<T>(serializer,comparator.duplicate(),memory);
+    }
+ else {
+      sorter=new NormalizedKeySorter<T>(serializer,comparator.duplicate(),memory);
+    }
+  break;
+case HASHED_PARTIAL_REDUCE:
+table=new InPlaceMutableHashTable<T>(serializer,comparator,memory);
+table.open();
+reduceFacade=table.new ReduceFacade(reducer,outputCollector,objectReuseEnabled);
+break;
+}
+}
