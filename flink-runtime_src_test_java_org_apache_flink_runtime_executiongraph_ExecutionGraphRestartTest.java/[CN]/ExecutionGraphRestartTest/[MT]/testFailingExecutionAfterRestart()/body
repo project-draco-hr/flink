@@ -1,0 +1,51 @@
+{
+  Instance instance=ExecutionGraphTestUtils.getInstance(new SimpleActorGateway(TestingUtils.directExecutionContext()),2);
+  Scheduler scheduler=new Scheduler(TestingUtils.defaultExecutionContext());
+  scheduler.newInstanceAvailable(instance);
+  JobVertex sender=new JobVertex("Task1");
+  sender.setInvokableClass(Tasks.NoOpInvokable.class);
+  sender.setParallelism(1);
+  JobVertex receiver=new JobVertex("Task2");
+  receiver.setInvokableClass(Tasks.NoOpInvokable.class);
+  receiver.setParallelism(1);
+  JobGraph jobGraph=new JobGraph("Pointwise job",sender,receiver);
+  ExecutionGraph eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"test job",new Configuration(),AkkaUtils.getDefaultTimeout());
+  eg.setNumberOfRetriesLeft(1);
+  eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+  assertEquals(JobStatus.CREATED,eg.getState());
+  eg.scheduleForExecution(scheduler);
+  assertEquals(JobStatus.RUNNING,eg.getState());
+  Iterator<ExecutionVertex> executionVertices=eg.getAllExecutionVertices().iterator();
+  Execution finishedExecution=executionVertices.next().getCurrentExecutionAttempt();
+  Execution failedExecution=executionVertices.next().getCurrentExecutionAttempt();
+  finishedExecution.markFinished();
+  failedExecution.fail(new Exception("Test Exception"));
+  failedExecution.cancelingComplete();
+  FiniteDuration timeout=new FiniteDuration(2,TimeUnit.MINUTES);
+  Deadline deadline=timeout.fromNow();
+  while (deadline.hasTimeLeft() && eg.getState() != JobStatus.RUNNING) {
+    Thread.sleep(100);
+  }
+  assertEquals(JobStatus.RUNNING,eg.getState());
+  deadline=timeout.fromNow();
+  boolean success=false;
+  while (deadline.hasTimeLeft() && !success) {
+    success=true;
+    for (    ExecutionVertex vertex : eg.getAllExecutionVertices()) {
+      if (vertex.getCurrentExecutionAttempt().getAssignedResource() == null) {
+        success=false;
+        Thread.sleep(100);
+        break;
+      }
+ else {
+        vertex.getCurrentExecutionAttempt().switchToRunning();
+      }
+    }
+  }
+  finishedExecution.fail(new Exception("This should have no effect"));
+  for (  ExecutionVertex vertex : eg.getAllExecutionVertices()) {
+    vertex.getCurrentExecutionAttempt().markFinished();
+  }
+  assertEquals(ExecutionState.FINISHED,finishedExecution.getState());
+  assertEquals(JobStatus.FINISHED,eg.getState());
+}
