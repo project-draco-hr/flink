@@ -12,11 +12,11 @@
   StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
   env.setParallelism(parallelism);
   env.enableCheckpointing(500);
-  env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3,1000));
+  env.setRestartStrategy(RestartStrategies.noRestart());
   env.getConfig().disableSysoutLogging();
   FlinkKafkaConsumerBase<Integer> kafkaSource=kafkaServer.getConsumer(topic,schema,standardProps);
   env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderId,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
   BrokerKillingMapper.killedLeaderBefore=false;
-  tryExecute(env,"One-to-one exactly once test");
+  tryExecute(env,"Broker failure once test");
   kafkaServer.restartBroker(leaderId);
 }

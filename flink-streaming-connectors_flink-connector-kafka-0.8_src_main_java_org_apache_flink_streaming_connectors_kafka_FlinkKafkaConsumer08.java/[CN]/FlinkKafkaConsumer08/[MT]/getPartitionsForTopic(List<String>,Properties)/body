@@ -4,6 +4,9 @@
   checkNotNull(seedBrokersConfString,"Configuration property " + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG + " not set");
   String[] seedBrokers=seedBrokersConfString.split(",");
   List<KafkaTopicPartitionLeader> partitions=new ArrayList<>();
+  final String clientId="flink-kafka-consumer-partition-lookup";
+  final int soTimeout=Integer.valueOf(properties.getProperty("socket.timeout.ms","30000"));
+  final int bufferSize=Integer.valueOf(properties.getProperty("socket.receive.buffer.bytes","65536"));
   Random rnd=new Random();
   retryLoop:   for (int retry=0; retry < numRetries; retry++) {
     int index=rnd.nextInt(seedBrokers.length);
@@ -16,9 +19,6 @@
       URL brokerUrl=NetUtils.getCorrectHostnamePort(seedBroker);
       SimpleConsumer consumer=null;
       try {
-        final String clientId="flink-kafka-consumer-partition-lookup";
-        final int soTimeout=Integer.valueOf(properties.getProperty("socket.timeout.ms","30000"));
-        final int bufferSize=Integer.valueOf(properties.getProperty("socket.receive.buffer.bytes","65536"));
         consumer=new SimpleConsumer(brokerUrl.getHost(),brokerUrl.getPort(),soTimeout,bufferSize,clientId);
         TopicMetadataRequest req=new TopicMetadataRequest(topics);
         kafka.javaapi.TopicMetadataResponse resp=consumer.send(req);
@@ -46,8 +46,13 @@
         break retryLoop;
       }
  catch (      Exception e) {
-        LOG.warn("Error communicating with broker " + seedBroker + " to find partitions for "+ topics.toString()+ ". Message: "+ e.getMessage());
+        LOG.warn("Error communicating with broker " + seedBroker + " to find partitions for "+ topics.toString()+ "."+ ""+ e.getClass()+ ". Message: "+ e.getMessage());
         LOG.debug("Detailed trace",e);
+        try {
+          Thread.sleep(500);
+        }
+ catch (        InterruptedException e1) {
+        }
       }
  finally {
         if (consumer != null) {

@@ -4,28 +4,33 @@
   final int thisConsumerIndex=getRuntimeContext().getIndexOfThisSubtask();
   subscribedPartitions=assignPartitions(this.partitionInfos,numConsumers,thisConsumerIndex);
   if (LOG.isInfoEnabled()) {
-    LOG.info("Kafka consumer {} will read partitions {} out of partitions {}",thisConsumerIndex,KafkaTopicPartitionLeader.toString(subscribedPartitions),this.partitionInfos.size());
+    LOG.info("Kafka consumer {} will read partitions {} out of partitions {}",thisConsumerIndex,KafkaTopicPartition.toString(subscribedPartitions),this.partitionInfos.size());
   }
   if (subscribedPartitions.isEmpty()) {
     LOG.info("Kafka consumer {} has no partitions (empty source)",thisConsumerIndex);
     this.fetcher=null;
     return;
   }
-  fetcher=new LegacyFetcher(this.subscribedPartitions,props,getRuntimeContext().getTaskName(),getRuntimeContext().getUserCodeClassLoader());
   offsetHandler=new ZookeeperOffsetHandler(props);
   committedOffsets=new HashMap<>();
+  Map<KafkaTopicPartition,Long> subscribedPartitionsWithOffsets=new HashMap<>(subscribedPartitions.size());
+  for (  KafkaTopicPartition ktp : subscribedPartitions) {
+    subscribedPartitionsWithOffsets.put(ktp,FlinkKafkaConsumer08.OFFSET_NOT_SET);
+  }
   if (restoreToOffset != null) {
     if (LOG.isInfoEnabled()) {
       LOG.info("Consumer {} is restored from previous checkpoint: {}",thisConsumerIndex,KafkaTopicPartition.toString(restoreToOffset));
     }
-    for (    Map.Entry<KafkaTopicPartition,Long> restorePartition : restoreToOffset.entrySet()) {
-      fetcher.seek(restorePartition.getKey(),restorePartition.getValue() + 1);
-    }
     this.offsetsState=restoreToOffset;
+    subscribedPartitionsWithOffsets.putAll(restoreToOffset);
     restoreToOffset=null;
   }
  else {
     offsetsState=new HashMap<>();
-    offsetHandler.seekFetcherToInitialOffsets(subscribedPartitions,fetcher);
+    subscribedPartitionsWithOffsets.putAll(offsetHandler.getOffsets(subscribedPartitions,fetcher));
   }
+  if (subscribedPartitionsWithOffsets.size() != subscribedPartitions.size()) {
+    throw new IllegalStateException("The subscribed partitions map has more entries than the subscribed partitions " + "list: " + subscribedPartitionsWithOffsets.size() + ","+ subscribedPartitions.size());
+  }
+  fetcher=new LegacyFetcher(subscribedPartitionsWithOffsets,props,getRuntimeContext().getTaskName(),getRuntimeContext().getUserCodeClassLoader());
 }
