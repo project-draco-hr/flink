@@ -1,0 +1,20 @@
+{
+  String hostPortUrl=NetUtils.hostAndPortToUrlString(listeningAddress,listeningPort);
+  logger.info("Trying to start actor system at {}",hostPortUrl);
+  try {
+    Config akkaConfig=AkkaUtils.getAkkaConfig(configuration,new scala.Some<>(new scala.Tuple2<String,Object>(listeningAddress,listeningPort)));
+    logger.debug("Using akka configuration\n {}",akkaConfig);
+    ActorSystem actorSystem=AkkaUtils.createActorSystem(akkaConfig);
+    logger.info("Actor system started at {}",hostPortUrl);
+    return actorSystem;
+  }
+ catch (  Throwable t) {
+    if (t instanceof org.jboss.netty.channel.ChannelException) {
+      Throwable cause=t.getCause();
+      if (cause != null && t.getCause() instanceof java.net.BindException) {
+        throw new IOException("Unable to create ActorSystem at address " + hostPortUrl + " : "+ cause.getMessage(),t);
+      }
+    }
+    throw new Exception("Could not create actor system",t);
+  }
+}

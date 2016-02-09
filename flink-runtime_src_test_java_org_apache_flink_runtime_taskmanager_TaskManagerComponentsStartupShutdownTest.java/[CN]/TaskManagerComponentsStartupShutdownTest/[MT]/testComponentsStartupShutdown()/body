@@ -10,6 +10,7 @@
   try {
     actorSystem=AkkaUtils.createLocalActorSystem(config);
     final ActorRef jobManager=JobManager.startJobManagerActors(config,actorSystem,JobManager.class,MemoryArchivist.class)._1();
+    FlinkResourceManager.startResourceManagerActors(config,actorSystem,LeaderRetrievalUtils.createLeaderRetrievalService(config,jobManager),StandaloneResourceManager.class);
     final TaskManagerConfiguration tmConfig=new TaskManagerConfiguration(TMP_DIR,1000000,timeout,Option.<FiniteDuration>empty(),1,config);
     final NetworkEnvironmentConfiguration netConf=new NetworkEnvironmentConfiguration(32,BUFFER_SIZE,MemoryType.HEAP,IOManager.IOMode.SYNC,Option.<NettyConfig>empty(),new Tuple2<Integer,Integer>(0,0));
     final InstanceConnectionInfo connectionInfo=new InstanceConnectionInfo(InetAddress.getLocalHost(),10000);
@@ -18,7 +19,7 @@
     final NetworkEnvironment network=new NetworkEnvironment(TestingUtils.defaultExecutionContext(),timeout,netConf);
     final int numberOfSlots=1;
     LeaderRetrievalService leaderRetrievalService=new StandaloneLeaderRetrievalService(jobManager.path().toString());
-    final Props tmProps=Props.create(TaskManager.class,tmConfig,connectionInfo,memManager,ioManager,network,numberOfSlots,leaderRetrievalService);
+    final Props tmProps=Props.create(TaskManager.class,tmConfig,ResourceID.generate(),connectionInfo,memManager,ioManager,network,numberOfSlots,leaderRetrievalService);
     final ActorRef taskManager=actorSystem.actorOf(tmProps);
     new JavaTestKit(actorSystem){
 {

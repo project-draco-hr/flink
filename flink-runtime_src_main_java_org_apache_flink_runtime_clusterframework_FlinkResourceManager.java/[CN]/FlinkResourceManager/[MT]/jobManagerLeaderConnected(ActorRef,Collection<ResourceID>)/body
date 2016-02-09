@@ -1,0 +1,31 @@
+{
+  if (jobManager == null) {
+    LOG.info("Resource Manager associating with leading JobManager {} - leader session {}",newJobManagerLeader,leaderSessionID);
+    jobManager=newJobManagerLeader;
+    leaderUpdated();
+    if (workers.size() > 0) {
+      LOG.info("Received TaskManagers that were registered at the leader JobManager. " + "Trying to consolidate.");
+      Set<ResourceID> toHandle=new HashSet<>(workers.size());
+      toHandle.addAll(workers);
+      try {
+        Collection<WorkerType> consolidated=reacceptRegisteredWorkers(workers);
+        LOG.info("Consolidated {} TaskManagers",consolidated.size());
+        for (        WorkerType worker : consolidated) {
+          registeredWorkers.put(worker,worker);
+          toHandle.remove(worker);
+        }
+      }
+ catch (      Throwable t) {
+        LOG.error("Error during consolidation of known TaskManagers",t);
+        for (        ResourceID id : toHandle) {
+          releasePendingWorker(id);
+        }
+      }
+    }
+    checkWorkersPool();
+  }
+ else {
+    String msg="Attempting to associate with new JobManager leader " + newJobManagerLeader + " without previously disassociating from current leader "+ jobManager;
+    fatalError(msg,new Exception(msg));
+  }
+}

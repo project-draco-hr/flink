@@ -1,0 +1,28 @@
+{
+synchronized (this.lock) {
+    if (this.isShutdown) {
+      throw new IllegalStateException("InstanceManager is shut down.");
+    }
+    Instance prior=registeredHostsByConnection.get(taskManager);
+    if (prior != null) {
+      throw new IllegalStateException("Registration attempt from TaskManager at " + taskManager.path() + ". This connection is already registered under ID "+ prior.getId());
+    }
+    boolean wasDead=this.deadHosts.remove(taskManager);
+    if (wasDead) {
+      LOG.info("Registering TaskManager at " + taskManager.path() + " which was marked as dead earlier because of a heart-beat timeout.");
+    }
+    ActorGateway actorGateway=new AkkaActorGateway(taskManager,leaderSessionID);
+    InstanceID instanceID=new InstanceID();
+    Instance host=new Instance(actorGateway,connectionInfo,resourceID,instanceID,resources,numberOfSlots);
+    registeredHostsById.put(instanceID,host);
+    registeredHostsByConnection.put(taskManager,host);
+    registeredHostsByResource.put(resourceID,host);
+    totalNumberOfAliveTaskSlots+=numberOfSlots;
+    if (LOG.isInfoEnabled()) {
+      LOG.info(String.format("Registered TaskManager at %s (%s) as %s. " + "Current number of registered hosts is %d. " + "Current number of alive task slots is %d.",connectionInfo.getHostname(),taskManager.path(),instanceID,registeredHostsById.size(),totalNumberOfAliveTaskSlots));
+    }
+    host.reportHeartBeat();
+    notifyNewInstance(host);
+    return instanceID;
+  }
+}

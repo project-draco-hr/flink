@@ -1,0 +1,39 @@
+{
+  Iterator<Integer> portsIterator;
+  try {
+    portsIterator=NetUtils.getPortRangeFromString(portRangeDefinition);
+  }
+ catch (  Exception e) {
+    throw new IllegalArgumentException("Invalid port range definition: " + portRangeDefinition);
+  }
+  while (portsIterator.hasNext()) {
+    ServerSocket availableSocket=NetUtils.createSocketFromPorts(portsIterator,new NetUtils.SocketFactory(){
+      @Override public ServerSocket createSocket(      int port) throws IOException {
+        return new ServerSocket(port);
+      }
+    }
+);
+    int port;
+    if (availableSocket == null) {
+      throw new BindException("Unable to allocate further port in port range: " + portRangeDefinition);
+    }
+ else {
+      port=availableSocket.getLocalPort();
+      try {
+        availableSocket.close();
+      }
+ catch (      IOException ignored) {
+      }
+    }
+    try {
+      return startActorSystem(configuration,listeningAddress,port,logger);
+    }
+ catch (    Exception e) {
+      Throwable cause=e.getCause();
+      if (!(cause instanceof org.jboss.netty.channel.ChannelException || cause instanceof java.net.BindException)) {
+        throw e;
+      }
+    }
+  }
+  throw new BindException("Could not start actor system on any port in port range " + portRangeDefinition);
+}
