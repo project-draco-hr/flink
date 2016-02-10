@@ -1,0 +1,28 @@
+{
+  if (timeoutMillis == 0L) {
+    return getElementBlocking();
+  }
+ else   if (timeoutMillis < 0L) {
+    throw new IllegalArgumentException("invalid timeout");
+  }
+  final long deadline=System.currentTimeMillis() + timeoutMillis;
+  lock.lock();
+  try {
+    while (open && elements.isEmpty() && timeoutMillis > 0) {
+      nonEmpty.await(timeoutMillis,TimeUnit.MILLISECONDS);
+      timeoutMillis=deadline - System.currentTimeMillis();
+    }
+    if (!open) {
+      throw new IllegalStateException("queue is closed");
+    }
+ else     if (elements.isEmpty()) {
+      return null;
+    }
+ else {
+      return elements.removeFirst();
+    }
+  }
+  finally {
+    lock.unlock();
+  }
+}
