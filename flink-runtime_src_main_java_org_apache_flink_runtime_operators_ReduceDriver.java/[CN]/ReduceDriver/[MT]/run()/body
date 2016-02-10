@@ -8,16 +8,15 @@
   final ReduceFunction<T> function=this.taskContext.getStub();
   final Collector<T> output=this.taskContext.getOutputCollector();
   if (objectReuseEnabled) {
-    T reuse1=serializer.createInstance();
+    T reuse1=input.next();
     T reuse2=serializer.createInstance();
-    T value=input.next(reuse1);
+    T value=reuse1;
     while (this.running && value != null) {
       comparator.setReference(value);
-      T res=value;
-      while ((value=input.next(reuse2)) != null) {
-        if (comparator.equalToReference(value)) {
-          res=function.reduce(res,value);
-          if (res == reuse2) {
+      while ((reuse2=input.next(reuse2)) != null) {
+        if (comparator.equalToReference(reuse2)) {
+          value=function.reduce(value,reuse2);
+          if (value == reuse2) {
             T tmp=reuse1;
             reuse1=reuse2;
             reuse2=tmp;
@@ -27,10 +26,11 @@
           break;
         }
       }
-      output.collect(res);
-      if (value != null) {
-        value=serializer.copy(value,reuse1);
-      }
+      output.collect(value);
+      T tmp=reuse1;
+      reuse1=reuse2;
+      reuse2=tmp;
+      value=reuse1;
     }
   }
  else {
