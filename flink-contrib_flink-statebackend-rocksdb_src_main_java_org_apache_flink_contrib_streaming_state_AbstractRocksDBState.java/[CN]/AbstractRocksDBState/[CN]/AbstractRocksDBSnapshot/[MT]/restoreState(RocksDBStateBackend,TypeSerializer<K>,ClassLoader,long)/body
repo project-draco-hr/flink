@@ -2,12 +2,12 @@
   if (!this.keySerializer.equals(keySerializer)) {
     throw new IllegalArgumentException("Cannot restore the state from the snapshot with the given serializers. " + "State (K/V) was serialized with " + "(" + keySerializer + ") "+ "now is ("+ keySerializer+ ")");
   }
-  if (!dbPath.exists()) {
-    if (!dbPath.mkdirs()) {
-      throw new RuntimeException("Could not create RocksDB base path " + dbPath);
+  if (!basePath.exists()) {
+    if (!basePath.mkdirs()) {
+      throw new RuntimeException("Could not create RocksDB base path " + basePath);
     }
   }
-  final File localBackupPath=new File(dbPath,"chk-" + checkpointId);
+  final File localBackupPath=new File(basePath,"chk-" + checkpointId);
   if (localBackupPath.exists()) {
     try {
       LOG.warn("Deleting already existing local backup directory {}.",localBackupPath);
@@ -17,6 +17,7 @@
       throw new RuntimeException("Error cleaning RocksDB local backup directory.",e);
     }
   }
-  HDFSCopyToLocal.copyToLocal(backupUri,dbPath);
-  return createRocksDBState(keySerializer,namespaceSerializer,stateDesc,dbPath,checkpointPath,localBackupPath.getAbsolutePath(),stateBackend.getRocksDBOptions());
+  writeHadoopConfig(new File(basePath,HADOOP_CONF_NAME));
+  HDFSCopyToLocal.copyToLocal(new File(basePath,HADOOP_CONF_NAME),backupUri,basePath);
+  return createRocksDBState(keySerializer,namespaceSerializer,stateDesc,basePath,checkpointPath,localBackupPath.getAbsolutePath(),stateBackend.getRocksDBOptions());
 }
