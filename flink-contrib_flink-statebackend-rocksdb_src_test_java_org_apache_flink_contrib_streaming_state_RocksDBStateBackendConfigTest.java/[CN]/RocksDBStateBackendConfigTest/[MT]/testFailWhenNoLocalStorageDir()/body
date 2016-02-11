@@ -1,0 +1,23 @@
+{
+  File targetDir=new File(System.getProperty("java.io.tmpdir"),UUID.randomUUID().toString());
+  try {
+    assertTrue(targetDir.mkdirs());
+    if (!targetDir.setWritable(false,false)) {
+      System.err.println("Cannot execute 'testFailWhenNoLocalStorageDir' because cannot mark directory non-writable");
+      return;
+    }
+    RocksDBStateBackend rocksDbBackend=new RocksDBStateBackend(TEMP_URI);
+    rocksDbBackend.setDbStoragePath(targetDir.getAbsolutePath());
+    try {
+      rocksDbBackend.initializeForJob(getMockEnvironment(),"foobar",IntSerializer.INSTANCE);
+    }
+ catch (    Exception e) {
+      assertTrue(e.getMessage().contains("No local storage directories available"));
+      assertTrue(e.getMessage().contains(targetDir.getAbsolutePath()));
+    }
+  }
+  finally {
+    targetDir.setWritable(true,false);
+    FileUtils.deleteDirectory(targetDir);
+  }
+}

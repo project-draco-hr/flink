@@ -1,6 +1,29 @@
 {
   super.initializeForJob(env,operatorIdentifier,keySerializer);
+  this.nonPartitionedStateBackend.initializeForJob(env,operatorIdentifier,keySerializer);
   this.operatorIdentifier=operatorIdentifier.replace(" ","");
-  backingStateBackend.initializeForJob(env,operatorIdentifier,keySerializer);
   this.jobId=env.getJobID();
+  if (dbBasePaths == null) {
+    dbStorageDirectories=env.getIOManager().getSpillingDirectories();
+  }
+ else {
+    List<File> dirs=new ArrayList<>(dbBasePaths.length);
+    String errorMessage="";
+    for (    Path path : dbBasePaths) {
+      File f=new File(path.toUri().getPath());
+      if (!f.exists() && !f.mkdirs()) {
+        String msg="Local DB files directory '" + f.getAbsolutePath() + "' does not exist and cannot be created. ";
+        LOG.error(msg);
+        errorMessage+=msg;
+      }
+      dirs.add(f);
+    }
+    if (dirs.isEmpty()) {
+      throw new Exception("No local storage directories available. " + errorMessage);
+    }
+ else {
+      dbStorageDirectories=dirs.toArray(new File[dirs.size()]);
+    }
+  }
+  nextDirectory=new Random().nextInt(dbStorageDirectories.length);
 }
