@@ -1,5 +1,4 @@
 {
-  ApplicationID appId=new ApplicationID();
   JobID jobId=new JobID();
   long checkpointTimeout=60 * 1000;
   long timestamp=1272635;
@@ -7,8 +6,8 @@
   MockCheckpointIdCounter checkpointIdCounter=new MockCheckpointIdCounter();
   final File tmpDir=CommonTestUtils.createTempDirectory();
   try {
-    FileSystemStateStore<Savepoint> savepointStore=new FileSystemStateStore<>(tmpDir.toURI().toString(),"sp-");
-    SavepointCoordinator coordinator=createSavepointCoordinator(appId,jobId,checkpointTimeout,vertices,vertices,vertices,checkpointIdCounter,savepointStore);
+    FileSystemStateStore<CompletedCheckpoint> savepointStore=new FileSystemStateStore<>(tmpDir.toURI().toString(),"sp-");
+    SavepointCoordinator coordinator=createSavepointCoordinator(jobId,checkpointTimeout,vertices,vertices,vertices,checkpointIdCounter,savepointStore);
     Future<String> savepointPathFuture=coordinator.triggerSavepoint(timestamp);
     assertFalse(savepointPathFuture.isCompleted());
     long checkpointId=checkpointIdCounter.getLastReturnedCount();
@@ -30,8 +29,8 @@
     String savepointPath=Await.result(savepointPathFuture,FiniteDuration.Zero());
     assertEquals(0,getSavepointPromises(coordinator).size());
     coordinator.shutdown();
-    Savepoint savepoint=savepointStore.getState(savepointPath);
-    verifySavepoint(savepoint,appId,jobId,checkpointId,timestamp,vertices);
+    CompletedCheckpoint savepoint=savepointStore.getState(savepointPath);
+    verifySavepoint(savepoint,jobId,checkpointId,timestamp,vertices);
   }
   finally {
     FileUtils.deleteDirectory(tmpDir);

@@ -1,12 +1,11 @@
 {
-  ApplicationID appId=new ApplicationID();
   JobID jobId=new JobID();
   long checkpointTimeout=60 * 1000;
   long timestamp=1272635;
   ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(jobId),mockExecutionVertex(jobId)};
   MockCheckpointIdCounter checkpointIdCounter=new MockCheckpointIdCounter();
-  HeapStateStore<Savepoint> savepointStore=new HeapStateStore<>();
-  SavepointCoordinator coordinator=createSavepointCoordinator(appId,jobId,checkpointTimeout,vertices,vertices,vertices,checkpointIdCounter,savepointStore);
+  HeapStateStore<CompletedCheckpoint> savepointStore=new HeapStateStore<>();
+  SavepointCoordinator coordinator=createSavepointCoordinator(jobId,checkpointTimeout,vertices,vertices,vertices,checkpointIdCounter,savepointStore);
   Future<String> savepointPathFuture=coordinator.triggerSavepoint(timestamp);
   assertFalse(savepointPathFuture.isCompleted());
   long checkpointId=checkpointIdCounter.getLastReturnedCount();
@@ -26,8 +25,8 @@
   }
   assertTrue(savepointPathFuture.isCompleted());
   String savepointPath=Await.result(savepointPathFuture,FiniteDuration.Zero());
-  Savepoint savepoint=savepointStore.getState(savepointPath);
-  verifySavepoint(savepoint,appId,jobId,checkpointId,timestamp,vertices);
+  CompletedCheckpoint savepoint=savepointStore.getState(savepointPath);
+  verifySavepoint(savepoint,jobId,checkpointId,timestamp,vertices);
   assertEquals(0,getSavepointPromises(coordinator).size());
   coordinator.shutdown();
 }
