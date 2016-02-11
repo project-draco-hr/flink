@@ -16,6 +16,13 @@ synchronized (lock) {
           if (state.getFunctionState() instanceof AsynchronousStateHandle) {
             hasAsyncStates=true;
           }
+          if (state.getKvStates() != null) {
+            for (            KvStateSnapshot<?,?,?,?,?> kvSnapshot : state.getKvStates().values()) {
+              if (kvSnapshot instanceof AsynchronousKvStateSnapshot) {
+                hasAsyncStates=true;
+              }
+            }
+          }
           states[i]=state.isEmpty() ? null : state;
         }
       }
@@ -44,10 +51,21 @@ synchronized (lock) {
                     AsynchronousStateHandle<?> asyncState=(AsynchronousStateHandle<?>)state.getOperatorState();
                     state.setOperatorState(asyncState.materialize());
                   }
+                  if (state.getKvStates() != null) {
+                    Set<String> keys=state.getKvStates().keySet();
+                    HashMap<String,KvStateSnapshot<?,?,?,?,?>> kvStates=state.getKvStates();
+                    for (                    String key : keys) {
+                      if (kvStates.get(key) instanceof AsynchronousKvStateSnapshot) {
+                        AsynchronousKvStateSnapshot<?,?,?,?,?> asyncHandle=(AsynchronousKvStateSnapshot<?,?,?,?,?>)kvStates.get(key);
+                        kvStates.put(key,asyncHandle.materialize());
+                      }
+                    }
+                  }
                 }
               }
               StreamTaskStateList allStates=new StreamTaskStateList(states);
               getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
+              LOG.debug("Finished asynchronous checkpoints for checkpoint {} on task {}",checkpointId,getName());
             }
  catch (            Exception e) {
               if (isRunning()) {
@@ -58,7 +76,6 @@ synchronized (lock) {
               }
             }
             asyncCheckpointThreads.remove(this);
-            LOG.debug("Finished asynchronous checkpoints for checkpoint {} on task {}",checkpointId,getName());
           }
         }
 ;

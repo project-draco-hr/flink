@@ -1,26 +1,13 @@
 {
-  boolean success=false;
-  final File localBackupPath=new File(dbPath,"backup-" + checkpointId);
+  final File localBackupPath=new File(basePath,"local-chk-" + checkpointId);
   final URI backupUri=new URI(checkpointPath + "/chk-" + checkpointId);
-  try {
-    if (!localBackupPath.exists()) {
-      if (!localBackupPath.mkdirs()) {
-        throw new RuntimeException("Could not create local backup path " + localBackupPath);
-      }
-    }
-    try (BackupEngine backupEngine=BackupEngine.open(Env.getDefault(),new BackupableDBOptions(localBackupPath.getAbsolutePath()))){
-      backupEngine.createNewBackup(db);
-    }
-     HDFSCopyFromLocal.copyFromLocal(localBackupPath,backupUri);
-    AbstractRocksDBSnapshot<K,N,S,SD> result=createRocksDBSnapshot(backupUri,checkpointId);
-    success=true;
-    return result;
-  }
-  finally {
-    FileUtils.deleteDirectory(localBackupPath);
-    if (!success) {
-      FileSystem fs=FileSystem.get(backupUri,new Configuration());
-      fs.delete(new Path(backupUri),true);
+  if (!localBackupPath.exists()) {
+    if (!localBackupPath.mkdirs()) {
+      throw new RuntimeException("Could not create local backup path " + localBackupPath);
     }
   }
+  try (BackupEngine backupEngine=BackupEngine.open(Env.getDefault(),new BackupableDBOptions(localBackupPath.getAbsolutePath()))){
+    backupEngine.createNewBackup(db);
+  }
+   return new AsyncRocksDBSnapshot<>(localBackupPath,backupUri,checkpointId,this);
 }
