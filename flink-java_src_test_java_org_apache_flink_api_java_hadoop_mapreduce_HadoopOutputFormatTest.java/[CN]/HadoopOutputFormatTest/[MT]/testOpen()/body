@@ -1,12 +1,9 @@
 {
-  OutputFormat<String,Long> dummyOutputFormat=new DummyOutputFormat();
-  try {
-    Job job=Job.getInstance();
-    HadoopOutputFormat<String,Long> hadoopOutputFormat=new HadoopOutputFormat<>(dummyOutputFormat,job);
-    hadoopOutputFormat.recordWriter=new DummyRecordWriter();
-    hadoopOutputFormat.open(1,4);
-  }
- catch (  IOException e) {
-    fail();
-  }
+  OutputFormat<String,Long> dummyOutputFormat=mock(DummyOutputFormat.class);
+  OutputCommitter outputCommitter=setupOutputCommitter(true);
+  when(dummyOutputFormat.getOutputCommitter(any(TaskAttemptContext.class))).thenReturn(outputCommitter);
+  HadoopOutputFormat<String,Long> hadoopOutputFormat=setupHadoopOutputFormat(dummyOutputFormat,Job.getInstance(),new DummyRecordWriter(),setupOutputCommitter(true),new Configuration());
+  hadoopOutputFormat.open(1,4);
+  verify(hadoopOutputFormat.outputCommitter,times(1)).setupJob(any(JobContext.class));
+  verify(hadoopOutputFormat.mapreduceOutputFormat,times(1)).getRecordWriter(any(TaskAttemptContext.class));
 }
