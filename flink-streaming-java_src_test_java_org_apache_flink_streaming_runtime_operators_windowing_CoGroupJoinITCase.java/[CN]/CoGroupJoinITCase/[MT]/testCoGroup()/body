@@ -1,5 +1,5 @@
 {
-  testResults=Lists.newArrayList();
+  testResults=new ArrayList<>();
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
   env.setParallelism(1);
@@ -19,9 +19,8 @@
     @Override public void cancel(){
     }
   }
-).assignTimestamps(new Tuple2TimestampExtractor());
+).assignTimestampsAndWatermarks(new Tuple2TimestampExtractor());
   DataStream<Tuple2<String,Integer>> source2=env.addSource(new SourceFunction<Tuple2<String,Integer>>(){
-    private static final long serialVersionUID=1L;
     @Override public void run(    SourceContext<Tuple2<String,Integer>> ctx) throws Exception {
       ctx.collect(Tuple2.of("a",0));
       ctx.collect(Tuple2.of("a",1));
@@ -33,7 +32,7 @@
     @Override public void cancel(){
     }
   }
-).assignTimestamps(new Tuple2TimestampExtractor());
+).assignTimestampsAndWatermarks(new Tuple2TimestampExtractor());
   source1.coGroup(source2).where(new Tuple2KeyExtractor()).equalTo(new Tuple2KeyExtractor()).window(TumblingTimeWindows.of(Time.of(3,TimeUnit.MILLISECONDS))).apply(new CoGroupFunction<Tuple2<String,Integer>,Tuple2<String,Integer>,String>(){
     @Override public void coGroup(    Iterable<Tuple2<String,Integer>> first,    Iterable<Tuple2<String,Integer>> second,    Collector<String> out) throws Exception {
       StringBuilder result=new StringBuilder();
@@ -55,7 +54,7 @@
   }
 );
   env.execute("CoGroup Test");
-  List<String> expectedResult=Lists.newArrayList("F:(a,0)(a,1)(a,2) S:(a,0)(a,1)","F:(b,3)(b,4)(b,5) S:(b,3)","F:(a,6)(a,7)(a,8) S:","F: S:(c,6)(c,7)(c,8)");
+  List<String> expectedResult=Arrays.asList("F:(a,0)(a,1)(a,2) S:(a,0)(a,1)","F:(b,3)(b,4)(b,5) S:(b,3)","F:(a,6)(a,7)(a,8) S:","F: S:(c,6)(c,7)(c,8)");
   Collections.sort(expectedResult);
   Collections.sort(testResults);
   Assert.assertEquals(expectedResult,testResults);

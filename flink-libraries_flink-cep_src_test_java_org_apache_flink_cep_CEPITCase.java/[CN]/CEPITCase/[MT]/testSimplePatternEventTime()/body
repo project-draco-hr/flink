@@ -1,50 +1,39 @@
 {
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-  DataStream<Event> input=env.fromElements(Tuple2.of(new Event(1,"start",1.0),5L),Tuple2.of(new Event(2,"middle",2.0),1L),Tuple2.of(new Event(3,"end",3.0),3L),Tuple2.of(new Event(4,"end",4.0),10L),Tuple2.of(new Event(5,"middle",5.0),7L)).assignTimestamps(new TimestampExtractor<Tuple2<Event,Long>>(){
-    private static final long serialVersionUID=878281782188702293L;
-    private Long currentMaxTimestamp=Long.MIN_VALUE;
-    @Override public long extractTimestamp(    Tuple2<Event,Long> element,    long currentTimestamp){
-      if (currentMaxTimestamp < element.f1) {
-        currentMaxTimestamp=element.f1;
-      }
+  DataStream<Event> input=env.fromElements(Tuple2.of(new Event(1,"start",1.0),5L),Tuple2.of(new Event(2,"middle",2.0),1L),Tuple2.of(new Event(3,"end",3.0),3L),Tuple2.of(new Event(4,"end",4.0),10L),Tuple2.of(new Event(5,"middle",5.0),7L)).assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks<Tuple2<Event,Long>>(){
+    private long currentMaxTimestamp=-1;
+    @Override public long extractTimestamp(    Tuple2<Event,Long> element,    long previousTimestamp){
+      currentMaxTimestamp=Math.max(currentMaxTimestamp,element.f1);
       return element.f1;
     }
-    @Override public long extractWatermark(    Tuple2<Event,Long> element,    long currentTimestamp){
-      return currentMaxTimestamp - 5;
-    }
     @Override public long getCurrentWatermark(){
-      return Long.MIN_VALUE;
+      return currentMaxTimestamp - 5;
     }
   }
 ).map(new MapFunction<Tuple2<Event,Long>,Event>(){
-    private static final long serialVersionUID=-5288731103938665328L;
     @Override public Event map(    Tuple2<Event,Long> value) throws Exception {
       return value.f0;
     }
   }
 );
   Pattern<Event,?> pattern=Pattern.<Event>begin("start").where(new FilterFunction<Event>(){
-    private static final long serialVersionUID=2601494641888389648L;
     @Override public boolean filter(    Event value) throws Exception {
       return value.getName().equals("start");
     }
   }
 ).followedBy("middle").where(new FilterFunction<Event>(){
-    private static final long serialVersionUID=-3133506934766766660L;
     @Override public boolean filter(    Event value) throws Exception {
       return value.getName().equals("middle");
     }
   }
 ).followedBy("end").where(new FilterFunction<Event>(){
-    private static final long serialVersionUID=-8528031731858936269L;
     @Override public boolean filter(    Event value) throws Exception {
       return value.getName().equals("end");
     }
   }
 );
   DataStream<String> result=CEP.pattern(input,pattern).select(new PatternSelectFunction<Event,String>(){
-    private static final long serialVersionUID=1447462674590806097L;
     @Override public String select(    Map<String,Event> pattern){
       StringBuilder builder=new StringBuilder();
       builder.append(pattern.get("start").getId()).append(",").append(pattern.get("middle").getId()).append(",").append(pattern.get("end").getId());

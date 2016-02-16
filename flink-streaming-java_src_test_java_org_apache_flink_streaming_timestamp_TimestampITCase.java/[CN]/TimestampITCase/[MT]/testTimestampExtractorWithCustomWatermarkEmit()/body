@@ -6,8 +6,8 @@
   env.getConfig().enableTimestamps();
   DataStream<Integer> source1=env.addSource(new SourceFunction<Integer>(){
     @Override public void run(    SourceContext<Integer> ctx) throws Exception {
-      int index=0;
-      while (index < NUM_ELEMENTS) {
+      int index=1;
+      while (index <= NUM_ELEMENTS) {
         ctx.collect(index);
         latch.await();
         index++;
@@ -17,21 +17,18 @@
     }
   }
 );
-  source1.assignTimestamps(new TimestampExtractor<Integer>(){
+  source1.assignTimestampsAndWatermarks(new AssignerWithPunctuatedWatermarks<Integer>(){
     @Override public long extractTimestamp(    Integer element,    long currentTimestamp){
       return element;
     }
-    @Override public long extractWatermark(    Integer element,    long currentTimestamp){
-      return element - 1;
-    }
-    @Override public long getCurrentWatermark(){
-      return Long.MIN_VALUE;
+    @Override public long checkAndGetNextWatermark(    Integer element,    long extractedTimestamp){
+      return extractedTimestamp - 1;
     }
   }
 ).transform("Watermark Check",BasicTypeInfo.INT_TYPE_INFO,new CustomOperator(true)).transform("Timestamp Check",BasicTypeInfo.INT_TYPE_INFO,new TimestampCheckingOperator());
   env.execute();
   for (int j=0; j < NUM_ELEMENTS; j++) {
-    if (!CustomOperator.finalWatermarks[0].get(j).equals(new Watermark(j - 1))) {
+    if (!CustomOperator.finalWatermarks[0].get(j).equals(new Watermark(j))) {
       Assert.fail("Wrong watermark.");
     }
   }
