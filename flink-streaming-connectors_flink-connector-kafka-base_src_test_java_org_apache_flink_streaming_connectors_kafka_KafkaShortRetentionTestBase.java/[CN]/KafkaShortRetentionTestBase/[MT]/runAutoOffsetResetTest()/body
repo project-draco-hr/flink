@@ -1,0 +1,36 @@
+{
+  final String topic="auto-offset-reset-test";
+  final int parallelism=1;
+  final int elementsPerPartition=50000;
+  Properties tprops=new Properties();
+  tprops.setProperty("retention.ms","250");
+  kafkaServer.createTestTopic(topic,parallelism,1,tprops);
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flink.getLeaderRPCPort());
+  env.setParallelism(parallelism);
+  env.setRestartStrategy(RestartStrategies.noRestart());
+  env.getConfig().disableSysoutLogging();
+  DataStream<String> stream=env.addSource(new RichParallelSourceFunction<String>(){
+    private boolean running=true;
+    @Override public void run(    SourceContext<String> ctx) throws InterruptedException {
+      int cnt=getRuntimeContext().getIndexOfThisSubtask() * elementsPerPartition;
+      int limit=cnt + elementsPerPartition;
+      while (running && !stopProducer && cnt < limit) {
+        ctx.collect("element-" + cnt);
+        cnt++;
+        Thread.sleep(10);
+      }
+      LOG.info("Stopping producer");
+    }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
+);
+  stream.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(new SimpleStringSchema()),standardProps,null));
+  NonContinousOffsetsDeserializationSchema deserSchema=new NonContinousOffsetsDeserializationSchema();
+  FlinkKafkaConsumerBase<String> source=kafkaServer.getConsumer(topic,deserSchema,standardProps);
+  DataStreamSource<String> consuming=env.addSource(source);
+  consuming.addSink(new DiscardingSink<String>());
+  tryExecute(env,"run auto offset reset test");
+  kafkaServer.deleteTestTopic(topic);
+}
