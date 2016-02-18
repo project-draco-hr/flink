@@ -1,11 +1,11 @@
 {
   this.mainThread=Thread.currentThread();
-  List<SimpleConsumerThread<T>> deadBrokerThreads=new ArrayList<>();
-  Map<Node,SimpleConsumerThread<T>> brokerToThread=new HashMap<>();
+  final Map<Node,SimpleConsumerThread<T>> brokerToThread=new HashMap<>();
   try {
     while (running && error.get() == null) {
       try {
         List<FetchPartition> partitionsToAssign=unassignedPartitions.getBatchBlocking(5000);
+        partitionsToAssign.remove(MARKER);
         if (!partitionsToAssign.isEmpty()) {
           LOG.info("Assigning {} partitions to broker threads",partitionsToAssign.size());
           Map<Node,List<FetchPartition>> partitionsWithLeaders=findLeaderForPartitions(partitionsToAssign);
@@ -13,55 +13,38 @@
             final Node leader=partitionsWithLeader.getKey();
             final List<FetchPartition> partitions=partitionsWithLeader.getValue();
             SimpleConsumerThread<T> brokerThread=brokerToThread.get(leader);
-            if (brokerThread == null) {
+            if (!running) {
+              break;
+            }
+            if (brokerThread == null || !brokerThread.getNewPartitionsQueue().isOpen()) {
               brokerThread=createAndStartSimpleConsumerThread(sourceContext,deserializer,lastOffsets,partitions,leader);
               brokerToThread.put(leader,brokerThread);
             }
  else {
-              if (brokerThread.isAlive()) {
-                ClosableBlockingQueue<FetchPartition> newPartitionsQueue=brokerThread.getNewPartitionsQueue();
-                for (                FetchPartition fp : partitions) {
-                  if (!newPartitionsQueue.addIfOpen(fp)) {
-                    List<FetchPartition> seedPartitions=new ArrayList<>();
-                    seedPartitions.add(fp);
-                    brokerThread=createAndStartSimpleConsumerThread(sourceContext,deserializer,lastOffsets,seedPartitions,leader);
-                    SimpleConsumerThread<T> oldThread=brokerToThread.put(leader,brokerThread);
-                    if (oldThread != null) {
-                      deadBrokerThreads.add(oldThread);
-                    }
-                    newPartitionsQueue=brokerThread.getNewPartitionsQueue();
-                  }
-                }
-              }
- else {
-                brokerThread=createAndStartSimpleConsumerThread(sourceContext,deserializer,lastOffsets,partitions,leader);
-                SimpleConsumerThread<T> oldThread=brokerToThread.put(leader,brokerThread);
-                if (oldThread != null) {
-                  deadBrokerThreads.add(oldThread);
+              ClosableBlockingQueue<FetchPartition> newPartitionsQueue=brokerThread.getNewPartitionsQueue();
+              for (              FetchPartition fp : partitions) {
+                if (!newPartitionsQueue.addIfOpen(fp)) {
+                  List<FetchPartition> seedPartitions=new ArrayList<>();
+                  seedPartitions.add(fp);
+                  brokerThread=createAndStartSimpleConsumerThread(sourceContext,deserializer,lastOffsets,seedPartitions,leader);
+                  brokerToThread.put(leader,brokerThread);
+                  newPartitionsQueue=brokerThread.getNewPartitionsQueue();
                 }
               }
             }
           }
         }
  else {
-          Iterator<Map.Entry<Node,SimpleConsumerThread<T>>> bttIterator=brokerToThread.entrySet().iterator();
+          Iterator<SimpleConsumerThread<T>> bttIterator=brokerToThread.values().iterator();
           while (bttIterator.hasNext()) {
-            Map.Entry<Node,SimpleConsumerThread<T>> brokerAndThread=bttIterator.next();
-            if (!brokerAndThread.getValue().isAlive()) {
-              LOG.info("Removing stopped consumer thread {}",brokerAndThread.getValue().getName());
+            SimpleConsumerThread<T> thread=bttIterator.next();
+            if (!thread.getNewPartitionsQueue().isOpen()) {
+              LOG.info("Removing stopped consumer thread {}",thread.getName());
               bttIterator.remove();
             }
           }
         }
-        if (deadBrokerThreads.size() > 0) {
-          Iterator<SimpleConsumerThread<T>> deadBrokerThreadsIterator=deadBrokerThreads.iterator();
-          while (deadBrokerThreadsIterator.hasNext()) {
-            if (!deadBrokerThreadsIterator.next().isAlive()) {
-              deadBrokerThreadsIterator.remove();
-            }
-          }
-        }
-        if (brokerToThread.size() == 0 && unassignedPartitions.peek() == null) {
+        if (brokerToThread.size() == 0 && unassignedPartitions.isEmpty()) {
           if (unassignedPartitions.close()) {
             LOG.info("All consumer threads are finished, there are no more unassigned partitions. Stopping fetcher");
             break;
@@ -84,14 +67,6 @@
         if (t.isAlive()) {
           t.cancel();
           runningThreads++;
-        }
-      }
-      if (deadBrokerThreads.size() > 0) {
-        for (        SimpleConsumerThread<T> thread : deadBrokerThreads) {
-          if (thread.isAlive()) {
-            thread.cancel();
-            runningThreads++;
-          }
         }
       }
       if (runningThreads > 0) {

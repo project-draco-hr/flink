@@ -25,6 +25,7 @@
         if (newPartitionsQueue.close()) {
           LOG.info("Consumer thread {} does not have any partitions assigned anymore. Stopping thread.",getName());
           running=false;
+          unassignedPartitions.add(MARKER);
           break;
         }
  else {
@@ -51,9 +52,7 @@
           if (++reconnects >= reconnectLimit) {
             LOG.warn("Unable to reach broker after {} retries. Returning all current partitions",reconnectLimit);
             for (            FetchPartition fp : this.partitions) {
-              if (!unassignedPartitions.addIfOpen(fp)) {
-                throw new RuntimeException("Main thread closed unassigned partitions queue");
-              }
+              unassignedPartitions.add(fp);
             }
             this.partitions.clear();
             continue;
@@ -90,9 +89,7 @@
  else           if (code == ErrorMapping.NotLeaderForPartitionCode() || code == ErrorMapping.LeaderNotAvailableCode() || code == ErrorMapping.BrokerNotAvailableCode() || code == ErrorMapping.UnknownCode()) {
             LOG.warn("{} is not the leader of {}. Reassigning leader for partition",broker,fp);
             LOG.debug("Error code = {}",code);
-            if (!unassignedPartitions.addIfOpen(fp)) {
-              throw new RuntimeException("Main thread closed unassigned partitions queue");
-            }
+            unassignedPartitions.add(fp);
             partitionsIterator.remove();
             partitionsRemoved=true;
           }
@@ -168,6 +165,9 @@ synchronized (sourceContext.getCheckpointLock()) {
         }
       }
       LOG.debug("This fetch contained {} messages ({} deleted messages)",messagesInFetch,deletedMessages);
+    }
+    if (!newPartitionsQueue.close()) {
+      throw new Exception("Bug: Cleanly leaving fetcher thread without having a closed queue.");
     }
   }
  catch (  Throwable t) {
