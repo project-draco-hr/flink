@@ -3,6 +3,7 @@
   StackTraceSampleCoordinator sampleCoordinator=mock(StackTraceSampleCoordinator.class);
   when(sampleCoordinator.triggerStackTraceSample(any(ExecutionVertex[].class),anyInt(),any(FiniteDuration.class),anyInt())).thenReturn(samplePromise.future());
   ExecutionGraph graph=mock(ExecutionGraph.class);
+  when(graph.getState()).thenReturn(JobStatus.RUNNING);
   when(graph.getExecutionContext()).thenReturn(new ExecutionContext(){
     @Override public void execute(    Runnable runnable){
       runnable.run();
@@ -28,9 +29,9 @@
   int numSamples=100;
   FiniteDuration delayBetweenSamples=new FiniteDuration(100,TimeUnit.MILLISECONDS);
   BackPressureStatsTracker tracker=new BackPressureStatsTracker(sampleCoordinator,9999,numSamples,delayBetweenSamples);
-  tracker.triggerStackTraceSample(jobVertex);
+  assertTrue("Failed to trigger",tracker.triggerStackTraceSample(jobVertex));
   verify(sampleCoordinator).triggerStackTraceSample(eq(taskVertices),eq(numSamples),eq(delayBetweenSamples),eq(BackPressureStatsTracker.MAX_STACK_TRACE_DEPTH));
-  tracker.triggerStackTraceSample(jobVertex);
+  assertFalse("Unexpected trigger",tracker.triggerStackTraceSample(jobVertex));
   assertTrue(tracker.getOperatorBackPressureStats(jobVertex).isEmpty());
   verify(sampleCoordinator).triggerStackTraceSample(eq(taskVertices),eq(numSamples),eq(delayBetweenSamples),eq(BackPressureStatsTracker.MAX_STACK_TRACE_DEPTH));
   assertTrue(tracker.getOperatorBackPressureStats(jobVertex).isEmpty());
