@@ -4,7 +4,6 @@
   createTestTopic(topic,parallelism,1);
   final TypeInformation<Tuple2<Long,byte[]>> longBytesInfo=TypeInfoParser.parse("Tuple2<Long, byte[]>");
   final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> serSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
-  final TypeInformationSerializationSchema<Tuple2<Long,byte[]>> deserSchema=new TypeInformationSerializationSchema<>(longBytesInfo,new ExecutionConfig());
   final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
   env.setRestartStrategy(RestartStrategies.noRestart());
   env.getConfig().disableSysoutLogging();
@@ -12,8 +11,8 @@
   env.setParallelism(parallelism);
   Properties consumerProps=new Properties();
   consumerProps.putAll(standardProps);
-  consumerProps.setProperty("fetch.message.max.bytes",Integer.toString(1024 * 1024 * 40));
-  consumerProps.setProperty("max.partition.fetch.bytes",Integer.toString(1024 * 1024 * 40));
+  consumerProps.setProperty("fetch.message.max.bytes",Integer.toString(1024 * 1024 * 14));
+  consumerProps.setProperty("max.partition.fetch.bytes",Integer.toString(1024 * 1024 * 14));
   consumerProps.setProperty("queued.max.message.chunks","1");
   FlinkKafkaConsumerBase<Tuple2<Long,byte[]>> source=kafkaServer.getConsumer(topic,serSchema,consumerProps);
   DataStreamSource<Tuple2<Long,byte[]>> consuming=env.addSource(source);
@@ -36,7 +35,7 @@
   }
 );
   Properties producerProps=new Properties();
-  producerProps.setProperty("max.request.size",Integer.toString(1024 * 1024 * 30));
+  producerProps.setProperty("max.request.size",Integer.toString(1024 * 1024 * 14));
   producerProps.setProperty("retries","3");
   producerProps.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,brokerConnectionStrings);
   DataStream<Tuple2<Long,byte[]>> stream=env.addSource(new RichSourceFunction<Tuple2<Long,byte[]>>(){
@@ -48,9 +47,9 @@
     @Override public void run(    SourceContext<Tuple2<Long,byte[]>> ctx) throws Exception {
       Random rnd=new Random();
       long cnt=0;
-      int fifteenMb=1024 * 1024 * 15;
+      int sevenMb=1024 * 1024 * 7;
       while (running) {
-        byte[] wl=new byte[fifteenMb + rnd.nextInt(fifteenMb)];
+        byte[] wl=new byte[sevenMb + rnd.nextInt(sevenMb)];
         ctx.collect(new Tuple2<>(cnt++,wl));
         Thread.sleep(100);
         if (cnt == 10) {

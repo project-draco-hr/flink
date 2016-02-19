@@ -8,12 +8,21 @@
     properties.setProperty("bootstrap.servers","localhost:80");
     properties.setProperty("zookeeper.connect","localhost:80");
     properties.setProperty("group.id","test");
+    properties.setProperty("request.timeout.ms","3000");
+    properties.setProperty("session.timeout.ms","2000");
+    properties.setProperty("fetch.max.wait.ms","2000");
+    properties.setProperty("heartbeat.interval.ms","1000");
     FlinkKafkaConsumerBase<String> source=kafkaServer.getConsumer("doesntexist",new SimpleStringSchema(),properties);
     DataStream<String> stream=see.addSource(source);
     stream.print();
     see.execute("No broker test");
   }
  catch (  RuntimeException re) {
-    Assert.assertTrue("Wrong RuntimeException thrown: " + StringUtils.stringifyException(re),re.getClass().equals(RuntimeException.class) && re.getMessage().contains("Unable to retrieve any partitions for the requested topics [doesntexist]"));
+    if (kafkaServer.getVersion().equals("0.9")) {
+      Assert.assertTrue("Wrong RuntimeException thrown: " + StringUtils.stringifyException(re),re.getClass().equals(TimeoutException.class) && re.getMessage().contains("Timeout expired while fetching topic metadata"));
+    }
+ else {
+      Assert.assertTrue("Wrong RuntimeException thrown: " + StringUtils.stringifyException(re),re.getClass().equals(RuntimeException.class) && re.getMessage().contains("Unable to retrieve any partitions for the requested topics [doesntexist]"));
+    }
   }
 }
