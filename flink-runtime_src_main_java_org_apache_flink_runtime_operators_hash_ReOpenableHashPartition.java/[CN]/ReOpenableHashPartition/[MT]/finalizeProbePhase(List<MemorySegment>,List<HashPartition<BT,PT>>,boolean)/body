@@ -9,19 +9,21 @@
       this.nextOverflowBucket=0;
       return 0;
     }
-    return super.finalizeProbePhase(freeMemory,spilledPartitions);
+    return super.finalizeProbePhase(freeMemory,spilledPartitions,keepUnprobedSpilledPartitions);
   }
-  if (!isInMemory() && this.probeSideRecordCounter == 0) {
+  if (isInMemory()) {
+    return 0;
+  }
+ else   if (this.probeSideRecordCounter == 0 && !keepUnprobedSpilledPartitions) {
     freeMemory.add(this.probeSideBuffer.getCurrentSegment());
     this.probeSideChannel.close();
     this.probeSideChannel.deleteChannel();
     return 0;
   }
-  if (isInMemory()) {
-    return 0;
+ else {
+    this.probeSideBuffer.close();
+    this.probeSideChannel.close();
+    spilledPartitions.add(this);
+    return 1;
   }
-  this.probeSideBuffer.close();
-  this.probeSideChannel.close();
-  spilledPartitions.add(this);
-  return 1;
 }

@@ -1,24 +1,26 @@
 {
-  this.probeMatchedPhase=true;
-  this.unmatchedBuildVisited=false;
   int buffersAvailable=0;
   for (int i=0; i < this.partitionsBeingBuilt.size(); i++) {
     final HashPartition<BT,PT> p=this.partitionsBeingBuilt.get(i);
     p.setFurtherPatitioning(this.furtherPartitioning);
-    buffersAvailable+=p.finalizeProbePhase(this.availableMemory,this.partitionsPending);
+    buffersAvailable+=p.finalizeProbePhase(this.availableMemory,this.partitionsPending,this.buildSideOuterJoin);
   }
   this.partitionsBeingBuilt.clear();
   this.writeBehindBuffersAvailable+=buffersAvailable;
   releaseTable();
+  if (this.currentSpilledBuildSide != null) {
+    this.currentSpilledBuildSide.closeAndDelete();
+    this.currentSpilledBuildSide=null;
+  }
   if (this.currentSpilledProbeSide != null) {
     this.currentSpilledProbeSide.closeAndDelete();
     this.currentSpilledProbeSide=null;
   }
-  if (!this.partitionsPending.isEmpty()) {
-    final HashPartition<BT,PT> p=this.partitionsPending.get(0);
-    buildTableFromSpilledPartition(p);
-    LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
-    this.currentSpilledProbeSide=this.ioManager.createBlockChannelReader(p.getProbeSideChannel().getChannelID(),returnQueue);
+  if (this.partitionsPending.isEmpty()) {
+    return false;
+  }
+  final HashPartition<BT,PT> p=this.partitionsPending.get(0);
+  if (p.probeSideRecordCounter == 0) {
     List<MemorySegment> memory=new ArrayList<MemorySegment>();
     MemorySegment seg1=getNextBuffer();
     if (seg1 != null) {
@@ -29,15 +31,35 @@
       }
     }
  else {
-      throw new IllegalStateException("Attempting to begin probing of partition without any memory available");
+      throw new IllegalStateException("Attempting to begin reading spilled partition without any memory available");
     }
-    ChannelReaderInputViewIterator<PT> probeReader=new ChannelReaderInputViewIterator<PT>(this.currentSpilledProbeSide,returnQueue,memory,this.availableMemory,this.probeSideSerializer,p.getProbeSideBlockCount());
-    this.probeIterator.set(probeReader);
+    this.currentSpilledBuildSide=this.ioManager.createBlockChannelReader(p.getBuildSideChannel().getChannelID());
+    final ChannelReaderInputView inView=new HeaderlessChannelReaderInputView(currentSpilledBuildSide,memory,p.getBuildSideBlockCount(),p.getLastSegmentLimit(),false);
+    final ChannelReaderInputViewIterator<BT> inIter=new ChannelReaderInputViewIterator<BT>(inView,this.availableMemory,this.buildSideSerializer);
+    this.unmatchedBuildIterator=inIter;
     this.partitionsPending.remove(0);
-    this.currentRecursionDepth=p.getRecursionLevel() + 1;
-    return nextRecord();
+    return true;
+  }
+  this.probeMatchedPhase=true;
+  this.unmatchedBuildVisited=false;
+  buildTableFromSpilledPartition(p);
+  LinkedBlockingQueue<MemorySegment> returnQueue=new LinkedBlockingQueue<MemorySegment>();
+  this.currentSpilledProbeSide=this.ioManager.createBlockChannelReader(p.getProbeSideChannel().getChannelID(),returnQueue);
+  List<MemorySegment> memory=new ArrayList<MemorySegment>();
+  MemorySegment seg1=getNextBuffer();
+  if (seg1 != null) {
+    memory.add(seg1);
+    MemorySegment seg2=getNextBuffer();
+    if (seg2 != null) {
+      memory.add(seg2);
+    }
   }
  else {
-    return false;
+    throw new IllegalStateException("Attempting to begin probing of partition without any memory available");
   }
+  ChannelReaderInputViewIterator<PT> probeReader=new ChannelReaderInputViewIterator<PT>(this.currentSpilledProbeSide,returnQueue,memory,this.availableMemory,this.probeSideSerializer,p.getProbeSideBlockCount());
+  this.probeIterator.set(probeReader);
+  this.partitionsPending.remove(0);
+  this.currentRecursionDepth=p.getRecursionLevel() + 1;
+  return nextRecord();
 }
