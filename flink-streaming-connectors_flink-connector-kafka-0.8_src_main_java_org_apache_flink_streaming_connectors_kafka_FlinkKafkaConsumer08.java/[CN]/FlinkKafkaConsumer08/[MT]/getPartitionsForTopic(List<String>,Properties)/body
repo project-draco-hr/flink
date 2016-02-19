@@ -1,12 +1,12 @@
 {
   String seedBrokersConfString=properties.getProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG);
-  final int numRetries=Integer.valueOf(properties.getProperty(GET_PARTITIONS_RETRIES_KEY,Integer.toString(DEFAULT_GET_PARTITIONS_RETRIES)));
-  checkNotNull(seedBrokersConfString,"Configuration property " + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG + " not set");
+  final int numRetries=getIntFromConfig(properties,GET_PARTITIONS_RETRIES_KEY,DEFAULT_GET_PARTITIONS_RETRIES);
+  requireNonNull(seedBrokersConfString,"Configuration property " + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG + " not set");
   String[] seedBrokers=seedBrokersConfString.split(",");
   List<KafkaTopicPartitionLeader> partitions=new ArrayList<>();
   final String clientId="flink-kafka-consumer-partition-lookup";
-  final int soTimeout=Integer.valueOf(properties.getProperty("socket.timeout.ms","30000"));
-  final int bufferSize=Integer.valueOf(properties.getProperty("socket.receive.buffer.bytes","65536"));
+  final int soTimeout=getIntFromConfig(properties,"socket.timeout.ms",30000);
+  final int bufferSize=getIntFromConfig(properties,"socket.receive.buffer.bytes",65536);
   Random rnd=new Random();
   retryLoop:   for (int retry=0; retry < numRetries; retry++) {
     int index=rnd.nextInt(seedBrokers.length);
@@ -26,9 +26,6 @@
         partitions.clear();
         for (        TopicMetadata item : metaData) {
           if (item.errorCode() != ErrorMapping.NoError()) {
-            if (item.errorCode() == ErrorMapping.InvalidTopicCode() || item.errorCode() == ErrorMapping.UnknownTopicOrPartitionCode()) {
-              throw new RuntimeException("Requested partitions for unknown topic",ErrorMapping.exceptionFor(item.errorCode()));
-            }
             LOG.warn("Error while getting metadata from broker " + seedBroker + " to find partitions "+ "for "+ topics.toString()+ ". Error: "+ ErrorMapping.exceptionFor(item.errorCode()).getMessage());
             continue brokersLoop;
           }

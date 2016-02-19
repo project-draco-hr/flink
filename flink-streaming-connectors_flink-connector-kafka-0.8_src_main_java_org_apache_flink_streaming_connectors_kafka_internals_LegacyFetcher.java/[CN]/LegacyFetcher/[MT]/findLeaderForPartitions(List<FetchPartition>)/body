@@ -8,31 +8,30 @@
   KillerWatchDog watchDog=new KillerWatchDog(infoFetcher,60000);
   watchDog.start();
   List<KafkaTopicPartitionLeader> topicPartitionWithLeaderList=infoFetcher.getPartitions();
-  LOG.debug("topic partitions with leader list {}",topicPartitionWithLeaderList);
-  List<FetchPartition> partitionsToAssignInternal=new ArrayList<>(partitionsToAssign);
+  List<FetchPartition> unassignedPartitions=new ArrayList<>(partitionsToAssign);
   Map<Node,List<FetchPartition>> leaderToPartitions=new HashMap<>();
   for (  KafkaTopicPartitionLeader partitionLeader : topicPartitionWithLeaderList) {
-    if (partitionsToAssignInternal.size() == 0) {
+    if (unassignedPartitions.size() == 0) {
       break;
     }
-    Iterator<FetchPartition> fpIter=partitionsToAssignInternal.iterator();
-    while (fpIter.hasNext()) {
-      FetchPartition fp=fpIter.next();
-      if (fp.topic.equals(partitionLeader.getTopicPartition().getTopic()) && fp.partition == partitionLeader.getTopicPartition().getPartition()) {
+    Iterator<FetchPartition> unassignedPartitionsIterator=unassignedPartitions.iterator();
+    while (unassignedPartitionsIterator.hasNext()) {
+      FetchPartition unassignedPartition=unassignedPartitionsIterator.next();
+      if (unassignedPartition.topic.equals(partitionLeader.getTopicPartition().getTopic()) && unassignedPartition.partition == partitionLeader.getTopicPartition().getPartition()) {
         Node leader=partitionLeader.getLeader();
         List<FetchPartition> partitionsOfLeader=leaderToPartitions.get(leader);
         if (partitionsOfLeader == null) {
           partitionsOfLeader=new ArrayList<>();
           leaderToPartitions.put(leader,partitionsOfLeader);
         }
-        partitionsOfLeader.add(fp);
-        fpIter.remove();
+        partitionsOfLeader.add(unassignedPartition);
+        unassignedPartitionsIterator.remove();
         break;
       }
     }
   }
-  if (partitionsToAssignInternal.size() > 0) {
-    throw new RuntimeException("Unable to find a leader for partitions: " + partitionsToAssignInternal);
+  if (unassignedPartitions.size() > 0) {
+    throw new RuntimeException("Unable to find a leader for partitions: " + unassignedPartitions);
   }
   LOG.debug("Partitions with assigned leaders {}",leaderToPartitions);
   return leaderToPartitions;
