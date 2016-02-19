@@ -2,20 +2,15 @@
   new JavaTestKit(system){
 {
       ActorGateway taskManagerActorGateway=null;
-      ActorGateway jobManagerActorGateway=TestingUtils.createForwardingJobManager(system,getTestActor(),Option.<String>empty());
+      ActorRef jm=system.actorOf(Props.create(new SimpleLookupJobManagerCreator(null)));
+      ActorGateway jobManagerActorGateway=new AkkaActorGateway(jm,null);
       final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),leaderSessionID);
       try {
         final ActorGateway jobManager=jobManagerActorGateway;
         final ActorGateway taskManager=TestingUtils.createTaskManager(system,jobManager,new Configuration(),true,false);
-        new Within(d){
-          @Override protected void run(){
-            expectMsgClass(RegistrationMessages.RegisterTaskManager.class);
-            assertEquals(taskManager.actor(),getLastSender());
-            taskManager.tell(new RegistrationMessages.AcknowledgeRegistration(new InstanceID(),12345),jobManager);
-          }
-        }
-;
         final TaskDeploymentDescriptor tdd=new TaskDeploymentDescriptor(new JobID(),new JobVertexID(),new ExecutionAttemptID(),"Task",0,1,0,new Configuration(),new Configuration(),Tasks.BlockingNoOpInvokable.class.getName(),Collections.<ResultPartitionDeploymentDescriptor>emptyList(),Collections.<InputGateDeploymentDescriptor>emptyList(),Collections.<BlobKey>emptyList(),Collections.<URL>emptyList(),0);
+        Future<?> connectFuture=taskManager.ask(new TestingTaskManagerMessages.NotifyWhenRegisteredAtJobManager(jobManager.actor()),remaining());
+        Await.ready(connectFuture,remaining());
         new Within(d){
           @Override protected void run(){
             try {
@@ -131,15 +126,33 @@
         new Within(d){
           @Override protected void run(){
             try {
-              taskManager.tell(new TriggerStackTraceSample(0,tdd.getExecutionId(),10000,new FiniteDuration(100,TimeUnit.MILLISECONDS),0),testActorGateway);
-              taskManager.tell(new CancelTask(tdd.getExecutionId()));
-              Object[] msg=receiveN(1);
-              while (!(msg[0] instanceof ResponseStackTraceSampleFailure)) {
-                msg=receiveN(1);
+              int maxAttempts=10;
+              int sleepTime=100;
+              for (int i=0; i < maxAttempts; i++, sleepTime*=2) {
+                taskManager.tell(new TriggerStackTraceSample(44,tdd.getExecutionId(),Integer.MAX_VALUE,new FiniteDuration(10,TimeUnit.MILLISECONDS),0),testActorGateway);
+                Thread.sleep(sleepTime);
+                Future<?> removeFuture=taskManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(tdd.getJobID()),remaining());
+                taskManager.tell(new CancelTask(tdd.getExecutionId()));
+                while (true) {
+                  Object[] msg=receiveN(1);
+                  if (msg[0] instanceof ResponseStackTraceSampleSuccess) {
+                    ResponseStackTraceSampleSuccess response=(ResponseStackTraceSampleSuccess)msg[0];
+                    assertEquals(tdd.getExecutionId(),response.executionId());
+                    assertEquals(44,response.sampleId());
+                    return;
+                  }
+ else                   if (msg[0] instanceof ResponseStackTraceSampleFailure) {
+                    Await.ready(removeFuture,remaining());
+                    Future<?> taskRunningFuture=taskManager.ask(new TestingTaskManagerMessages.NotifyWhenTaskIsRunning(tdd.getExecutionId()),timeout);
+                    taskManager.tell(new SubmitTask(tdd));
+                    Await.ready(taskRunningFuture,remaining());
+                    break;
+                  }
+ else {
+                    continue;
+                  }
+                }
               }
-              ResponseStackTraceSampleFailure response=(ResponseStackTraceSampleFailure)msg[0];
-              assertEquals(tdd.getExecutionId(),response.executionId());
-              assertEquals(IllegalStateException.class,response.cause().getClass());
             }
  catch (            Exception e) {
               e.printStackTrace();

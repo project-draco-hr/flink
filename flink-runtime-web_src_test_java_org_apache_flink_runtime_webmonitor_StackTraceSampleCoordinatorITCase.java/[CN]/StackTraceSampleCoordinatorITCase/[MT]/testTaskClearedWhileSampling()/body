@@ -1,0 +1,64 @@
+{
+  new JavaTestKit(testActorSystem){
+{
+      final FiniteDuration deadline=new FiniteDuration(60,TimeUnit.SECONDS);
+      final JobGraph jobGraph=new JobGraph();
+      final int parallelism=1;
+      final JobVertex task=new JobVertex("Task");
+      task.setInvokableClass(Tasks.BlockingNoOpInvokable.class);
+      task.setParallelism(parallelism);
+      jobGraph.addVertex(task);
+      ActorGateway jobManger=null;
+      ActorGateway taskManager=null;
+      try {
+        jobManger=TestingUtils.createJobManager(testActorSystem,new Configuration());
+        Configuration config=new Configuration();
+        config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,parallelism);
+        taskManager=TestingUtils.createTaskManager(testActorSystem,jobManger,config,true,true);
+        final ActorGateway jm=jobManger;
+        new Within(deadline){
+          @Override protected void run(){
+            try {
+              ActorGateway testActor=new AkkaActorGateway(getTestActor(),null);
+              int maxAttempts=10;
+              int sleepTime=100;
+              for (int i=0; i < maxAttempts; i++, sleepTime*=2) {
+                JobClient.submitJobDetached(jm,jobGraph,deadline,ClassLoader.getSystemClassLoader());
+                jm.tell(new WaitForAllVerticesToBeRunning(jobGraph.getJobID()),testActor);
+                expectMsgEquals(new AllVerticesRunning(jobGraph.getJobID()));
+                jm.tell(new RequestExecutionGraph(jobGraph.getJobID()),testActor);
+                ExecutionGraphFound executionGraphResponse=expectMsgClass(ExecutionGraphFound.class);
+                ExecutionGraph executionGraph=executionGraphResponse.executionGraph();
+                ExecutionJobVertex vertex=executionGraph.getJobVertex(task.getID());
+                StackTraceSampleCoordinator coordinator=new StackTraceSampleCoordinator(testActorSystem,60000);
+                Future<?> sampleFuture=coordinator.triggerStackTraceSample(vertex.getTaskVertices(),Integer.MAX_VALUE,new FiniteDuration(10,TimeUnit.MILLISECONDS),0);
+                Thread.sleep(sleepTime);
+                Future<?> removeFuture=jm.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobGraph.getJobID()),remaining());
+                jm.tell(new JobManagerMessages.CancelJob(jobGraph.getJobID()));
+                try {
+                  Await.result(sampleFuture,remaining());
+                  break;
+                }
+ catch (                Throwable t) {
+                }
+ finally {
+                  Await.ready(removeFuture,remaining());
+                }
+              }
+            }
+ catch (            Exception e) {
+              e.printStackTrace();
+              fail(e.getMessage());
+            }
+          }
+        }
+;
+      }
+  finally {
+        TestingUtils.stopActor(jobManger);
+        TestingUtils.stopActor(taskManager);
+      }
+    }
+  }
+;
+}
