@@ -1,0 +1,26 @@
+{
+  if (watermarkInterval < 1L) {
+    throw new IllegalArgumentException("The watermark interval cannot be smaller than one.");
+  }
+  this.owner=owner;
+  this.lockingObject=lockingObjectParam;
+  this.output=outputParam;
+  this.watermarkInterval=watermarkInterval;
+  this.reuse=new StreamRecord<T>(null);
+  this.scheduleExecutor=Executors.newScheduledThreadPool(1);
+  this.watermarkTimer=scheduleExecutor.scheduleAtFixedRate(new Runnable(){
+    @Override public void run(){
+      final long currentTime=System.currentTimeMillis();
+      if (currentTime > nextWatermarkTime) {
+        final long watermarkTime=currentTime - (currentTime % watermarkInterval);
+synchronized (lockingObjectParam) {
+          if (currentTime > nextWatermarkTime) {
+            outputParam.emitWatermark(new Watermark(watermarkTime));
+            nextWatermarkTime+=watermarkInterval;
+          }
+        }
+      }
+    }
+  }
+,0,watermarkInterval,TimeUnit.MILLISECONDS);
+}

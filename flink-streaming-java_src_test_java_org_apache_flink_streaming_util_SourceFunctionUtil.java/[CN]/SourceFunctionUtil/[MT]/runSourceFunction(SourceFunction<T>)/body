@@ -1,5 +1,5 @@
 {
-  List<T> outputs=new ArrayList<T>();
+  final List<T> outputs=new ArrayList<T>();
   if (sourceFunction instanceof RichFunction) {
     AbstractStreamOperator<?> operator=mock(AbstractStreamOperator.class);
     when(operator.getExecutionConfig()).thenReturn(new ExecutionConfig());
@@ -8,15 +8,7 @@
     ((RichFunction)sourceFunction).open(new Configuration());
   }
   try {
-    final Output<StreamRecord<T>> collector=new MockOutput<T>(outputs);
-    final Object lockingObject=new Object();
-    SourceFunction.SourceContext<T> ctx;
-    if (sourceFunction instanceof EventTimeSourceFunction) {
-      ctx=new StreamSource.ManualWatermarkContext<T>(lockingObject,collector,true);
-    }
- else {
-      ctx=new StreamSource.NonWatermarkContext<T>(lockingObject,collector);
-    }
+    SourceFunction.SourceContext<T> ctx=new CollectingSourceContext<T>(new Object(),outputs);
     sourceFunction.run(ctx);
   }
  catch (  Exception e) {

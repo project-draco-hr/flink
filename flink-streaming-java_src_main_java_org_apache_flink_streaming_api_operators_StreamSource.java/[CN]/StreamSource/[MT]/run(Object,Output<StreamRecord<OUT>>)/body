@@ -1,17 +1,18 @@
 {
-  final ExecutionConfig executionConfig=getExecutionConfig();
-  if (userFunction instanceof EventTimeSourceFunction) {
-    ctx=new ManualWatermarkContext<OUT>(lockingObject,collector,getRuntimeContext().getExecutionConfig().areTimestampsEnabled());
-  }
- else   if (executionConfig.getAutoWatermarkInterval() > 0) {
-    ctx=new AutomaticWatermarkContext<OUT>(lockingObject,collector,executionConfig);
-  }
- else   if (executionConfig.areTimestampsEnabled()) {
-    ctx=new NonWatermarkContext<OUT>(lockingObject,collector);
-  }
- else {
-    ctx=new NonTimestampContext<OUT>(lockingObject,collector);
-  }
-  userFunction.run(ctx);
-  ctx.close();
+  final TimeCharacteristic timeCharacteristic=getOperatorConfig().getTimeCharacteristic();
+switch (timeCharacteristic) {
+case EventTime:
+    ctx=new ManualWatermarkContext<>(this,lockingObject,collector);
+  break;
+case IngestionTime:
+ctx=new AutomaticWatermarkContext<>(this,lockingObject,collector,getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval());
+break;
+case ProcessingTime:
+ctx=new NonTimestampContext<>(this,lockingObject,collector);
+break;
+default :
+throw new Exception(String.valueOf(timeCharacteristic));
+}
+userFunction.run(ctx);
+ctx.close();
 }

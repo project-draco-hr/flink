@@ -1,12 +1,22 @@
 {
-  long millis=source.readLong();
-  if (millis == IS_WATERMARK) {
+  int tag=source.readByte();
+  if (tag == TAG_REC_WITH_TIMESTAMP) {
+    long timestamp=source.readLong();
+    T value=typeSerializer.deserialize(source);
+    StreamRecord<T> reuseRecord=reuse.asRecord();
+    reuseRecord.replace(value,timestamp);
+    return reuseRecord;
+  }
+ else   if (tag == TAG_REC_WITHOUT_TIMESTAMP) {
+    T value=typeSerializer.deserialize(source);
+    StreamRecord<T> reuseRecord=reuse.asRecord();
+    reuseRecord.replace(value);
+    return reuseRecord;
+  }
+ else   if (tag == TAG_WATERMARK) {
     return new Watermark(source.readLong());
   }
  else {
-    StreamRecord<T> reuseRecord=reuse.asRecord();
-    T element=typeSerializer.deserialize(reuseRecord.getValue(),source);
-    reuseRecord.replace(element,millis);
-    return reuse;
+    throw new IOException("Corrupt stream, found tag: " + tag);
   }
 }
