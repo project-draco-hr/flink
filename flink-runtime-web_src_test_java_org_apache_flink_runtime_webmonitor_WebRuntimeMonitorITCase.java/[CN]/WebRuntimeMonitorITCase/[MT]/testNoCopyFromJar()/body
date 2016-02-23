@@ -1,0 +1,39 @@
+{
+  final Deadline deadline=TestTimeout.fromNow();
+  TestingCluster flink=null;
+  WebRuntimeMonitor webMonitor=null;
+  try {
+    flink=new TestingCluster(new Configuration());
+    flink.start(true);
+    ActorSystem jmActorSystem=flink.jobManagerActorSystems().get().head();
+    ActorRef jmActor=flink.jobManagerActors().get().head();
+    String jobManagerAddress=AkkaUtils.getAkkaURL(jmActorSystem,jmActor);
+    Configuration config=new Configuration();
+    config.setInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,0);
+    webMonitor=new WebRuntimeMonitor(config,flink.createLeaderRetrievalService(),jmActorSystem);
+    webMonitor.start(jobManagerAddress);
+    try (HttpTestClient client=new HttpTestClient("localhost",webMonitor.getServerPort())){
+      String expectedIndex=new Scanner(new File(MAIN_RESOURCES_PATH + "/index.html")).useDelimiter("\\A").next();
+      client.sendGetRequest("index.html",deadline.timeLeft());
+      HttpTestClient.SimpleHttpResponse response=client.getNextResponse(deadline.timeLeft());
+      assertEquals(HttpResponseStatus.OK,response.getStatus());
+      assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("html"));
+      assertEquals(expectedIndex,response.getContent());
+      client.sendGetRequest("../log4j-test.properties",deadline.timeLeft());
+      response=client.getNextResponse(deadline.timeLeft());
+      assertEquals("Returned status code " + response.getStatus() + " for file outside of web root.",HttpResponseStatus.NOT_FOUND,response.getStatus());
+      assertFalse("Did not respond with the file, but still copied it from the JAR.",new File(webMonitor.getBaseDir(),"log4j-test.properties").exists());
+      client.sendGetRequest("not-existing-resource",deadline.timeLeft());
+      response=client.getNextResponse(deadline.timeLeft());
+      assertEquals("Unexpected status code " + response.getStatus() + " for file outside of web root.",HttpResponseStatus.NOT_FOUND,response.getStatus());
+    }
+   }
+  finally {
+    if (flink != null) {
+      flink.shutdown();
+    }
+    if (webMonitor != null) {
+      webMonitor.stop();
+    }
+  }
+}

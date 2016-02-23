@@ -3,17 +3,40 @@
   if (!file.exists()) {
     ClassLoader cl=StaticFileServerHandler.class.getClassLoader();
     try (InputStream resourceStream=cl.getResourceAsStream("web" + requestPath)){
-      if (resourceStream == null) {
-        logger.debug("Unable to load requested file {} from classloader",requestPath);
-        sendError(ctx,NOT_FOUND);
-        return;
+      boolean success=false;
+      try {
+        if (resourceStream != null) {
+          URL root=cl.getResource("web");
+          URL requested=cl.getResource("web" + requestPath);
+          if (root != null && requested != null) {
+            URI rootURI=new URI(root.getPath()).normalize();
+            URI requestedURI=new URI(requested.getPath()).normalize();
+            if (!rootURI.relativize(requestedURI).equals(requestedURI)) {
+              logger.debug("Loading missing file from classloader: {}",requestPath);
+              file.getParentFile().mkdirs();
+              Files.copy(resourceStream,file.toPath());
+              success=true;
+            }
+          }
+        }
       }
-      logger.debug("Loading missing file from classloader: {}",requestPath);
-      file.getParentFile().mkdirs();
-      Files.copy(resourceStream,file.toPath());
+ catch (      Throwable t) {
+        logger.error("error while responding",t);
+      }
+ finally {
+        if (!success) {
+          logger.debug("Unable to load requested file {} from classloader",requestPath);
+          sendError(ctx,NOT_FOUND);
+          return;
+        }
+      }
     }
    }
   if (!file.exists() || file.isHidden() || file.isDirectory()|| !file.isFile()) {
+    sendError(ctx,NOT_FOUND);
+    return;
+  }
+  if (!file.getCanonicalFile().toPath().startsWith(rootPath.toPath())) {
     sendError(ctx,NOT_FOUND);
     return;
   }
