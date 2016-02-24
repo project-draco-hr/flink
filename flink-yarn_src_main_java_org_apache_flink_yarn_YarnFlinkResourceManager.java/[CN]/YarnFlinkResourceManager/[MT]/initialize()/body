@@ -1,0 +1,25 @@
+{
+  LOG.info("Initializing YARN resource master");
+  ActorGateway selfGateway=new AkkaActorGateway(self(),getLeaderSessionID());
+  resourceManagerCallbackHandler=new YarnResourceManagerCallbackHandler(selfGateway);
+  resourceManagerClient=AMRMClientAsync.createAMRMClientAsync(yarnHeartbeatIntervalMillis,resourceManagerCallbackHandler);
+  resourceManagerClient.init(yarnConfig);
+  resourceManagerClient.start();
+  nodeManagerClient=NMClient.createNMClient();
+  nodeManagerClient.init(yarnConfig);
+  nodeManagerClient.start();
+  nodeManagerClient.cleanupRunningContainersOnStop(true);
+  LOG.info("Registering Application Master with tracking url {}",webInterfaceURL);
+  scala.Option<Object> portOption=AkkaUtils.getAddress(getContext().system()).port();
+  int actorSystemPort=portOption.isDefined() ? (int)portOption.get() : -1;
+  RegisterApplicationMasterResponse response=resourceManagerClient.registerApplicationMaster(applicationMasterHostName,actorSystemPort,webInterfaceURL);
+  List<Container> containersFromPreviousAttempts=applicationMasterResponseReflector.getContainersFromPreviousAttempts(response);
+  if (!containersFromPreviousAttempts.isEmpty()) {
+    LOG.info("Retrieved {} TaskManagers from previous attempt",containersFromPreviousAttempts.size());
+    final long now=System.currentTimeMillis();
+    for (    Container c : containersFromPreviousAttempts) {
+      containersInLaunch.put(new ResourceID(c.getId().toString()),new YarnContainerInLaunch(c,now));
+    }
+    updateProgress();
+  }
+}

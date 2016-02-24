@@ -1,0 +1,35 @@
+{
+  final int numRequired=getDesignatedWorkerPoolSize();
+  final int numRegistered=getNumberOfRegisteredTaskManagers();
+  for (  Container container : containers) {
+    numPendingContainerRequests=Math.max(0,numPendingContainerRequests - 1);
+    LOG.info("Received new container: {} - Remaining pending container requests: {}",container.getId(),numPendingContainerRequests);
+    if (numRegistered + containersInLaunch.size() < numRequired) {
+      final ResourceID containerIdString=new ResourceID(container.getId().toString());
+      final long now=System.currentTimeMillis();
+      containersInLaunch.put(containerIdString,new YarnContainerInLaunch(container,now));
+      String message="Launching TaskManager in container " + containerIdString + " on host "+ container.getNodeId().getHost();
+      LOG.info(message);
+      sendInfoMessage(message);
+      try {
+        nodeManagerClient.startContainer(container,taskManagerLaunchContext);
+      }
+ catch (      Throwable t) {
+        containersInLaunch.remove(containerIdString);
+        LOG.error("Could not start TaskManager in container " + containerIdString,t);
+        containersBeingReturned.put(container.getId(),container);
+        resourceManagerClient.releaseAssignedContainer(container.getId());
+      }
+    }
+ else {
+      LOG.info("Returning excess container {}",container.getId());
+      containersBeingReturned.put(container.getId(),container);
+      resourceManagerClient.releaseAssignedContainer(container.getId());
+    }
+  }
+  updateProgress();
+  if (numPendingContainerRequests <= 0) {
+    resourceManagerClient.setHeartbeatInterval(yarnHeartbeatIntervalMillis);
+  }
+  triggerCheckWorkers();
+}

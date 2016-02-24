@@ -1,0 +1,29 @@
+{
+  try {
+    LOG.debug("All environment variables: {}",ENV);
+    final String yarnClientUsername=ENV.get(YarnConfigKeys.ENV_CLIENT_USERNAME);
+    require(yarnClientUsername != null,"YARN client user name environment variable {} not set",YarnConfigKeys.ENV_CLIENT_USERNAME);
+    final UserGroupInformation currentUser;
+    try {
+      currentUser=UserGroupInformation.getCurrentUser();
+    }
+ catch (    Throwable t) {
+      throw new Exception("Cannot access UserGroupInformation information for current user",t);
+    }
+    LOG.info("YARN daemon runs as user {}. Running Flink Application Master/JobManager as user {}",currentUser.getShortUserName(),yarnClientUsername);
+    UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
+    for (    Token<?> token : currentUser.getTokens()) {
+      ugi.addToken(token);
+    }
+    return ugi.doAs(new PrivilegedAction<Integer>(){
+      @Override public Integer run(){
+        return runApplicationMaster();
+      }
+    }
+);
+  }
+ catch (  Throwable t) {
+    LOG.error("YARN Application Master initialization failed",t);
+    return INIT_ERROR_EXIT_CODE;
+  }
+}

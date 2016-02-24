@@ -1,0 +1,42 @@
+{
+  for (  ContainerStatus status : containers) {
+    final ResourceID id=new ResourceID(status.getContainerId().toString());
+    if (containersBeingReturned.remove(status.getContainerId()) != null) {
+      LOG.info("Container {} completed successfully with diagnostics: {}",id,status.getDiagnostics());
+    }
+ else {
+      final String exitStatus;
+switch (status.getExitStatus()) {
+case -103:
+        exitStatus="Vmem limit exceeded (-103)";
+      break;
+case -104:
+    exitStatus="Pmem limit exceeded (-104)";
+  break;
+default :
+exitStatus=String.valueOf(status.getExitStatus());
+}
+final YarnContainerInLaunch launched=containersInLaunch.remove(id);
+if (launched != null) {
+LOG.info("Container {} failed, with a TaskManager in launch or registration. " + "Exit status: {}",id,exitStatus);
+}
+ else {
+LOG.info("Container {} failed. Exit status: {}",id,exitStatus);
+notifyWorkerFailed(id,"Container " + id + " failed. "+ "Exit status: {}"+ exitStatus);
+}
+failedContainersSoFar++;
+String diagMessage=String.format("Diagnostics for container %s in state %s : " + "exitStatus=%s diagnostics=%s",id,status.getState(),exitStatus,status.getDiagnostics());
+sendInfoMessage(diagMessage);
+LOG.info(diagMessage);
+LOG.info("Total number of failed containers so far: " + failedContainersSoFar);
+if (maxFailedContainers >= 0 && failedContainersSoFar > maxFailedContainers) {
+String msg="Stopping YARN session because the number of failed containers (" + failedContainersSoFar + ") exceeded the maximum failed containers ("+ maxFailedContainers+ "). This number is controlled by the '"+ ConfigConstants.YARN_MAX_FAILED_CONTAINERS+ "' configuration setting. "+ "By default its the number of requested containers.";
+LOG.error(msg);
+self().tell(decorateMessage(new StopCluster(ApplicationStatus.FAILED,msg)),ActorRef.noSender());
+return;
+}
+}
+}
+updateProgress();
+triggerCheckWorkers();
+}

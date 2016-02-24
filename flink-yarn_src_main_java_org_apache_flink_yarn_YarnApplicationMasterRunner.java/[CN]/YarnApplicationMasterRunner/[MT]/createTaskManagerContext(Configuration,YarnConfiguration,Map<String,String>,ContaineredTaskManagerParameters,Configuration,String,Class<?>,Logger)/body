@@ -1,0 +1,69 @@
+{
+  log.info("Setting up resources for TaskManagers");
+  String remoteFlinkJarPath=env.get(YarnConfigKeys.FLINK_JAR_PATH);
+  require(remoteFlinkJarPath != null,"Environment variable %s not set",YarnConfigKeys.FLINK_JAR_PATH);
+  String appId=env.get(YarnConfigKeys.ENV_APP_ID);
+  require(appId != null,"Environment variable %s not set",YarnConfigKeys.ENV_APP_ID);
+  String clientHomeDir=env.get(YarnConfigKeys.ENV_CLIENT_HOME_DIR);
+  require(clientHomeDir != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_HOME_DIR);
+  String shipListString=env.get(YarnConfigKeys.ENV_CLIENT_SHIP_FILES);
+  require(shipListString != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_SHIP_FILES);
+  String yarnClientUsername=env.get(YarnConfigKeys.ENV_CLIENT_USERNAME);
+  require(yarnClientUsername != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_USERNAME);
+  final org.apache.hadoop.fs.FileSystem yarnFileSystem;
+  try {
+    yarnFileSystem=org.apache.hadoop.fs.FileSystem.get(yarnConfig);
+  }
+ catch (  IOException e) {
+    throw new Exception("Could not access YARN's default file system",e);
+  }
+  LocalResource flinkJar=Records.newRecord(LocalResource.class);
+{
+    Path remoteJarPath=new Path(remoteFlinkJarPath);
+    Utils.registerLocalResource(yarnFileSystem,remoteJarPath,flinkJar);
+  }
+  LocalResource flinkConf=Records.newRecord(LocalResource.class);
+{
+    final File taskManagerConfigFile=new File(workingDirectory,UUID.randomUUID() + "-taskmanager-conf.yaml");
+    LOG.debug("Writing TaskManager configuration to {}",taskManagerConfigFile.getAbsolutePath());
+    BootstrapTools.writeConfiguration(taskManagerConfig,taskManagerConfigFile);
+    Utils.setupLocalResource(yarnFileSystem,appId,new Path(taskManagerConfigFile.toURI()),flinkConf,new Path(clientHomeDir));
+    log.info("Prepared local resource for modified yaml: {}",flinkConf);
+  }
+  Map<String,LocalResource> taskManagerLocalResources=new HashMap<>();
+  taskManagerLocalResources.put("flink.jar",flinkJar);
+  taskManagerLocalResources.put("flink-conf.yaml",flinkConf);
+  for (  String pathStr : shipListString.split(",")) {
+    if (!pathStr.isEmpty()) {
+      LocalResource resource=Records.newRecord(LocalResource.class);
+      Path path=new Path(pathStr);
+      Utils.registerLocalResource(yarnFileSystem,path,resource);
+      taskManagerLocalResources.put(path.getName(),resource);
+    }
+  }
+  log.info("Creating container launch context for TaskManagers");
+  boolean hasLogback=new File(workingDirectory,"logback.xml").exists();
+  boolean hasLog4j=new File(workingDirectory,"log4j.properties").exists();
+  String launchCommand=BootstrapTools.getTaskManagerShellCommand(flinkConfig,tmParams,".",ApplicationConstants.LOG_DIR_EXPANSION_VAR,hasLogback,hasLog4j,taskManagerMainClass);
+  log.info("Starting TaskManagers with command: " + launchCommand);
+  ContainerLaunchContext ctx=Records.newRecord(ContainerLaunchContext.class);
+  ctx.setCommands(Collections.singletonList(launchCommand));
+  ctx.setLocalResources(taskManagerLocalResources);
+  Map<String,String> containerEnv=new HashMap<>();
+  containerEnv.putAll(tmParams.taskManagerEnv());
+  Utils.setupEnv(yarnConfig,containerEnv);
+  containerEnv.put(YarnConfigKeys.ENV_CLIENT_USERNAME,yarnClientUsername);
+  ctx.setEnvironment(containerEnv);
+  try {
+    UserGroupInformation user=UserGroupInformation.getCurrentUser();
+    Credentials credentials=user.getCredentials();
+    DataOutputBuffer dob=new DataOutputBuffer();
+    credentials.writeTokenStorageToStream(dob);
+    ByteBuffer securityTokens=ByteBuffer.wrap(dob.getData(),0,dob.getLength());
+    ctx.setTokens(securityTokens);
+  }
+ catch (  Throwable t) {
+    log.error("Getting current user info failed when trying to launch the container",t);
+  }
+  return ctx;
+}

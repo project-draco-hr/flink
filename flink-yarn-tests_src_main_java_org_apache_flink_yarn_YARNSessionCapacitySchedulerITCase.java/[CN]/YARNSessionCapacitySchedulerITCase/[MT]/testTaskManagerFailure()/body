@@ -43,7 +43,9 @@
     Assert.assertEquals("unable to find hostname in " + jsonConfig,hostname,parsedConfig.get(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY));
     Assert.assertEquals("unable to find port in " + jsonConfig,port,parsedConfig.get(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY));
     String logs=TestBaseUtils.getFromHTTP(url + "jobmanager/log");
-    Assert.assertTrue(logs.contains("Starting YARN ApplicationMaster/JobManager (Version"));
+    Assert.assertTrue(logs.contains("Starting YARN ApplicationMaster"));
+    Assert.assertTrue(logs.contains("Starting JobManager"));
+    Assert.assertTrue(logs.contains("Starting JobManager Web Frontend"));
   }
  catch (  Throwable e) {
     LOG.warn("Error while running test",e);
@@ -65,7 +67,7 @@
     ConcurrentMap<ContainerId,Container> containers=nm.getNMContext().getContainers();
     for (    Map.Entry<ContainerId,Container> entry : containers.entrySet()) {
       String command=Joiner.on(" ").join(entry.getValue().getLaunchContext().getCommands());
-      if (command.contains(YarnTaskManagerRunner.class.getSimpleName())) {
+      if (command.contains(YarnTaskManager.class.getSimpleName())) {
         taskManagerContainer=entry.getKey();
         nodeManager=nm;
         nmIdent=new NMTokenIdentifier(taskManagerContainer.getApplicationAttemptId(),null,"",0);
@@ -105,7 +107,7 @@
     int killedOff=o.indexOf("Container killed by the ApplicationMaster");
     if (killedOff != -1) {
       o=o.substring(killedOff);
-      ok=o.indexOf("Launching container") > 0;
+      ok=o.indexOf("Launching TaskManager") > 0;
     }
     sleep(1000);
   }
@@ -126,7 +128,7 @@
   LOG.info("Sending stderr content through logger: \n\n{}\n\n",eC);
   Assert.assertTrue("Expect to see failed container",eC.contains("New messages from the YARN cluster"));
   Assert.assertTrue("Expect to see failed container",eC.contains("Container killed by the ApplicationMaster"));
-  Assert.assertTrue("Expect to see new container started",eC.contains("Launching container") && eC.contains("on host"));
+  Assert.assertTrue("Expect to see new container started",eC.contains("Launching TaskManager") && eC.contains("on host"));
   remoteUgi.getTokenIdentifiers().remove(nmIdent);
   LOG.info("Finished testTaskManagerFailure()");
 }
