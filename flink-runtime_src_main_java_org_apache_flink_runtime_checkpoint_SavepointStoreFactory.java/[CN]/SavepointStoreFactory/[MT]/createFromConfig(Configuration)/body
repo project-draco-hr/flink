@@ -1,5 +1,5 @@
 {
-  String savepointBackend=config.getString(SAVEPOINT_BACKEND_KEY,null);
+  String savepointBackend=config.getString(SAVEPOINT_BACKEND_KEY,DEFAULT_SAVEPOINT_BACKEND);
   if (savepointBackend == null) {
     LOG.info("No savepoint state backend configured. " + "Using job manager savepoint state backend.");
     return createJobManagerSavepointStore();
@@ -9,25 +9,16 @@
     return createJobManagerSavepointStore();
   }
  else   if (savepointBackend.equals("filesystem")) {
-    String checkpointBackend=config.getString(ConfigConstants.STATE_BACKEND,"jobmanager");
-    if (checkpointBackend.equals("jobmanager")) {
-      LOG.warn("The combination of file system backend for savepoints and " + "jobmanager backend for checkpoints does not work. The savepoint " + "will *not* be recoverable after the job manager shuts down. "+ "Falling back to job manager savepoint state backend.");
-      return createJobManagerSavepointStore();
+    String rootPath=config.getString(SAVEPOINT_DIRECTORY_KEY,null);
+    if (rootPath == null) {
+      throw new IllegalConfigurationException("Using filesystem as savepoint state backend, " + "but did not specify directory. Please set the " + "following configuration key: '" + SAVEPOINT_DIRECTORY_KEY + "' (e.g. "+ SAVEPOINT_DIRECTORY_KEY+ ": hdfs:///flink/savepoints/). "+ "Falling back to job manager savepoint backend.");
     }
  else {
-      String rootPath=config.getString(SAVEPOINT_DIRECTORY_KEY,null);
-      if (rootPath == null) {
-        LOG.warn("Using filesystem as savepoint state backend, " + "but did not specify directory. Please set the " + "following configuration key: '" + SAVEPOINT_DIRECTORY_KEY + "' (e.g. "+ SAVEPOINT_DIRECTORY_KEY+ ": hdfs:///flink/savepoints/). "+ "Falling back to job manager savepoint backend.");
-        return createJobManagerSavepointStore();
-      }
- else {
-        LOG.info("Using filesystem savepoint backend (root path: {}).",rootPath);
-        return createFileSystemSavepointStore(rootPath);
-      }
+      LOG.info("Using filesystem savepoint backend (root path: {}).",rootPath);
+      return createFileSystemSavepointStore(rootPath);
     }
   }
  else {
-    LOG.warn("Unexpected savepoint backend configuration '{}'. " + "Falling back to job manager savepoint state backend.",savepointBackend);
-    return createJobManagerSavepointStore();
+    throw new IllegalConfigurationException("Unexpected savepoint backend " + "configuration '" + savepointBackend + "'. "+ "Falling back to job manager savepoint state backend.");
   }
 }
