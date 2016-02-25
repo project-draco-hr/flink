@@ -19,29 +19,32 @@ case IGNORE:
     break;
 case TAKE:
   final State<T> newState=stateTransition.getTargetState();
-final DeweyNumber newVersion;
+final DeweyNumber oldVersion;
+final DeweyNumber newComputationStateVersion;
 final State<T> previousState=computationState.getState();
 final T previousEvent=computationState.getEvent();
 final long previousTimestamp;
 final long startTimestamp;
 if (computationState.isStartState()) {
-newVersion=new DeweyNumber(startEventCounter++);
+oldVersion=new DeweyNumber(startEventCounter++);
+newComputationStateVersion=oldVersion.addStage();
 startTimestamp=timestamp;
 previousTimestamp=-1L;
 }
  else {
 startTimestamp=computationState.getStartTimestamp();
 previousTimestamp=computationState.getTimestamp();
+oldVersion=computationState.getVersion();
 if (newState.equals(computationState.getState())) {
-newVersion=computationState.getVersion().increase();
+newComputationStateVersion=oldVersion.increase();
 }
  else {
-newVersion=computationState.getVersion().addStage();
+newComputationStateVersion=oldVersion.addStage();
 }
 }
-sharedBuffer.put(newState,event,timestamp,previousState,previousEvent,previousTimestamp,newVersion);
+sharedBuffer.put(newState,event,timestamp,previousState,previousEvent,previousTimestamp,oldVersion);
 sharedBuffer.lock(newState,event,timestamp);
-resultingComputationStates.add(new ComputationState<T>(newState,event,timestamp,newVersion,startTimestamp));
+resultingComputationStates.add(new ComputationState<T>(newState,event,timestamp,newComputationStateVersion,startTimestamp));
 break;
 }
 }
