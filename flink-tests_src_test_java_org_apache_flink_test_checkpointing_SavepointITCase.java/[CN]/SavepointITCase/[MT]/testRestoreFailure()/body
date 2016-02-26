@@ -1,0 +1,62 @@
+{
+  int numTaskManagers=1;
+  int numSlotsPerTaskManager=1;
+  int numExecutionRetries=2;
+  int retryDelay=500;
+  int checkpointingInterval=100000000;
+  final Deadline deadline=new FiniteDuration(3,TimeUnit.MINUTES).fromNow();
+  ForkableFlinkMiniCluster flink=null;
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(1);
+    env.enableCheckpointing(checkpointingInterval);
+    env.setNumberOfExecutionRetries(numExecutionRetries);
+    env.getConfig().setExecutionRetryDelay(retryDelay);
+    DataStream<Integer> stream=env.addSource(new RestoreStateCountingAndFailingSource());
+    RestoreStateCountingAndFailingSource.failOnRestoreStateCall=false;
+    RestoreStateCountingAndFailingSource.numRestoreStateCalls=0;
+    RestoreStateCountingAndFailingSource.checkpointCompleteLatch=new CountDownLatch(1);
+    RestoreStateCountingAndFailingSource.emitted=0;
+    stream.addSink(new DiscardingSink<Integer>());
+    JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+    final Configuration config=new Configuration();
+    config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,numTaskManagers);
+    config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,numSlotsPerTaskManager);
+    LOG.info("Flink configuration: " + config + ".");
+    flink=new ForkableFlinkMiniCluster(config);
+    LOG.info("Starting Flink cluster.");
+    flink.start();
+    LOG.info("Retrieving JobManager.");
+    ActorGateway jobManager=flink.getLeaderGateway(deadline.timeLeft());
+    LOG.info("JobManager: " + jobManager + ".");
+    flink.submitJobDetached(jobGraph);
+    while (deadline.hasTimeLeft() && RestoreStateCountingAndFailingSource.emitted < 100) {
+      Thread.sleep(100);
+    }
+    assertTrue("No progress",RestoreStateCountingAndFailingSource.emitted >= 100);
+    Future<Object> savepointPathFuture=jobManager.ask(new TriggerSavepoint(jobGraph.getJobID()),deadline.timeLeft());
+    final String savepointPath=((TriggerSavepointSuccess)Await.result(savepointPathFuture,deadline.timeLeft())).savepointPath();
+    LOG.info("Retrieved savepoint path: " + savepointPath + ".");
+    RestoreStateCountingAndFailingSource.checkpointCompleteLatch.await();
+    Future<?> cancelFuture=jobManager.ask(new CancelJob(jobGraph.getJobID()),deadline.timeLeft());
+    Await.ready(cancelFuture,deadline.timeLeft());
+    Future<?> removedFuture=jobManager.ask(new NotifyWhenJobRemoved(jobGraph.getJobID()),deadline.timeLeft());
+    Await.ready(removedFuture,deadline.timeLeft());
+    RestoreStateCountingAndFailingSource.failOnRestoreStateCall=true;
+    jobGraph.setSavepointPath(savepointPath);
+    try {
+      flink.submitJobAndWait(jobGraph,false,deadline.timeLeft());
+      fail("Did not throw expected Exception");
+    }
+ catch (    Exception ignored) {
+    }
+ finally {
+      assertEquals(1 + numExecutionRetries,RestoreStateCountingAndFailingSource.numRestoreStateCalls);
+    }
+  }
+  finally {
+    if (flink != null) {
+      flink.shutdown();
+    }
+  }
+}
