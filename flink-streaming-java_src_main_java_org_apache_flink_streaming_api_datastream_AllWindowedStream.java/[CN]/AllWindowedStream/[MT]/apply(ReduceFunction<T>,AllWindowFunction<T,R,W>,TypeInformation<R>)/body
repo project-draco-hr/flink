@@ -9,10 +9,10 @@
   String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
   OneInputStreamOperator<T,R> operator;
   if (evictor != null) {
-    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new HeapWindowBuffer.Factory<T>(),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger,evictor);
+    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ListWindowBuffer.Factory<>(getInputType().createSerializer(getExecutionEnvironment().getConfig())),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger,evictor);
   }
  else {
-    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new PreAggregatingHeapWindowBuffer.Factory<>(preAggregator),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger);
+    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ReducingWindowBuffer.Factory<>(preAggregator,getInputType().createSerializer(getExecutionEnvironment().getConfig())),function,trigger);
   }
   return input.transform(opName,resultType,operator).setParallelism(1);
 }
