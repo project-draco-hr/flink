@@ -1,20 +1,15 @@
 {
   final ParameterTool params=ParameterTool.fromArgs(args);
-  System.out.println("Usage: WindowJoin --grades <path> --salaries <path> --output <path>");
+  final long windowSize=params.getLong("windowSize",2000);
+  final long rate=params.getLong("rate",3L);
+  System.out.println("Using windowSize=" + windowSize + ", data rate="+ rate);
+  System.out.println("To customize example, use: WindowJoin [--windowSize <window-size-in-millis>] [--rate <elements-per-second>]");
   StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
   env.getConfig().setGlobalJobParameters(params);
-  env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-  DataStream<Tuple3<Long,String,Integer>> grades=getGradesPath(env,params);
-  DataStream<Tuple3<Long,String,Integer>> salaries=getSalariesPath(env,params);
-  grades=grades.assignTimestampsAndWatermarks(new MyTimestampExtractor());
-  salaries=salaries.assignTimestampsAndWatermarks(new MyTimestampExtractor());
-  DataStream<Tuple3<String,Integer,Integer>> joinedStream=grades.join(salaries).where(new NameKeySelector()).equalTo(new NameKeySelector()).window(TumblingEventTimeWindows.of(Time.of(5,TimeUnit.MILLISECONDS))).apply(new MyJoinFunction());
-  if (params.has("output")) {
-    joinedStream.writeAsText(params.get("output"));
-  }
- else {
-    System.out.println("Printing result to stdout. Use --output to specify output path.");
-    joinedStream.print();
-  }
+  DataStream<Tuple2<String,Integer>> grades=GradeSource.getSource(env,rate);
+  DataStream<Tuple2<String,Integer>> salaries=SalarySource.getSource(env,rate);
+  DataStream<Tuple3<String,Integer,Integer>> joinedStream=runWindowJoin(grades,salaries,windowSize);
+  joinedStream.print().setParallelism(1);
   env.execute("Windowed Join Example");
 }

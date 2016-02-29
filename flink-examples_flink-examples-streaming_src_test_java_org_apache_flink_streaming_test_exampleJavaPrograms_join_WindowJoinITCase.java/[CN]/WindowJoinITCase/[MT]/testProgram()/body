@@ -1,3 +1,19 @@
 {
-  WindowJoin.main(new String[]{"--grades",gradesPath,"--salaries",salariesPath,"--output",resultPath});
+  final String resultPath=File.createTempFile("result-path","dir").toURI().toString();
+  try {
+    final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
+    DataStream<Tuple2<String,Integer>> grades=env.fromElements(WindowJoinData.GRADES_INPUT.split("\n")).map(new Parser());
+    DataStream<Tuple2<String,Integer>> salaries=env.fromElements(WindowJoinData.SALARIES_INPUT.split("\n")).map(new Parser());
+    WindowJoin.runWindowJoin(grades,salaries,100).writeAsText(resultPath,WriteMode.OVERWRITE);
+    env.execute();
+    checkLinesAgainstRegexp(resultPath,"^\\([a-z]+,(\\d),(\\d)+\\)");
+  }
+  finally {
+    try {
+      FileUtils.deleteDirectory(new File(resultPath));
+    }
+ catch (    Throwable ignored) {
+    }
+  }
 }
