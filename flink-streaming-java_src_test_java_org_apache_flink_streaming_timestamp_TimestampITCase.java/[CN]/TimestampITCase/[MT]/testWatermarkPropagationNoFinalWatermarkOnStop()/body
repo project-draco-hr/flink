@@ -1,0 +1,47 @@
+{
+  while (!cluster.getCurrentlyRunningJobsJava().isEmpty()) {
+    Thread.sleep(100);
+  }
+  final int NUM_WATERMARKS=10;
+  long initialTime=0L;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getLeaderRPCPort());
+  env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+  env.setParallelism(PARALLELISM);
+  env.getConfig().disableSysoutLogging();
+  DataStream<Integer> source1=env.addSource(new MyTimestampSourceInfinite(initialTime,NUM_WATERMARKS));
+  DataStream<Integer> source2=env.addSource(new MyTimestampSourceInfinite(initialTime,NUM_WATERMARKS / 2));
+  source1.union(source2).map(new IdentityMap()).connect(source2).map(new IdentityCoMap()).transform("Custom Operator",BasicTypeInfo.INT_TYPE_INFO,new CustomOperator(true)).addSink(new NoOpSink<Integer>());
+  new Thread("stopper"){
+    @Override public void run(){
+      try {
+        List<JobID> running;
+        while ((running=cluster.getCurrentlyRunningJobsJava()).isEmpty()) {
+          Thread.sleep(100);
+        }
+        JobID id=running.get(0);
+        do {
+          cluster.stopJob(id);
+          Thread.sleep(50);
+        }
+ while (!cluster.getCurrentlyRunningJobsJava().isEmpty());
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+  }
+.start();
+  env.execute();
+  for (int i=0; i < PARALLELISM; i++) {
+    for (int j=0; j < NUM_WATERMARKS / 2; j++) {
+      if (!CustomOperator.finalWatermarks[i].get(j).equals(new Watermark(initialTime + j))) {
+        System.err.println("All Watermarks: ");
+        for (int k=0; k <= NUM_WATERMARKS / 2; k++) {
+          System.err.println(CustomOperator.finalWatermarks[i].get(k));
+        }
+        fail("Wrong watermark.");
+      }
+    }
+    assertNotEquals(Watermark.MAX_WATERMARK,CustomOperator.finalWatermarks[i].get(CustomOperator.finalWatermarks[i].size() - 1));
+  }
+}

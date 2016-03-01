@@ -1,5 +1,6 @@
 {
   final TimeCharacteristic timeCharacteristic=getOperatorConfig().getTimeCharacteristic();
+  final SourceFunction.SourceContext<OUT> ctx;
 switch (timeCharacteristic) {
 case EventTime:
     ctx=new ManualWatermarkContext<>(this,lockingObject,collector);
@@ -13,6 +14,14 @@ break;
 default :
 throw new Exception(String.valueOf(timeCharacteristic));
 }
+this.ctx=ctx;
+try {
 userFunction.run(ctx);
+if (!isCanceledOrStopped()) {
+ctx.emitWatermark(Watermark.MAX_WATERMARK);
+}
+}
+  finally {
 ctx.close();
+}
 }
