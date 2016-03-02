@@ -1,0 +1,25 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(1);
+  DataStreamSource<Pojo> source=env.addSource(new SourceFunction<Pojo>(){
+    private boolean running=true;
+    private volatile int cnt=0;
+    @Override public void run(    SourceContext<Pojo> ctx) throws Exception {
+      while (running) {
+        ctx.collect(new Pojo(UUID.randomUUID().toString(),cnt,0));
+        cnt++;
+        if (cnt == 20) {
+          cancel();
+        }
+      }
+    }
+    @Override public void cancel(){
+      running=false;
+    }
+  }
+);
+  source.addSink(new CassandraPojoAtLeastOnceSink<>(Pojo.class,builder));
+  env.execute();
+  ResultSet rs=session.execute(SELECT_DATA_QUERY);
+  Assert.assertEquals(20,rs.all().size());
+}
