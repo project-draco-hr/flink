@@ -1,0 +1,23 @@
+{
+  super.notifyOfCompletedCheckpoint(checkpointId);
+synchronized (state.pendingHandles) {
+    Set<Long> pastCheckpointIds=state.pendingHandles.keySet();
+    Set<Long> checkpointsToRemove=new HashSet<>();
+    for (    Long pastCheckpointId : pastCheckpointIds) {
+      if (pastCheckpointId <= checkpointId) {
+        if (!committer.isCheckpointCommitted(pastCheckpointId)) {
+          Tuple2<Long,StateHandle<DataInputView>> handle=state.pendingHandles.get(pastCheckpointId);
+          DataInputView in=handle.f1.getState(getUserCodeClassloader());
+          sendValue(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(in,serializer),serializer),handle.f0);
+          committer.commitCheckpoint(pastCheckpointId);
+        }
+        checkpointsToRemove.add(pastCheckpointId);
+      }
+    }
+    for (    Long toRemove : checkpointsToRemove) {
+      Tuple2<Long,StateHandle<DataInputView>> handle=state.pendingHandles.get(toRemove);
+      state.pendingHandles.remove(toRemove);
+      handle.f1.discardState();
+    }
+  }
+}

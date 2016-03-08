@@ -1,0 +1,36 @@
+{
+  OperatorExposingTask<IN> task=createTask();
+  TypeInformation<IN> info=createTypeInfo();
+  OneInputStreamTaskTestHarness<IN,IN> testHarness=new OneInputStreamTaskTestHarness<>(task,1,1,info,info);
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  streamConfig.setStreamOperator(createSink());
+  int elementCounter=1;
+  testHarness.invoke();
+  testHarness.waitForTaskRunning();
+  ArrayList<StreamTaskState> states=new ArrayList<>();
+  for (int x=0; x < 20; x++) {
+    testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,0)));
+    elementCounter++;
+  }
+  testHarness.waitForInputProcessing();
+  states.add(copyTaskState(task.getOperator().snapshotOperatorState(states.size(),0)));
+  task.notifyCheckpointComplete(states.size() - 1);
+  for (int x=0; x < 20; x++) {
+    testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,1)));
+    elementCounter++;
+  }
+  testHarness.waitForInputProcessing();
+  states.add(copyTaskState(task.getOperator().snapshotOperatorState(states.size(),0)));
+  task.notifyCheckpointComplete(states.size() - 1);
+  for (int x=0; x < 20; x++) {
+    testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,2)));
+    elementCounter++;
+  }
+  testHarness.waitForInputProcessing();
+  states.add(copyTaskState(task.getOperator().snapshotOperatorState(states.size(),0)));
+  task.notifyCheckpointComplete(states.size() - 1);
+  testHarness.endInput();
+  states.add(copyTaskState(task.getOperator().snapshotOperatorState(states.size(),0)));
+  testHarness.waitForTaskCompletion();
+  verifyResultsIdealCircumstances(testHarness,task,(S)task.getOperator());
+}
