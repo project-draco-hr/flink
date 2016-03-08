@@ -1,0 +1,28 @@
+{
+  final String topic1="wmExtractorTopic1_" + UUID.randomUUID().toString();
+  final String topic2="wmExtractorTopic2_" + UUID.randomUUID().toString();
+  final Map<String,Boolean> topics=new HashMap<>();
+  topics.put(topic1,false);
+  topics.put(topic2,emptyPartition);
+  final int noOfTopcis=topics.size();
+  final int partitionsPerTopic=1;
+  final int elementsPerPartition=100 + 1;
+  final int totalElements=emptyPartition ? partitionsPerTopic * elementsPerPartition : noOfTopcis * partitionsPerTopic * elementsPerPartition;
+  createTestTopic(topic1,partitionsPerTopic,1);
+  createTestTopic(topic2,partitionsPerTopic,1);
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+  env.setParallelism(partitionsPerTopic);
+  env.setRestartStrategy(RestartStrategies.noRestart());
+  env.getConfig().disableSysoutLogging();
+  TypeInformation<Tuple2<Long,Integer>> longIntType=TypeInfoParser.parse("Tuple2<Long, Integer>");
+  Properties producerProperties=FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings);
+  producerProperties.setProperty("retries","0");
+  putDataInTopics(env,producerProperties,elementsPerPartition,topics,longIntType);
+  List<String> topicTitles=new ArrayList<>(topics.keySet());
+  runPunctuatedComsumer(env,topicTitles,totalElements,longIntType);
+  executeAndCatchException(env,"runComsumerWithPunctuatedExplicitWMTest");
+  for (  String topic : topicTitles) {
+    deleteTestTopic(topic);
+  }
+}

@@ -13,24 +13,27 @@
   }
   offsetHandler=new ZookeeperOffsetHandler(props);
   committedOffsets=new HashMap<>();
-  Map<KafkaTopicPartition,Long> subscribedPartitionsWithOffsets=new HashMap<>(subscribedPartitions.size());
+  Map<KafkaTopicPartition,KafkaPartitionState> subscribedPartitionsWithOffsets=new HashMap<>(subscribedPartitions.size());
   for (  KafkaTopicPartition ktp : subscribedPartitions) {
-    subscribedPartitionsWithOffsets.put(ktp,FlinkKafkaConsumer08.OFFSET_NOT_SET);
+    subscribedPartitionsWithOffsets.put(ktp,new KafkaPartitionState(ktp.getPartition(),FlinkKafkaConsumerBase.OFFSET_NOT_SET));
   }
   if (restoreToOffset != null) {
     if (LOG.isInfoEnabled()) {
       LOG.info("Consumer {} is restored from previous checkpoint: {}",thisConsumerIndex,KafkaTopicPartition.toString(restoreToOffset));
     }
-    this.offsetsState=restoreToOffset;
-    subscribedPartitionsWithOffsets.putAll(restoreToOffset);
+    this.partitionState=restoreInfoFromCheckpoint();
+    subscribedPartitionsWithOffsets.putAll(partitionState);
     restoreToOffset=null;
   }
  else {
-    offsetsState=new HashMap<>();
-    subscribedPartitionsWithOffsets.putAll(offsetHandler.getOffsets(subscribedPartitions));
+    partitionState=new HashMap<>();
+    for (    Map.Entry<KafkaTopicPartition,Long> offsetInfo : offsetHandler.getOffsets(subscribedPartitions).entrySet()) {
+      KafkaTopicPartition key=offsetInfo.getKey();
+      subscribedPartitionsWithOffsets.put(key,new KafkaPartitionState(key.getPartition(),offsetInfo.getValue()));
+    }
   }
   if (subscribedPartitionsWithOffsets.size() != subscribedPartitions.size()) {
     throw new IllegalStateException("The subscribed partitions map has more entries than the subscribed partitions " + "list: " + subscribedPartitionsWithOffsets.size() + ","+ subscribedPartitions.size());
   }
-  fetcher=new LegacyFetcher(subscribedPartitionsWithOffsets,props,getRuntimeContext().getTaskName(),getRuntimeContext().getUserCodeClassLoader());
+  fetcher=new LegacyFetcher<T>(this,subscribedPartitionsWithOffsets,props,getRuntimeContext().getTaskName(),getRuntimeContext().getUserCodeClassLoader());
 }
