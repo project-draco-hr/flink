@@ -1,0 +1,15 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(1);
+  env.enableCheckpointing(1000);
+  env.setRestartStrategy(RestartStrategies.fixedDelayRestart(1,1000));
+  env.setStateBackend(new FsStateBackend("file:///" + System.getProperty("java.io.tmpdir") + "/flink/backend"));
+  CassandraSink<Tuple2<String,Integer>> sink=CassandraSink.addSink(env.addSource(new MySource())).setQuery("INSERT INTO example.values (id, counter) values (?, ?);").enableWriteAheadLog().setClusterBuilder(new ClusterBuilder(){
+    @Override public Cluster buildCluster(    Cluster.Builder builder){
+      return builder.addContactPoint("127.0.0.1").build();
+    }
+  }
+).build();
+  sink.name("Cassandra Sink").disableChaining().setParallelism(1).uid("hello");
+  env.execute();
+}

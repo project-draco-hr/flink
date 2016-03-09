@@ -1,0 +1,20 @@
+{
+  super.open();
+  if (!getRuntimeContext().isCheckpointingEnabled()) {
+    throw new IllegalStateException("The write-ahead log requires checkpointing to be enabled.");
+  }
+  this.callback=new FutureCallback<ResultSet>(){
+    @Override public void onSuccess(    ResultSet resultSet){
+      updatesConfirmed.incrementAndGet();
+    }
+    @Override public void onFailure(    Throwable throwable){
+      exception=throwable;
+      LOG.error("Error while sending value.",throwable);
+    }
+  }
+;
+  cluster=builder.getCluster();
+  session=cluster.connect();
+  preparedStatement=session.prepare(insertQuery);
+  fields=new Object[((TupleSerializer<IN>)serializer).getArity()];
+}
