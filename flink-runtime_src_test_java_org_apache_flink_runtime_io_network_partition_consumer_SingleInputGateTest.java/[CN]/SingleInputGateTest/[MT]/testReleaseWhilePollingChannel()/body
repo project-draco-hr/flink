@@ -1,0 +1,36 @@
+{
+  final AtomicReference<Exception> asyncException=new AtomicReference<>();
+  final SingleInputGate inputGate=new SingleInputGate("InputGate",new JobID(),new ExecutionAttemptID(),new IntermediateDataSetID(),0,1,mock(PartitionStateChecker.class));
+  InputChannel unknown=new UnknownInputChannel(inputGate,0,new ResultPartitionID(),new ResultPartitionManager(),new TaskEventDispatcher(),new LocalConnectionManager(),new Tuple2<>(0,0));
+  inputGate.setInputChannel(unknown.partitionId.getPartitionId(),unknown);
+  Thread asyncConsumer=new Thread(){
+    @Override public void run(){
+      try {
+        inputGate.getNextBufferOrEvent();
+      }
+ catch (      Exception e) {
+        asyncException.set(e);
+      }
+    }
+  }
+;
+  asyncConsumer.start();
+  boolean success=false;
+  for (int i=0; i < 50; i++) {
+    if (asyncConsumer != null && asyncConsumer.isAlive()) {
+      StackTraceElement[] stackTrace=asyncConsumer.getStackTrace();
+      success=isInBlockingQueuePoll(stackTrace);
+    }
+    if (success) {
+      break;
+    }
+ else {
+      Thread.sleep(500);
+    }
+  }
+  assertTrue("Did not trigger blocking buffer request.",success);
+  inputGate.releaseAllResources();
+  asyncConsumer.join();
+  assertNotNull(asyncException.get());
+  assertEquals(IllegalStateException.class,asyncException.get().getClass());
+}
