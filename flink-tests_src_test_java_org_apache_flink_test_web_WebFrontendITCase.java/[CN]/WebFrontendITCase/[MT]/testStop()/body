@@ -1,18 +1,24 @@
 {
+  assertTrue(cluster.getCurrentlyRunningJobsJava().isEmpty());
   final JobVertex sender=new JobVertex("Sender");
   sender.setParallelism(2);
   sender.setInvokableClass(StoppableInvokable.class);
   final JobGraph jobGraph=new JobGraph("Stoppable streaming test job",new ExecutionConfig(),sender);
   final JobID jid=jobGraph.getJobID();
   cluster.submitJobDetached(jobGraph);
+  while (cluster.getCurrentlyRunningJobsJava().isEmpty()) {
+    Thread.sleep(10);
+  }
   final FiniteDuration testTimeout=new FiniteDuration(2,TimeUnit.MINUTES);
   final Deadline deadline=testTimeout.fromNow();
-  try (HttpTestClient client=new HttpTestClient("localhost",port)){
-    client.sendDeleteRequest("/jobs/" + jid + "/stop",deadline.timeLeft());
-    HttpTestClient.SimpleHttpResponse response=client.getNextResponse(deadline.timeLeft());
-    assertEquals(HttpResponseStatus.OK,response.getStatus());
-    assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("json"));
-    assertEquals("{}",response.getContent());
+  while (!cluster.getCurrentlyRunningJobsJava().isEmpty()) {
+    try (HttpTestClient client=new HttpTestClient("localhost",port)){
+      client.sendDeleteRequest("/jobs/" + jid + "/stop",deadline.timeLeft());
+      HttpTestClient.SimpleHttpResponse response=client.getNextResponse(deadline.timeLeft());
+      assertEquals(HttpResponseStatus.OK,response.getStatus());
+      assertEquals(response.getType(),MimeTypes.getMimeTypeForExtension("json"));
+      assertEquals("{}",response.getContent());
+    }
+     Thread.sleep(20);
   }
-   waitForTaskManagers();
 }
