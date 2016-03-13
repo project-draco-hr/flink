@@ -2,14 +2,10 @@
   Instance instance=ExecutionGraphTestUtils.getInstance(new SimpleActorGateway(TestingUtils.directExecutionContext()),2);
   Scheduler scheduler=new Scheduler(TestingUtils.defaultExecutionContext());
   scheduler.newInstanceAvailable(instance);
-  JobVertex sender=new JobVertex("Task1");
-  sender.setInvokableClass(Tasks.NoOpInvokable.class);
-  sender.setParallelism(1);
-  JobVertex receiver=new JobVertex("Task2");
-  receiver.setInvokableClass(Tasks.NoOpInvokable.class);
-  receiver.setParallelism(1);
+  JobVertex sender=newJobVertex("Task1",1,Tasks.NoOpInvokable.class);
+  JobVertex receiver=newJobVertex("Task2",1,Tasks.NoOpInvokable.class);
   JobGraph jobGraph=new JobGraph("Pointwise job",sender,receiver);
-  ExecutionGraph eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"test job",new Configuration(),new SerializedValue<>(new ExecutionConfig()),AkkaUtils.getDefaultTimeout(),new FixedDelayRestartStrategy(1,1000));
+  ExecutionGraph eg=newExecutionGraph(new FixedDelayRestartStrategy(1,1000));
   eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
   assertEquals(JobStatus.CREATED,eg.getState());
   eg.scheduleForExecution(scheduler);
@@ -21,23 +17,9 @@
   failedExecution.fail(new Exception("Test Exception"));
   failedExecution.cancelingComplete();
   FiniteDuration timeout=new FiniteDuration(2,TimeUnit.MINUTES);
-  Deadline deadline=timeout.fromNow();
-  while (deadline.hasTimeLeft() && eg.getState() != JobStatus.RUNNING) {
-    Thread.sleep(100);
-  }
+  waitForAsyncRestart(eg,timeout);
   assertEquals(JobStatus.RUNNING,eg.getState());
-  deadline=timeout.fromNow();
-  boolean success=false;
-  while (deadline.hasTimeLeft() && !success) {
-    success=true;
-    for (    ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-      if (vertex.getCurrentExecutionAttempt().getAssignedResource() == null) {
-        success=false;
-        Thread.sleep(100);
-        break;
-      }
-    }
-  }
+  waitForAllResourcesToBeAssignedAfterAsyncRestart(eg,timeout.fromNow());
   for (  ExecutionVertex vertex : eg.getAllExecutionVertices()) {
     assertNotNull("No assigned resource (test instability).",vertex.getCurrentAssignedResource());
     vertex.getCurrentExecutionAttempt().switchToRunning();

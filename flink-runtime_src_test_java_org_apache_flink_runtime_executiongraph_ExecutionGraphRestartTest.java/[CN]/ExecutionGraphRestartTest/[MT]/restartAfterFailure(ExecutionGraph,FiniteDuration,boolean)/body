@@ -1,26 +1,8 @@
 {
-  eg.getAllExecutionVertices().iterator().next().fail(new Exception("Test Exception"));
-  assertEquals(JobStatus.FAILING,eg.getState());
-  for (  ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-    vertex.getCurrentExecutionAttempt().cancelingComplete();
-  }
-  Deadline deadline=timeout.fromNow();
-  while (deadline.hasTimeLeft() && eg.getState() != JobStatus.RUNNING) {
-    Thread.sleep(100);
-  }
+  makeAFailureAndWait(eg,timeout);
   assertEquals(JobStatus.RUNNING,eg.getState());
-  deadline=timeout.fromNow();
-  boolean success=false;
-  while (deadline.hasTimeLeft() && !success) {
-    success=true;
-    for (    ExecutionVertex vertex : eg.getAllExecutionVertices()) {
-      if (vertex.getCurrentExecutionAttempt().getAssignedResource() == null) {
-        success=false;
-        Thread.sleep(100);
-        break;
-      }
-    }
-  }
+  Deadline deadline=timeout.fromNow();
+  waitForAllResourcesToBeAssignedAfterAsyncRestart(eg,deadline);
   if (haltAfterRestart) {
     if (deadline.hasTimeLeft()) {
       haltExecution(eg);
