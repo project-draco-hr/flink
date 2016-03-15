@@ -1,0 +1,25 @@
+{
+  final ParameterTool params=ParameterTool.fromArgs(args);
+  System.out.println("Usage: TwitterExample [--output <path>] " + "[--twitter-source.consumerKey <key> --twitter-source.consumerSecret <secret> --twitter-source.token <token> --twitter-source.tokenSecret <tokenSecret>]");
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.getConfig().setGlobalJobParameters(params);
+  env.setParallelism(params.getInt("parallelism",1));
+  DataStream<String> streamSource;
+  if (params.has(TwitterSource.CONSUMER_KEY) && params.has(TwitterSource.CONSUMER_SECRET) && params.has(TwitterSource.TOKEN)&& params.has(TwitterSource.TOKEN_SECRET)) {
+    streamSource=env.addSource(new TwitterSource(params.getProperties()));
+  }
+ else {
+    System.out.println("Executing TwitterStream example with default props.");
+    System.out.println("Use --twitter-source.consumerKey <key> --twitter-source.consumerSecret <secret> " + "--twitter-source.token <token> --twitter-source.tokenSecret <tokenSecret> specify the authentication info.");
+    streamSource=env.fromElements(TwitterExampleData.TEXTS);
+  }
+  DataStream<Tuple2<String,Integer>> tweets=streamSource.flatMap(new SelectEnglishAndTokenizeFlatMap()).keyBy(0).sum(1);
+  if (params.has("output")) {
+    tweets.writeAsText(params.get("output"));
+  }
+ else {
+    System.out.println("Printing result to stdout. Use --output to specify output path.");
+    tweets.print();
+  }
+  env.execute("Twitter Streaming Example");
+}
