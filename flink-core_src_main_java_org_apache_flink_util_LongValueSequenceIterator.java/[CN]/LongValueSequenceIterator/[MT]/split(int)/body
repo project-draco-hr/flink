@@ -1,0 +1,58 @@
+{
+  if (numPartitions < 1) {
+    throw new IllegalArgumentException("The number of partitions must be at least 1.");
+  }
+  if (numPartitions == 1) {
+    return new LongValueSequenceIterator[]{new LongValueSequenceIterator(current,to)};
+  }
+  long elementsPerSplit;
+  if (to - current + 1 >= 0) {
+    elementsPerSplit=(to - current + 1) / numPartitions;
+  }
+ else {
+    final long halfDiff;
+    if (current == Long.MIN_VALUE) {
+      halfDiff=(Long.MAX_VALUE / 2 + 1) + to / 2;
+    }
+ else {
+      long posFrom=-current;
+      if (posFrom > to) {
+        halfDiff=to + ((posFrom - to) / 2);
+      }
+ else {
+        halfDiff=posFrom + ((to - posFrom) / 2);
+      }
+    }
+    elementsPerSplit=halfDiff / numPartitions * 2;
+  }
+  if (elementsPerSplit < Long.MAX_VALUE) {
+    long numWithExtra=-(elementsPerSplit * numPartitions) + to - current + 1;
+    if (numWithExtra > numPartitions) {
+      elementsPerSplit++;
+      numWithExtra-=numPartitions;
+      if (numWithExtra > numPartitions) {
+        throw new RuntimeException("Bug in splitting logic. To much rounding loss.");
+      }
+    }
+    LongValueSequenceIterator[] iters=new LongValueSequenceIterator[numPartitions];
+    long curr=current;
+    int i=0;
+    for (; i < numWithExtra; i++) {
+      long next=curr + elementsPerSplit + 1;
+      iters[i]=new LongValueSequenceIterator(curr,next - 1);
+      curr=next;
+    }
+    for (; i < numPartitions; i++) {
+      long next=curr + elementsPerSplit;
+      iters[i]=new LongValueSequenceIterator(curr,next - 1,true);
+      curr=next;
+    }
+    return iters;
+  }
+ else {
+    if (numPartitions != 2) {
+      throw new RuntimeException("Bug in splitting logic.");
+    }
+    return new LongValueSequenceIterator[]{new LongValueSequenceIterator(current,current + elementsPerSplit),new LongValueSequenceIterator(current + elementsPerSplit,to)};
+  }
+}
