@@ -1,18 +1,23 @@
 {
-  if (preAggregator instanceof RichFunction) {
-    throw new UnsupportedOperationException("Pre-aggregator of apply can not be a RichFunction.");
+  if (reduceFunction instanceof RichFunction) {
+    throw new UnsupportedOperationException("ReduceFunction of apply can not be a RichFunction.");
   }
   function=input.getExecutionEnvironment().clean(function);
-  preAggregator=input.getExecutionEnvironment().clean(preAggregator);
+  reduceFunction=input.getExecutionEnvironment().clean(reduceFunction);
   String callLocation=Utils.getCallLocationName();
-  String udfName="AllWindowedStream." + callLocation;
-  String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
+  String udfName="WindowedStream." + callLocation;
+  String opName;
+  KeySelector<T,Byte> keySel=input.getKeySelector();
   OneInputStreamOperator<T,R> operator;
   if (evictor != null) {
-    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ListWindowBuffer.Factory<>(getInputType().createSerializer(getExecutionEnvironment().getConfig())),new ReduceApplyAllWindowFunction<>(preAggregator,function),trigger,evictor);
+    ListStateDescriptor<StreamRecord<T>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(input.getType().createSerializer(getExecutionEnvironment().getConfig())));
+    opName="TriggerWindow(" + windowAssigner + ", "+ stateDesc+ ", "+ trigger+ ", "+ evictor+ ", "+ udfName+ ")";
+    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new InternalIterableAllWindowFunction<>(new ReduceApplyAllWindowFunction<>(reduceFunction,function)),trigger,evictor);
   }
  else {
-    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ReducingWindowBuffer.Factory<>(preAggregator,getInputType().createSerializer(getExecutionEnvironment().getConfig())),function,trigger);
+    ReducingStateDescriptor<T> stateDesc=new ReducingStateDescriptor<>("window-contents",reduceFunction,input.getType().createSerializer(getExecutionEnvironment().getConfig()));
+    opName="TriggerWindow(" + windowAssigner + ", "+ stateDesc+ ", "+ trigger+ ", "+ udfName+ ")";
+    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new InternalSingleValueAllWindowFunction<>(function),trigger);
   }
   return input.transform(opName,resultType,operator).setParallelism(1);
 }

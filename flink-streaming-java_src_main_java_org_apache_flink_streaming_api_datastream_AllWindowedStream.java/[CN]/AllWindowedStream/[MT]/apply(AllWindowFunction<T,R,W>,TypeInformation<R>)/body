@@ -1,18 +1,19 @@
 {
   function=input.getExecutionEnvironment().clean(function);
   String callLocation=Utils.getCallLocationName();
-  String udfName="AllWindowedStream." + callLocation;
-  SingleOutputStreamOperator<R> result=createFastTimeOperatorIfValid(function,resultType,udfName);
-  if (result != null) {
-    return result;
-  }
-  String opName="TriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
-  NonKeyedWindowOperator<T,T,R,W> operator;
+  String udfName="WindowedStream." + callLocation;
+  String opName;
+  KeySelector<T,Byte> keySel=input.getKeySelector();
+  WindowOperator<Byte,T,Iterable<T>,R,W> operator;
   if (evictor != null) {
-    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ListWindowBuffer.Factory<>(getInputType().createSerializer(getExecutionEnvironment().getConfig())),function,trigger,evictor);
+    ListStateDescriptor<StreamRecord<T>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(input.getType().createSerializer(getExecutionEnvironment().getConfig())));
+    opName="TriggerWindow(" + windowAssigner + ", "+ stateDesc+ ", "+ trigger+ ", "+ evictor+ ", "+ udfName+ ")";
+    operator=new EvictingWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new InternalIterableAllWindowFunction<>(function),trigger,evictor);
   }
  else {
-    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ListWindowBuffer.Factory<>(getInputType().createSerializer(getExecutionEnvironment().getConfig())),function,trigger);
+    ListStateDescriptor<T> stateDesc=new ListStateDescriptor<>("window-contents",input.getType().createSerializer(getExecutionEnvironment().getConfig()));
+    opName="TriggerWindow(" + windowAssigner + ", "+ stateDesc+ ", "+ trigger+ ", "+ udfName+ ")";
+    operator=new WindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),keySel,input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),stateDesc,new InternalIterableAllWindowFunction<>(function),trigger);
   }
   return input.transform(opName,resultType,operator).setParallelism(1);
 }

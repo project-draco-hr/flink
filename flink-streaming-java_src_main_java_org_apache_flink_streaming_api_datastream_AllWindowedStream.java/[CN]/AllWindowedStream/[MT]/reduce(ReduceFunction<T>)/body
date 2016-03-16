@@ -4,18 +4,6 @@
   }
   function=input.getExecutionEnvironment().clean(function);
   String callLocation=Utils.getCallLocationName();
-  String udfName="AllWindowedStream." + callLocation;
-  SingleOutputStreamOperator<T> result=createFastTimeOperatorIfValid(function,input.getType(),udfName);
-  if (result != null) {
-    return result;
-  }
-  String opName="NonParallelTriggerWindow(" + windowAssigner + ", "+ trigger+ ", "+ udfName+ ")";
-  OneInputStreamOperator<T,T> operator;
-  if (evictor != null) {
-    operator=new EvictingNonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ListWindowBuffer.Factory<>(getInputType().createSerializer(getExecutionEnvironment().getConfig())),new ReduceIterableAllWindowFunction<W,T>(function),trigger,evictor);
-  }
- else {
-    operator=new NonKeyedWindowOperator<>(windowAssigner,windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),new ReducingWindowBuffer.Factory<>(function,getInputType().createSerializer(getExecutionEnvironment().getConfig())),new ReduceIterableAllWindowFunction<W,T>(function),trigger);
-  }
-  return input.transform(opName,input.getType(),operator).setParallelism(1);
+  String udfName="WindowedStream." + callLocation;
+  return apply(function,new PassThroughAllWindowFunction<W,T>());
 }
