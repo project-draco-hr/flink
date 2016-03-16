@@ -1,0 +1,19 @@
+{
+  File dataDir=tempFolder.newFolder();
+  Node node=NodeBuilder.nodeBuilder().settings(Settings.settingsBuilder().put("path.home",dataDir.getParent()).put("http.enabled",false).put("path.data",dataDir.getAbsolutePath())).clusterName("my-transport-client-cluster").node();
+  final StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStreamSource<Tuple2<Integer,String>> source=env.addSource(new TestSourceFunction());
+  Map<String,String> config=new HashMap<>();
+  config.put(ElasticsearchSink.CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS,"1");
+  config.put("cluster.name","my-transport-client-cluster");
+  List<InetSocketAddress> transports=new ArrayList<>();
+  transports.add(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),9300));
+  source.addSink(new ElasticsearchSink<>(config,transports,new TestElasticsearchSinkFunction()));
+  env.execute("Elasticsearch TransportClient Test");
+  Client client=node.client();
+  for (int i=0; i < NUM_ELEMENTS; i++) {
+    GetResponse response=client.get(new GetRequest("my-index","my-type",Integer.toString(i))).actionGet();
+    Assert.assertEquals("message #" + i,response.getSource().get("data"));
+  }
+  node.close();
+}
