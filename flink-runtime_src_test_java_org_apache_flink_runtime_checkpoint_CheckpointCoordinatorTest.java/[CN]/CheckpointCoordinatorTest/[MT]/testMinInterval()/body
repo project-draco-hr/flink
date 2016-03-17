@@ -1,0 +1,42 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final ExecutionAttemptID attemptID1=new ExecutionAttemptID();
+    ExecutionVertex vertex1=mockExecutionVertex(attemptID1);
+    final AtomicInteger numCalls=new AtomicInteger();
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        if (invocation.getArguments()[0] instanceof TriggerCheckpoint) {
+          numCalls.incrementAndGet();
+        }
+        return null;
+      }
+    }
+).when(vertex1).sendMessageToCurrentExecution(any(Serializable.class),any(ExecutionAttemptID.class));
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,10,200000,500,10,new ExecutionVertex[]{vertex1},new ExecutionVertex[]{vertex1},new ExecutionVertex[]{vertex1},cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(2,cl),RecoveryMode.STANDALONE,new DisabledCheckpointStatsTracker());
+    coord.startCheckpointScheduler();
+    for (int x=0; x < 20; x++) {
+      Thread.sleep(100);
+      if (numCalls.get() > 0) {
+        break;
+      }
+    }
+    if (numCalls.get() == 0) {
+      fail("No checkpoint was triggered within the first 2000 ms.");
+    }
+    long start=System.currentTimeMillis();
+    for (int x=0; x < 20; x++) {
+      Thread.sleep(100);
+      int triggeredCheckpoints=numCalls.get();
+      long curT=System.currentTimeMillis();
+      long maxAllowedCheckpoints=(curT - start) / 500 + 2;
+      assertTrue(maxAllowedCheckpoints >= triggeredCheckpoints);
+    }
+    coord.stopCheckpointScheduler();
+    coord.shutdown();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}
