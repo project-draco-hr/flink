@@ -1,16 +1,31 @@
 {
   final int NUM_TOPICS=5;
   final int NUM_ELEMENTS=20;
-  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
   final List<String> topics=new ArrayList<>();
   for (int i=0; i < NUM_TOPICS; i++) {
     final String topic="topic-" + i;
     topics.add(topic);
     createTestTopic(topic,i + 1,1);
-    writeSequence(env,topic,NUM_ELEMENTS,i + 1);
   }
-  KeyedDeserializationSchema<Tuple3<Integer,Integer,String>> readSchema=new Tuple2WithTopicDeserializationSchema(env.getConfig());
-  DataStreamSource<Tuple3<Integer,Integer,String>> stream=env.addSource(kafkaServer.getConsumer(topics,readSchema,standardProps));
+  DataStream<Tuple3<Integer,Integer,String>> stream=env.addSource(new RichParallelSourceFunction<Tuple3<Integer,Integer,String>>(){
+    @Override public void run(    SourceContext<Tuple3<Integer,Integer,String>> ctx) throws Exception {
+      int partition=getRuntimeContext().getIndexOfThisSubtask();
+      for (int topicId=0; topicId < NUM_TOPICS; topicId++) {
+        for (int i=0; i < NUM_ELEMENTS; i++) {
+          ctx.collect(new Tuple3<>(partition,i,"topic-" + topicId));
+        }
+      }
+    }
+    @Override public void cancel(){
+    }
+  }
+);
+  Tuple2WithTopicSchema schema=new Tuple2WithTopicSchema(env.getConfig());
+  stream.addSink(kafkaServer.getProducer("dummy",schema,standardProps,null));
+  env.execute("Write to topics");
+  env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  stream=env.addSource(kafkaServer.getConsumer(topics,schema,standardProps));
   stream.flatMap(new FlatMapFunction<Tuple3<Integer,Integer,String>,Integer>(){
     Map<String,Integer> countPerTopic=new HashMap<>(NUM_TOPICS);
     @Override public void flatMap(    Tuple3<Integer,Integer,String> value,    Collector<Integer> out) throws Exception {
