@@ -15,40 +15,15 @@
     throw new IllegalArgumentException("Cannot parse poll timeout for '" + KEY_POLL_TIMEOUT + '\'',e);
   }
   final List<KafkaTopicPartition> partitions=new ArrayList<>();
-  KafkaConsumer<byte[],byte[]> consumer=null;
-  try {
-    consumer=new KafkaConsumer<>(this.properties);
+  try (KafkaConsumer<byte[],byte[]> consumer=new KafkaConsumer<>(this.properties)){
     for (    final String topic : topics) {
-      List<PartitionInfo> partitionsForTopic=null;
-      for (int tri=0; tri < 10; tri++) {
-        LOG.info("Trying to get partitions for topic {}",topic);
-        try {
-          partitionsForTopic=consumer.partitionsFor(topic);
-          if (partitionsForTopic != null && partitionsForTopic.size() > 0) {
-            break;
-          }
-        }
- catch (        NullPointerException npe) {
-        }
-        consumer.close();
-        try {
-          Thread.sleep(1000);
-        }
- catch (        InterruptedException ignored) {
-        }
-        consumer=new KafkaConsumer<>(properties);
-      }
+      List<PartitionInfo> partitionsForTopic=consumer.partitionsFor(topic);
       if (partitionsForTopic != null) {
         partitions.addAll(convertToFlinkKafkaTopicPartition(partitionsForTopic));
       }
     }
   }
-  finally {
-    if (consumer != null) {
-      consumer.close();
-    }
-  }
-  if (partitions.isEmpty()) {
+   if (partitions.isEmpty()) {
     throw new RuntimeException("Unable to retrieve any partitions for the requested topics " + topics);
   }
   LOG.info("Got {} partitions from these topics: {}",partitions.size(),topics);
