@@ -3,18 +3,19 @@
   ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(jobId),mockExecutionVertex(jobId)};
   ExecutionVertex commitVertex=mockExecutionVertex(jobId);
   MockCheckpointIdCounter checkpointIdCounter=new MockCheckpointIdCounter();
-  SavepointCoordinator coordinator=createSavepointCoordinator(jobId,20,vertices,vertices,new ExecutionVertex[]{commitVertex},checkpointIdCounter,new HeapStateStore<CompletedCheckpoint>());
+  long checkpointTimeout=1000;
+  SavepointCoordinator coordinator=createSavepointCoordinator(jobId,checkpointTimeout,vertices,vertices,new ExecutionVertex[]{commitVertex},checkpointIdCounter,new HeapStateStore<CompletedCheckpoint>());
   Future<String> savepointPathFuture=coordinator.triggerSavepoint(12731273);
   assertFalse(savepointPathFuture.isCompleted());
   long checkpointId=checkpointIdCounter.getLastReturnedCount();
-  coordinator.receiveAcknowledgeMessage(new AcknowledgeCheckpoint(jobId,vertices[0].getCurrentExecutionAttempt().getAttemptId(),checkpointId,createSerializedStateHandle(vertices[0]),0));
   PendingCheckpoint pendingCheckpoint=coordinator.getPendingCheckpoints().get(checkpointId);
-  assertFalse(pendingCheckpoint.isDiscarded());
-  Deadline deadline=FiniteDuration.apply(5,"s").fromNow();
+  assertNotNull("Checkpoint not pending (test race)",pendingCheckpoint);
+  assertFalse("Checkpoint already discarded (test race)",pendingCheckpoint.isDiscarded());
+  Deadline deadline=FiniteDuration.apply(60,"s").fromNow();
   while (deadline.hasTimeLeft() && !pendingCheckpoint.isDiscarded() && coordinator.getNumberOfPendingCheckpoints() > 0) {
     Thread.sleep(250);
   }
-  assertTrue(pendingCheckpoint.isDiscarded());
+  assertTrue("Savepoint not discarded within timeout",pendingCheckpoint.isDiscarded());
   assertEquals(0,coordinator.getNumberOfPendingCheckpoints());
   assertEquals(0,coordinator.getNumberOfRetainedSuccessfulCheckpoints());
   verify(commitVertex,times(0)).sendMessageToCurrentExecution(any(NotifyCheckpointComplete.class),any(ExecutionAttemptID.class));
