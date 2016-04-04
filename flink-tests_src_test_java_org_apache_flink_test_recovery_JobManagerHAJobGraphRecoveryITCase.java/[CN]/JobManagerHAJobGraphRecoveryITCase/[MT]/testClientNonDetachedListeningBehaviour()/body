@@ -25,6 +25,11 @@
       AkkaActorGateway client=new AkkaActorGateway(clientRef,leaderId);
       ActorRef leaderRef=AkkaUtils.getActorRef(leaderAddress,testSystem,deadline.timeLeft());
       ActorGateway leader=new AkkaActorGateway(leaderRef,leaderId);
+      int numSlots=0;
+      while (numSlots == 0) {
+        Future<?> slotsFuture=leader.ask(JobManagerMessages.getRequestTotalNumberOfSlots(),deadline.timeLeft());
+        numSlots=(Integer)Await.result(slotsFuture,deadline.timeLeft());
+      }
       leader.tell(new SubmitJob(jobGraph,ListeningBehaviour.EXECUTION_RESULT_AND_STATE_CHANGES),client);
       JobManagerActorTestUtils.waitForJobStatus(jobGraph.getJobID(),JobStatus.RUNNING,leader,deadline.timeLeft());
     }
