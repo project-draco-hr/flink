@@ -2,10 +2,18 @@
   if (!triggerResult.isFire() && !triggerResult.isPurge()) {
     return;
   }
+  ListState<StreamRecord<IN>> windowState;
+  MergingWindowSet<W> mergingWindows=null;
+  if (windowAssigner instanceof MergingWindowAssigner) {
+    mergingWindows=mergingWindowsByKey.get(key);
+    W stateWindow=mergingWindows.getStateWindow(window);
+    windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
+  }
+ else {
+    windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+  }
   if (triggerResult.isFire()) {
     timestampedCollector.setAbsoluteTimestamp(window.maxTimestamp());
-    setKeyContext(key);
-    ListState<StreamRecord<IN>> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
     Iterable<StreamRecord<IN>> contents=windowState.get();
     int toEvict=evictor.evict((Iterable)contents,Iterables.size(contents),context.window);
     FluentIterable<IN> projectedContents=FluentIterable.from(contents).skip(toEvict).transform(new Function<StreamRecord<IN>,IN>(){
@@ -15,19 +23,12 @@
     }
 );
     userFunction.apply(context.key,context.window,projectedContents,timestampedCollector);
-    if (triggerResult.isPurge()) {
-      windowState.clear();
-    }
- else {
-      windowState.clear();
-      for (      StreamRecord<IN> rec : FluentIterable.from(contents).skip(toEvict)) {
-        windowState.add(rec);
-      }
-    }
   }
- else   if (triggerResult.isPurge()) {
-    setKeyContext(key);
-    ListState<StreamRecord<IN>> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
+  if (triggerResult.isPurge()) {
     windowState.clear();
+    if (mergingWindows != null) {
+      mergingWindows.retireWindow(window);
+    }
+    context.clear();
   }
 }
