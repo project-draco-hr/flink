@@ -1,0 +1,26 @@
+{
+  this.sourceContext=checkNotNull(sourceContext);
+  this.checkpointLock=sourceContext.getCheckpointLock();
+  if (watermarksPeriodic == null) {
+    if (watermarksPunctuated == null) {
+      timestampWatermarkMode=NO_TIMESTAMPS_WATERMARKS;
+    }
+ else {
+      timestampWatermarkMode=PUNCTUATED_WATERMARKS;
+    }
+  }
+ else {
+    if (watermarksPunctuated == null) {
+      timestampWatermarkMode=PERIODIC_WATERMARKS;
+    }
+ else {
+      throw new IllegalArgumentException("Cannot have both periodic and punctuated watermarks");
+    }
+  }
+  this.allPartitions=initializePartitions(assignedPartitions,timestampWatermarkMode,watermarksPeriodic,watermarksPunctuated,runtimeContext.getUserCodeClassLoader());
+  if (timestampWatermarkMode == PERIODIC_WATERMARKS) {
+    KafkaTopicPartitionStateWithPeriodicWatermarks<?,?>[] parts=(KafkaTopicPartitionStateWithPeriodicWatermarks<?,?>[])allPartitions;
+    PeriodicWatermarkEmitter periodicEmitter=new PeriodicWatermarkEmitter(parts,sourceContext,runtimeContext);
+    periodicEmitter.start();
+  }
+}

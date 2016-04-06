@@ -1,2 +1,60 @@
 {
+  final String topicName="testKafkaOffsetToZk";
+  final int parallelism=3;
+  createTestTopic(topicName,parallelism,1);
+  StreamExecutionEnvironment env1=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env1.getConfig().disableSysoutLogging();
+  env1.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+  env1.setParallelism(parallelism);
+  writeSequence(env1,topicName,50,parallelism);
+  final StreamExecutionEnvironment env2=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env2.getConfig().disableSysoutLogging();
+  env2.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+  env2.setParallelism(parallelism);
+  env2.enableCheckpointing(200);
+  Properties readProps=new Properties();
+  readProps.putAll(standardProps);
+  readProps.setProperty("auto.offset.reset","latest");
+  DataStream<String> stream=env2.addSource(kafkaServer.getConsumer(topicName,new SimpleStringSchema(),readProps));
+  stream.addSink(new DiscardingSink<String>());
+  final AtomicReference<Throwable> errorRef=new AtomicReference<>();
+  final Thread runner=new Thread("runner"){
+    @Override public void run(){
+      try {
+        env2.execute();
+      }
+ catch (      Throwable t) {
+        if (!(t.getCause() instanceof JobCancellationException)) {
+          errorRef.set(t);
+        }
+      }
+    }
+  }
+;
+  runner.start();
+  final CuratorFramework curatorFramework=((KafkaTestEnvironmentImpl)kafkaServer).createCuratorClient();
+  final Long l49=49L;
+  final long deadline=30000 + System.currentTimeMillis();
+  do {
+    Long o1=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,0);
+    Long o2=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,1);
+    Long o3=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,2);
+    if (l49.equals(o1) && l49.equals(o2) && l49.equals(o3)) {
+      break;
+    }
+    Thread.sleep(100);
+  }
+ while (System.currentTimeMillis() < deadline);
+  JobManagerCommunicationUtils.cancelCurrentJob(flink.getLeaderGateway(timeout));
+  final Throwable t=errorRef.get();
+  if (t != null) {
+    throw new RuntimeException("Job failed with an exception",t);
+  }
+  Long o1=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,0);
+  Long o2=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,1);
+  Long o3=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,2);
+  Assert.assertEquals(Long.valueOf(49L),o1);
+  Assert.assertEquals(Long.valueOf(49L),o2);
+  Assert.assertEquals(Long.valueOf(49L),o3);
+  curatorFramework.close();
 }

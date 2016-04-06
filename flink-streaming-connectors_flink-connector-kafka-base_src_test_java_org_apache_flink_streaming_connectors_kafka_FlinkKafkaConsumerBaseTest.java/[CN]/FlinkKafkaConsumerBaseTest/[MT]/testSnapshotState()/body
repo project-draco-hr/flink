@@ -1,0 +1,44 @@
+{
+  final HashMap<KafkaTopicPartition,Long> state1=new HashMap<>();
+  state1.put(new KafkaTopicPartition("abc",13),16768L);
+  state1.put(new KafkaTopicPartition("def",7),987654321L);
+  final HashMap<KafkaTopicPartition,Long> state2=new HashMap<>();
+  state2.put(new KafkaTopicPartition("abc",13),16770L);
+  state2.put(new KafkaTopicPartition("def",7),987654329L);
+  final HashMap<KafkaTopicPartition,Long> state3=new HashMap<>();
+  state2.put(new KafkaTopicPartition("abc",13),16780L);
+  state2.put(new KafkaTopicPartition("def",7),987654377L);
+  final AbstractFetcher<String,?> fetcher=mock(AbstractFetcher.class);
+  when(fetcher.snapshotCurrentState()).thenReturn(state1,state2,state3);
+  final LinkedMap pendingCheckpoints=new LinkedMap();
+  FlinkKafkaConsumerBase<String> consumer=getConsumer(fetcher,pendingCheckpoints,true);
+  assertEquals(0,pendingCheckpoints.size());
+  HashMap<KafkaTopicPartition,Long> snapshot1=consumer.snapshotState(138L,19L);
+  assertEquals(state1,snapshot1);
+  assertEquals(1,pendingCheckpoints.size());
+  assertEquals(state1,pendingCheckpoints.get(138L));
+  HashMap<KafkaTopicPartition,Long> snapshot2=consumer.snapshotState(140L,1578L);
+  assertEquals(state2,snapshot2);
+  assertEquals(2,pendingCheckpoints.size());
+  assertEquals(state2,pendingCheckpoints.get(140L));
+  consumer.notifyCheckpointComplete(138L);
+  assertEquals(1,pendingCheckpoints.size());
+  assertTrue(pendingCheckpoints.containsKey(140L));
+  HashMap<KafkaTopicPartition,Long> snapshot3=consumer.snapshotState(141L,1578L);
+  assertEquals(state3,snapshot3);
+  assertEquals(2,pendingCheckpoints.size());
+  assertEquals(state3,pendingCheckpoints.get(141L));
+  consumer.notifyCheckpointComplete(141L);
+  assertEquals(0,pendingCheckpoints.size());
+  consumer.notifyCheckpointComplete(666);
+  assertEquals(0,pendingCheckpoints.size());
+  for (int i=100; i < 600; i++) {
+    consumer.snapshotState(i,15 * i);
+  }
+  assertEquals(FlinkKafkaConsumerBase.MAX_NUM_PENDING_CHECKPOINTS,pendingCheckpoints.size());
+  consumer.notifyCheckpointComplete(598);
+  assertEquals(1,pendingCheckpoints.size());
+  consumer.notifyCheckpointComplete(590);
+  consumer.notifyCheckpointComplete(599);
+  assertEquals(0,pendingCheckpoints.size());
+}

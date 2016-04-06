@@ -1,0 +1,38 @@
+{
+  if (partitionsToAssign.isEmpty()) {
+    throw new IllegalArgumentException("Leader request for empty partitions list");
+  }
+  LOG.info("Refreshing leader information for partitions {}",partitionsToAssign);
+  PartitionInfoFetcher infoFetcher=new PartitionInfoFetcher(getTopics(partitionsToAssign),kafkaProperties);
+  infoFetcher.start();
+  KillerWatchDog watchDog=new KillerWatchDog(infoFetcher,60000);
+  watchDog.start();
+  List<KafkaTopicPartitionLeader> topicPartitionWithLeaderList=infoFetcher.getPartitions();
+  List<KafkaTopicPartitionState<TopicAndPartition>> unassignedPartitions=new ArrayList<>(partitionsToAssign);
+  Map<Node,List<KafkaTopicPartitionState<TopicAndPartition>>> leaderToPartitions=new HashMap<>();
+  for (  KafkaTopicPartitionLeader partitionLeader : topicPartitionWithLeaderList) {
+    if (unassignedPartitions.size() == 0) {
+      break;
+    }
+    Iterator<KafkaTopicPartitionState<TopicAndPartition>> unassignedPartitionsIterator=unassignedPartitions.iterator();
+    while (unassignedPartitionsIterator.hasNext()) {
+      KafkaTopicPartitionState<TopicAndPartition> unassignedPartition=unassignedPartitionsIterator.next();
+      if (unassignedPartition.getKafkaTopicPartition().equals(partitionLeader.getTopicPartition())) {
+        Node leader=partitionLeader.getLeader();
+        List<KafkaTopicPartitionState<TopicAndPartition>> partitionsOfLeader=leaderToPartitions.get(leader);
+        if (partitionsOfLeader == null) {
+          partitionsOfLeader=new ArrayList<>();
+          leaderToPartitions.put(leader,partitionsOfLeader);
+        }
+        partitionsOfLeader.add(unassignedPartition);
+        unassignedPartitionsIterator.remove();
+        break;
+      }
+    }
+  }
+  if (unassignedPartitions.size() > 0) {
+    throw new RuntimeException("Unable to find a leader for partitions: " + unassignedPartitions);
+  }
+  LOG.debug("Partitions with assigned leaders {}",leaderToPartitions);
+  return leaderToPartitions;
+}

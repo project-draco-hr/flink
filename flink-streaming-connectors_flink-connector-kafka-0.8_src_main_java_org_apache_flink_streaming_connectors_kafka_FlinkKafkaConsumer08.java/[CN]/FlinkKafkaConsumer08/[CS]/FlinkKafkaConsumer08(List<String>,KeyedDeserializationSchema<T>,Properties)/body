@@ -1,13 +1,16 @@
 {
-  super(deserializer,props);
-  requireNonNull(topics,"topics");
-  this.props=requireNonNull(props,"props");
+  super(deserializer);
+  checkNotNull(topics,"topics");
+  this.kafkaProperties=checkNotNull(props,"props");
   validateZooKeeperConfig(props);
-  this.partitionInfos=KafkaTopicPartition.dropLeaderData(getPartitionsForTopic(topics,props));
+  this.invalidOffsetBehavior=getInvalidOffsetBehavior(props);
+  this.autoCommitInterval=getLongFromConfig(props,"auto.commit.interval.ms",60000);
+  List<KafkaTopicPartition> partitionInfos=KafkaTopicPartition.dropLeaderData(getPartitionsForTopic(topics,props));
   if (partitionInfos.size() == 0) {
-    throw new RuntimeException("Unable to retrieve any partitions for the requested topics " + topics.toString() + "."+ "Please check previous log entries");
+    throw new RuntimeException("Unable to retrieve any partitions for the requested topics " + topics + ". Please check previous log entries");
   }
   if (LOG.isInfoEnabled()) {
-    logPartitionInfo(partitionInfos);
+    logPartitionInfo(LOG,partitionInfos);
   }
+  setSubscribedPartitions(partitionInfos);
 }

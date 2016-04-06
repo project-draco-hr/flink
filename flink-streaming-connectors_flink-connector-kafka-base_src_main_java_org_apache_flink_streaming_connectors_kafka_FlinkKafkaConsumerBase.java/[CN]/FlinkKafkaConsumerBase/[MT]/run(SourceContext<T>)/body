@@ -1,0 +1,33 @@
+{
+  if (allSubscribedPartitions == null) {
+    throw new Exception("The partitions were not set for the consumer");
+  }
+  final List<KafkaTopicPartition> thisSubtaskPartitions=assignPartitions(allSubscribedPartitions,getRuntimeContext().getNumberOfParallelSubtasks(),getRuntimeContext().getIndexOfThisSubtask());
+  if (!thisSubtaskPartitions.isEmpty()) {
+    final AbstractFetcher<T,?> fetcher=createFetcher(sourceContext,thisSubtaskPartitions,periodicWatermarkAssigner,punctuatedWatermarkAssigner,(StreamingRuntimeContext)getRuntimeContext());
+    if (restoreToOffset != null) {
+      fetcher.restoreOffsets(restoreToOffset);
+    }
+    this.kafkaFetcher=fetcher;
+    if (!running) {
+      return;
+    }
+    fetcher.runFetchLoop();
+  }
+ else {
+    sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
+    final Object waitLock=new Object();
+    while (running) {
+      try {
+synchronized (waitLock) {
+          waitLock.wait();
+        }
+      }
+ catch (      InterruptedException e) {
+        if (!running) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+  }
+}

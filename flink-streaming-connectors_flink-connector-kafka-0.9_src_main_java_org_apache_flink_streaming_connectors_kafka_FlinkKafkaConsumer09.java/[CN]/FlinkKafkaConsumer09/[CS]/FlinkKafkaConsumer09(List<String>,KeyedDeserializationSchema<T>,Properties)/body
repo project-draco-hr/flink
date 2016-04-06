@@ -1,12 +1,23 @@
 {
-  super(deserializer,props);
-  requireNonNull(topics,"topics");
-  this.properties=requireNonNull(props,"props");
+  super(deserializer);
+  checkNotNull(topics,"topics");
+  this.properties=checkNotNull(props,"props");
   setDeserializer(this.properties);
+  try {
+    if (properties.containsKey(KEY_POLL_TIMEOUT)) {
+      this.pollTimeout=Long.parseLong(properties.getProperty(KEY_POLL_TIMEOUT));
+    }
+ else {
+      this.pollTimeout=DEFAULT_POLL_TIMEOUT;
+    }
+  }
+ catch (  Exception e) {
+    throw new IllegalArgumentException("Cannot parse poll timeout for '" + KEY_POLL_TIMEOUT + '\'',e);
+  }
+  final List<KafkaTopicPartition> partitions=new ArrayList<>();
   KafkaConsumer<byte[],byte[]> consumer=null;
   try {
     consumer=new KafkaConsumer<>(this.properties);
-    this.partitionInfos=new ArrayList<>();
     for (    final String topic : topics) {
       List<PartitionInfo> partitionsForTopic=null;
       for (int tri=0; tri < 10; tri++) {
@@ -23,12 +34,12 @@
         try {
           Thread.sleep(1000);
         }
- catch (        InterruptedException e) {
+ catch (        InterruptedException ignored) {
         }
         consumer=new KafkaConsumer<>(properties);
       }
       if (partitionsForTopic != null) {
-        partitionInfos.addAll(convertToFlinkKafkaTopicPartition(partitionsForTopic));
+        partitions.addAll(convertToFlinkKafkaTopicPartition(partitionsForTopic));
       }
     }
   }
@@ -37,12 +48,12 @@
       consumer.close();
     }
   }
-  if (partitionInfos.isEmpty()) {
+  if (partitions.isEmpty()) {
     throw new RuntimeException("Unable to retrieve any partitions for the requested topics " + topics);
   }
-  LOG.info("Got {} partitions from these topics: {}",partitionInfos.size(),topics);
+  LOG.info("Got {} partitions from these topics: {}",partitions.size(),topics);
   if (LOG.isInfoEnabled()) {
-    logPartitionInfo(partitionInfos);
+    logPartitionInfo(LOG,partitions);
   }
-  this.consumerId=UUID.randomUUID().toString();
+  setSubscribedPartitions(partitions);
 }

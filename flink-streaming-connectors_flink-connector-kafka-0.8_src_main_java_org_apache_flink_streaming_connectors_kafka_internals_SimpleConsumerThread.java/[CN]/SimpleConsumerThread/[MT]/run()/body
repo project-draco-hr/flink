@@ -1,0 +1,179 @@
+{
+  LOG.info("Starting to fetch from {}",this.partitions);
+  final String clientId="flink-kafka-consumer-legacy-" + broker.id();
+  try {
+    consumer=new SimpleConsumer(broker.host(),broker.port(),soTimeout,bufferSize,clientId);
+    getMissingOffsetsFromKafka(partitions);
+    int offsetOutOfRangeCount=0;
+    int reconnects=0;
+    while (running) {
+      List<KafkaTopicPartitionState<TopicAndPartition>> newPartitions=newPartitionsQueue.pollBatch();
+      if (newPartitions != null) {
+        getMissingOffsetsFromKafka(newPartitions);
+        for (        KafkaTopicPartitionState<TopicAndPartition> newPartition : newPartitions) {
+          if (partitions.contains(newPartition)) {
+            throw new IllegalStateException("Adding partition " + newPartition + " to subscribed partitions even though it is already subscribed");
+          }
+          partitions.add(newPartition);
+        }
+        LOG.info("Adding {} new partitions to consumer thread {}",newPartitions.size(),getName());
+        LOG.debug("Partitions list: {}",newPartitions);
+      }
+      if (partitions.size() == 0) {
+        if (newPartitionsQueue.close()) {
+          running=false;
+          LOG.info("Consumer thread {} does not have any partitions assigned anymore. Stopping thread.",getName());
+          unassignedPartitions.add(MARKER);
+          break;
+        }
+ else {
+          continue;
+        }
+      }
+      FetchRequestBuilder frb=new FetchRequestBuilder();
+      frb.clientId(clientId);
+      frb.maxWait(maxWait);
+      frb.minBytes(minBytes);
+      for (      KafkaTopicPartitionState<?> partition : partitions) {
+        frb.addFetch(partition.getKafkaTopicPartition().getTopic(),partition.getKafkaTopicPartition().getPartition(),partition.getOffset() + 1,fetchSize);
+      }
+      kafka.api.FetchRequest fetchRequest=frb.build();
+      LOG.debug("Issuing fetch request {}",fetchRequest);
+      FetchResponse fetchResponse;
+      try {
+        fetchResponse=consumer.fetch(fetchRequest);
+      }
+ catch (      Throwable cce) {
+        if (cce instanceof ClosedChannelException) {
+          LOG.warn("Fetch failed because of ClosedChannelException.");
+          LOG.debug("Full exception",cce);
+          if (++reconnects >= reconnectLimit) {
+            LOG.warn("Unable to reach broker after {} retries. Returning all current partitions",reconnectLimit);
+            for (            KafkaTopicPartitionState<TopicAndPartition> fp : this.partitions) {
+              unassignedPartitions.add(fp);
+            }
+            this.partitions.clear();
+            continue;
+          }
+          try {
+            consumer.close();
+          }
+ catch (          Throwable t) {
+            LOG.warn("Error while closing consumer connection",t);
+          }
+          Thread.sleep(100);
+          consumer=new SimpleConsumer(broker.host(),broker.port(),soTimeout,bufferSize,clientId);
+          continue;
+        }
+ else {
+          throw cce;
+        }
+      }
+      reconnects=0;
+      if (fetchResponse == null) {
+        throw new IOException("Fetch from Kafka failed (request returned null)");
+      }
+      if (fetchResponse.hasError()) {
+        String exception="";
+        List<KafkaTopicPartitionState<TopicAndPartition>> partitionsToGetOffsetsFor=new ArrayList<>();
+        Iterator<KafkaTopicPartitionState<TopicAndPartition>> partitionsIterator=partitions.iterator();
+        boolean partitionsRemoved=false;
+        while (partitionsIterator.hasNext()) {
+          final KafkaTopicPartitionState<TopicAndPartition> fp=partitionsIterator.next();
+          short code=fetchResponse.errorCode(fp.getTopic(),fp.getPartition());
+          if (code == ErrorMapping.OffsetOutOfRangeCode()) {
+            partitionsToGetOffsetsFor.add(fp);
+          }
+ else           if (code == ErrorMapping.NotLeaderForPartitionCode() || code == ErrorMapping.LeaderNotAvailableCode() || code == ErrorMapping.BrokerNotAvailableCode() || code == ErrorMapping.UnknownCode()) {
+            LOG.warn("{} is not the leader of {}. Reassigning leader for partition",broker,fp);
+            LOG.debug("Error code = {}",code);
+            unassignedPartitions.add(fp);
+            partitionsIterator.remove();
+            partitionsRemoved=true;
+          }
+ else           if (code != ErrorMapping.NoError()) {
+            exception+="\nException for " + fp.getTopic() + ":"+ fp.getPartition()+ ": "+ StringUtils.stringifyException(ErrorMapping.exceptionFor(code));
+          }
+        }
+        if (partitionsToGetOffsetsFor.size() > 0) {
+          if (offsetOutOfRangeCount++ > 3) {
+            throw new RuntimeException("Found invalid offsets more than three times in partitions " + partitionsToGetOffsetsFor + " Exceptions: "+ exception);
+          }
+          LOG.warn("The following partitions had an invalid offset: {}",partitionsToGetOffsetsFor);
+          getLastOffsetFromKafka(consumer,partitionsToGetOffsetsFor,invalidOffsetBehavior);
+          LOG.warn("The new partition offsets are {}",partitionsToGetOffsetsFor);
+          continue;
+        }
+ else         if (partitionsRemoved) {
+          continue;
+        }
+ else {
+          throw new IOException("Error while fetching from broker '" + broker + "': "+ exception);
+        }
+      }
+ else {
+        offsetOutOfRangeCount=0;
+      }
+      int messagesInFetch=0;
+      int deletedMessages=0;
+      Iterator<KafkaTopicPartitionState<TopicAndPartition>> partitionsIterator=partitions.iterator();
+      partitionsLoop:       while (partitionsIterator.hasNext()) {
+        final KafkaTopicPartitionState<TopicAndPartition> currentPartition=partitionsIterator.next();
+        final ByteBufferMessageSet messageSet=fetchResponse.messageSet(currentPartition.getTopic(),currentPartition.getPartition());
+        for (        MessageAndOffset msg : messageSet) {
+          if (running) {
+            messagesInFetch++;
+            final ByteBuffer payload=msg.message().payload();
+            final long offset=msg.offset();
+            if (offset <= currentPartition.getOffset()) {
+              LOG.info("Skipping message with offset " + msg.offset() + " because we have seen messages until (including) "+ currentPartition.getOffset()+ " from topic/partition "+ currentPartition.getTopic()+ '/'+ currentPartition.getPartition()+ " already");
+              continue;
+            }
+            byte[] valueBytes;
+            if (payload == null) {
+              deletedMessages++;
+              valueBytes=null;
+            }
+ else {
+              valueBytes=new byte[payload.remaining()];
+              payload.get(valueBytes);
+            }
+            byte[] keyBytes=null;
+            int keySize=msg.message().keySize();
+            if (keySize >= 0) {
+              ByteBuffer keyPayload=msg.message().key();
+              keyBytes=new byte[keySize];
+              keyPayload.get(keyBytes);
+            }
+            final T value=deserializer.deserialize(keyBytes,valueBytes,currentPartition.getTopic(),currentPartition.getPartition(),offset);
+            if (deserializer.isEndOfStream(value)) {
+              partitionsIterator.remove();
+              continue partitionsLoop;
+            }
+            owner.emitRecord(value,currentPartition,offset);
+          }
+ else {
+            return;
+          }
+        }
+      }
+      LOG.debug("This fetch contained {} messages ({} deleted messages)",messagesInFetch,deletedMessages);
+    }
+    if (!newPartitionsQueue.close()) {
+      throw new Exception("Bug: Cleanly leaving fetcher thread without having a closed queue.");
+    }
+  }
+ catch (  Throwable t) {
+    errorHandler.reportError(t);
+  }
+ finally {
+    if (consumer != null) {
+      try {
+        consumer.close();
+      }
+ catch (      Throwable t) {
+        LOG.error("Error while closing the Kafka simple consumer",t);
+      }
+    }
+  }
+}
