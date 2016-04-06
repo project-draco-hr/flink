@@ -1,0 +1,23 @@
+{
+  if (!input.getType().isTupleType()) {
+    throw new IllegalArgumentException("summarize() is only implemented for DataSet's of Tuples");
+  }
+  final TupleTypeInfoBase<?> inType=(TupleTypeInfoBase<?>)input.getType();
+  DataSet<TupleSummaryAggregator<R>> result=input.mapPartition(new MapPartitionFunction<T,TupleSummaryAggregator<R>>(){
+    @Override public void mapPartition(    Iterable<T> values,    Collector<TupleSummaryAggregator<R>> out) throws Exception {
+      TupleSummaryAggregator<R> aggregator=SummaryAggregatorFactory.create(inType);
+      for (      Tuple value : values) {
+        aggregator.aggregate(value);
+      }
+      out.collect(aggregator);
+    }
+  }
+).reduce(new ReduceFunction<TupleSummaryAggregator<R>>(){
+    @Override public TupleSummaryAggregator<R> reduce(    TupleSummaryAggregator<R> agg1,    TupleSummaryAggregator<R> agg2) throws Exception {
+      agg1.combine(agg2);
+      return agg1;
+    }
+  }
+);
+  return result.collect().get(0).result();
+}
