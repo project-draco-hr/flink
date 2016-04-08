@@ -29,4 +29,32 @@
     }
   }
   nextDirectory=new Random().nextInt(initializedDbBasePaths.length);
+  instanceBasePath=new File(getDbPath("dummy_state"),UUID.randomUUID().toString());
+  instanceCheckpointPath=getCheckpointPath("dummy_state");
+  instanceRocksDBPath=new File(instanceBasePath,"db");
+  RocksDB.loadLibrary();
+  if (!instanceBasePath.exists()) {
+    if (!instanceBasePath.mkdirs()) {
+      throw new RuntimeException("Could not create RocksDB data directory.");
+    }
+  }
+  try {
+    if (instanceRocksDBPath.exists()) {
+      LOG.warn("Deleting already existing db directory {}.",instanceRocksDBPath);
+      FileUtils.deleteDirectory(instanceRocksDBPath);
+    }
+  }
+ catch (  IOException e) {
+    throw new RuntimeException("Error cleaning RocksDB data directory.",e);
+  }
+  List<ColumnFamilyDescriptor> columnFamilyDescriptors=new ArrayList<>(1);
+  columnFamilyDescriptors.add(new ColumnFamilyDescriptor("default".getBytes()));
+  List<ColumnFamilyHandle> columnFamilyHandles=new ArrayList<>(1);
+  try {
+    db=RocksDB.open(getDbOptions(),instanceRocksDBPath.getAbsolutePath(),columnFamilyDescriptors,columnFamilyHandles);
+  }
+ catch (  RocksDBException e) {
+    throw new RuntimeException("Error while opening RocksDB instance.",e);
+  }
+  kvStateInformation=new HashMap<>();
 }

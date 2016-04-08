@@ -1,0 +1,58 @@
+{
+  if (!instanceBasePath.exists()) {
+    if (!instanceBasePath.mkdirs()) {
+      throw new RuntimeException("Could not create RocksDB data directory.");
+    }
+  }
+  db.dispose();
+  try {
+    if (instanceRocksDBPath.exists()) {
+      LOG.warn("Deleting already existing db directory {}.",instanceRocksDBPath);
+      FileUtils.deleteDirectory(instanceRocksDBPath);
+    }
+  }
+ catch (  IOException e) {
+    throw new RuntimeException("Error cleaning RocksDB data directory.",e);
+  }
+  final File localBackupPath=new File(instanceBasePath,"chk-" + snapshot.checkpointId);
+  if (localBackupPath.exists()) {
+    try {
+      LOG.warn("Deleting already existing local backup directory {}.",localBackupPath);
+      FileUtils.deleteDirectory(localBackupPath);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Error cleaning RocksDB local backup directory.",e);
+    }
+  }
+  HDFSCopyToLocal.copyToLocal(snapshot.backupUri,instanceBasePath);
+  try (BackupEngine backupEngine=BackupEngine.open(Env.getDefault(),new BackupableDBOptions(localBackupPath.getAbsolutePath()))){
+    backupEngine.restoreDbFromLatestBackup(instanceRocksDBPath.getAbsolutePath(),instanceRocksDBPath.getAbsolutePath(),new RestoreOptions(true));
+  }
+ catch (  RocksDBException|IllegalArgumentException e) {
+    throw new RuntimeException("Error while restoring RocksDB state from " + localBackupPath,e);
+  }
+ finally {
+    try {
+      FileUtils.deleteDirectory(localBackupPath);
+    }
+ catch (    IOException e) {
+      LOG.error("Error cleaning up local restore directory " + localBackupPath,e);
+    }
+  }
+  List<ColumnFamilyDescriptor> columnFamilyDescriptors=new ArrayList<>(snapshot.stateDescriptors.size());
+  for (  StateDescriptor stateDescriptor : snapshot.stateDescriptors) {
+    columnFamilyDescriptors.add(new ColumnFamilyDescriptor(stateDescriptor.getName().getBytes(),getColumnOptions()));
+  }
+  columnFamilyDescriptors.add(new ColumnFamilyDescriptor("default".getBytes()));
+  List<ColumnFamilyHandle> columnFamilyHandles=new ArrayList<>(snapshot.stateDescriptors.size());
+  try {
+    db=RocksDB.open(getDbOptions(),instanceRocksDBPath.getAbsolutePath(),columnFamilyDescriptors,columnFamilyHandles);
+    this.kvStateInformation=new HashMap<>();
+    for (int i=0; i < snapshot.stateDescriptors.size(); i++) {
+      this.kvStateInformation.put(snapshot.stateDescriptors.get(i).getName(),new Tuple2<>(columnFamilyHandles.get(i),snapshot.stateDescriptors.get(i)));
+    }
+  }
+ catch (  RocksDBException e) {
+    throw new RuntimeException("Error while opening RocksDB instance.",e);
+  }
+}

@@ -1,0 +1,38 @@
+{
+  try {
+    long startTime=System.currentTimeMillis();
+    CheckpointStateOutputView outputView=backend.createCheckpointStateOutputView(checkpointId,startTime);
+    outputView.writeInt(columnFamilies.size());
+    byte count=0;
+    Map<String,Byte> columnFamilyMapping=new HashMap<>();
+    for (    Map.Entry<String,Tuple2<ColumnFamilyHandle,StateDescriptor>> column : columnFamilies.entrySet()) {
+      columnFamilyMapping.put(column.getKey(),count);
+      outputView.writeByte(count);
+      ObjectOutputStream ooOut=new ObjectOutputStream(outputView);
+      ooOut.writeObject(column.getValue().f1);
+      ooOut.flush();
+      count++;
+    }
+    for (    Map.Entry<String,Tuple2<ColumnFamilyHandle,StateDescriptor>> column : columnFamilies.entrySet()) {
+      byte columnByte=columnFamilyMapping.get(column.getKey());
+      ReadOptions readOptions=new ReadOptions();
+      readOptions.setSnapshot(snapshot);
+      RocksIterator iterator=db.newIterator(column.getValue().f0,readOptions);
+      iterator.seekToFirst();
+      while (iterator.isValid()) {
+        outputView.writeByte(columnByte);
+        BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.key(),outputView);
+        BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.value(),outputView);
+        iterator.next();
+      }
+    }
+    StateHandle<DataInputView> stateHandle=outputView.closeAndGetHandle();
+    long endTime=System.currentTimeMillis();
+    LOG.info("Fully asynchronous RocksDB materialization to " + backupUri + " (asynchronous part) took "+ (endTime - startTime)+ " ms.");
+    return new FinalFullyAsyncSnapshot(stateHandle,checkpointId);
+  }
+  finally {
+    db.releaseSnapshot(snapshot);
+    snapshot=null;
+  }
+}

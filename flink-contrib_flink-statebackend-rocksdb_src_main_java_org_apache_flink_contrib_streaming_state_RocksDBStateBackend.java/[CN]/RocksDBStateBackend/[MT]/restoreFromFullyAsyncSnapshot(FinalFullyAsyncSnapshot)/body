@@ -1,0 +1,24 @@
+{
+  DataInputView inputView=snapshot.stateHandle.getState(userCodeClassLoader);
+  kvStateInformation.clear();
+  int numColumns=inputView.readInt();
+  Map<Byte,StateDescriptor> columnFamilyMapping=new HashMap<>(numColumns);
+  for (int i=0; i < numColumns; i++) {
+    byte mappingByte=inputView.readByte();
+    ObjectInputStream ooIn=new ObjectInputStream(new DataInputViewStream(inputView));
+    StateDescriptor stateDescriptor=(StateDescriptor)ooIn.readObject();
+    columnFamilyMapping.put(mappingByte,stateDescriptor);
+    getColumnFamily(stateDescriptor);
+  }
+  try {
+    while (true) {
+      byte mappingByte=inputView.readByte();
+      ColumnFamilyHandle handle=getColumnFamily(columnFamilyMapping.get(mappingByte));
+      byte[] key=BytePrimitiveArraySerializer.INSTANCE.deserialize(inputView);
+      byte[] value=BytePrimitiveArraySerializer.INSTANCE.deserialize(inputView);
+      db.put(handle,key,value);
+    }
+  }
+ catch (  EOFException e) {
+  }
+}

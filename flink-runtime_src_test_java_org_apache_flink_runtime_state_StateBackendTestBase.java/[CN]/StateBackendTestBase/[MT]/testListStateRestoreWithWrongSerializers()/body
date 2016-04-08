@@ -3,22 +3,33 @@
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     ListStateDescriptor<String> kvId=new ListStateDescriptor<>("id",String.class);
     ListState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
-    @SuppressWarnings("unchecked") KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> kv=(KvState<Integer,Void,ListState<String>,ListStateDescriptor<String>,B>)state;
-    kv.setCurrentKey(1);
+    backend.setCurrentKey(1);
     state.add("1");
-    kv.setCurrentKey(2);
+    backend.setCurrentKey(2);
     state.add("2");
-    KvStateSnapshot<Integer,Void,ListState<String>,ListStateDescriptor<String>,B> snapshot=kv.snapshot(682375462378L,System.currentTimeMillis());
-    if (snapshot instanceof AsynchronousKvStateSnapshot) {
-      snapshot=((AsynchronousKvStateSnapshot<Integer,Void,ListState<String>,ListStateDescriptor<String>,B>)snapshot).materialize();
+    HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot1=backend.snapshotPartitionedState(682375462378L,2);
+    for (    String key : snapshot1.keySet()) {
+      if (snapshot1.get(key) instanceof AsynchronousKvStateSnapshot) {
+        snapshot1.put(key,((AsynchronousKvStateSnapshot<?,?,?,?,?>)snapshot1.get(key)).materialize());
+      }
     }
-    kv.dispose();
-    @SuppressWarnings("unchecked") TypeSerializer<Integer> fakeIntSerializer=(TypeSerializer<Integer>)(TypeSerializer<?>)FloatSerializer.INSTANCE;
+    backend.dispose();
+    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+    backend.injectKeyValueStateSnapshots((HashMap)snapshot1,100);
+    for (    String key : snapshot1.keySet()) {
+      snapshot1.get(key).discardState();
+    }
+    @SuppressWarnings("unchecked") TypeSerializer<String> fakeStringSerializer=(TypeSerializer<String>)(TypeSerializer<?>)FloatSerializer.INSTANCE;
     try {
-      snapshot.restoreState(backend,fakeIntSerializer,getClass().getClassLoader(),1);
+      kvId=new ListStateDescriptor<>("id",fakeStringSerializer);
+      state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+      state.get();
       fail("should recognize wrong serializers");
     }
- catch (    IllegalArgumentException e) {
+ catch (    RuntimeException e) {
+      if (!e.getMessage().contains("Trying to access state using wrong StateDescriptor")) {
+        fail("wrong exception " + e);
+      }
     }
 catch (    Exception e) {
       fail("wrong exception " + e);

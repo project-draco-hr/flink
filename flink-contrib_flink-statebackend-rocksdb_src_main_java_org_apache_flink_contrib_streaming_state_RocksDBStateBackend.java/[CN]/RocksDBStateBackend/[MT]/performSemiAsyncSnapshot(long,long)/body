@@ -1,0 +1,26 @@
+{
+  final File localBackupPath=new File(instanceBasePath,"local-chk-" + checkpointId);
+  final URI backupUri=new URI(instanceCheckpointPath + "/chk-" + checkpointId);
+  if (!localBackupPath.exists()) {
+    if (!localBackupPath.mkdirs()) {
+      throw new RuntimeException("Could not create local backup path " + localBackupPath);
+    }
+  }
+  long startTime=System.currentTimeMillis();
+  BackupableDBOptions backupOptions=new BackupableDBOptions(localBackupPath.getAbsolutePath());
+  backupOptions.setBackupLogFiles(false);
+  backupOptions.setSync(false);
+  try (BackupEngine backupEngine=BackupEngine.open(Env.getDefault(),backupOptions)){
+    backupEngine.createNewBackup(db,true);
+  }
+   long endTime=System.currentTimeMillis();
+  LOG.info("RocksDB (" + instanceRocksDBPath + ") backup (synchronous part) took "+ (endTime - startTime)+ " ms.");
+  List<StateDescriptor> kvStateInformationCopy=new ArrayList<>();
+  for (  Tuple2<ColumnFamilyHandle,StateDescriptor> state : kvStateInformation.values()) {
+    kvStateInformationCopy.add(state.f1);
+  }
+  SemiAsyncSnapshot dummySnapshot=new SemiAsyncSnapshot(localBackupPath,backupUri,kvStateInformationCopy,checkpointId);
+  HashMap<String,KvStateSnapshot<?,?,?,?,?>> result=new HashMap<>();
+  result.put("dummy_state",dummySnapshot);
+  return result;
+}

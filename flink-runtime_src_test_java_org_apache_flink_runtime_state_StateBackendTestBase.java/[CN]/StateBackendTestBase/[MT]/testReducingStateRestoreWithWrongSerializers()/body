@@ -1,29 +1,35 @@
 {
   try {
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
-    ReducingStateDescriptor<String> kvId=new ReducingStateDescriptor<>("id",new ReduceFunction<String>(){
-      @Override public String reduce(      String value1,      String value2) throws Exception {
-        return value1 + "," + value2;
+    ReducingStateDescriptor<String> kvId=new ReducingStateDescriptor<>("id",new AppendingReduce(),StringSerializer.INSTANCE);
+    ReducingState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    backend.setCurrentKey(1);
+    state.add("1");
+    backend.setCurrentKey(2);
+    state.add("2");
+    HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot1=backend.snapshotPartitionedState(682375462378L,2);
+    for (    String key : snapshot1.keySet()) {
+      if (snapshot1.get(key) instanceof AsynchronousKvStateSnapshot) {
+        snapshot1.put(key,((AsynchronousKvStateSnapshot<?,?,?,?,?>)snapshot1.get(key)).materialize());
       }
     }
-,String.class);
-    ReducingState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
-    @SuppressWarnings("unchecked") KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> kv=(KvState<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B>)state;
-    kv.setCurrentKey(1);
-    state.add("1");
-    kv.setCurrentKey(2);
-    state.add("2");
-    KvStateSnapshot<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B> snapshot=kv.snapshot(682375462378L,System.currentTimeMillis());
-    if (snapshot instanceof AsynchronousKvStateSnapshot) {
-      snapshot=((AsynchronousKvStateSnapshot<Integer,Void,ReducingState<String>,ReducingStateDescriptor<String>,B>)snapshot).materialize();
+    backend.dispose();
+    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+    backend.injectKeyValueStateSnapshots((HashMap)snapshot1,100);
+    for (    String key : snapshot1.keySet()) {
+      snapshot1.get(key).discardState();
     }
-    kv.dispose();
-    @SuppressWarnings("unchecked") TypeSerializer<Integer> fakeIntSerializer=(TypeSerializer<Integer>)(TypeSerializer<?>)FloatSerializer.INSTANCE;
+    @SuppressWarnings("unchecked") TypeSerializer<String> fakeStringSerializer=(TypeSerializer<String>)(TypeSerializer<?>)FloatSerializer.INSTANCE;
     try {
-      snapshot.restoreState(backend,fakeIntSerializer,getClass().getClassLoader(),1);
+      kvId=new ReducingStateDescriptor<>("id",new AppendingReduce(),fakeStringSerializer);
+      state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+      state.get();
       fail("should recognize wrong serializers");
     }
- catch (    IllegalArgumentException e) {
+ catch (    RuntimeException e) {
+      if (!e.getMessage().contains("Trying to access state using wrong StateDescriptor")) {
+        fail("wrong exception " + e);
+      }
     }
 catch (    Exception e) {
       fail("wrong exception " + e);
