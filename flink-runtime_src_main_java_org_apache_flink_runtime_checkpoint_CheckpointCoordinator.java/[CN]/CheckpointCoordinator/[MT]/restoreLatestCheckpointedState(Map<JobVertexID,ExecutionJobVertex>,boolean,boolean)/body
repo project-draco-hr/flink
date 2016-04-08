@@ -14,32 +14,32 @@ synchronized (lock) {
       }
     }
     long recoveryTimestamp=System.currentTimeMillis();
-    if (allOrNothingState) {
-      Map<ExecutionJobVertex,Integer> stateCounts=new HashMap<ExecutionJobVertex,Integer>();
-      for (      StateForTask state : latest.getStates()) {
-        ExecutionJobVertex vertex=tasks.get(state.getOperatorId());
-        Execution exec=vertex.getTaskVertices()[state.getSubtask()].getCurrentExecutionAttempt();
-        exec.setInitialState(state.getState(),recoveryTimestamp);
-        Integer count=stateCounts.get(vertex);
-        if (count != null) {
-          stateCounts.put(vertex,count + 1);
+    for (    Map.Entry<JobVertexID,TaskState> taskGroupStateEntry : latest.getTaskStates().entrySet()) {
+      TaskState taskState=taskGroupStateEntry.getValue();
+      ExecutionJobVertex executionJobVertex=tasks.get(taskGroupStateEntry.getKey());
+      if (executionJobVertex != null) {
+        if (taskState.getParallelism() != executionJobVertex.getParallelism()) {
+          throw new RuntimeException("Cannot restore the latest checkpoint because " + "the parallelism changed. The operator" + executionJobVertex.getJobVertexId() + " has parallelism "+ executionJobVertex.getParallelism()+ " whereas the corresponding"+ "state object has a parallelism of "+ taskState.getParallelism());
         }
- else {
-          stateCounts.put(vertex,1);
+        int counter=0;
+        List<Set<Integer>> keyGroupPartitions=createKeyGroupPartitions(numberKeyGroups,executionJobVertex.getParallelism());
+        for (int i=0; i < executionJobVertex.getParallelism(); i++) {
+          SubtaskState subtaskState=taskState.getState(i);
+          SerializedValue<StateHandle<?>> state=null;
+          if (subtaskState != null) {
+            counter++;
+            state=subtaskState.getState();
+          }
+          Map<Integer,SerializedValue<StateHandle<?>>> kvStateForTaskMap=taskState.getUnwrappedKvStates(keyGroupPartitions.get(i));
+          Execution currentExecutionAttempt=executionJobVertex.getTaskVertices()[i].getCurrentExecutionAttempt();
+          currentExecutionAttempt.setInitialState(state,kvStateForTaskMap,recoveryTimestamp);
+        }
+        if (allOrNothingState && counter > 0 && counter < executionJobVertex.getParallelism()) {
+          throw new IllegalStateException("The checkpoint contained state only for " + "a subset of tasks for vertex " + executionJobVertex);
         }
       }
-      for (      Map.Entry<ExecutionJobVertex,Integer> entry : stateCounts.entrySet()) {
-        ExecutionJobVertex vertex=entry.getKey();
-        if (entry.getValue() != vertex.getParallelism()) {
-          throw new IllegalStateException("The checkpoint contained state only for a subset of tasks for vertex " + vertex);
-        }
-      }
-    }
  else {
-      for (      StateForTask state : latest.getStates()) {
-        ExecutionJobVertex vertex=tasks.get(state.getOperatorId());
-        Execution exec=vertex.getTaskVertices()[state.getSubtask()].getCurrentExecutionAttempt();
-        exec.setInitialState(state.getState(),recoveryTimestamp);
+        throw new IllegalStateException("There is no execution job vertex for the job" + " vertex ID " + taskGroupStateEntry.getKey());
       }
     }
     return true;

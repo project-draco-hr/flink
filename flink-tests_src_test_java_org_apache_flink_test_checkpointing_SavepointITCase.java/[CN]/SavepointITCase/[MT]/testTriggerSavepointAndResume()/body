@@ -106,20 +106,18 @@
 ;
     errMsg="Error during gathering of TaskDeploymentDescriptors";
     assertNull(errMsg,error[0]);
-    for (    StateForTask stateForTask : savepoint.getStates()) {
-      Collection<TaskDeploymentDescriptor> taskTdds=tdds.get(stateForTask.getOperatorId());
-      errMsg="Missing task for savepoint state for operator " + stateForTask.getOperatorId() + ".";
+    for (    Map.Entry<JobVertexID,TaskState> entry : savepoint.getTaskStates().entrySet()) {
+      Collection<TaskDeploymentDescriptor> taskTdds=tdds.get(entry.getKey());
+      TaskState taskState=entry.getValue();
+      errMsg="Missing task for savepoint state for operator " + entry.getKey() + ".";
       assertTrue(errMsg,taskTdds.size() > 0);
-      boolean success=false;
+      assertEquals(taskState.getNumberCollectedStates(),taskTdds.size());
       for (      TaskDeploymentDescriptor tdd : taskTdds) {
-        if (tdd.getIndexInSubtaskGroup() == stateForTask.getSubtask()) {
-          success=true;
-          errMsg="Initial operator state mismatch.";
-          assertEquals(errMsg,stateForTask.getState(),tdd.getOperatorState());
-        }
+        SubtaskState subtaskState=taskState.getState(tdd.getIndexInSubtaskGroup());
+        assertNotNull(subtaskState);
+        errMsg="Initial operator state mismatch.";
+        assertEquals(errMsg,subtaskState.getState(),tdd.getOperatorState());
       }
-      errMsg="No matching task deployment descriptor found.";
-      assertTrue(errMsg,success);
     }
     LOG.info("Cancelling job " + jobId + ".");
     jobManager.tell(new CancelJob(jobId));
@@ -129,11 +127,13 @@
     Object resp=Await.result(disposeFuture,deadline.timeLeft());
     assertTrue(errMsg,resp.getClass() == getDisposeSavepointSuccess().getClass());
     List<File> checkpointFiles=new ArrayList<>();
-    for (    StateForTask stateForTask : savepoint.getStates()) {
-      StreamTaskStateList taskStateList=(StreamTaskStateList)stateForTask.getState().deserializeValue(ClassLoader.getSystemClassLoader());
-      for (      StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
-        AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
-        checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+    for (    TaskState stateForTaskGroup : savepoint.getTaskStates().values()) {
+      for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
+        StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
+        for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
+          AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
+          checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+        }
       }
     }
     for (    File f : checkpointFiles) {

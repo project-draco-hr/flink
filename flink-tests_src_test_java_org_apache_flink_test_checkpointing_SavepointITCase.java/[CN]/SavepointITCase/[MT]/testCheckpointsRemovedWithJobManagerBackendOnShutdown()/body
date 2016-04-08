@@ -49,11 +49,13 @@
     LOG.info("Waiting for job " + jobId + " to be removed.");
     Future<Object> removedRespFuture=jobManager.ask(new NotifyWhenJobRemoved(jobId),deadline.timeLeft());
     assertTrue((Boolean)Await.result(removedRespFuture,deadline.timeLeft()));
-    for (    StateForTask stateForTask : savepoint.getStates()) {
-      StreamTaskStateList taskStateList=(StreamTaskStateList)stateForTask.getState().deserializeValue(ClassLoader.getSystemClassLoader());
-      for (      StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
-        AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
-        checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+    for (    TaskState stateForTaskGroup : savepoint.getTaskStates().values()) {
+      for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
+        StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
+        for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
+          AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
+          checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+        }
       }
     }
   }

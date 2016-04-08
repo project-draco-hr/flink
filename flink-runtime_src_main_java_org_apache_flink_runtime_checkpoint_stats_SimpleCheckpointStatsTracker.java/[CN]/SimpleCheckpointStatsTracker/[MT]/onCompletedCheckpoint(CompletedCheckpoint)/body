@@ -3,21 +3,20 @@
     return;
   }
 synchronized (statsLock) {
-    long overallStateSize=0;
+    long overallStateSize=checkpoint.getStateSize();
     Map<JobVertexID,long[][]> statsForSubTasks=new HashMap<>();
-    for (    StateForTask state : checkpoint.getStates()) {
-      overallStateSize+=state.getStateSize();
-      JobVertexID opId=state.getOperatorId();
-      long[][] statsPerSubtask=statsForSubTasks.get(opId);
-      if (statsPerSubtask == null) {
-        int parallelism=taskParallelism.get(opId);
-        statsPerSubtask=new long[parallelism][2];
-        statsForSubTasks.put(opId,statsPerSubtask);
-      }
-      int subTaskIndex=state.getSubtask();
-      if (subTaskIndex < statsPerSubtask.length) {
-        statsPerSubtask[subTaskIndex][0]=state.getDuration();
-        statsPerSubtask[subTaskIndex][1]=state.getStateSize();
+    for (    Map.Entry<JobVertexID,TaskState> taskStateEntry : checkpoint.getTaskStates().entrySet()) {
+      JobVertexID jobVertexID=taskStateEntry.getKey();
+      TaskState taskState=taskStateEntry.getValue();
+      int parallelism=taskParallelism.get(jobVertexID);
+      long[][] statsPerSubtask=new long[parallelism][2];
+      statsForSubTasks.put(jobVertexID,statsPerSubtask);
+      for (int i=0; i < Math.min(taskState.getParallelism(),parallelism); i++) {
+        SubtaskState subtaskState=taskState.getState(i);
+        if (subtaskState != null) {
+          statsPerSubtask[i][0]=subtaskState.getDuration();
+          statsPerSubtask[i][1]=subtaskState.getStateSize();
+        }
       }
     }
     boolean isInOrder=latestCompletedCheckpoint != null && checkpoint.getCheckpointID() > latestCompletedCheckpoint.getCheckpointID();

@@ -2,21 +2,16 @@
   for (  ExecutionJobVertex vertex : tasksToWaitFor) {
     JobVertexID operatorId=vertex.getJobVertexId();
     int parallelism=vertex.getParallelism();
+    TaskState taskState=checkpoint.getTaskState(operatorId);
+    assertNotNull(taskState);
     OperatorCheckpointStats actualStats=tracker.getOperatorStats(operatorId).get();
     long operatorDuration=Long.MIN_VALUE;
     long operatorStateSize=0;
     long[][] expectedSubTaskStats=new long[parallelism][2];
     for (int i=0; i < parallelism; i++) {
-      long duration=-1;
-      long stateSize=-1;
-      for (      StateForTask state : checkpoint.getStates()) {
-        if (state.getOperatorId().equals(operatorId) && state.getSubtask() == i) {
-          duration=state.getDuration();
-          stateSize=state.getStateSize();
-        }
-      }
-      expectedSubTaskStats[i][0]=duration;
-      expectedSubTaskStats[i][1]=stateSize;
+      SubtaskState subtaskState=taskState.getState(i);
+      expectedSubTaskStats[i][0]=subtaskState.getDuration();
+      expectedSubTaskStats[i][1]=subtaskState.getStateSize();
     }
     OperatorCheckpointStats expectedStats=new OperatorCheckpointStats(checkpoint.getCheckpointID(),checkpoint.getTimestamp(),operatorDuration,operatorStateSize,expectedSubTaskStats);
     assertEquals(expectedStats,actualStats);

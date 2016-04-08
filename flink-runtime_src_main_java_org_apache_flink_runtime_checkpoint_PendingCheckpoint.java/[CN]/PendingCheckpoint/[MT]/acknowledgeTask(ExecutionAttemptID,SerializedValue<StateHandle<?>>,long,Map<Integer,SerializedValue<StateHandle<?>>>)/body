@@ -1,0 +1,35 @@
+{
+synchronized (lock) {
+    if (discarded) {
+      return false;
+    }
+    ExecutionVertex vertex=notYetAcknowledgedTasks.remove(attemptID);
+    if (vertex != null) {
+      if (state != null || kvState != null) {
+        JobVertexID jobVertexID=vertex.getJobvertexId();
+        TaskState taskState;
+        if (taskStates.containsKey(jobVertexID)) {
+          taskState=taskStates.get(jobVertexID);
+        }
+ else {
+          taskState=new TaskState(jobVertexID,vertex.getTotalNumberOfParallelSubtasks());
+          taskStates.put(jobVertexID,taskState);
+        }
+        long timestamp=System.currentTimeMillis() - checkpointTimestamp;
+        if (state != null) {
+          taskState.putState(vertex.getParallelSubtaskIndex(),new SubtaskState(state,stateSize,timestamp));
+        }
+        if (kvState != null) {
+          for (          Map.Entry<Integer,SerializedValue<StateHandle<?>>> entry : kvState.entrySet()) {
+            taskState.putKvState(entry.getKey(),new KeyGroupState(entry.getValue(),0L,timestamp));
+          }
+        }
+      }
+      numAcknowledgedTasks++;
+      return true;
+    }
+ else {
+      return false;
+    }
+  }
+}

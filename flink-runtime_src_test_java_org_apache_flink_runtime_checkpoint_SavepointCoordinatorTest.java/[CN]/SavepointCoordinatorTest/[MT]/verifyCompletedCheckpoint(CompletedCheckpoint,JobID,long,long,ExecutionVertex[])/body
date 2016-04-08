@@ -3,20 +3,14 @@
   assertEquals(expectedJobId,checkpoint.getJobId());
   assertEquals(expectedCheckpointId,checkpoint.getCheckpointID());
   assertEquals(expectedTimestamp,checkpoint.getTimestamp());
-  List<StateForTask> states=checkpoint.getStates();
-  assertEquals(expectedVertices.length,states.size());
   for (  ExecutionVertex vertex : expectedVertices) {
-    JobVertexID expectedOperatorId=vertex.getJobvertexId();
-    boolean success=false;
-    for (    StateForTask state : states) {
-      if (state.getOperatorId().equals(expectedOperatorId)) {
-        ExecutionAttemptID vertexAttemptId=vertex.getCurrentExecutionAttempt().getAttemptId();
-        ExecutionAttemptID stateAttemptId=(ExecutionAttemptID)state.getState().deserializeValue(Thread.currentThread().getContextClassLoader()).getState(Thread.currentThread().getContextClassLoader());
-        assertEquals(vertexAttemptId,stateAttemptId);
-        success=true;
-        break;
-      }
-    }
-    assertTrue(success);
+    JobVertexID jobVertexID=vertex.getJobvertexId();
+    TaskState taskState=checkpoint.getTaskState(jobVertexID);
+    assertNotNull(taskState);
+    SubtaskState subtaskState=taskState.getState(vertex.getParallelSubtaskIndex());
+    assertNotNull(subtaskState);
+    ExecutionAttemptID vertexAttemptId=vertex.getCurrentExecutionAttempt().getAttemptId();
+    ExecutionAttemptID stateAttemptId=(ExecutionAttemptID)subtaskState.getState().deserializeValue(Thread.currentThread().getContextClassLoader()).getState(Thread.currentThread().getContextClassLoader());
+    assertEquals(vertexAttemptId,stateAttemptId);
   }
 }

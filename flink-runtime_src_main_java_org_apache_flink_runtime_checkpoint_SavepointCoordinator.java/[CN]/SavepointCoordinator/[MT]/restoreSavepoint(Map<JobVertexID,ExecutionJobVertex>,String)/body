@@ -9,19 +9,30 @@ synchronized (lock) {
     CompletedCheckpoint checkpoint=savepointStore.getState(savepointPath);
     LOG.info("Savepoint: {}@{}",checkpoint.getCheckpointID(),checkpoint.getTimestamp());
     LOG.debug("Rolling back individual operators.");
-    for (    StateForTask state : checkpoint.getStates()) {
-      LOG.debug("Rolling back subtask {} of operator {}.",state.getSubtask(),state.getOperatorId());
-      ExecutionJobVertex vertex=tasks.get(state.getOperatorId());
-      if (vertex == null) {
-        String msg=String.format("Failed to rollback to savepoint %s. " + "Cannot map old state for task %s to the new program. " + "This indicates that the program has been changed in a "+ "non-compatible way  after the savepoint.",checkpoint,state.getOperatorId());
+    for (    Map.Entry<JobVertexID,TaskState> taskStateEntry : checkpoint.getTaskStates().entrySet()) {
+      TaskState taskState=taskStateEntry.getValue();
+      ExecutionJobVertex executionJobVertex=tasks.get(taskStateEntry.getKey());
+      if (executionJobVertex != null) {
+        if (executionJobVertex.getParallelism() != taskState.getParallelism()) {
+          String msg=String.format("Failed to rollback to savepoint %s. " + "Parallelism mismatch between savepoint state and new program. " + "Cannot map operator %s with parallelism %d to new program with "+ "parallelism %d. This indicates that the program has been changed "+ "in a non-compatible way after the savepoint.",checkpoint,taskStateEntry.getKey(),taskState.getParallelism(),executionJobVertex.getParallelism());
+          throw new IllegalStateException(msg);
+        }
+        List<Set<Integer>> keyGroupPartitions=createKeyGroupPartitions(numberKeyGroups,executionJobVertex.getParallelism());
+        for (int i=0; i < executionJobVertex.getTaskVertices().length; i++) {
+          SubtaskState subtaskState=taskState.getState(i);
+          SerializedValue<StateHandle<?>> state=null;
+          if (subtaskState != null) {
+            state=subtaskState.getState();
+          }
+          Map<Integer,SerializedValue<StateHandle<?>>> kvStateForTaskMap=taskState.getUnwrappedKvStates(keyGroupPartitions.get(i));
+          Execution currentExecutionAttempt=executionJobVertex.getTaskVertices()[i].getCurrentExecutionAttempt();
+          currentExecutionAttempt.setInitialState(state,kvStateForTaskMap,recoveryTimestamp);
+        }
+      }
+ else {
+        String msg=String.format("Failed to rollback to savepoint %s. " + "Cannot map old state for task %s to the new program. " + "This indicates that the program has been changed in a "+ "non-compatible way  after the savepoint.",checkpoint,taskStateEntry.getKey());
         throw new IllegalStateException(msg);
       }
-      if (state.getSubtask() >= vertex.getParallelism()) {
-        String msg=String.format("Failed to rollback to savepoint %s. " + "Parallelism mismatch between savepoint state and new program. " + "Cannot map subtask %d of operator %s to new program with "+ "parallelism %d. This indicates that the program has been changed "+ "in a non-compatible way after the savepoint.",checkpoint,state.getSubtask(),state.getOperatorId(),vertex.getParallelism());
-        throw new IllegalStateException(msg);
-      }
-      Execution exec=vertex.getTaskVertices()[state.getSubtask()].getCurrentExecutionAttempt();
-      exec.setInitialState(state.getState(),recoveryTimestamp);
     }
     long nextCheckpointId=checkpoint.getCheckpointID();
     checkpointIdCounter.start();
