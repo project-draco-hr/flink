@@ -1,0 +1,20 @@
+{
+  DatumReader<E> datumReader;
+  if (org.apache.avro.generic.GenericRecord.class == avroValueType) {
+    datumReader=new GenericDatumReader<E>();
+  }
+ else {
+    datumReader=org.apache.avro.specific.SpecificRecordBase.class.isAssignableFrom(avroValueType) ? new SpecificDatumReader<E>(avroValueType) : new ReflectDatumReader<E>(avroValueType);
+  }
+  if (LOG.isInfoEnabled()) {
+    LOG.info("Opening split {}",split);
+  }
+  SeekableInput in=new FSDataInputStreamWrapper(stream,split.getPath().getFileSystem().getFileStatus(split.getPath()).getLen());
+  DataFileReader<E> dataFileReader=(DataFileReader)DataFileReader.openReader(in,datumReader);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Loaded SCHEMA: {}",dataFileReader.getSchema());
+  }
+  end=split.getStart() + split.getLength();
+  recordsReadSinceLastSync=0;
+  return dataFileReader;
+}

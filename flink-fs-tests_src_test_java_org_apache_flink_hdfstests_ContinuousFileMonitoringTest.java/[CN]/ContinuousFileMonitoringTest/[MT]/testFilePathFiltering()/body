@@ -1,0 +1,24 @@
+{
+  Set<String> uniqFilesFound=new HashSet<>();
+  Set<org.apache.hadoop.fs.Path> filesCreated=new HashSet<>();
+  for (int i=0; i < NO_OF_FILES; i++) {
+    Tuple2<org.apache.hadoop.fs.Path,String> file=fillWithData(hdfsURI,"**file",i,"This is test line.");
+    filesCreated.add(file.f0);
+  }
+  for (int i=0; i < NO_OF_FILES; i++) {
+    Tuple2<org.apache.hadoop.fs.Path,String> file=fillWithData(hdfsURI,"file",i,"This is test line.");
+    filesCreated.add(file.f0);
+  }
+  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+  ContinuousFileMonitoringFunction<String> monitoringFunction=new ContinuousFileMonitoringFunction<>(format,hdfsURI,new PathFilter(),FileProcessingMode.PROCESS_ONCE,1,INTERVAL);
+  monitoringFunction.open(new Configuration());
+  monitoringFunction.run(new TestingSourceContext(monitoringFunction,uniqFilesFound));
+  Assert.assertTrue(uniqFilesFound.size() == NO_OF_FILES);
+  for (int i=0; i < NO_OF_FILES; i++) {
+    org.apache.hadoop.fs.Path file=new org.apache.hadoop.fs.Path(hdfsURI + "/file" + i);
+    Assert.assertTrue(uniqFilesFound.contains(file.toString()));
+  }
+  for (  org.apache.hadoop.fs.Path file : filesCreated) {
+    hdfs.delete(file,false);
+  }
+}

@@ -1,0 +1,41 @@
+{
+  FileCreator fileCreator=new FileCreator(INTERVAL);
+  Thread t=new Thread(fileCreator);
+  t.start();
+  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+  format.setFilePath(hdfsURI);
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(1);
+    ContinuousFileMonitoringFunction<String> monitoringFunction=new ContinuousFileMonitoringFunction<>(format,hdfsURI,FilePathFilter.createDefaultFilter(),FileProcessingMode.PROCESS_CONTINUOUSLY,env.getParallelism(),INTERVAL);
+    TypeInformation<String> typeInfo=TypeExtractor.getInputFormatTypes(format);
+    ContinuousFileReaderOperator<String,?> reader=new ContinuousFileReaderOperator<>(format);
+    TestingSinkFunction sink=new TestingSinkFunction(monitoringFunction);
+    DataStream<FileInputSplit> splits=env.addSource(monitoringFunction);
+    splits.transform("FileSplitReader",typeInfo,reader).addSink(sink).setParallelism(1);
+    env.execute();
+  }
+ catch (  Exception e) {
+    Throwable th=e;
+    int depth=0;
+    for (; depth < 20; depth++) {
+      if (th instanceof SuccessException) {
+        try {
+          postSubmit();
+        }
+ catch (        Exception e1) {
+          e1.printStackTrace();
+        }
+        return;
+      }
+ else       if (th.getCause() != null) {
+        th=th.getCause();
+      }
+ else {
+        break;
+      }
+    }
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+}

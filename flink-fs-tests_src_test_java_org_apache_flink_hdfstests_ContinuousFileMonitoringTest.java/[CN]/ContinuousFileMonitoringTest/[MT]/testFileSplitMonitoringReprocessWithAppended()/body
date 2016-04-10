@@ -1,0 +1,27 @@
+{
+  Set<String> uniqFilesFound=new HashSet<>();
+  FileCreator fc=new FileCreator(INTERVAL,NO_OF_FILES);
+  fc.start();
+  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+  ContinuousFileMonitoringFunction<String> monitoringFunction=new ContinuousFileMonitoringFunction<>(format,hdfsURI,FilePathFilter.createDefaultFilter(),FileProcessingMode.PROCESS_CONTINUOUSLY,1,INTERVAL);
+  monitoringFunction.open(new Configuration());
+  monitoringFunction.run(new TestingSourceContext(monitoringFunction,uniqFilesFound));
+synchronized (uniqFilesFound) {
+    while (uniqFilesFound.size() < NO_OF_FILES) {
+      uniqFilesFound.wait(7 * INTERVAL);
+    }
+  }
+  Assert.assertTrue(fc.getFilesCreated().size() == NO_OF_FILES);
+  Assert.assertTrue(uniqFilesFound.size() == NO_OF_FILES);
+  Set<org.apache.hadoop.fs.Path> filesCreated=fc.getFilesCreated();
+  Set<String> fileNamesCreated=new HashSet<>();
+  for (  org.apache.hadoop.fs.Path path : fc.getFilesCreated()) {
+    fileNamesCreated.add(path.toString());
+  }
+  for (  String file : uniqFilesFound) {
+    Assert.assertTrue(fileNamesCreated.contains(file));
+  }
+  for (  org.apache.hadoop.fs.Path file : filesCreated) {
+    hdfs.delete(file,false);
+  }
+}

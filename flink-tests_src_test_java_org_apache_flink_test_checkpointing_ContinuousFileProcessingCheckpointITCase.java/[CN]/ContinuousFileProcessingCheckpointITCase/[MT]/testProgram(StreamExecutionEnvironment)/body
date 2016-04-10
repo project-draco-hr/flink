@@ -1,0 +1,16 @@
+{
+  env.getConfig().setRestartStrategy(RestartStrategies.fixedDelayRestart(NO_OF_RETRIES,0));
+  env.enableCheckpointing(20);
+  env.setParallelism(PARALLELISM);
+  fc=new FileCreator();
+  fc.start();
+  TestingSinkFunction sink=new TestingSinkFunction();
+  TextInputFormat format=new TextInputFormat(new org.apache.flink.core.fs.Path(localFsURI));
+  DataStream<String> inputStream=env.readFile(format,localFsURI,FileProcessingMode.PROCESS_CONTINUOUSLY,INTERVAL,FilePathFilter.createDefaultFilter());
+  inputStream.flatMap(new FlatMapFunction<String,String>(){
+    @Override public void flatMap(    String value,    Collector<String> out) throws Exception {
+      out.collect(value);
+    }
+  }
+).addSink(sink).setParallelism(1);
+}

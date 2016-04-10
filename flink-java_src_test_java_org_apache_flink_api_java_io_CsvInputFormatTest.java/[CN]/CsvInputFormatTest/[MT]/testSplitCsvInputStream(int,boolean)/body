@@ -1,0 +1,73 @@
+{
+  final String fileContent="this is|1|2.0|\n" + "a test|3|4.0|\n" + "#next|5|6.0|\n"+ "asdadas|5|30.0|\n";
+  final File tempFile=File.createTempFile("input-stream-decoration-test","tmp");
+  tempFile.deleteOnExit();
+  FileOutputStream fileOutputStream=new FileOutputStream(tempFile);
+  fileOutputStream.write(fileContent.getBytes());
+  fileOutputStream.close();
+  final int noOfBlocks=3;
+  final TupleTypeInfo<Tuple3<String,Integer,Double>> typeInfo=TupleTypeInfo.getBasicTupleTypeInfo(String.class,Integer.class,Double.class);
+  CsvInputFormat<Tuple3<String,Integer,Double>> format=new TupleCsvInputFormat<>(new Path(tempFile.toURI()),"\n","|",typeInfo);
+  format.setLenient(true);
+  format.setBufferSize(bufferSize);
+  final Configuration config=new Configuration();
+  format.configure(config);
+  long[] offsetsAfterRecord=new long[]{15,29,42,58};
+  long[] offsetAtEndOfSplit=new long[]{20,40,58};
+  int recordCounter=0;
+  int splitCounter=0;
+  FileInputSplit[] inputSplits=format.createInputSplits(noOfBlocks);
+  Tuple3<String,Integer,Double> result=new Tuple3<>();
+  for (  FileInputSplit inputSplit : inputSplits) {
+    assertEquals(inputSplit.getStart() + inputSplit.getLength(),offsetAtEndOfSplit[splitCounter]);
+    splitCounter++;
+    format.open(inputSplit);
+    format.reopen(inputSplit,format.getCurrentState());
+    while (!format.reachedEnd()) {
+      if ((result=format.nextRecord(result)) != null) {
+        assertEquals((long)format.getCurrentState(),offsetsAfterRecord[recordCounter]);
+        recordCounter++;
+        if (recordCounter == 1) {
+          assertNotNull(result);
+          assertEquals("this is",result.f0);
+          assertEquals(new Integer(1),result.f1);
+          assertEquals(new Double(2.0),result.f2);
+          assertEquals((long)format.getCurrentState(),15);
+        }
+ else         if (recordCounter == 2) {
+          assertNotNull(result);
+          assertEquals("a test",result.f0);
+          assertEquals(new Integer(3),result.f1);
+          assertEquals(new Double(4.0),result.f2);
+          assertEquals((long)format.getCurrentState(),29);
+        }
+ else         if (recordCounter == 3) {
+          assertNotNull(result);
+          assertEquals("#next",result.f0);
+          assertEquals(new Integer(5),result.f1);
+          assertEquals(new Double(6.0),result.f2);
+          assertEquals((long)format.getCurrentState(),42);
+        }
+ else {
+          assertNotNull(result);
+          assertEquals("asdadas",result.f0);
+          assertEquals(new Integer(5),result.f1);
+          assertEquals(new Double(30.0),result.f2);
+          assertEquals((long)format.getCurrentState(),58);
+        }
+        Long state=format.getCurrentState();
+        long offsetToRestore=state;
+        format=new TupleCsvInputFormat<>(new Path(tempFile.toURI()),"\n","|",typeInfo);
+        format.setLenient(true);
+        format.setBufferSize(bufferSize);
+        format.configure(config);
+        format.reopen(inputSplit,offsetToRestore);
+      }
+ else {
+        result=new Tuple3<>();
+      }
+    }
+    format.close();
+  }
+  Assert.assertEquals(4,recordCounter);
+}

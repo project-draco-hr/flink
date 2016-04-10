@@ -1,0 +1,65 @@
+{
+  try {
+    while (this.isRunning) {
+synchronized (checkpointLock) {
+        if (this.currentSplit != null) {
+          if (currentSplit.equals(EOS)) {
+            isRunning=false;
+            break;
+          }
+          if (this.format instanceof CheckpointableInputFormat && restoredFormatState != null) {
+            ((CheckpointableInputFormat)format).reopen(currentSplit,restoredFormatState);
+          }
+ else {
+            LOG.info("Format " + this.format.getClass().getName() + " used is not checkpointable.");
+            format.open(currentSplit);
+          }
+          this.restoredFormatState=null;
+        }
+ else {
+          currentSplit=this.pendingSplits.poll();
+          if (currentSplit == null) {
+            checkpointLock.wait(50);
+            continue;
+          }
+          if (currentSplit.equals(EOS)) {
+            isRunning=false;
+            break;
+          }
+          this.format.open(currentSplit);
+        }
+      }
+      LOG.info("Reading split: " + currentSplit);
+      try {
+        OT nextElement=serializer.createInstance();
+        while (!format.reachedEnd()) {
+synchronized (checkpointLock) {
+            nextElement=format.nextRecord(nextElement);
+            if (nextElement != null) {
+              collector.collect(nextElement);
+            }
+ else {
+              break;
+            }
+          }
+        }
+      }
+  finally {
+        this.format.close();
+        this.currentSplit=null;
+      }
+    }
+  }
+ catch (  Throwable e) {
+    if (isRunning) {
+      LOG.error("Caught exception processing split: ",currentSplit);
+    }
+    getContainingTask().failExternally(e);
+  }
+ finally {
+synchronized (checkpointLock) {
+      LOG.info("Reader terminated, and exiting...");
+      checkpointLock.notifyAll();
+    }
+  }
+}

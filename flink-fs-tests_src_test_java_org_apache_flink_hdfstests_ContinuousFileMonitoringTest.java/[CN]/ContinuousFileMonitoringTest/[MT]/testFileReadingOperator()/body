@@ -1,0 +1,59 @@
+{
+  Set<org.apache.hadoop.fs.Path> filesCreated=new HashSet<>();
+  Map<Integer,String> expectedFileContents=new HashMap<>();
+  for (int i=0; i < NO_OF_FILES; i++) {
+    Tuple2<org.apache.hadoop.fs.Path,String> file=fillWithData(hdfsURI,"file",i,"This is test line.");
+    filesCreated.add(file.f0);
+    expectedFileContents.put(i,file.f1);
+  }
+  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+  TypeInformation<String> typeInfo=TypeExtractor.getInputFormatTypes(format);
+  ContinuousFileReaderOperator<String,?> reader=new ContinuousFileReaderOperator<>(format);
+  OneInputStreamOperatorTestHarness<FileInputSplit,String> tester=new OneInputStreamOperatorTestHarness<>(reader);
+  reader.setOutputType(typeInfo,new ExecutionConfig());
+  tester.open();
+  FileInputSplit[] splits=format.createInputSplits(reader.getRuntimeContext().getNumberOfParallelSubtasks());
+  for (  FileInputSplit split : splits) {
+    tester.processElement(new StreamRecord<>(split));
+  }
+synchronized (tester.getCheckpointLock()) {
+    tester.close();
+  }
+  long start=System.currentTimeMillis();
+  Queue<Object> output;
+  do {
+    output=tester.getOutput();
+    Thread.sleep(50);
+  }
+ while ((output == null || output.size() != NO_OF_FILES * LINES_PER_FILE) && (System.currentTimeMillis() - start) < 1000);
+  Map<Integer,List<String>> actualFileContents=new HashMap<>();
+  for (  Object line : tester.getOutput()) {
+    StreamRecord<String> element=(StreamRecord<String>)line;
+    int fileIdx=Character.getNumericValue(element.getValue().charAt(0));
+    List<String> content=actualFileContents.get(fileIdx);
+    if (content == null) {
+      content=new ArrayList<>();
+      actualFileContents.put(fileIdx,content);
+    }
+    content.add(element.getValue() + "\n");
+  }
+  Assert.assertEquals(actualFileContents.size(),expectedFileContents.size());
+  for (  Integer fileIdx : expectedFileContents.keySet()) {
+    Assert.assertTrue(actualFileContents.keySet().contains(fileIdx));
+    List<String> cntnt=actualFileContents.get(fileIdx);
+    Collections.sort(cntnt,new Comparator<String>(){
+      @Override public int compare(      String o1,      String o2){
+        return getLineNo(o1) - getLineNo(o2);
+      }
+    }
+);
+    StringBuilder cntntStr=new StringBuilder();
+    for (    String line : cntnt) {
+      cntntStr.append(line);
+    }
+    Assert.assertEquals(cntntStr.toString(),expectedFileContents.get(fileIdx));
+  }
+  for (  org.apache.hadoop.fs.Path file : filesCreated) {
+    hdfs.delete(file,false);
+  }
+}
