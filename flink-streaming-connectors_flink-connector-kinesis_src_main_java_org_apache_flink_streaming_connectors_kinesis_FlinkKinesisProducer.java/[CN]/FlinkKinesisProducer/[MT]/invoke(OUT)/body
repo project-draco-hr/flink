@@ -1,0 +1,46 @@
+{
+  if (this.producer == null) {
+    throw new RuntimeException("Kinesis producer has been closed");
+  }
+  if (thrownException != null) {
+    String errorMessages="";
+    if (thrownException instanceof UserRecordFailedException) {
+      List<Attempt> attempts=((UserRecordFailedException)thrownException).getResult().getAttempts();
+      for (      Attempt attempt : attempts) {
+        if (attempt.getErrorMessage() != null) {
+          errorMessages+=attempt.getErrorMessage() + "\n";
+        }
+      }
+    }
+    if (failOnError) {
+      throw new RuntimeException("An exception was thrown while processing a record: " + errorMessages,thrownException);
+    }
+ else {
+      LOG.warn("An exception was thrown while processing a record: {}",thrownException,errorMessages);
+      thrownException=null;
+    }
+  }
+  String stream=defaultStream;
+  String partition=defaultPartition;
+  ByteBuffer serialized=schema.serialize(value);
+  String customStream=schema.getTargetStream(value);
+  if (customStream != null) {
+    stream=customStream;
+  }
+  String explicitHashkey=null;
+  if (customPartitioner != null) {
+    partition=customPartitioner.getPartitionId(value);
+    explicitHashkey=customPartitioner.getExplicitHashKey(value);
+  }
+  if (stream == null) {
+    if (failOnError) {
+      throw new RuntimeException("No target stream set");
+    }
+ else {
+      LOG.warn("No target stream set. Skipping record");
+      return;
+    }
+  }
+  ListenableFuture<UserRecordResult> cb=producer.addUserRecord(stream,partition,explicitHashkey,serialized);
+  Futures.addCallback(cb,callback);
+}

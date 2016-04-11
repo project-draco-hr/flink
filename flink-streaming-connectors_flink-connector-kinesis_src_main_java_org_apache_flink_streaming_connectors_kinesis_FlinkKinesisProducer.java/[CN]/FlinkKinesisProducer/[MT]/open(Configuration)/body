@@ -1,0 +1,32 @@
+{
+  super.open(parameters);
+  KinesisProducerConfiguration config=new KinesisProducerConfiguration();
+  config.setRegion(this.region);
+  config.setCredentialsProvider(new StaticCredentialsProvider(new BasicAWSCredentials(this.accessKey,this.secretKey)));
+  producer=new KinesisProducer(config);
+  callback=new FutureCallback<UserRecordResult>(){
+    @Override public void onSuccess(    UserRecordResult result){
+      if (!result.isSuccessful()) {
+        if (failOnError) {
+          thrownException=new RuntimeException("Record was not sent successful");
+        }
+ else {
+          LOG.warn("Record was not sent successful");
+        }
+      }
+    }
+    @Override public void onFailure(    Throwable t){
+      if (failOnError) {
+        thrownException=t;
+      }
+ else {
+        LOG.warn("An exception occurred while processing a record",t);
+      }
+    }
+  }
+;
+  if (this.customPartitioner != null) {
+    this.customPartitioner.initialize(getRuntimeContext().getIndexOfThisSubtask(),getRuntimeContext().getNumberOfParallelSubtasks());
+  }
+  LOG.info("Started Kinesis producer instance for region '{}'",this.region);
+}
