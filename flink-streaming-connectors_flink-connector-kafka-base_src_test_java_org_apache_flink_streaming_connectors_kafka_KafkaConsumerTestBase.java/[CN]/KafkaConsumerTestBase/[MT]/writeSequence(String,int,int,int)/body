@@ -1,0 +1,99 @@
+{
+  LOG.info("\n===================================\n" + "== Writing sequence of " + numElements + " into "+ baseTopicName+ " with p="+ parallelism+ "\n"+ "===================================");
+  final TypeInformation<Tuple2<Integer,Integer>> resultType=TypeInformation.of(new TypeHint<Tuple2<Integer,Integer>>(){
+  }
+);
+  final KeyedSerializationSchema<Tuple2<Integer,Integer>> serSchema=new KeyedSerializationSchemaWrapper<>(new TypeInformationSerializationSchema<>(resultType,new ExecutionConfig()));
+  final KeyedDeserializationSchema<Tuple2<Integer,Integer>> deserSchema=new KeyedDeserializationSchemaWrapper<>(new TypeInformationSerializationSchema<>(resultType,new ExecutionConfig()));
+  final int maxNumAttempts=10;
+  for (int attempt=1; attempt <= maxNumAttempts; attempt++) {
+    final String topicName=baseTopicName + '-' + attempt;
+    LOG.info("Writing attempt #1");
+    createTestTopic(topicName,parallelism,replicationFactor);
+    StreamExecutionEnvironment writeEnv=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+    writeEnv.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+    writeEnv.getConfig().disableSysoutLogging();
+    DataStream<Tuple2<Integer,Integer>> stream=writeEnv.addSource(new RichParallelSourceFunction<Tuple2<Integer,Integer>>(){
+      private boolean running=true;
+      @Override public void run(      SourceContext<Tuple2<Integer,Integer>> ctx) throws Exception {
+        int cnt=0;
+        int partition=getRuntimeContext().getIndexOfThisSubtask();
+        while (running && cnt < numElements) {
+          ctx.collect(new Tuple2<>(partition,cnt));
+          cnt++;
+        }
+      }
+      @Override public void cancel(){
+        running=false;
+      }
+    }
+).setParallelism(parallelism);
+    Properties producerProperties=FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings);
+    producerProperties.setProperty("retries","0");
+    stream.addSink(kafkaServer.getProducer(topicName,serSchema,producerProperties,new Tuple2Partitioner(parallelism))).setParallelism(parallelism);
+    writeEnv.execute("Write sequence");
+    LOG.info("Finished writing sequence");
+    LOG.info("Validating sequence");
+    final StreamExecutionEnvironment readEnv=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+    readEnv.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+    readEnv.getConfig().disableSysoutLogging();
+    readEnv.setParallelism(parallelism);
+    Properties readProps=(Properties)standardProps.clone();
+    readProps.setProperty("group.id","flink-tests-validator");
+    FlinkKafkaConsumerBase<Tuple2<Integer,Integer>> consumer=kafkaServer.getConsumer(topicName,deserSchema,readProps);
+    readEnv.addSource(consumer).map(new RichMapFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
+      private final int totalCount=parallelism * numElements;
+      private int count=0;
+      @Override public Tuple2<Integer,Integer> map(      Tuple2<Integer,Integer> value) throws Exception {
+        if (++count == totalCount) {
+          throw new SuccessException();
+        }
+ else {
+          return value;
+        }
+      }
+    }
+).setParallelism(1).addSink(new DiscardingSink<Tuple2<Integer,Integer>>()).setParallelism(1);
+    final AtomicReference<Throwable> errorRef=new AtomicReference<>();
+    Thread runner=new Thread(){
+      @Override public void run(){
+        try {
+          tryExecute(readEnv,"sequence validation");
+        }
+ catch (        Throwable t) {
+          errorRef.set(t);
+        }
+      }
+    }
+;
+    runner.start();
+    final long deadline=System.currentTimeMillis() + 10000;
+    long delay;
+    while (runner.isAlive() && (delay=deadline - System.currentTimeMillis()) > 0) {
+      runner.join(delay);
+    }
+    boolean success;
+    if (runner.isAlive()) {
+      success=false;
+      JobManagerCommunicationUtils.cancelCurrentJob(flink.getLeaderGateway(timeout));
+    }
+ else {
+      Throwable error=errorRef.get();
+      if (error != null) {
+        success=false;
+        LOG.info("Attempt " + attempt + " failed with exception",error);
+      }
+ else {
+        success=true;
+      }
+    }
+    JobManagerCommunicationUtils.waitUntilNoJobIsRunning(flink.getLeaderGateway(timeout));
+    if (success) {
+      return topicName;
+    }
+ else {
+      deleteTestTopic(topicName);
+    }
+  }
+  throw new Exception("Could not write a valid sequence to Kafka after " + maxNumAttempts + " attempts");
+}

@@ -1,20 +1,14 @@
 {
-  final String topicName="testOffsetAutocommit";
   final int parallelism=3;
-  createTestTopic(topicName,parallelism,1);
-  StreamExecutionEnvironment env1=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-  env1.getConfig().disableSysoutLogging();
-  env1.getConfig().setRestartStrategy(RestartStrategies.noRestart());
-  env1.setParallelism(parallelism);
-  StreamExecutionEnvironment env2=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
-  env2.getConfig().disableSysoutLogging();
-  env2.getConfig().setRestartStrategy(RestartStrategies.noRestart());
-  env2.setParallelism(parallelism);
-  writeSequence(env1,topicName,100,parallelism);
+  final String topicName=writeSequence("testOffsetAutocommit",100,parallelism,1);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env.getConfig().disableSysoutLogging();
+  env.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+  env.setParallelism(parallelism);
   Properties readProps=new Properties();
   readProps.putAll(standardProps);
   readProps.setProperty("auto.commit.interval.ms","500");
-  readSequence(env2,readProps,parallelism,topicName,100,0);
+  readSequence(env,readProps,parallelism,topicName,100,0);
   CuratorFramework curatorFramework=((KafkaTestEnvironmentImpl)kafkaServer).createCuratorClient();
   Long o1=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,0);
   Long o2=ZookeeperOffsetHandler.getOffsetFromZooKeeper(curatorFramework,standardProps.getProperty("group.id"),topicName,1);
