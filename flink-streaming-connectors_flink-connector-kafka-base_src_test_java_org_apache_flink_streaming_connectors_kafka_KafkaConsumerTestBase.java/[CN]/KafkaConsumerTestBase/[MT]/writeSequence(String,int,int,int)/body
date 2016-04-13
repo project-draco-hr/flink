@@ -31,9 +31,18 @@
     Properties producerProperties=FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings);
     producerProperties.setProperty("retries","0");
     stream.addSink(kafkaServer.getProducer(topicName,serSchema,producerProperties,new Tuple2Partitioner(parallelism))).setParallelism(parallelism);
-    writeEnv.execute("Write sequence");
+    try {
+      writeEnv.execute("Write sequence");
+    }
+ catch (    Exception e) {
+      LOG.error("Write attempt failed, trying again",e);
+      deleteTestTopic(topicName);
+      JobManagerCommunicationUtils.waitUntilNoJobIsRunning(flink.getLeaderGateway(timeout));
+      continue;
+    }
     LOG.info("Finished writing sequence");
     LOG.info("Validating sequence");
+    JobManagerCommunicationUtils.waitUntilNoJobIsRunning(flink.getLeaderGateway(timeout));
     final StreamExecutionEnvironment readEnv=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
     readEnv.getConfig().setRestartStrategy(RestartStrategies.noRestart());
     readEnv.getConfig().disableSysoutLogging();
