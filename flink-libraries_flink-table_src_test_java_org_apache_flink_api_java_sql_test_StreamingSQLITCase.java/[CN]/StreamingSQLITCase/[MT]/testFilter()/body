@@ -1,0 +1,18 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  StreamTableEnvironment tableEnv=TableEnvironment.getTableEnvironment(env);
+  StreamITCase.clear();
+  DataStream<Tuple5<Integer,Long,Integer,String,Long>> ds=StreamTestData.get5TupleDataStream(env);
+  tableEnv.registerDataStream("MyTable",ds,"a, b, c, d, e");
+  String sqlQuery="SELECT STREAM a, b, e FROM MyTable WHERE c < 4";
+  Table result=tableEnv.sql(sqlQuery);
+  DataStream<Row> resultSet=tableEnv.toDataStream(result,Row.class);
+  resultSet.addSink(new StreamITCase.StringSink());
+  env.execute();
+  List<String> expected=new ArrayList();
+  expected.add("1,1,1");
+  expected.add("2,2,2");
+  expected.add("2,3,1");
+  expected.add("3,4,2");
+  StreamITCase.compareWithList(expected);
+}
