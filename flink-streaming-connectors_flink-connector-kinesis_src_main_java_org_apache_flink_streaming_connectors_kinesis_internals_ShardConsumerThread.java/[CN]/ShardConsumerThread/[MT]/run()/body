@@ -1,0 +1,51 @@
+{
+  try {
+    if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_LATEST_SEQUENCE_NUM.toString())) {
+      if (assignedShard.isClosed()) {
+        nextShardItr=null;
+      }
+ else {
+        nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.LATEST.toString(),null);
+      }
+    }
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.toString())) {
+      nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.TRIM_HORIZON.toString(),null);
+    }
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.toString())) {
+      nextShardItr=null;
+    }
+ else {
+      nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.AFTER_SEQUENCE_NUMBER.toString(),lastSequenceNum);
+    }
+    while (running) {
+      if (nextShardItr == null) {
+        lastSequenceNum=SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.toString();
+synchronized (sourceContext.getCheckpointLock()) {
+          seqNoState.put(assignedShard,lastSequenceNum);
+        }
+        break;
+      }
+ else {
+        GetRecordsResult getRecordsResult=kinesisProxy.getRecords(nextShardItr,maxNumberOfRecordsPerFetch);
+        List<Record> fetchedRecords=getRecordsResult.getRecords();
+        fetchedRecords=deaggregateRecords(fetchedRecords,assignedShard.getStartingHashKey(),assignedShard.getEndingHashKey());
+        for (        Record record : fetchedRecords) {
+          ByteBuffer recordData=record.getData();
+          byte[] dataBytes=new byte[recordData.remaining()];
+          recordData.get(dataBytes);
+          byte[] keyBytes=record.getPartitionKey().getBytes();
+          final T value=deserializer.deserialize(keyBytes,dataBytes,assignedShard.getStreamName(),record.getSequenceNumber());
+synchronized (sourceContext.getCheckpointLock()) {
+            sourceContext.collect(value);
+            seqNoState.put(assignedShard,record.getSequenceNumber());
+          }
+          lastSequenceNum=record.getSequenceNumber();
+        }
+        nextShardItr=getRecordsResult.getNextShardIterator();
+      }
+    }
+  }
+ catch (  Throwable t) {
+    ownerRef.stopWithError(t);
+  }
+}

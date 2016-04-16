@@ -1,0 +1,28 @@
+{
+  checkNotNull(streams,"streams can not be null");
+  this.configProps=checkNotNull(configProps,"configProps can not be null");
+  validatePropertiesConfig(this.configProps);
+  this.deserializer=checkNotNull(deserializer,"deserializer can not be null");
+  this.shards=new KinesisProxy(configProps).getShardList(streams);
+  if (shards.size() == 0) {
+    throw new RuntimeException("Unable to retrieve any shards for the requested streams " + streams.toString() + ".");
+  }
+  if (LOG.isInfoEnabled()) {
+    Map<String,Integer> shardCountPerStream=new HashMap<>();
+    for (    KinesisStreamShard shard : shards) {
+      Integer shardCount=shardCountPerStream.get(shard.getStreamName());
+      if (shardCount == null) {
+        shardCount=1;
+      }
+ else {
+        shardCount++;
+      }
+      shardCountPerStream.put(shard.getStreamName(),shardCount);
+    }
+    StringBuilder sb=new StringBuilder();
+    for (    Map.Entry<String,Integer> streamAndShardCountPair : shardCountPerStream.entrySet()) {
+      sb.append(streamAndShardCountPair.getKey()).append(" (").append(streamAndShardCountPair.getValue()).append("), ");
+    }
+    LOG.info("Flink Kinesis Consumer is going to read the following streams (with number of shards): {}",sb.toString());
+  }
+}

@@ -1,0 +1,24 @@
+{
+  int fakeNumConsumerTasks=6;
+  int fakeThisConsumerTaskIndex=2;
+  String fakeThisConsumerTaskName="fake-this-task-name";
+  List<KinesisStreamShard> fakeCompleteShardList=ReferenceKinesisShardTopologies.flatTopologyWithFourOpenShards();
+  List<KinesisStreamShard> fakeAssignedShardsToThisConsumerTask=fakeCompleteShardList.subList(2,3);
+  Properties testConsumerConfig=new Properties();
+  testConsumerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_REGION,"us-east-1");
+  testConsumerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_ACCESSKEYID,"accessKey");
+  testConsumerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_SECRETKEY,"secretKey");
+  testConsumerConfig.setProperty(KinesisConfigConstants.CONFIG_STREAM_INIT_POSITION_TYPE,"TRIM_HORIZON");
+  KinesisDataFetcher kinesisDataFetcherMock=Mockito.mock(KinesisDataFetcher.class);
+  try {
+    whenNew(KinesisDataFetcher.class).withArguments(fakeAssignedShardsToThisConsumerTask,testConsumerConfig,fakeThisConsumerTaskName).thenReturn(kinesisDataFetcherMock);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Error when power mocking KinesisDataFetcher in test",e);
+  }
+  FlinkKinesisConsumer dummyConsumer=getDummyConsumerWithMockedKinesisProxy(fakeNumConsumerTasks,fakeThisConsumerTaskIndex,fakeThisConsumerTaskName,fakeCompleteShardList,fakeAssignedShardsToThisConsumerTask,testConsumerConfig,null,null,false,false);
+  dummyConsumer.open(new Configuration());
+  for (  KinesisStreamShard shard : fakeAssignedShardsToThisConsumerTask) {
+    verify(kinesisDataFetcherMock).advanceSequenceNumberTo(shard,SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.toString());
+  }
+}

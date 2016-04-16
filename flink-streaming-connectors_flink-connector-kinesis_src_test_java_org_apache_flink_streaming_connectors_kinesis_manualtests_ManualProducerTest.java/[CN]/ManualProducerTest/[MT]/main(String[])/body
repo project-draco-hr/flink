@@ -1,0 +1,30 @@
+{
+  ParameterTool pt=ParameterTool.fromArgs(args);
+  StreamExecutionEnvironment see=StreamExecutionEnvironment.getExecutionEnvironment();
+  see.setParallelism(4);
+  DataStream<String> simpleStringStream=see.addSource(new ProduceIntoKinesis.EventsGenerator());
+  FlinkKinesisProducer<String> kinesis=new FlinkKinesisProducer<>(pt.getRequired("region"),pt.getRequired("accessKey"),pt.getRequired("secretKey"),new KinesisSerializationSchema<String>(){
+    @Override public ByteBuffer serialize(    String element){
+      return ByteBuffer.wrap(element.getBytes());
+    }
+    @Override public String getTargetStream(    String element){
+      if (element.split("-")[0].endsWith("0")) {
+        return "flink-test-2";
+      }
+      return null;
+    }
+  }
+);
+  kinesis.setFailOnError(true);
+  kinesis.setDefaultStream("test-flink");
+  kinesis.setDefaultPartition("0");
+  kinesis.setCustomPartitioner(new KinesisPartitioner<String>(){
+    @Override public String getPartitionId(    String element){
+      int l=element.length();
+      return element.substring(l - 1,l);
+    }
+  }
+);
+  simpleStringStream.addSink(kinesis);
+  see.execute();
+}

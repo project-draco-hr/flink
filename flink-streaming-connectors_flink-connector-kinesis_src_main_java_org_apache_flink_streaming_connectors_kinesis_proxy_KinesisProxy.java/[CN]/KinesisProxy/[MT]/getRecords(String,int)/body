@@ -1,0 +1,27 @@
+{
+  final GetRecordsRequest getRecordsRequest=new GetRecordsRequest();
+  getRecordsRequest.setShardIterator(shardIterator);
+  getRecordsRequest.setLimit(maxRecordsToGet);
+  GetRecordsResult getRecordsResult=null;
+  int remainingRetryTimes=Integer.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_STREAM_DESCRIBE_RETRIES,Integer.toString(KinesisConfigConstants.DEFAULT_STREAM_DESCRIBE_RETRY_TIMES)));
+  long describeStreamBackoffTimeInMillis=Long.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_STREAM_DESCRIBE_BACKOFF,Long.toString(KinesisConfigConstants.DEFAULT_STREAM_DESCRIBE_BACKOFF)));
+  int i=0;
+  while (i <= remainingRetryTimes && getRecordsResult == null) {
+    try {
+      getRecordsResult=kinesisClient.getRecords(getRecordsRequest);
+    }
+ catch (    ProvisionedThroughputExceededException ex) {
+      LOG.warn("Got ProvisionedThroughputExceededException. Backing off for " + describeStreamBackoffTimeInMillis + " millis.");
+      try {
+        Thread.sleep(describeStreamBackoffTimeInMillis);
+      }
+ catch (      InterruptedException interruptEx) {
+      }
+    }
+    i++;
+  }
+  if (getRecordsResult == null) {
+    throw new RuntimeException("Rate Exceeded");
+  }
+  return getRecordsResult;
+}

@@ -1,0 +1,22 @@
+{
+  int totalRecordCount=500;
+  KinesisStreamShard assignedShardUnderTest=new KinesisStreamShard("fake-stream-name",new Shard().withShardId("fake-shard-id").withAdjacentParentShardId(null).withParentShardId(null).withHashKeyRange(new HashKeyRange().withStartingHashKey("0").withEndingHashKey(StringUtils.repeat("FF",16))));
+  KinesisProxy kinesisProxyMock=Mockito.mock(KinesisProxy.class);
+  Mockito.when(kinesisProxyMock.getShardIterator(Matchers.any(KinesisStreamShard.class),Matchers.anyString(),Matchers.anyString())).thenReturn("fake-initial-shard-itr");
+  GetRecordsResult getRecordsResultFirst=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(0,99)).withNextShardIterator("fake-1st-shard-itr");
+  GetRecordsResult getRecordsResultSecond=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(100,189)).withNextShardIterator("fake-2nd-shard-itr");
+  GetRecordsResult getRecordsResultThird=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(190,267)).withNextShardIterator("fake-3rd-shard-itr");
+  GetRecordsResult getRecordsResultFourth=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(268,367)).withNextShardIterator("fake-4th-shard-itr");
+  GetRecordsResult getRecordsResultFifth=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(368,459)).withNextShardIterator("fake-5th-shard-itr");
+  GetRecordsResult getRecordsResultFinal=new GetRecordsResult().withRecords(generateFakeListOfRecordsFromToIncluding(460,499)).withNextShardIterator(null);
+  Mockito.when(kinesisProxyMock.getRecords(Matchers.anyString(),Matchers.anyInt())).thenReturn(getRecordsResultFirst).thenReturn(getRecordsResultSecond).thenReturn(getRecordsResultThird).thenReturn(getRecordsResultFourth).thenReturn(getRecordsResultFifth).thenReturn(getRecordsResultFinal);
+  PowerMockito.mockStatic(ShardConsumerThread.class);
+  PowerMockito.when(ShardConsumerThread.deaggregateRecords(Matchers.anyListOf(Record.class),Matchers.anyString(),Matchers.anyString())).thenReturn(getRecordsResultFirst.getRecords()).thenReturn(getRecordsResultSecond.getRecords()).thenReturn(getRecordsResultThird.getRecords()).thenReturn(getRecordsResultFourth.getRecords()).thenReturn(getRecordsResultFifth.getRecords()).thenReturn(getRecordsResultFinal.getRecords());
+  Properties testConsumerConfig=new Properties();
+  HashMap<KinesisStreamShard,String> seqNumState=new HashMap<>();
+  DummySourceContext dummySourceContext=new DummySourceContext();
+  ShardConsumerThread dummyShardConsumerThread=getDummyShardConsumerThreadWithMockedKinesisProxy(dummySourceContext,kinesisProxyMock,Mockito.mock(KinesisDataFetcher.class),testConsumerConfig,assignedShardUnderTest,"fake-last-seq-num",seqNumState);
+  dummyShardConsumerThread.run();
+  assertEquals(seqNumState.get(assignedShardUnderTest),SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.toString());
+  assertEquals(dummySourceContext.getNumOfElementsCollected(),totalRecordCount);
+}

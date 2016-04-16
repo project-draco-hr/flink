@@ -1,0 +1,54 @@
+{
+  ParameterTool pt=ParameterTool.fromArgs(args);
+  StreamExecutionEnvironment see=StreamExecutionEnvironment.getExecutionEnvironment();
+  see.setParallelism(4);
+  DataStream<String> simpleStringStream=see.addSource(new ProduceIntoKinesis.EventsGenerator());
+  FlinkKinesisProducer<String> kinesis=new FlinkKinesisProducer<>(pt.getRequired("region"),pt.getRequired("accessKey"),pt.getRequired("secretKey"),new KinesisSerializationSchema<String>(){
+    @Override public ByteBuffer serialize(    String element){
+      return ByteBuffer.wrap(element.getBytes());
+    }
+    @Override public String getTargetStream(    String element){
+      if (element.split("-")[0].endsWith("0")) {
+        return "flink-test-2";
+      }
+      return null;
+    }
+  }
+);
+  kinesis.setFailOnError(true);
+  kinesis.setDefaultStream("test-flink");
+  kinesis.setDefaultPartition("0");
+  kinesis.setCustomPartitioner(new KinesisPartitioner<String>(){
+    @Override public String getPartitionId(    String element){
+      int l=element.length();
+      return element.substring(l - 1,l);
+    }
+  }
+);
+  simpleStringStream.addSink(kinesis);
+  Properties consumerProps=new Properties();
+  consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_ACCESSKEYID,pt.getRequired("accessKey"));
+  consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_SECRETKEY,pt.getRequired("secretKey"));
+  consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_REGION,pt.getRequired("region"));
+  DataStream<String> consuming=see.addSource(new FlinkKinesisConsumer<>("test-flink",new SimpleStringSchema(),consumerProps));
+  consuming.flatMap(new FlatMapFunction<String,String>(){
+    @Override public void flatMap(    String value,    Collector<String> out) throws Exception {
+      String[] parts=value.split("-");
+      try {
+        long l=Long.parseLong(parts[0]);
+        if (l < 0) {
+          throw new RuntimeException("Negative");
+        }
+      }
+ catch (      NumberFormatException nfe) {
+        throw new RuntimeException("First part of '" + value + "' is not a valid numeric type");
+      }
+      if (parts[1].length() != 12) {
+        throw new RuntimeException("Second part of '" + value + "' doesn't have 12 characters");
+      }
+    }
+  }
+);
+  consuming.print();
+  see.execute();
+}
