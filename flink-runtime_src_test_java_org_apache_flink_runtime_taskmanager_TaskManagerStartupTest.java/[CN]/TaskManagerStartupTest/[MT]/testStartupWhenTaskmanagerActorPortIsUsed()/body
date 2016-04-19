@@ -5,16 +5,19 @@
     final InetAddress localAddress=InetAddress.getByName(localHostName);
     blocker=new ServerSocket(0,50,localAddress);
     final int port=blocker.getLocalPort();
-    try {
-      TaskManager.runTaskManager(localHostName,ResourceID.generate(),port,new Configuration(),TaskManager.class);
-      fail("This should fail with an IOException");
-    }
- catch (    IOException e) {
-      assertNotNull(e.getMessage());
-      assertTrue(e.getMessage().contains("Address already in use"));
-    }
+    TaskManager.runTaskManager(localHostName,ResourceID.generate(),port,new Configuration(),TaskManager.class);
+    fail("This should fail with an IOException");
   }
- catch (  Exception e) {
+ catch (  IOException e) {
+    List<Throwable> causes=StartupUtils.getExceptionCauses(e,new ArrayList<Throwable>());
+    for (    Throwable cause : causes) {
+      if (cause instanceof BindException) {
+        throw (BindException)cause;
+      }
+    }
+    fail("This should fail with an exception caused by BindException");
+  }
+catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
   }
