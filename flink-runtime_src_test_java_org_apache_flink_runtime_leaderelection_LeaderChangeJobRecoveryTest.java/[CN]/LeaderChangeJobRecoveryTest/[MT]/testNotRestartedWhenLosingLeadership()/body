@@ -1,0 +1,19 @@
+{
+  UUID leaderSessionID=UUID.randomUUID();
+  cluster.grantLeadership(0,leaderSessionID);
+  cluster.notifyRetrievalListeners(0,leaderSessionID);
+  cluster.waitForTaskManagersToBeRegistered(timeout);
+  cluster.submitJobDetached(job);
+  ActorGateway jm=cluster.getLeaderGateway(timeout);
+  Future<Object> wait=jm.ask(new TestingJobManagerMessages.WaitForAllVerticesToBeRunningOrFinished(job.getJobID()),timeout);
+  Await.ready(wait,timeout);
+  Future<Object> futureExecutionGraph=jm.ask(new TestingJobManagerMessages.RequestExecutionGraph(job.getJobID()),timeout);
+  TestingJobManagerMessages.ResponseExecutionGraph responseExecutionGraph=(TestingJobManagerMessages.ResponseExecutionGraph)Await.result(futureExecutionGraph,timeout);
+  assertTrue(responseExecutionGraph instanceof TestingJobManagerMessages.ExecutionGraphFound);
+  ExecutionGraph executionGraph=((TestingJobManagerMessages.ExecutionGraphFound)responseExecutionGraph).executionGraph();
+  TestActorGateway testActorGateway=new TestActorGateway();
+  executionGraph.registerJobStatusListener(testActorGateway);
+  cluster.revokeLeadership();
+  Future<Boolean> hasReachedTerminalState=testActorGateway.hasReachedTerminalState();
+  assertTrue("The job should have reached a terminal state.",Await.result(hasReachedTerminalState,timeout));
+}
