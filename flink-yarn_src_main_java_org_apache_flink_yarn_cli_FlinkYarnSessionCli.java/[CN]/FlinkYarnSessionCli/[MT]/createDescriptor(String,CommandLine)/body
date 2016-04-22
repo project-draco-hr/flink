@@ -1,0 +1,85 @@
+{
+  YarnClusterDescriptor yarnClusterDescriptor=new YarnClusterDescriptor();
+  if (!cmd.hasOption(CONTAINER.getOpt())) {
+    LOG.error("Missing required argument {}",CONTAINER.getOpt());
+    printUsage();
+    throw new IllegalArgumentException("Missing required argument " + CONTAINER.getOpt());
+  }
+  yarnClusterDescriptor.setTaskManagerCount(Integer.valueOf(cmd.getOptionValue(CONTAINER.getOpt())));
+  Path localJarPath;
+  if (cmd.hasOption(FLINK_JAR.getOpt())) {
+    String userPath=cmd.getOptionValue(FLINK_JAR.getOpt());
+    if (!userPath.startsWith("file://")) {
+      userPath="file://" + userPath;
+    }
+    localJarPath=new Path(userPath);
+  }
+ else {
+    LOG.info("No path for the flink jar passed. Using the location of " + yarnClusterDescriptor.getClass() + " to locate the jar");
+    localJarPath=new Path("file://" + yarnClusterDescriptor.getClass().getProtectionDomain().getCodeSource().getLocation().getPath());
+  }
+  yarnClusterDescriptor.setLocalJarPath(localJarPath);
+  List<File> shipFiles=new ArrayList<>();
+  if (cmd.hasOption(SHIP_PATH.getOpt())) {
+    String shipPath=cmd.getOptionValue(SHIP_PATH.getOpt());
+    File shipDir=new File(shipPath);
+    if (shipDir.isDirectory()) {
+      shipFiles=new ArrayList<>(Arrays.asList(shipDir.listFiles(new FilenameFilter(){
+        @Override public boolean accept(        File dir,        String name){
+          return !(name.equals(".") || name.equals(".."));
+        }
+      }
+)));
+    }
+ else {
+      LOG.warn("Ship directory is not a directory. Ignoring it.");
+    }
+  }
+  yarnClusterDescriptor.setShipFiles(shipFiles);
+  if (cmd.hasOption(QUEUE.getOpt())) {
+    yarnClusterDescriptor.setQueue(cmd.getOptionValue(QUEUE.getOpt()));
+  }
+  if (cmd.hasOption(JM_MEMORY.getOpt())) {
+    int jmMemory=Integer.valueOf(cmd.getOptionValue(JM_MEMORY.getOpt()));
+    yarnClusterDescriptor.setJobManagerMemory(jmMemory);
+  }
+  if (cmd.hasOption(TM_MEMORY.getOpt())) {
+    int tmMemory=Integer.valueOf(cmd.getOptionValue(TM_MEMORY.getOpt()));
+    yarnClusterDescriptor.setTaskManagerMemory(tmMemory);
+  }
+  if (cmd.hasOption(SLOTS.getOpt())) {
+    int slots=Integer.valueOf(cmd.getOptionValue(SLOTS.getOpt()));
+    yarnClusterDescriptor.setTaskManagerSlots(slots);
+  }
+  String[] dynamicProperties=null;
+  if (cmd.hasOption(DYNAMIC_PROPERTIES.getOpt())) {
+    dynamicProperties=cmd.getOptionValues(DYNAMIC_PROPERTIES.getOpt());
+  }
+  String dynamicPropertiesEncoded=StringUtils.join(dynamicProperties,YARN_DYNAMIC_PROPERTIES_SEPARATOR);
+  yarnClusterDescriptor.setDynamicPropertiesEncoded(dynamicPropertiesEncoded);
+  if (cmd.hasOption(DETACHED.getOpt()) || cmd.hasOption(CliFrontendParser.DETACHED_OPTION.getOpt())) {
+    this.detachedMode=true;
+    yarnClusterDescriptor.setDetachedMode(true);
+  }
+  if (cmd.hasOption(NAME.getOpt())) {
+    yarnClusterDescriptor.setName(cmd.getOptionValue(NAME.getOpt()));
+  }
+ else {
+    if (defaultApplicationName != null) {
+      yarnClusterDescriptor.setName(defaultApplicationName);
+    }
+  }
+  int yarnTmSlots=yarnClusterDescriptor.getTaskManagerSlots();
+  if (yarnTmSlots == -1) {
+    yarnTmSlots=1;
+  }
+  int maxSlots=yarnTmSlots * yarnClusterDescriptor.getTaskManagerCount();
+  int userParallelism=Integer.valueOf(cmd.getOptionValue(CliFrontendParser.PARALLELISM_OPTION.getOpt(),"-1"));
+  if (userParallelism != -1) {
+    int slotsPerTM=userParallelism / yarnClusterDescriptor.getTaskManagerCount();
+    String message="The YARN cluster has " + maxSlots + " slots available, "+ "but the user requested a parallelism of "+ userParallelism+ " on YARN. "+ "Each of the "+ yarnClusterDescriptor.getTaskManagerCount()+ " TaskManagers "+ "will get "+ slotsPerTM+ " slots.";
+    logAndSysout(message);
+    yarnClusterDescriptor.setTaskManagerSlots(slotsPerTM);
+  }
+  return yarnClusterDescriptor;
+}

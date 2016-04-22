@@ -1,0 +1,78 @@
+{
+  Options options=new Options();
+  addOptions(options);
+  CommandLineParser parser=new PosixParser();
+  CommandLine cmd;
+  try {
+    cmd=parser.parse(options,args);
+  }
+ catch (  Exception e) {
+    System.out.println(e.getMessage());
+    printUsage();
+    return 1;
+  }
+  if (cmd.hasOption(QUERY.getOpt())) {
+    YarnClusterDescriptor flinkYarnClient=new YarnClusterDescriptor();
+    String description;
+    try {
+      description=flinkYarnClient.getClusterDescription();
+    }
+ catch (    Exception e) {
+      System.err.println("Error while querying the YARN cluster for available resources: " + e.getMessage());
+      e.printStackTrace(System.err);
+      return 1;
+    }
+    System.out.println(description);
+    return 0;
+  }
+ else {
+    YarnClusterDescriptor flinkYarnClient;
+    try {
+      flinkYarnClient=createDescriptor(null,cmd);
+    }
+ catch (    Exception e) {
+      System.err.println("Error while starting the YARN Client. Please check log output!");
+      return 1;
+    }
+    try {
+      yarnCluster=flinkYarnClient.deploy();
+    }
+ catch (    Exception e) {
+      System.err.println("Error while deploying YARN cluster: " + e.getMessage());
+      e.printStackTrace(System.err);
+      return 1;
+    }
+    String jobManagerAddress=yarnCluster.getJobManagerAddress().getAddress().getHostAddress() + ":" + yarnCluster.getJobManagerAddress().getPort();
+    System.out.println("Flink JobManager is now running on " + jobManagerAddress);
+    System.out.println("JobManager Web Interface: " + yarnCluster.getWebInterfaceURL());
+    File yarnPropertiesFile=new File(getYarnPropertiesLocation(yarnCluster.getFlinkConfiguration()));
+    Properties yarnProps=new Properties();
+    yarnProps.setProperty(YARN_PROPERTIES_JOBMANAGER_KEY,jobManagerAddress);
+    if (flinkYarnClient.getTaskManagerSlots() != -1) {
+      String parallelism=Integer.toString(flinkYarnClient.getTaskManagerSlots() * flinkYarnClient.getTaskManagerCount());
+      yarnProps.setProperty(YARN_PROPERTIES_PARALLELISM,parallelism);
+    }
+    if (flinkYarnClient.getDynamicPropertiesEncoded() != null) {
+      yarnProps.setProperty(YARN_PROPERTIES_DYNAMIC_PROPERTIES_STRING,flinkYarnClient.getDynamicPropertiesEncoded());
+    }
+    writeYarnProperties(yarnProps,yarnPropertiesFile);
+    if (detachedMode) {
+      LOG.info("The Flink YARN client has been started in detached mode. In order to stop " + "Flink on YARN, use the following command or a YARN web interface to stop it:\n" + "yarn application -kill " + yarnCluster.getClusterIdentifier() + "\n"+ "Please also note that the temporary files of the YARN session in {} will not be removed.",flinkYarnClient.getSessionFilesDir());
+      yarnCluster.disconnect();
+    }
+ else {
+      runInteractiveCli(yarnCluster,acceptInteractiveInput);
+      if (!yarnCluster.hasBeenShutdown()) {
+        LOG.info("Command Line Interface requested session shutdown");
+        yarnCluster.shutdown();
+      }
+      try {
+        yarnPropertiesFile.delete();
+      }
+ catch (      Exception e) {
+        LOG.warn("Exception while deleting the JobManager address file",e);
+      }
+    }
+  }
+  return 0;
+}

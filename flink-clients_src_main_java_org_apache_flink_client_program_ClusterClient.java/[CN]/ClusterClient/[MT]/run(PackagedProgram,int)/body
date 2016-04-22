@@ -1,0 +1,26 @@
+{
+  Thread.currentThread().setContextClassLoader(prog.getUserCodeClassLoader());
+  if (prog.isUsingProgramEntryPoint()) {
+    return run(prog.getPlanWithJars(),parallelism,prog.getSavepointPath());
+  }
+ else   if (prog.isUsingInteractiveMode()) {
+    LOG.info("Starting program in interactive mode");
+    ContextEnvironmentFactory factory=new ContextEnvironmentFactory(this,prog.getAllLibraries(),prog.getClasspaths(),prog.getUserCodeClassLoader(),parallelism,isDetached(),prog.getSavepointPath());
+    ContextEnvironment.setAsContext(factory);
+    try {
+      prog.invokeInteractiveModeForExecution();
+      if (isDetached()) {
+        return ((DetachedEnvironment)factory.getLastEnvCreated()).finalizeExecute();
+      }
+ else {
+        return new JobSubmissionResult(lastJobID);
+      }
+    }
+  finally {
+      ContextEnvironment.unsetContext();
+    }
+  }
+ else {
+    throw new RuntimeException("PackagedProgram does not have a valid invocation mode.");
+  }
+}

@@ -1,6 +1,6 @@
 {
   final int numberKillingAttempts=numberApplicationAttempts - 1;
-  TestingFlinkYarnClient flinkYarnClient=new TestingFlinkYarnClient();
+  TestingYarnClusterDescriptor flinkYarnClient=new TestingYarnClusterDescriptor();
   Assert.assertNotNull("unable to get yarn client",flinkYarnClient);
   flinkYarnClient.setTaskManagerCount(1);
   flinkYarnClient.setJobManagerMemory(768);
@@ -13,11 +13,10 @@
   flinkYarnClient.setFlinkConfiguration(GlobalConfiguration.getConfiguration());
   flinkYarnClient.setDynamicPropertiesEncoded("recovery.mode=zookeeper@@recovery.zookeeper.quorum=" + zkServer.getConnectString() + "@@yarn.application-attempts="+ numberApplicationAttempts+ "@@"+ ConfigConstants.STATE_BACKEND+ "=FILESYSTEM"+ "@@"+ FsStateBackendFactory.CHECKPOINT_DIRECTORY_URI_CONF_KEY+ "="+ fsStateHandlePath+ "/checkpoints"+ "@@"+ ConfigConstants.ZOOKEEPER_RECOVERY_PATH+ "="+ fsStateHandlePath+ "/recovery");
   flinkYarnClient.setConfigurationFilePath(new Path(confDirPath + File.separator + "flink-conf.yaml"));
-  AbstractFlinkYarnCluster yarnCluster=null;
+  ClusterClient yarnCluster=null;
   final FiniteDuration timeout=new FiniteDuration(2,TimeUnit.MINUTES);
   try {
     yarnCluster=flinkYarnClient.deploy();
-    yarnCluster.connectToCluster();
     final Configuration config=yarnCluster.getFlinkConfiguration();
     new JavaTestKit(actorSystem){
 {
@@ -60,7 +59,7 @@
   }
   finally {
     if (yarnCluster != null) {
-      yarnCluster.shutdown(false);
+      yarnCluster.shutdown();
     }
   }
 }
