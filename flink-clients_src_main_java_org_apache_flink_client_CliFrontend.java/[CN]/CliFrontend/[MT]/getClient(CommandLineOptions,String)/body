@@ -1,35 +1,21 @@
 {
-  InetSocketAddress jobManagerAddress;
-  if (options.getJobManagerAddress() != null) {
-    CustomCommandLine<?> activeCommandLine=CliFrontendParser.getActiveCustomCommandLine(options.getJobManagerAddress());
-    if (activeCommandLine != null) {
-      logAndSysout(activeCommandLine.getIdentifier() + " mode detected. Switching Log4j output to console");
+  CustomCommandLine<?> activeCommandLine=getActiveCustomCommandLine(options.getCommandLine());
+  ClusterClient client;
+  try {
+    client=activeCommandLine.retrieveCluster(options.getCommandLine(),config);
+    logAndSysout("Cluster retrieved");
+  }
+ catch (  UnsupportedOperationException e) {
+    try {
       String applicationName="Flink Application: " + programName;
-      ClusterClient client=activeCommandLine.createClient(applicationName,options.getCommandLine());
+      client=activeCommandLine.createCluster(applicationName,options.getCommandLine(),config);
       logAndSysout("Cluster started");
-      logAndSysout("JobManager web interface address " + client.getWebInterfaceURL());
-      return client;
     }
- else {
-      LOG.info("Using address {} to connect to JobManager.",options.getJobManagerAddress());
-      jobManagerAddress=ClientUtils.parseHostPortAddress(options.getJobManagerAddress());
-      writeJobManagerAddressToConfig(config,jobManagerAddress);
-      return new StandaloneClusterClient(config);
+ catch (    UnsupportedOperationException e2) {
+      throw new IllegalConfigurationException("The JobManager address is neither provided at the command-line, " + "nor configured in flink-conf.yaml.");
     }
   }
- else {
-    for (    CustomCommandLine cli : CliFrontendParser.getAllCustomCommandLine().values()) {
-      ClusterClient client=cli.retrieveCluster(config);
-      if (client != null) {
-        LOG.info("Using address {} to connect to JobManager.",client.getJobManagerAddressFromConfig());
-        return client;
-      }
-    }
-  }
-  if (config.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null) != null) {
-    return new StandaloneClusterClient(config);
-  }
- else {
-    throw new IllegalConfigurationException("The JobManager address is neither provided at the command-line, " + "nor configured in flink-conf.yaml.");
-  }
+  logAndSysout("Using address " + client.getJobManagerAddress() + " to connect to JobManager.");
+  logAndSysout("JobManager web interface address " + client.getWebInterfaceURL());
+  return client;
 }

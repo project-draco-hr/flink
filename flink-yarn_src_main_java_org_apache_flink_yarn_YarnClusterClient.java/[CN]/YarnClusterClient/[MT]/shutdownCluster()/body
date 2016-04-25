@@ -1,0 +1,73 @@
+{
+  if (!isConnected) {
+    throw new IllegalStateException("The cluster has been not been connected to the ApplicationMaster.");
+  }
+  if (hasBeenShutDown.getAndSet(true)) {
+    return;
+  }
+  try {
+    Runtime.getRuntime().removeShutdownHook(clientShutdownHook);
+  }
+ catch (  IllegalStateException e) {
+  }
+  if (actorSystem != null) {
+    LOG.info("Sending shutdown request to the Application Master");
+    if (applicationClient != ActorRef.noSender()) {
+      try {
+        Future<Object> response=Patterns.ask(applicationClient,new YarnMessages.LocalStopYarnSession(getApplicationStatus(),"Flink YARN Client requested shutdown"),new Timeout(akkaDuration));
+        Await.ready(response,akkaDuration);
+      }
+ catch (      Exception e) {
+        LOG.warn("Error while stopping YARN Application Client",e);
+      }
+    }
+    actorSystem.shutdown();
+    actorSystem.awaitTermination();
+  }
+  try {
+    File propertiesFile=FlinkYarnSessionCli.getYarnPropertiesLocation(flinkConfig);
+    if (propertiesFile.isFile()) {
+      if (propertiesFile.delete()) {
+        LOG.info("Deleted Yarn properties file at {}",propertiesFile.getAbsoluteFile().toString());
+      }
+ else {
+        LOG.warn("Couldn't delete Yarn properties file at {}",propertiesFile.getAbsoluteFile().toString());
+      }
+    }
+  }
+ catch (  Exception e) {
+    LOG.warn("Exception while deleting the JobManager address file",e);
+  }
+  if (sessionFilesDir != null) {
+    LOG.info("Deleting files in " + sessionFilesDir);
+    try {
+      FileSystem shutFS=FileSystem.get(hadoopConfig);
+      shutFS.delete(sessionFilesDir,true);
+      shutFS.close();
+    }
+ catch (    IOException e) {
+      LOG.error("Could not delete the Flink jar and configuration files in HDFS..",e);
+    }
+  }
+ else {
+    LOG.warn("Session file directory not set. Not deleting session files");
+  }
+  try {
+    actorRunner.join(1000);
+  }
+ catch (  InterruptedException e) {
+    LOG.warn("Shutdown of the actor runner was interrupted",e);
+    Thread.currentThread().interrupt();
+  }
+  try {
+    pollingRunner.stopRunner();
+    pollingRunner.join(1000);
+  }
+ catch (  InterruptedException e) {
+    LOG.warn("Shutdown of the polling runner was interrupted",e);
+    Thread.currentThread().interrupt();
+  }
+  LOG.info("YARN Client is shutting down");
+  yarnClient.stop();
+  yarnClient=null;
+}

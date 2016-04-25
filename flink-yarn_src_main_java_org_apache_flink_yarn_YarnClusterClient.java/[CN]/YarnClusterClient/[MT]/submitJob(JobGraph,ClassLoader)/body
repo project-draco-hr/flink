@@ -1,10 +1,26 @@
 {
-  if (isDetached()) {
-    JobSubmissionResult result=super.runDetached(jobGraph,classLoader);
+  if (perJobCluster) {
     stopAfterJob(jobGraph.getJobID());
-    return result;
+  }
+  if (isDetached()) {
+    return super.runDetached(jobGraph,classLoader);
   }
  else {
-    return super.run(jobGraph,classLoader);
+    try {
+      return super.run(jobGraph,classLoader);
+    }
+  finally {
+      List<String> msgs=getNewMessages();
+      if (msgs != null && msgs.size() > 1) {
+        logAndSysout("The following messages were created by the YARN cluster while running the Job:");
+        for (        String msg : msgs) {
+          logAndSysout(msg);
+        }
+      }
+      if (getApplicationStatus() != ApplicationStatus.SUCCEEDED) {
+        logAndSysout("YARN cluster is in non-successful state " + getApplicationStatus());
+        logAndSysout("YARN Diagnostics: " + getDiagnostics());
+      }
+    }
   }
 }
