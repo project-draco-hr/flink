@@ -1,0 +1,28 @@
+{
+  ExecutionEnvironment environment=ExecutionEnvironment.getExecutionEnvironment();
+  JDBCInputFormatBuilder inputBuilder=JDBCInputFormat.buildJDBCInputFormat().setDrivername(JDBCTestBase.DRIVER_CLASS).setDBUrl(JDBCTestBase.DB_URL).setQuery(JDBCTestBase.SELECT_ALL_BOOKS).setRowTypeInfo(rowTypeInfo);
+  if (exploitParallelism) {
+    final int fetchSize=1;
+    final Long min=new Long(JDBCTestBase.testData[0][0].toString());
+    final Long max=new Long(JDBCTestBase.testData[JDBCTestBase.testData.length - fetchSize][0].toString());
+    inputBuilder=inputBuilder.setQuery(JDBCTestBase.SELECT_ALL_BOOKS_SPLIT_BY_ID).setParametersProvider(new NumericBetweenParametersProvider(fetchSize,min,max));
+  }
+  DataSet<Row> source=environment.createInput(inputBuilder.finish());
+  source.output(JDBCOutputFormat.buildJDBCOutputFormat().setDrivername(JDBCTestBase.DRIVER_CLASS).setDBUrl(JDBCTestBase.DB_URL).setQuery("insert into newbooks (id,title,author,price,qty) values (?,?,?,?,?)").setSqlTypes(new int[]{Types.INTEGER,Types.VARCHAR,Types.VARCHAR,Types.DOUBLE,Types.INTEGER}).finish());
+  try {
+    environment.execute();
+  }
+ catch (  Exception e) {
+    Assert.fail("JDBC full test failed. " + e.getMessage());
+  }
+  try (Connection dbConn=DriverManager.getConnection(JDBCTestBase.DB_URL);PreparedStatement statement=dbConn.prepareStatement(JDBCTestBase.SELECT_ALL_NEWBOOKS);ResultSet resultSet=statement.executeQuery()){
+    int count=0;
+    while (resultSet.next()) {
+      count++;
+    }
+    Assert.assertEquals(JDBCTestBase.testData.length,count);
+  }
+ catch (  SQLException e) {
+    Assert.fail("JDBC full test failed. " + e.getMessage());
+  }
+}

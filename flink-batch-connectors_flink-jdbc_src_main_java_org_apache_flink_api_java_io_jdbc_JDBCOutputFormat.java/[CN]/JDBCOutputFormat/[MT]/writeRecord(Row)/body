@@ -1,0 +1,87 @@
+{
+  if (typesArray != null && typesArray.length > 0 && typesArray.length == row.productArity()) {
+    LOG.warn("Column SQL types array doesn't match arity of passed Row! Check the passed array...");
+  }
+  try {
+    if (typesArray == null) {
+      for (int index=0; index < row.productArity(); index++) {
+        LOG.warn("Unknown column type for column %s. Best effort approach to set its value: %s.",index + 1,row.productElement(index));
+        upload.setObject(index + 1,row.productElement(index));
+      }
+    }
+ else {
+      for (int index=0; index < row.productArity(); index++) {
+        if (row.productElement(index) == null) {
+          upload.setNull(index + 1,typesArray[index]);
+        }
+ else {
+switch (typesArray[index]) {
+case java.sql.Types.NULL:
+            upload.setNull(index + 1,typesArray[index]);
+          break;
+case java.sql.Types.BOOLEAN:
+case java.sql.Types.BIT:
+        upload.setBoolean(index + 1,(boolean)row.productElement(index));
+      break;
+case java.sql.Types.CHAR:
+case java.sql.Types.NCHAR:
+case java.sql.Types.VARCHAR:
+case java.sql.Types.LONGVARCHAR:
+case java.sql.Types.LONGNVARCHAR:
+    upload.setString(index + 1,(String)row.productElement(index));
+  break;
+case java.sql.Types.TINYINT:
+upload.setByte(index + 1,(byte)row.productElement(index));
+break;
+case java.sql.Types.SMALLINT:
+upload.setShort(index + 1,(short)row.productElement(index));
+break;
+case java.sql.Types.INTEGER:
+upload.setInt(index + 1,(int)row.productElement(index));
+break;
+case java.sql.Types.BIGINT:
+upload.setLong(index + 1,(long)row.productElement(index));
+break;
+case java.sql.Types.REAL:
+upload.setFloat(index + 1,(float)row.productElement(index));
+break;
+case java.sql.Types.FLOAT:
+case java.sql.Types.DOUBLE:
+upload.setDouble(index + 1,(double)row.productElement(index));
+break;
+case java.sql.Types.DECIMAL:
+case java.sql.Types.NUMERIC:
+upload.setBigDecimal(index + 1,(java.math.BigDecimal)row.productElement(index));
+break;
+case java.sql.Types.DATE:
+upload.setDate(index + 1,(java.sql.Date)row.productElement(index));
+break;
+case java.sql.Types.TIME:
+upload.setTime(index + 1,(java.sql.Time)row.productElement(index));
+break;
+case java.sql.Types.TIMESTAMP:
+upload.setTimestamp(index + 1,(java.sql.Timestamp)row.productElement(index));
+break;
+case java.sql.Types.BINARY:
+case java.sql.Types.VARBINARY:
+case java.sql.Types.LONGVARBINARY:
+upload.setBytes(index + 1,(byte[])row.productElement(index));
+break;
+default :
+upload.setObject(index + 1,row.productElement(index));
+LOG.warn("Unmanaged sql type (%s) for column %s. Best effort approach to set its value: %s.",typesArray[index],index + 1,row.productElement(index));
+}
+}
+}
+}
+upload.addBatch();
+batchCount++;
+if (batchCount >= batchInterval) {
+upload.executeBatch();
+batchCount=0;
+}
+}
+ catch (SQLException|IllegalArgumentException e) {
+throw new IllegalArgumentException("writeRecord() failed",e);
+}
+}

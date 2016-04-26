@@ -1,0 +1,40 @@
+{
+  Serializable[][] queryParameters=new String[2][1];
+  queryParameters[0]=new String[]{"Kumar"};
+  queryParameters[1]=new String[]{"Tan Ah Teck"};
+  ParameterValuesProvider paramProvider=new GenericParameterValuesProvider(queryParameters);
+  jdbcInputFormat=JDBCInputFormat.buildJDBCInputFormat().setDrivername(DRIVER_CLASS).setDBUrl(DB_URL).setQuery(JDBCTestBase.SELECT_ALL_BOOKS_SPLIT_BY_AUTHOR).setRowTypeInfo(rowTypeInfo).setParametersProvider(paramProvider).setResultSetType(ResultSet.TYPE_SCROLL_INSENSITIVE).finish();
+  jdbcInputFormat.openInputFormat();
+  InputSplit[] splits=jdbcInputFormat.createInputSplits(1);
+  Assert.assertEquals(queryParameters.length,splits.length);
+  int recordCount=0;
+  Row row=new Row(5);
+  for (int i=0; i < splits.length; i++) {
+    jdbcInputFormat.open(splits[i]);
+    while (!jdbcInputFormat.reachedEnd()) {
+      Row next=jdbcInputFormat.nextRecord(row);
+      if (next == null) {
+        break;
+      }
+      if (next.productElement(0) != null) {
+        Assert.assertEquals("Field 0 should be int",Integer.class,next.productElement(0).getClass());
+      }
+      if (next.productElement(1) != null) {
+        Assert.assertEquals("Field 1 should be String",String.class,next.productElement(1).getClass());
+      }
+      if (next.productElement(2) != null) {
+        Assert.assertEquals("Field 2 should be String",String.class,next.productElement(2).getClass());
+      }
+      if (next.productElement(3) != null) {
+        Assert.assertEquals("Field 3 should be float",Double.class,next.productElement(3).getClass());
+      }
+      if (next.productElement(4) != null) {
+        Assert.assertEquals("Field 4 should be int",Integer.class,next.productElement(4).getClass());
+      }
+      recordCount++;
+    }
+    jdbcInputFormat.close();
+  }
+  Assert.assertEquals(3,recordCount);
+  jdbcInputFormat.closeInputFormat();
+}
