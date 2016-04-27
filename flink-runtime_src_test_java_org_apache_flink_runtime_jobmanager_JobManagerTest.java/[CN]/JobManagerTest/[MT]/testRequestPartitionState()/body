@@ -1,68 +1,73 @@
 {
   new JavaTestKit(system){
 {
-      TestingCluster cluster=null;
-      try {
-        cluster=startTestingCluster(2,1,DEFAULT_AKKA_ASK_TIMEOUT());
-        final IntermediateDataSetID rid=new IntermediateDataSetID();
-        final JobVertex sender=new JobVertex("Sender");
-        sender.setParallelism(1);
-        sender.setInvokableClass(Tasks.BlockingNoOpInvokable.class);
-        sender.createAndAddResultDataSet(rid,PIPELINED);
-        final JobGraph jobGraph=new JobGraph("Blocking test job",new ExecutionConfig(),sender);
-        final JobID jid=jobGraph.getJobID();
-        final ActorGateway jobManagerGateway=cluster.getLeaderGateway(TestingUtils.TESTING_DURATION());
-        final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),null);
-        jobManagerGateway.tell(new SubmitJob(jobGraph,ListeningBehaviour.EXECUTION_RESULT),testActorGateway);
-        expectMsgClass(JobManagerMessages.JobSubmitSuccess.class);
-        jobManagerGateway.tell(new WaitForAllVerticesToBeRunningOrFinished(jid),testActorGateway);
-        expectMsgClass(TestingJobManagerMessages.AllVerticesRunning.class);
-        final ExecutionAttemptID receiver=new ExecutionAttemptID();
-        jobManagerGateway.tell(new RequestExecutionGraph(jid),testActorGateway);
-        final ExecutionGraph eg=expectMsgClass(ExecutionGraphFound.class).executionGraph();
-        final ExecutionVertex vertex=eg.getJobVertex(sender.getID()).getTaskVertices()[0];
-        final IntermediateResultPartition partition=vertex.getProducedPartitions().values().iterator().next();
-        final ResultPartitionID partitionId=new ResultPartitionID(partition.getPartitionId(),vertex.getCurrentExecutionAttempt().getAttemptId());
-        RequestPartitionState request=new RequestPartitionState(jid,partitionId,receiver,rid);
-        for (        ExecutionState state : ExecutionState.values()) {
-          ExecutionGraphTestUtils.setVertexState(vertex,state);
-          jobManagerGateway.tell(request,testActorGateway);
-          LeaderSessionMessage lsm=expectMsgClass(LeaderSessionMessage.class);
-          assertEquals(PartitionState.class,lsm.message().getClass());
-          PartitionState resp=(PartitionState)lsm.message();
-          assertEquals(request.taskExecutionId(),resp.taskExecutionId());
-          assertEquals(request.taskResultId(),resp.taskResultId());
-          assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
-          assertEquals(state,resp.state());
-        }
-        request=new RequestPartitionState(jid,new ResultPartitionID(),receiver,rid);
-        jobManagerGateway.tell(request,testActorGateway);
-        LeaderSessionMessage lsm=expectMsgClass(LeaderSessionMessage.class);
-        assertEquals(PartitionState.class,lsm.message().getClass());
-        PartitionState resp=(PartitionState)lsm.message();
-        assertEquals(request.taskExecutionId(),resp.taskExecutionId());
-        assertEquals(request.taskResultId(),resp.taskResultId());
-        assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
-        assertNull(resp.state());
-        request=new RequestPartitionState(new JobID(),new ResultPartitionID(),receiver,rid);
-        jobManagerGateway.tell(request,testActorGateway);
-        lsm=expectMsgClass(LeaderSessionMessage.class);
-        assertEquals(PartitionState.class,lsm.message().getClass());
-        resp=(PartitionState)lsm.message();
-        assertEquals(request.taskExecutionId(),resp.taskExecutionId());
-        assertEquals(request.taskResultId(),resp.taskResultId());
-        assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
-        assertNull(resp.state());
-      }
- catch (      Exception e) {
-        e.printStackTrace();
-        fail(e.getMessage());
-      }
+      new Within(duration("15 seconds")){
+        @Override protected void run(){
+          TestingCluster cluster=null;
+          try {
+            cluster=startTestingCluster(2,1,DEFAULT_AKKA_ASK_TIMEOUT());
+            final IntermediateDataSetID rid=new IntermediateDataSetID();
+            final JobVertex sender=new JobVertex("Sender");
+            sender.setParallelism(1);
+            sender.setInvokableClass(Tasks.BlockingNoOpInvokable.class);
+            sender.createAndAddResultDataSet(rid,PIPELINED);
+            final JobGraph jobGraph=new JobGraph("Blocking test job",new ExecutionConfig(),sender);
+            final JobID jid=jobGraph.getJobID();
+            final ActorGateway jobManagerGateway=cluster.getLeaderGateway(TestingUtils.TESTING_DURATION());
+            final ActorGateway testActorGateway=new AkkaActorGateway(getTestActor(),null);
+            jobManagerGateway.tell(new SubmitJob(jobGraph,ListeningBehaviour.EXECUTION_RESULT),testActorGateway);
+            expectMsgClass(JobManagerMessages.JobSubmitSuccess.class);
+            jobManagerGateway.tell(new WaitForAllVerticesToBeRunningOrFinished(jid),testActorGateway);
+            expectMsgClass(TestingJobManagerMessages.AllVerticesRunning.class);
+            final ExecutionAttemptID receiver=new ExecutionAttemptID();
+            jobManagerGateway.tell(new RequestExecutionGraph(jid),testActorGateway);
+            final ExecutionGraph eg=expectMsgClass(ExecutionGraphFound.class).executionGraph();
+            final ExecutionVertex vertex=eg.getJobVertex(sender.getID()).getTaskVertices()[0];
+            final IntermediateResultPartition partition=vertex.getProducedPartitions().values().iterator().next();
+            final ResultPartitionID partitionId=new ResultPartitionID(partition.getPartitionId(),vertex.getCurrentExecutionAttempt().getAttemptId());
+            RequestPartitionState request=new RequestPartitionState(jid,partitionId,receiver,rid);
+            for (            ExecutionState state : ExecutionState.values()) {
+              ExecutionGraphTestUtils.setVertexState(vertex,state);
+              jobManagerGateway.tell(request,testActorGateway);
+              LeaderSessionMessage lsm=expectMsgClass(LeaderSessionMessage.class);
+              assertEquals(PartitionState.class,lsm.message().getClass());
+              PartitionState resp=(PartitionState)lsm.message();
+              assertEquals(request.taskExecutionId(),resp.taskExecutionId());
+              assertEquals(request.taskResultId(),resp.taskResultId());
+              assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
+              assertEquals(state,resp.state());
+            }
+            request=new RequestPartitionState(jid,new ResultPartitionID(),receiver,rid);
+            jobManagerGateway.tell(request,testActorGateway);
+            LeaderSessionMessage lsm=expectMsgClass(LeaderSessionMessage.class);
+            assertEquals(PartitionState.class,lsm.message().getClass());
+            PartitionState resp=(PartitionState)lsm.message();
+            assertEquals(request.taskExecutionId(),resp.taskExecutionId());
+            assertEquals(request.taskResultId(),resp.taskResultId());
+            assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
+            assertNull(resp.state());
+            request=new RequestPartitionState(new JobID(),new ResultPartitionID(),receiver,rid);
+            jobManagerGateway.tell(request,testActorGateway);
+            lsm=expectMsgClass(LeaderSessionMessage.class);
+            assertEquals(PartitionState.class,lsm.message().getClass());
+            resp=(PartitionState)lsm.message();
+            assertEquals(request.taskExecutionId(),resp.taskExecutionId());
+            assertEquals(request.taskResultId(),resp.taskResultId());
+            assertEquals(request.partitionId().getPartitionId(),resp.partitionId());
+            assertNull(resp.state());
+          }
+ catch (          Exception e) {
+            e.printStackTrace();
+            fail(e.getMessage());
+          }
  finally {
-        if (cluster != null) {
-          cluster.shutdown();
+            if (cluster != null) {
+              cluster.shutdown();
+            }
+          }
         }
       }
+;
     }
   }
 ;
