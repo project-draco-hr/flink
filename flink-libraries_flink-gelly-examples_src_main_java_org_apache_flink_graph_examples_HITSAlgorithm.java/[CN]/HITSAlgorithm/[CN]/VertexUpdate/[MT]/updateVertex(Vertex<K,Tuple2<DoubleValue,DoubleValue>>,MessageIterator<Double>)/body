@@ -1,0 +1,48 @@
+{
+  double updateValue=0;
+  for (  double element : inMessages) {
+    if (getSuperstepNumber() == maxIteration) {
+      updateValue=element;
+      break;
+    }
+    updateValue+=element;
+  }
+  updatedValueSumAggregator.aggregate(Math.pow(updateValue,2));
+  double iterationValueSum=1.0;
+  DoubleValue newHubValue=vertex.getValue().f0;
+  DoubleValue newAuthorityValue=vertex.getValue().f1;
+  if (getSuperstepNumber() > 1) {
+    iterationValueSum=Math.sqrt(((DoubleValue)getPreviousIterationAggregate("updatedValueSum")).getValue());
+  }
+  if (getSuperstepNumber() < maxIteration) {
+    if (getSuperstepNumber() % 2 == 1) {
+      double previousAuthAverage=1.0;
+      double diffValueSum=1.0 * getNumberOfVertices();
+      if (getSuperstepNumber() > 1) {
+        previousAuthAverage=((DoubleValue)getPreviousIterationAggregate("authorityValueSum")).getValue() / getNumberOfVertices();
+        diffValueSum=((DoubleValue)getPreviousIterationAggregate("diffValueSum")).getValue();
+      }
+      authoritySumAggregator.aggregate(previousAuthAverage);
+      if (diffValueSum > convergeThreshold) {
+        newHubValue.setValue(newHubValue.getValue() / iterationValueSum);
+        newAuthorityValue.setValue(updateValue);
+      }
+ else {
+        maxIteration=getSuperstepNumber();
+        newHubValue.setValue(newHubValue.getValue() / iterationValueSum);
+      }
+    }
+ else {
+      newHubValue.setValue(updateValue);
+      newAuthorityValue.setValue(newAuthorityValue.getValue() / iterationValueSum);
+      authoritySumAggregator.aggregate(newAuthorityValue.getValue());
+      double previousAuthAverage=((DoubleValue)getPreviousIterationAggregate("authorityValueSum")).getValue() / getNumberOfVertices();
+      diffSumAggregator.aggregate(previousAuthAverage - newAuthorityValue.getValue());
+    }
+    setNewVertexValue(new Tuple2<>(newHubValue,newAuthorityValue));
+  }
+ else   if (getSuperstepNumber() == maxIteration) {
+    newHubValue.setValue(newHubValue.getValue() / iterationValueSum);
+    setNewVertexValue(new Tuple2<>(newHubValue,newAuthorityValue));
+  }
+}

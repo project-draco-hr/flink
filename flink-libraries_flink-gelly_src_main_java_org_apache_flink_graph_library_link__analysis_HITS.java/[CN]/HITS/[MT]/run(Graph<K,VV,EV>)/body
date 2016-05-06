@@ -1,0 +1,19 @@
+{
+  DataSet<Tuple2<K,K>> edges=input.getEdges().flatMap(new ExtractEdgeIDs<K,EV>()).setParallelism(parallelism).name("Extract edge IDs");
+  DataSet<Tuple3<K,DoubleValue,DoubleValue>> initialScores=edges.map(new InitializeScores<K>()).setParallelism(parallelism).name("Initial scores").groupBy(0).reduce(new SumScores<K>()).setParallelism(parallelism).name("Sum");
+  IterativeDataSet<Tuple3<K,DoubleValue,DoubleValue>> iterative=initialScores.iterate(maxIterations);
+  DataSet<Tuple2<K,DoubleValue>> hubbiness=iterative.coGroup(edges).where(0).equalTo(1).with(new Hubbiness<K>()).setParallelism(parallelism).name("Hub").groupBy(0).reduce(new SumScore<K>()).setParallelism(parallelism).name("Sum");
+  DataSet<DoubleValue> hubbinessSumSquared=hubbiness.map(new Square<K>()).setParallelism(parallelism).name("Square").reduce(new Sum()).setParallelism(parallelism).name("Sum");
+  DataSet<Tuple2<K,DoubleValue>> authority=hubbiness.coGroup(edges).where(0).equalTo(0).with(new Authority<K>()).setParallelism(parallelism).name("Authority").groupBy(0).reduce(new SumScore<K>()).setParallelism(parallelism).name("Sum");
+  DataSet<DoubleValue> authoritySumSquared=authority.map(new Square<K>()).setParallelism(parallelism).name("Square").reduce(new Sum()).setParallelism(parallelism).name("Sum");
+  DataSet<Tuple3<K,DoubleValue,DoubleValue>> scores=hubbiness.fullOuterJoin(authority,JoinHint.REPARTITION_SORT_MERGE).where(0).equalTo(0).with(new JoinAndNormalizeHubAndAuthority<K>()).withBroadcastSet(hubbinessSumSquared,HUBBINESS_SUM_SQUARED).withBroadcastSet(authoritySumSquared,AUTHORITY_SUM_SQUARED).setParallelism(parallelism).name("Join scores");
+  DataSet<Tuple3<K,DoubleValue,DoubleValue>> passThrough;
+  if (convergenceThreshold < Double.MAX_VALUE) {
+    passThrough=iterative.fullOuterJoin(scores,JoinHint.REPARTITION_SORT_MERGE).where(0).equalTo(0).with(new ChangeInScores<K>()).setParallelism(parallelism).name("Change in scores");
+    iterative.registerAggregationConvergenceCriterion(CHANGE_IN_SCORES,new DoubleSumAggregator(),new ScoreConvergence(convergenceThreshold));
+  }
+ else {
+    passThrough=scores;
+  }
+  return iterative.closeWith(passThrough).map(new TranslateResult<K>()).setParallelism(parallelism).name("Map result");
+}
