@@ -1,0 +1,49 @@
+{
+  this.taskInfo=checkNotNull(tdd.getTaskInfo());
+  this.jobId=checkNotNull(tdd.getJobID());
+  this.vertexId=checkNotNull(tdd.getVertexID());
+  this.executionId=checkNotNull(tdd.getExecutionId());
+  this.taskNameWithSubtask=taskInfo.getTaskNameWithSubtasks();
+  this.jobConfiguration=checkNotNull(tdd.getJobConfiguration());
+  this.taskConfiguration=checkNotNull(tdd.getTaskConfiguration());
+  this.requiredJarFiles=checkNotNull(tdd.getRequiredJarFiles());
+  this.requiredClasspaths=checkNotNull(tdd.getRequiredClasspaths());
+  this.nameOfInvokableClass=checkNotNull(tdd.getInvokableClassName());
+  this.operatorState=tdd.getOperatorState();
+  this.recoveryTs=tdd.getRecoveryTimestamp();
+  this.serializedExecutionConfig=checkNotNull(tdd.getSerializedExecutionConfig());
+  this.taskCancellationInterval=jobConfiguration.getLong(ConfigConstants.TASK_CANCELLATION_INTERVAL_MILLIS,ConfigConstants.DEFAULT_TASK_CANCELLATION_INTERVAL_MILLIS);
+  this.memoryManager=checkNotNull(memManager);
+  this.ioManager=checkNotNull(ioManager);
+  this.broadcastVariableManager=checkNotNull(bcVarManager);
+  this.accumulatorRegistry=new AccumulatorRegistry(jobId,executionId);
+  this.jobManager=checkNotNull(jobManagerActor);
+  this.taskManager=checkNotNull(taskManagerActor);
+  this.actorAskTimeout=checkNotNull(actorAskTimeout);
+  this.libraryCache=checkNotNull(libraryCache);
+  this.fileCache=checkNotNull(fileCache);
+  this.network=checkNotNull(networkEnvironment);
+  this.taskManagerConfig=checkNotNull(taskManagerConfig);
+  this.executionListenerActors=new CopyOnWriteArrayList<ActorGateway>();
+  this.metrics=metricGroup;
+  final String taskNameWithSubtaskAndId=taskNameWithSubtask + " (" + executionId+ ')';
+  List<ResultPartitionDeploymentDescriptor> partitions=tdd.getProducedPartitions();
+  List<InputGateDeploymentDescriptor> consumedPartitions=tdd.getInputGates();
+  this.producedPartitions=new ResultPartition[partitions.size()];
+  this.writers=new ResultPartitionWriter[partitions.size()];
+  for (int i=0; i < this.producedPartitions.length; i++) {
+    ResultPartitionDeploymentDescriptor desc=partitions.get(i);
+    ResultPartitionID partitionId=new ResultPartitionID(desc.getPartitionId(),executionId);
+    this.producedPartitions[i]=new ResultPartition(taskNameWithSubtaskAndId,jobId,partitionId,desc.getPartitionType(),desc.getEagerlyDeployConsumers(),desc.getNumberOfSubpartitions(),networkEnvironment.getPartitionManager(),networkEnvironment.getPartitionConsumableNotifier(),ioManager,networkEnvironment.getDefaultIOMode());
+    this.writers[i]=new ResultPartitionWriter(this.producedPartitions[i]);
+  }
+  this.inputGates=new SingleInputGate[consumedPartitions.size()];
+  this.inputGatesById=new HashMap<IntermediateDataSetID,SingleInputGate>();
+  for (int i=0; i < this.inputGates.length; i++) {
+    SingleInputGate gate=SingleInputGate.create(taskNameWithSubtaskAndId,jobId,executionId,consumedPartitions.get(i),networkEnvironment);
+    this.inputGates[i]=gate;
+    inputGatesById.put(gate.getConsumedResultId(),gate);
+  }
+  invokableHasBeenCanceled=new AtomicBoolean(false);
+  executingThread=new Thread(TASK_THREADS_GROUP,this,taskNameWithSubtask);
+}

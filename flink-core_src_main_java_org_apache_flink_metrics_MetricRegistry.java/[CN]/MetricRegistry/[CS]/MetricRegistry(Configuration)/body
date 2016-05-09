@@ -1,0 +1,31 @@
+{
+  try {
+    String className=config.getString(KEY_METRICS_REPORTER_CLASS,null);
+    if (className == null) {
+      LOG.info("No reporter class name defined in flink-conf.yaml, defaulting to " + JMXReporter.class.getName() + ".");
+      className=JMXReporter.class.getName();
+    }
+    this.scopeConfig=createScopeConfig(config);
+    Configuration reporterConfig=createReporterConfig(config);
+    Class<?> reporterClass=Class.forName(className);
+    reporter=(MetricReporter)reporterClass.newInstance();
+    reporter.open(reporterConfig);
+    if (reporter instanceof Scheduled) {
+      String[] interval=config.getString(KEY_METRICS_REPORTER_INTERVAL,"10 SECONDS").split(" ");
+      long millis=TimeUnit.valueOf(interval[1]).toMillis(Long.parseLong(interval[0]));
+      timer=new java.util.Timer(true);
+      timer.schedule(new TimerTask(){
+        @Override public void run(){
+          ((Scheduled)reporter).report();
+        }
+      }
+,millis,millis);
+    }
+  }
+ catch (  InstantiationException|ClassNotFoundException e) {
+    throw new RuntimeException("Error while instantiating reporter.",e);
+  }
+catch (  IllegalAccessException e) {
+    throw new RuntimeException("Implementation error.",e);
+  }
+}
