@@ -1,0 +1,60 @@
+{
+  final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.getConfig().enableObjectReuse();
+  ParameterTool parameters=ParameterTool.fromArgs(args);
+  DataSet ji;
+switch (parameters.get("input","")) {
+case "csv":
+{
+      String lineDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_line_delimiter",CsvOutputFormat.DEFAULT_LINE_DELIMITER));
+      String fieldDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_field_delimiter",CsvOutputFormat.DEFAULT_FIELD_DELIMITER));
+      Graph<LongValue,NullValue,NullValue> graph=Graph.fromCsvReader(parameters.get("input_filename"),env).ignoreCommentsEdges("#").lineDelimiterEdges(lineDelimiter).fieldDelimiterEdges(fieldDelimiter).keyType(LongValue.class);
+      ji=graph.run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>());
+    }
+  break;
+case "rmat":
+{
+  int scale=parameters.getInt("scale",DEFAULT_SCALE);
+  int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
+  RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
+  long vertexCount=1L << scale;
+  long edgeCount=vertexCount * edgeFactor;
+  boolean clipAndFlip=parameters.getBoolean("clip_and_flip",DEFAULT_CLIP_AND_FLIP);
+  Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).setSimpleGraph(true,clipAndFlip).generate();
+  if (scale > 32) {
+    ji=graph.run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>());
+  }
+ else {
+    ji=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new org.apache.flink.graph.library.similarity.JaccardIndex<IntValue,NullValue,NullValue>());
+  }
+}
+break;
+default :
+printUsage();
+return;
+}
+switch (parameters.get("output","")) {
+case "print":
+for (Object e : ji.collect()) {
+Result result=(Result)e;
+System.out.println(result.toVerboseString());
+}
+break;
+case "hash":
+System.out.println(DataSetUtils.checksumHashCode(ji));
+break;
+case "csv":
+String filename=parameters.get("output_filename");
+String lineDelimiter=StringEscapeUtils.unescapeJava(parameters.get("output_line_delimiter",CsvOutputFormat.DEFAULT_LINE_DELIMITER));
+String fieldDelimiter=StringEscapeUtils.unescapeJava(parameters.get("output_field_delimiter",CsvOutputFormat.DEFAULT_FIELD_DELIMITER));
+ji.writeAsCsv(filename,lineDelimiter,fieldDelimiter);
+env.execute();
+break;
+default :
+printUsage();
+return;
+}
+JobExecutionResult result=env.getLastJobExecutionResult();
+NumberFormat nf=NumberFormat.getInstance();
+System.out.println("Execution runtime: " + nf.format(result.getNetRuntime()) + " ms");
+}
