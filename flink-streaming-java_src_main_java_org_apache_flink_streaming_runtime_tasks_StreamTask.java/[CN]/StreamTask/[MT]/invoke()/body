@@ -5,13 +5,16 @@
     userClassLoader=getUserCodeClassLoader();
     configuration=new StreamConfig(getTaskConfiguration());
     accumulatorMap=getEnvironment().getAccumulatorRegistry().getUserMap();
+    if (timerService == null) {
+      ScheduledThreadPoolExecutor executor=new ScheduledThreadPoolExecutor(1,new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
+      executor.setRemoveOnCancelPolicy(true);
+      timerService=DefaultTimeServiceProvider.create(executor);
+    }
     headOperator=configuration.getStreamOperator(userClassLoader);
     operatorChain=new OperatorChain<>(this,headOperator,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
     if (headOperator != null) {
       headOperator.setup(this,configuration,operatorChain.getChainEntryPoint());
     }
-    timerService=new ScheduledThreadPoolExecutor(1,new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
-    timerService.setRemoveOnCancelPolicy(true);
     getEnvironment().getMetricGroup().gauge("lastCheckpointSize",new Gauge<Long>(){
       @Override public Long getValue(){
         return StreamTask.this.lastCheckpointSize;
@@ -47,7 +50,7 @@ synchronized (lock) {
     isRunning=false;
     if (timerService != null) {
       try {
-        timerService.shutdownNow();
+        timerService.shutdownService();
       }
  catch (      Throwable t) {
         LOG.error("Could not shut down timer service",t);

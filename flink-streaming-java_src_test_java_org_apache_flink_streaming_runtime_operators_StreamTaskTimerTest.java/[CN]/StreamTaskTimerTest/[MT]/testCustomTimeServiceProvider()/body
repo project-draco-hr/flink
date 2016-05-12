@@ -1,0 +1,32 @@
+{
+  TestTimeServiceProvider tp=new TestTimeServiceProvider();
+  final OneInputStreamTask<String,String> mapTask=new OneInputStreamTask<>();
+  mapTask.setTimeService(tp);
+  final OneInputStreamTaskTestHarness<String,String> testHarness=new OneInputStreamTaskTestHarness<>(mapTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  StreamMap<String,String> mapOperator=new StreamMap<>(new DummyMapFunction<String>());
+  streamConfig.setStreamOperator(mapOperator);
+  testHarness.invoke();
+  assertTrue(testHarness.getCurrentProcessingTime() == 0);
+  tp.setCurrentTime(11);
+  assertTrue(testHarness.getCurrentProcessingTime() == 11);
+  tp.setCurrentTime(15);
+  tp.setCurrentTime(16);
+  assertTrue(testHarness.getCurrentProcessingTime() == 16);
+  mapTask.registerTimer(30,new Triggerable(){
+    @Override public void trigger(    long timestamp){
+    }
+  }
+);
+  mapTask.registerTimer(40,new Triggerable(){
+    @Override public void trigger(    long timestamp){
+    }
+  }
+);
+  assertEquals(2,tp.getNoOfRegisteredTimers());
+  tp.setCurrentTime(35);
+  assertEquals(1,tp.getNoOfRegisteredTimers());
+  tp.setCurrentTime(40);
+  assertEquals(0,tp.getNoOfRegisteredTimers());
+  tp.shutdownService();
+}

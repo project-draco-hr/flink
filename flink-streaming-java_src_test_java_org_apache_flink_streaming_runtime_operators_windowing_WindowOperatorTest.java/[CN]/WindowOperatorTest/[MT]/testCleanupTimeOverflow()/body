@@ -4,14 +4,19 @@
   TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
   ReducingStateDescriptor<Tuple2<String,Integer>> stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
   TumblingEventTimeWindows windowAssigner=TumblingEventTimeWindows.of(Time.milliseconds(WINDOW_SIZE));
-  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new WindowOperator<>(windowAssigner,new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,TimeWindow,Tuple2<String,Integer>>()),EventTimeTrigger.create(),LATENESS);
+  final WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new WindowOperator<>(windowAssigner,new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,TimeWindow,Tuple2<String,Integer>>()),EventTimeTrigger.create(),LATENESS);
   OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
   testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
   operator.setInputType(inputType,new ExecutionConfig());
   testHarness.open();
   ConcurrentLinkedQueue<Object> expected=new ConcurrentLinkedQueue<>();
   long timestamp=Long.MAX_VALUE - 1750;
-  Collection<TimeWindow> windows=windowAssigner.assignWindows(new Tuple2<>("key2",1),timestamp);
+  Collection<TimeWindow> windows=windowAssigner.assignWindows(new Tuple2<>("key2",1),timestamp,new WindowAssignerContext(){
+    @Override public long getCurrentProcessingTime(){
+      return operator.windowAssignerContext.getCurrentProcessingTime();
+    }
+  }
+);
   TimeWindow window=Iterables.getOnlyElement(windows);
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),timestamp));
   Assert.assertTrue(window.maxTimestamp() + LATENESS < window.maxTimestamp());
