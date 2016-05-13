@@ -1,0 +1,30 @@
+{
+  File tempFile=null;
+  String fileContent=FIRST_PART + lineBreakerInFile + SECOND_PART+ lineBreakerInFile;
+  try {
+    tempFile=File.createTempFile("CsvInputFormatTest","tmp");
+    tempFile.deleteOnExit();
+    tempFile.setWritable(true);
+    OutputStreamWriter wrt=new OutputStreamWriter(new FileOutputStream(tempFile));
+    wrt.write(fileContent);
+    wrt.close();
+    RowTypeInfo typeInfo=new RowTypeInfo(new TypeInformation<?>[]{BasicTypeInfo.STRING_TYPE_INFO});
+    CsvInputFormat<Row> inputFormat=new RowCsvInputFormat(new Path(tempFile.toURI().toString()),typeInfo);
+    Configuration parameters=new Configuration();
+    inputFormat.configure(parameters);
+    inputFormat.setDelimiter(lineBreakerSetup);
+    FileInputSplit[] splits=inputFormat.createInputSplits(1);
+    inputFormat.open(splits[0]);
+    Row result=inputFormat.nextRecord(new Row(1));
+    assertNotNull("Expecting to not return null",result);
+    assertEquals(FIRST_PART,result.productElement(0));
+    result=inputFormat.nextRecord(result);
+    assertNotNull("Expecting to not return null",result);
+    assertEquals(SECOND_PART,result.productElement(0));
+  }
+ catch (  Throwable t) {
+    System.err.println("test failed with exception: " + t.getMessage());
+    t.printStackTrace(System.err);
+    fail("Test erroneous");
+  }
+}

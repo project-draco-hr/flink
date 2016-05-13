@@ -1,0 +1,20 @@
+{
+  final String fileContent="\"\\\"Hello\\\" World\"|\"We are\\\" young\"";
+  final File tempFile=File.createTempFile("CsvReaderQuotedString","tmp");
+  tempFile.deleteOnExit();
+  tempFile.setWritable(true);
+  OutputStreamWriter writer=new OutputStreamWriter(new FileOutputStream(tempFile));
+  writer.write(fileContent);
+  writer.close();
+  RowTypeInfo typeInfo=new RowTypeInfo(new TypeInformation<?>[]{BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO});
+  CsvInputFormat<Row> inputFormat=new RowCsvInputFormat(new Path(tempFile.toURI().toString()),typeInfo);
+  inputFormat.enableQuotedStringParsing('"');
+  inputFormat.setFieldDelimiter('|');
+  inputFormat.setDelimiter('\n');
+  inputFormat.configure(new Configuration());
+  FileInputSplit[] splits=inputFormat.createInputSplits(1);
+  inputFormat.open(splits[0]);
+  Row record=inputFormat.nextRecord(new Row(2));
+  assertEquals("\\\"Hello\\\" World",record.productElement(0));
+  assertEquals("We are\\\" young",record.productElement(1));
+}
