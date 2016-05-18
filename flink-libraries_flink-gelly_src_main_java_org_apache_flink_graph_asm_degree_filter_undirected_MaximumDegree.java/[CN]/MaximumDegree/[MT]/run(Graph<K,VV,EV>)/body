@@ -1,0 +1,8 @@
+{
+  DataSet<Vertex<K,LongValue>> vertexDegree=input.run(new VertexDegree<K,VV,EV>().setReduceOnTargetId(reduceOnTargetId).setParallelism(parallelism));
+  DataSet<Tuple1<K>> highDegreeVertices=vertexDegree.flatMap(new DegreeFilter<K>(maximumDegree)).setParallelism(parallelism).name("Filter high-degree vertices");
+  JoinHint joinHint=broadcastHighDegreeVertices ? JoinHint.BROADCAST_HASH_SECOND : JoinHint.REPARTITION_HASH_SECOND;
+  DataSet<Vertex<K,VV>> vertices=input.getVertices().leftOuterJoin(highDegreeVertices,joinHint).where(0).equalTo(0).with(new ProjectVertex<K,VV>()).setParallelism(parallelism).name("Project low-degree vertices");
+  DataSet<Edge<K,EV>> edges=input.getEdges().leftOuterJoin(highDegreeVertices,joinHint).where(reduceOnTargetId ? 1 : 0).equalTo(0).with(new ProjectEdge<K,EV>()).setParallelism(parallelism).name("Project low-degree edges by " + (reduceOnTargetId ? "target" : "source")).leftOuterJoin(highDegreeVertices,joinHint).where(reduceOnTargetId ? 0 : 1).equalTo(0).with(new ProjectEdge<K,EV>()).setParallelism(parallelism).name("Project low-degree edges by " + (reduceOnTargetId ? "source" : "target"));
+  return Graph.fromDataSet(vertices,edges,input.getContext());
+}
