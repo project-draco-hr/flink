@@ -13,17 +13,22 @@
       ooOut.flush();
       count++;
     }
+    ReadOptions readOptions=new ReadOptions();
+    readOptions.setSnapshot(snapshot);
     for (    Map.Entry<String,Tuple2<ColumnFamilyHandle,StateDescriptor>> column : columnFamilies.entrySet()) {
       byte columnByte=columnFamilyMapping.get(column.getKey());
-      ReadOptions readOptions=new ReadOptions();
-      readOptions.setSnapshot(snapshot);
-      RocksIterator iterator=db.newIterator(column.getValue().f0,readOptions);
-      iterator.seekToFirst();
-      while (iterator.isValid()) {
-        outputView.writeByte(columnByte);
-        BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.key(),outputView);
-        BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.value(),outputView);
-        iterator.next();
+synchronized (dbCleanupLock) {
+        if (db == null) {
+          throw new RuntimeException("RocksDB instance was disposed. This happens " + "when we are in the middle of a checkpoint and the job fails.");
+        }
+        RocksIterator iterator=db.newIterator(column.getValue().f0,readOptions);
+        iterator.seekToFirst();
+        while (iterator.isValid()) {
+          outputView.writeByte(columnByte);
+          BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.key(),outputView);
+          BytePrimitiveArraySerializer.INSTANCE.serialize(iterator.value(),outputView);
+          iterator.next();
+        }
       }
     }
     StateHandle<DataInputView> stateHandle=outputView.closeAndGetHandle();
@@ -32,7 +37,11 @@
     return new FinalFullyAsyncSnapshot(stateHandle,checkpointId);
   }
   finally {
-    db.releaseSnapshot(snapshot);
+synchronized (dbCleanupLock) {
+      if (db != null) {
+        db.releaseSnapshot(snapshot);
+      }
+    }
     snapshot=null;
   }
 }
