@@ -1,31 +1,55 @@
 {
+  Scope.ScopeFormat scopeFormat;
   try {
-    String className=config.getString(KEY_METRICS_REPORTER_CLASS,null);
-    if (className == null) {
-      LOG.info("No reporter class name defined in flink-conf.yaml, defaulting to " + JMXReporter.class.getName() + ".");
-      className=JMXReporter.class.getName();
-    }
-    this.scopeConfig=createScopeConfig(config);
-    Configuration reporterConfig=createReporterConfig(config);
-    Class<?> reporterClass=Class.forName(className);
-    reporter=(MetricReporter)reporterClass.newInstance();
-    reporter.open(reporterConfig);
-    if (reporter instanceof Scheduled) {
-      String[] interval=config.getString(KEY_METRICS_REPORTER_INTERVAL,"10 SECONDS").split(" ");
-      long millis=TimeUnit.valueOf(interval[1]).toMillis(Long.parseLong(interval[0]));
-      timer=new java.util.Timer(true);
-      timer.schedule(new TimerTask(){
-        @Override public void run(){
-          ((Scheduled)reporter).report();
+    scopeFormat=createScopeConfig(config);
+  }
+ catch (  Exception e) {
+    scopeFormat=createScopeConfig(new Configuration());
+    LOG.warn("Failed to parse scope format, using default scope formats",e);
+  }
+  this.scopeConfig=scopeFormat;
+  final String className=config.getString(KEY_METRICS_REPORTER_CLASS,null);
+  if (className == null) {
+    this.reporter=new JMXReporter();
+    this.timer=null;
+  }
+ else {
+    MetricReporter reporter;
+    java.util.Timer timer;
+    try {
+      String configuredPeriod=config.getString(KEY_METRICS_REPORTER_INTERVAL,null);
+      TimeUnit timeunit=TimeUnit.SECONDS;
+      long period=10;
+      if (configuredPeriod != null) {
+        try {
+          String[] interval=configuredPeriod.split(" ");
+          period=Long.parseLong(interval[0]);
+          timeunit=TimeUnit.valueOf(interval[1]);
+        }
+ catch (        Exception e) {
+          LOG.error("Cannot parse report interval from config: " + configuredPeriod + " - please use values like '10 SECONDS' or '500 MILLISECONDS'. "+ "Using default reporting interval.");
         }
       }
-,millis,millis);
+      Configuration reporterConfig=createReporterConfig(config,timeunit,period);
+      Class<?> reporterClass=Class.forName(className);
+      reporter=(MetricReporter)reporterClass.newInstance();
+      reporter.open(reporterConfig);
+      if (reporter instanceof Scheduled) {
+        LOG.info("Periodically reporting metrics in intervals of {} {}",period,timeunit.name());
+        long millis=timeunit.toMillis(period);
+        timer=new java.util.Timer("Periodic Metrics Reporter",true);
+        timer.schedule(new ReporterTask((Scheduled)reporter),millis,millis);
+      }
+ else {
+        timer=null;
+      }
     }
-  }
- catch (  InstantiationException|ClassNotFoundException e) {
-    throw new RuntimeException("Error while instantiating reporter.",e);
-  }
-catch (  IllegalAccessException e) {
-    throw new RuntimeException("Implementation error.",e);
+ catch (    Throwable t) {
+      reporter=new JMXReporter();
+      timer=null;
+      LOG.error("Could not instantiate custom metrics reporter. Defaulting to JMX metrics export.",t);
+    }
+    this.reporter=reporter;
+    this.timer=timer;
   }
 }
