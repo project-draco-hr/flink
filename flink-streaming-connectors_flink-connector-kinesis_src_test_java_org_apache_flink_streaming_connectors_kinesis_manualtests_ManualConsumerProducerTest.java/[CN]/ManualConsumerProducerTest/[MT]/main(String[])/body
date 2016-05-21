@@ -3,7 +3,11 @@
   StreamExecutionEnvironment see=StreamExecutionEnvironment.getExecutionEnvironment();
   see.setParallelism(4);
   DataStream<String> simpleStringStream=see.addSource(new ProduceIntoKinesis.EventsGenerator());
-  FlinkKinesisProducer<String> kinesis=new FlinkKinesisProducer<>(pt.getRequired("region"),pt.getRequired("accessKey"),pt.getRequired("secretKey"),new KinesisSerializationSchema<String>(){
+  Properties kinesisProducerConfig=new Properties();
+  kinesisProducerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_REGION,pt.getRequired("region"));
+  kinesisProducerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_ACCESSKEYID,pt.getRequired("accessKey"));
+  kinesisProducerConfig.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_SECRETKEY,pt.getRequired("secretKey"));
+  FlinkKinesisProducer<String> kinesis=new FlinkKinesisProducer<>(new KinesisSerializationSchema<String>(){
     @Override public ByteBuffer serialize(    String element){
       return ByteBuffer.wrap(element.getBytes());
     }
@@ -14,7 +18,7 @@
       return null;
     }
   }
-);
+,kinesisProducerConfig);
   kinesis.setFailOnError(true);
   kinesis.setDefaultStream("test-flink");
   kinesis.setDefaultPartition("0");

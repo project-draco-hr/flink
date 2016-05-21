@@ -1,9 +1,15 @@
 {
   super.open(parameters);
-  KinesisProducerConfiguration config=new KinesisProducerConfiguration();
-  config.setRegion(this.region);
-  config.setCredentialsProvider(new StaticCredentialsProvider(new BasicAWSCredentials(this.accessKey,this.secretKey)));
-  producer=new KinesisProducer(config);
+  KinesisProducerConfiguration producerConfig=new KinesisProducerConfiguration();
+  producerConfig.setRegion(configProps.getProperty(KinesisConfigConstants.CONFIG_AWS_REGION));
+  producerConfig.setCredentialsProvider(AWSUtil.getCredentialsProvider(configProps));
+  if (configProps.containsKey(KinesisConfigConstants.CONFIG_PRODUCER_COLLECTION_MAX_COUNT)) {
+    producerConfig.setCollectionMaxCount(Long.parseLong(configProps.getProperty(KinesisConfigConstants.CONFIG_PRODUCER_COLLECTION_MAX_COUNT)));
+  }
+  if (configProps.containsKey(KinesisConfigConstants.CONFIG_PRODUCER_AGGREGATION_MAX_COUNT)) {
+    producerConfig.setAggregationMaxCount(Long.parseLong(configProps.getProperty(KinesisConfigConstants.CONFIG_PRODUCER_AGGREGATION_MAX_COUNT)));
+  }
+  producer=new KinesisProducer(producerConfig);
   callback=new FutureCallback<UserRecordResult>(){
     @Override public void onSuccess(    UserRecordResult result){
       if (!result.isSuccessful()) {
@@ -28,5 +34,5 @@
   if (this.customPartitioner != null) {
     this.customPartitioner.initialize(getRuntimeContext().getIndexOfThisSubtask(),getRuntimeContext().getNumberOfParallelSubtasks());
   }
-  LOG.info("Started Kinesis producer instance for region '{}'",this.region);
+  LOG.info("Started Kinesis producer instance for region '{}'",producerConfig.getRegion());
 }
