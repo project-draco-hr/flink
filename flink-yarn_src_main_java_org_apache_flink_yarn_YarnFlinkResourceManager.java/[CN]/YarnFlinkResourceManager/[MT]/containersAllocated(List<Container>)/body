@@ -6,16 +6,17 @@
     LOG.info("Received new container: {} - Remaining pending container requests: {}",container.getId(),numPendingContainerRequests);
     if (numRegistered + containersInLaunch.size() < numRequired) {
       final YarnContainerInLaunch containerInLaunch=new YarnContainerInLaunch(container);
-      containersInLaunch.put(containerInLaunch,containerInLaunch);
+      final ResourceID resourceID=containerInLaunch.getResourceID();
+      containersInLaunch.put(resourceID,containerInLaunch);
       String message="Launching TaskManager in container " + containerInLaunch + " on host "+ container.getNodeId().getHost();
       LOG.info(message);
       sendInfoMessage(message);
       try {
-        taskManagerLaunchContext.getEnvironment().put(ENV_FLINK_CONTAINER_ID,containerInLaunch.getResourceIdString());
+        taskManagerLaunchContext.getEnvironment().put(ENV_FLINK_CONTAINER_ID,resourceID.getResourceIdString());
         nodeManagerClient.startContainer(container,taskManagerLaunchContext);
       }
  catch (      Throwable t) {
-        containersInLaunch.remove(containerInLaunch);
+        containersInLaunch.remove(resourceID);
         LOG.error("Could not start TaskManager in container " + containerInLaunch,t);
         containersBeingReturned.put(container.getId(),container);
         resourceManagerClient.releaseAssignedContainer(container.getId());
