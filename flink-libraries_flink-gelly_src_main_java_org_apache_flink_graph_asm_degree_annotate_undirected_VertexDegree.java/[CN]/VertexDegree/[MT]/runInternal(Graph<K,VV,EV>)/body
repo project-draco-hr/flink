@@ -1,0 +1,9 @@
+{
+  MapFunction<Edge<K,EV>,Vertex<K,LongValue>> mapEdgeToId=reduceOnTargetId.get() ? new MapEdgeToTargetId<K,EV>() : new MapEdgeToSourceId<K,EV>();
+  DataSet<Vertex<K,LongValue>> vertexIds=input.getEdges().map(mapEdgeToId).setParallelism(parallelism).name("Map edge to vertex ID");
+  DataSet<Vertex<K,LongValue>> degree=vertexIds.groupBy(0).reduce(new DegreeCount<K>()).setParallelism(parallelism).name("Degree count");
+  if (includeZeroDegreeVertices.get()) {
+    degree=input.getVertices().leftOuterJoin(degree).where(0).equalTo(0).with(new JoinVertexWithVertexDegree<K,VV>()).setParallelism(parallelism).name("Join zero degree vertices");
+  }
+  return degree;
+}
