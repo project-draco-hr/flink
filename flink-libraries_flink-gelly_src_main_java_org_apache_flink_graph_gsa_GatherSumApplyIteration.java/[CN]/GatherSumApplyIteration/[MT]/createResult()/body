@@ -7,12 +7,10 @@
   TypeInformation<Tuple2<K,M>> innerType=new TupleTypeInfo<Tuple2<K,M>>(keyType,messageType);
   TypeInformation<Vertex<K,VV>> outputType=vertexDataSet.getType();
   Graph<K,VV,EV> graph=Graph.fromDataSet(vertexDataSet,edgeDataSet,vertexDataSet.getExecutionEnvironment());
+  DataSet<LongValue> numberOfVertices=null;
   if (this.configuration != null && this.configuration.isOptNumVertices()) {
     try {
-      long numberOfVertices=graph.numberOfVertices();
-      gather.setNumberOfVertices(numberOfVertices);
-      sum.setNumberOfVertices(numberOfVertices);
-      apply.setNumberOfVertices(numberOfVertices);
+      numberOfVertices=GraphUtils.count(this.vertexDataSet);
     }
  catch (    Exception e) {
       e.printStackTrace();
@@ -58,6 +56,9 @@ if (this.configuration != null) {
 for (Tuple2<String,DataSet<?>> e : this.configuration.getGatherBcastVars()) {
 gatherMapOperator=gatherMapOperator.withBroadcastSet(e.f1,e.f0);
 }
+if (this.configuration.isOptNumVertices()) {
+gatherMapOperator=gatherMapOperator.withBroadcastSet(numberOfVertices,"number of vertices");
+}
 }
 DataSet<Tuple2<K,M>> gatheredSet=gatherMapOperator;
 ReduceOperator<Tuple2<K,M>> sumReduceOperator=gatheredSet.groupBy(0).reduce(sumUdf);
@@ -66,6 +67,9 @@ if (this.configuration != null) {
 for (Tuple2<String,DataSet<?>> e : this.configuration.getSumBcastVars()) {
 sumReduceOperator=sumReduceOperator.withBroadcastSet(e.f1,e.f0);
 }
+if (this.configuration.isOptNumVertices()) {
+sumReduceOperator=sumReduceOperator.withBroadcastSet(numberOfVertices,"number of vertices");
+}
 }
 DataSet<Tuple2<K,M>> summedSet=sumReduceOperator;
 JoinOperator<?,?,Vertex<K,VV>> appliedSet=summedSet.join(iteration.getSolutionSet()).where(0).equalTo(0).with(applyUdf);
@@ -73,6 +77,9 @@ appliedSet=appliedSet.name("Apply");
 if (this.configuration != null) {
 for (Tuple2<String,DataSet<?>> e : this.configuration.getApplyBcastVars()) {
 appliedSet=appliedSet.withBroadcastSet(e.f1,e.f0);
+}
+if (this.configuration.isOptNumVertices()) {
+appliedSet=appliedSet.withBroadcastSet(numberOfVertices,"number of vertices");
 }
 }
 appliedSet.withForwardedFieldsFirst("0").withForwardedFieldsSecond("0");
