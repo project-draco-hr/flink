@@ -1,0 +1,37 @@
+{
+  final String name=generateJmxName(metricName,group.getScopeComponents());
+  AbstractBean jmxMetric;
+  ObjectName jmxName;
+  try {
+    jmxName=new ObjectName(name);
+  }
+ catch (  MalformedObjectNameException e) {
+    LOG.error("Metric name did not conform to JMX ObjectName rules: " + name,e);
+    return;
+  }
+  if (metric instanceof Gauge) {
+    jmxMetric=new JmxGauge((Gauge<?>)metric);
+  }
+ else   if (metric instanceof Counter) {
+    jmxMetric=new JmxCounter((Counter)metric);
+  }
+ else {
+    LOG.error("Unknown metric type: " + metric.getClass().getName());
+    return;
+  }
+  try {
+synchronized (this) {
+      mBeanServer.registerMBean(jmxMetric,jmxName);
+      registeredMetrics.put(metric,jmxName);
+    }
+  }
+ catch (  NotCompliantMBeanException e) {
+    LOG.error("Metric did not comply with JMX MBean naming rules.",e);
+  }
+catch (  InstanceAlreadyExistsException e) {
+    LOG.error("A metric with the name " + jmxName + " was already registered.",e);
+  }
+catch (  Throwable t) {
+    LOG.error("Failed to register metric",t);
+  }
+}

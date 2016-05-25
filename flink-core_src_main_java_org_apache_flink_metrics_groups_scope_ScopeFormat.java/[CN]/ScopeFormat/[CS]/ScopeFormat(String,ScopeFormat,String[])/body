@@ -1,0 +1,35 @@
+{
+  checkNotNull(format,"format is null");
+  final String[] rawComponents=format.split("\\" + SCOPE_SEPARATOR);
+  final boolean parentAsPrefix=rawComponents.length > 0 && rawComponents[0].equals(SCOPE_INHERIT_PARENT);
+  if (parentAsPrefix) {
+    if (parent == null) {
+      throw new IllegalArgumentException("Component scope format requires parent prefix (starts with '" + SCOPE_INHERIT_PARENT + "'), but this component has no parent (is root component).");
+    }
+    this.format=format.length() > 2 ? format.substring(2) : "<empty>";
+    String[] parentTemplate=parent.template;
+    int parentLen=parentTemplate.length;
+    this.template=new String[parentLen + rawComponents.length - 1];
+    System.arraycopy(parentTemplate,0,this.template,0,parentLen);
+    System.arraycopy(rawComponents,1,this.template,parentLen,rawComponents.length - 1);
+  }
+ else {
+    this.format=format.isEmpty() ? "<empty>" : format;
+    this.template=rawComponents;
+  }
+  HashMap<String,Integer> varToValuePos=arrayToMap(variables);
+  List<Integer> templatePos=new ArrayList<>();
+  List<Integer> valuePos=new ArrayList<>();
+  for (int i=0; i < template.length; i++) {
+    final String component=template[i];
+    if (component != null && component.length() >= 3 && component.charAt(0) == '<' && component.charAt(component.length() - 1) == '>') {
+      Integer replacementPos=varToValuePos.get(component);
+      if (replacementPos != null) {
+        templatePos.add(i);
+        valuePos.add(replacementPos);
+      }
+    }
+  }
+  this.templatePos=integerListToArray(templatePos);
+  this.valuePos=integerListToArray(valuePos);
+}
