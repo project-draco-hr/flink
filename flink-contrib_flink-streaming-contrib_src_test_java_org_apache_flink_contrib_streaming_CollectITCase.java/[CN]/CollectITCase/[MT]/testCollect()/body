@@ -1,19 +1,19 @@
 {
-  Configuration config=new Configuration();
-  ForkableFlinkMiniCluster cluster=new ForkableFlinkMiniCluster(config,false);
-  cluster.start();
-  final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getLeaderRPCPort());
-  long N=10;
-  DataStream<Long> stream=env.generateSequence(1,N);
-  long i=1;
-  for (Iterator it=DataStreamUtils.collect(stream); it.hasNext(); ) {
-    Long x=(Long)it.next();
-    if (x != i) {
-      Assert.fail(String.format("Should have got %d, got %d instead.",i,x));
+  final ForkableFlinkMiniCluster cluster=new ForkableFlinkMiniCluster(new Configuration(),false);
+  try {
+    cluster.start();
+    final StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",cluster.getLeaderRPCPort());
+    final long N=10;
+    DataStream<Long> stream=env.generateSequence(1,N);
+    long i=1;
+    for (Iterator<Long> it=DataStreamUtils.collect(stream); it.hasNext(); ) {
+      long x=it.next();
+      assertEquals("received wrong element",i,x);
+      i++;
     }
-    i++;
+    assertEquals("received wrong number of elements",N + 1,i);
   }
-  if (i != N + 1) {
-    Assert.fail(String.format("Should have collected %d numbers, got %d instead.",N,i - 1));
+  finally {
+    cluster.stop();
   }
 }
