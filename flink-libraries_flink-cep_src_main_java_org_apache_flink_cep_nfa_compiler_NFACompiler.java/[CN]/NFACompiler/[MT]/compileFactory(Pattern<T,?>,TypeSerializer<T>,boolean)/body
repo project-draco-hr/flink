@@ -1,0 +1,45 @@
+{
+  if (pattern == null) {
+    return new NFAFactoryImpl<T>(inputTypeSerializer,0,Collections.<State<T>>emptyList(),timeoutHandling);
+  }
+ else {
+    Map<String,State<T>> states=new HashMap<>();
+    long windowTime;
+    Pattern<T,?> succeedingPattern;
+    State<T> succeedingState;
+    Pattern<T,?> currentPattern=pattern;
+    State<T> currentState=new State<>(currentPattern.getName(),State.StateType.Final);
+    states.put(currentPattern.getName(),currentState);
+    windowTime=currentPattern.getWindowTime() != null ? currentPattern.getWindowTime().toMilliseconds() : 0L;
+    while (currentPattern.getPrevious() != null) {
+      succeedingPattern=currentPattern;
+      succeedingState=currentState;
+      currentPattern=currentPattern.getPrevious();
+      Time currentWindowTime=currentPattern.getWindowTime();
+      if (currentWindowTime != null && currentWindowTime.toMilliseconds() < windowTime) {
+        windowTime=currentWindowTime.toMilliseconds();
+      }
+      if (states.containsKey(currentPattern.getName())) {
+        currentState=states.get(currentPattern.getName());
+      }
+ else {
+        currentState=new State<>(currentPattern.getName(),State.StateType.Normal);
+        states.put(currentState.getName(),currentState);
+      }
+      currentState.addStateTransition(new StateTransition<T>(StateTransitionAction.TAKE,succeedingState,(FilterFunction<T>)succeedingPattern.getFilterFunction()));
+      if (succeedingPattern instanceof FollowedByPattern) {
+        currentState.addStateTransition(new StateTransition<T>(StateTransitionAction.IGNORE,currentState,null));
+      }
+    }
+    final State<T> beginningState;
+    if (states.containsKey(BEGINNING_STATE_NAME)) {
+      beginningState=states.get(BEGINNING_STATE_NAME);
+    }
+ else {
+      beginningState=new State<>(BEGINNING_STATE_NAME,State.StateType.Start);
+      states.put(BEGINNING_STATE_NAME,beginningState);
+    }
+    beginningState.addStateTransition(new StateTransition<T>(StateTransitionAction.TAKE,currentState,(FilterFunction<T>)currentPattern.getFilterFunction()));
+    return new NFAFactoryImpl<T>(inputTypeSerializer,windowTime,new HashSet<>(states.values()),timeoutHandling);
+  }
+}

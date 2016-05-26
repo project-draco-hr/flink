@@ -1,10 +1,17 @@
 {
   final int numberComputationStates=computationStates.size();
-  final List<Map<String,T>> result=new ArrayList<>();
+  final Collection<Map<String,T>> result=new ArrayList<>();
+  final Collection<Tuple2<Map<String,T>,Long>> timeoutResult=new ArrayList<>();
   for (int i=0; i < numberComputationStates; i++) {
     ComputationState<T> computationState=computationStates.poll();
     final Collection<ComputationState<T>> newComputationStates;
     if (!computationState.isStartState() && windowTime > 0 && timestamp - computationState.getStartTimestamp() >= windowTime) {
+      if (handleTimeout) {
+        Collection<Map<String,T>> timeoutPatterns=extractPatternMatches(computationState);
+        for (        Map<String,T> timeoutPattern : timeoutPatterns) {
+          timeoutResult.add(Tuple2.of(timeoutPattern,timestamp));
+        }
+      }
       sharedBuffer.release(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
       sharedBuffer.remove(computationState.getState(),computationState.getEvent(),computationState.getTimestamp());
       newComputationStates=Collections.emptyList();
@@ -23,13 +30,13 @@
         computationStates.add(newComputationState);
       }
     }
-    if (windowTime > 0) {
-      long pruningTimestamp=timestamp - windowTime;
-      if (pruningTimestamp >= timestamp) {
-        throw new IllegalStateException("Detected an underflow in the pruning timestamp. This indicates that" + " either the window length is too long (" + windowTime + ") or that the timestamp has not been"+ " set correctly (e.g. Long.MIN_VALUE).");
-      }
-      sharedBuffer.prune(pruningTimestamp);
-    }
   }
-  return result;
+  if (windowTime > 0) {
+    long pruningTimestamp=timestamp - windowTime;
+    if (pruningTimestamp >= timestamp) {
+      throw new IllegalStateException("Detected an underflow in the pruning timestamp. This indicates that" + " either the window length is too long (" + windowTime + ") or that the timestamp has not been"+ " set correctly (e.g. Long.MIN_VALUE).");
+    }
+    sharedBuffer.prune(pruningTimestamp);
+  }
+  return Tuple2.of(result,timeoutResult);
 }

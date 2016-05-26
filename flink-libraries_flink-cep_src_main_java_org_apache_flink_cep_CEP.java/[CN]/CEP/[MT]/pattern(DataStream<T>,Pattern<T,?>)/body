@@ -1,16 +1,3 @@
 {
-  final TypeSerializer<T> inputSerializer=input.getType().createSerializer(input.getExecutionConfig());
-  final boolean isProcessingTime=input.getExecutionEnvironment().getStreamTimeCharacteristic() == TimeCharacteristic.ProcessingTime;
-  final NFACompiler.NFAFactory<T> nfaFactory=NFACompiler.compileFactory(pattern,inputSerializer);
-  final DataStream<Map<String,T>> patternStream;
-  if (input instanceof KeyedStream) {
-    KeyedStream<T,K> keyedStream=(KeyedStream<T,K>)input;
-    KeySelector<T,K> keySelector=keyedStream.getKeySelector();
-    TypeSerializer<K> keySerializer=keyedStream.getKeyType().createSerializer(keyedStream.getExecutionConfig());
-    patternStream=keyedStream.transform(PATTERN_OPERATOR_NAME,(TypeInformation<Map<String,T>>)(TypeInformation<?>)TypeExtractor.getForClass(Map.class),new KeyedCEPPatternOperator<>(inputSerializer,isProcessingTime,keySelector,keySerializer,nfaFactory));
-  }
- else {
-    patternStream=input.transform(PATTERN_OPERATOR_NAME,(TypeInformation<Map<String,T>>)(TypeInformation<?>)TypeExtractor.getForClass(Map.class),new CEPPatternOperator<T>(inputSerializer,isProcessingTime,nfaFactory)).setParallelism(1);
-  }
-  return new PatternStream<>(patternStream,input.getType());
+  return new PatternStream<>(input,pattern);
 }
