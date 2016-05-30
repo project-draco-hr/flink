@@ -1,0 +1,26 @@
+{
+  if (shutDown.get()) {
+    return Futures.failed(new IllegalStateException("Shut down"));
+  }
+  EstablishedConnection connection=establishedConnections.get(serverAddress);
+  if (connection != null) {
+    return connection.getKvState(kvStateId,serializedKeyAndNamespace);
+  }
+ else {
+    PendingConnection pendingConnection=pendingConnections.get(serverAddress);
+    if (pendingConnection != null) {
+      return pendingConnection.getKvState(kvStateId,serializedKeyAndNamespace);
+    }
+ else {
+      PendingConnection pending=new PendingConnection(serverAddress);
+      PendingConnection previous=pendingConnections.putIfAbsent(serverAddress,pending);
+      if (previous == null) {
+        bootstrap.connect(serverAddress.getHost(),serverAddress.getPort()).addListener(pending);
+        return pending.getKvState(kvStateId,serializedKeyAndNamespace);
+      }
+ else {
+        return previous.getKvState(kvStateId,serializedKeyAndNamespace);
+      }
+    }
+  }
+}

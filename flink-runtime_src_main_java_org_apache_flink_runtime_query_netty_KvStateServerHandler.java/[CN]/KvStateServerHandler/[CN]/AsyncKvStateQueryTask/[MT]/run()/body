@@ -1,0 +1,43 @@
+{
+  boolean success=false;
+  try {
+    if (!ctx.channel().isActive()) {
+      return;
+    }
+    byte[] serializedKeyAndNamespace=request.getSerializedKeyAndNamespace();
+    byte[] serializedResult=kvState.getSerializedValue(serializedKeyAndNamespace);
+    if (serializedResult != null) {
+      ByteBuf buf=KvStateRequestSerializer.serializeKvStateRequestResult(ctx.alloc(),request.getRequestId(),serializedResult);
+      int highWatermark=ctx.channel().config().getWriteBufferHighWaterMark();
+      ChannelFuture write;
+      if (buf.readableBytes() <= highWatermark) {
+        write=ctx.writeAndFlush(buf);
+      }
+ else {
+        write=ctx.writeAndFlush(new ChunkedByteBuf(buf,highWatermark));
+      }
+      write.addListener(new QueryResultWriteListener());
+      success=true;
+    }
+ else {
+      ByteBuf unknownKey=KvStateRequestSerializer.serializeKvStateRequestFailure(ctx.alloc(),request.getRequestId(),new UnknownKeyOrNamespace());
+      ctx.writeAndFlush(unknownKey);
+    }
+  }
+ catch (  Throwable t) {
+    try {
+      String stringifiedCause=ExceptionUtils.stringifyException(t);
+      String errMsg="Failed to query state backend for query " + request.getRequestId() + ". Caused by: "+ stringifiedCause;
+      ByteBuf err=KvStateRequestSerializer.serializeKvStateRequestFailure(ctx.alloc(),request.getRequestId(),new RuntimeException(errMsg));
+      ctx.writeAndFlush(err);
+    }
+ catch (    IOException e) {
+      LOG.error("Failed to respond with the error after failed to query state backend",e);
+    }
+  }
+ finally {
+    if (!success) {
+      stats.reportFailedRequest();
+    }
+  }
+}

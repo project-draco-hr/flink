@@ -1,0 +1,13 @@
+{
+  Preconditions.checkArgument(numEventLoopThreads >= 1,"Non-positive number of event loop threads.");
+  NettyBufferPool bufferPool=new NettyBufferPool(numEventLoopThreads);
+  ThreadFactory threadFactory=new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Flink KvStateClient Event Loop Thread %d").build();
+  NioEventLoopGroup nioGroup=new NioEventLoopGroup(numEventLoopThreads,threadFactory);
+  this.bootstrap=new Bootstrap().group(nioGroup).channel(NioSocketChannel.class).option(ChannelOption.ALLOCATOR,bufferPool).handler(new ChannelInitializer<SocketChannel>(){
+    @Override protected void initChannel(    SocketChannel ch) throws Exception {
+      ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,0,4,0,4)).addLast(new ChunkedWriteHandler());
+    }
+  }
+);
+  this.stats=Preconditions.checkNotNull(stats,"Statistics tracker");
+}

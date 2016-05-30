@@ -1,0 +1,13 @@
+{
+  Preconditions.checkArgument(bindPort >= 0 && bindPort <= 65536,"Port " + bindPort + " is out of valid port range (0-65536).");
+  Preconditions.checkArgument(numEventLoopThreads >= 1,"Non-positive number of event loop threads.");
+  Preconditions.checkArgument(numQueryThreads >= 1,"Non-positive number of query threads.");
+  Preconditions.checkNotNull(kvStateRegistry,"KvStateRegistry");
+  Preconditions.checkNotNull(stats,"KvStateRequestStats");
+  NettyBufferPool bufferPool=new NettyBufferPool(numEventLoopThreads);
+  ThreadFactory threadFactory=new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Flink KvStateServer EventLoop Thread %d").build();
+  NioEventLoopGroup nioGroup=new NioEventLoopGroup(numEventLoopThreads,threadFactory);
+  queryExecutor=createQueryExecutor(numQueryThreads);
+  KvStateServerHandler serverHandler=new KvStateServerHandler(kvStateRegistry,queryExecutor,stats);
+  bootstrap=new ServerBootstrap().localAddress(bindAddress,bindPort).group(nioGroup).channel(NioServerSocketChannel.class).option(ChannelOption.ALLOCATOR,bufferPool).childOption(ChannelOption.ALLOCATOR,bufferPool).childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK,LOW_WATER_MARK).childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK,HIGH_WATER_MARK).childHandler(new KvStateServerChannelInitializer(serverHandler));
+}

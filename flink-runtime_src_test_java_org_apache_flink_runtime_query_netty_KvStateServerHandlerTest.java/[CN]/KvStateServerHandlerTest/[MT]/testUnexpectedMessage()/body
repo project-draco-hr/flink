@@ -1,0 +1,25 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  ByteBuf unexpectedMessage=Unpooled.buffer(8);
+  unexpectedMessage.writeInt(4);
+  unexpectedMessage.writeInt(123238213);
+  channel.writeInbound(unexpectedMessage);
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.SERVER_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  Throwable response=KvStateRequestSerializer.deserializeServerFailure(buf);
+  assertEquals(0,stats.getNumRequests());
+  assertEquals(0,stats.getNumFailed());
+  unexpectedMessage=KvStateRequestSerializer.serializeKvStateRequestResult(channel.alloc(),192,new byte[0]);
+  channel.writeInbound(unexpectedMessage);
+  buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.SERVER_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  response=KvStateRequestSerializer.deserializeServerFailure(buf);
+  assertTrue("Unexpected failure cause " + response.getClass().getName(),response instanceof IllegalArgumentException);
+  assertEquals(0,stats.getNumRequests());
+  assertEquals(0,stats.getNumFailed());
+}

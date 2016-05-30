@@ -1,0 +1,34 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  ValueStateDescriptor<Integer> desc=new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null);
+  desc.setQueryable("any");
+  MemValueState<Integer,VoidNamespace,Integer> kvState=new MemValueState<>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
+  KvStateID kvStateId=registry.registerKvState(new JobID(),new JobVertexID(),0,"vanilla",kvState);
+  int key=99812822;
+  kvState.setCurrentKey(key);
+  kvState.setCurrentNamespace(VoidNamespace.INSTANCE);
+  kvState.update(712828289);
+  byte[] wrongKeyAndNamespace=KvStateRequestSerializer.serializeKeyAndNamespace("wrong-key-type",StringSerializer.INSTANCE,"wrong-namespace-type",StringSerializer.INSTANCE);
+  byte[] wrongNamespace=KvStateRequestSerializer.serializeKeyAndNamespace(key,IntSerializer.INSTANCE,"wrong-namespace-type",StringSerializer.INSTANCE);
+  ByteBuf request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),182828,kvStateId,wrongKeyAndNamespace);
+  channel.writeInbound(request);
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.REQUEST_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  KvStateRequestFailure response=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+  assertEquals(182828,response.getRequestId());
+  assertTrue(response.getCause().getMessage().contains("IllegalArgumentException"));
+  request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),182829,kvStateId,wrongNamespace);
+  channel.writeInbound(request);
+  buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.REQUEST_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  response=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+  assertEquals(182829,response.getRequestId());
+  assertTrue(response.getCause().getMessage().contains("IllegalArgumentException"));
+  assertEquals(2,stats.getNumRequests());
+  assertEquals(2,stats.getNumFailed());
+}

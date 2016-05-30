@@ -1,0 +1,31 @@
+{
+  try {
+    ByteBuf buf=(ByteBuf)msg;
+    KvStateRequestType msgType=KvStateRequestSerializer.deserializeHeader(buf);
+    if (msgType == KvStateRequestType.REQUEST_RESULT) {
+      KvStateRequestResult result=KvStateRequestSerializer.deserializeKvStateRequestResult(buf);
+      callback.onRequestResult(result.getRequestId(),result.getSerializedResult());
+    }
+ else     if (msgType == KvStateRequestType.REQUEST_FAILURE) {
+      KvStateRequestFailure failure=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+      callback.onRequestFailure(failure.getRequestId(),failure.getCause());
+    }
+ else     if (msgType == KvStateRequestType.SERVER_FAILURE) {
+      throw KvStateRequestSerializer.deserializeServerFailure(buf);
+    }
+ else {
+      throw new IllegalStateException("Unexpected response type '" + msgType + "'");
+    }
+  }
+ catch (  Throwable t1) {
+    try {
+      callback.onFailure(t1);
+    }
+ catch (    Throwable t2) {
+      LOG.error("Failed to notify callback about failure",t2);
+    }
+  }
+ finally {
+    ReferenceCountUtil.release(msg);
+  }
+}

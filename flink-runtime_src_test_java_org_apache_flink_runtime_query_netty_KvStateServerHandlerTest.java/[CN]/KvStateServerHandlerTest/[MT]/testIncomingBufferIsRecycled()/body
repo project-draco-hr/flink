@@ -1,0 +1,16 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  ByteBuf request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),282872,new KvStateID(),new byte[0]);
+  assertEquals(1,request.refCnt());
+  channel.writeInbound(request);
+  assertEquals("Buffer not recycled",0,request.refCnt());
+  ByteBuf unexpected=channel.alloc().buffer(8);
+  unexpected.writeInt(4);
+  unexpected.writeInt(4);
+  assertEquals(1,unexpected.refCnt());
+  channel.writeInbound(unexpected);
+  assertEquals("Buffer not recycled",0,unexpected.refCnt());
+}

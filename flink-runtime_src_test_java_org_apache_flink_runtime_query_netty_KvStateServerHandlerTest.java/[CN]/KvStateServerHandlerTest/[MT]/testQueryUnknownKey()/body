@@ -1,0 +1,22 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  ValueStateDescriptor<Integer> desc=new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null);
+  desc.setQueryable("any");
+  MemValueState<Integer,VoidNamespace,Integer> kvState=new MemValueState<>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
+  KvStateID kvStateId=registry.registerKvState(new JobID(),new JobVertexID(),0,"vanilla",kvState);
+  byte[] serializedKeyAndNamespace=KvStateRequestSerializer.serializeKeyAndNamespace(1238283,IntSerializer.INSTANCE,VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE);
+  long requestId=Integer.MAX_VALUE + 22982L;
+  ByteBuf request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),requestId,kvStateId,serializedKeyAndNamespace);
+  channel.writeInbound(request);
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.REQUEST_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  KvStateRequestFailure response=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+  assertEquals(requestId,response.getRequestId());
+  assertTrue("Did not respond with expected failure cause",response.getCause() instanceof UnknownKeyOrNamespace);
+  assertEquals(1,stats.getNumRequests());
+  assertEquals(1,stats.getNumFailed());
+}

@@ -1,0 +1,17 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  long requestId=Integer.MAX_VALUE + 182828L;
+  ByteBuf request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),requestId,new KvStateID(),new byte[0]);
+  channel.writeInbound(request);
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.REQUEST_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  KvStateRequestFailure response=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+  assertEquals(requestId,response.getRequestId());
+  assertTrue("Did not respond with expected failure cause",response.getCause() instanceof UnknownKvStateID);
+  assertEquals(1,stats.getNumRequests());
+  assertEquals(1,stats.getNumFailed());
+}

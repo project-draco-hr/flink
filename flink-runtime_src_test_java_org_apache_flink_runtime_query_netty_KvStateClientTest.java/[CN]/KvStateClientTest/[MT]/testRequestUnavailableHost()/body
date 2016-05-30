@@ -1,0 +1,23 @@
+{
+  Deadline deadline=TEST_TIMEOUT.fromNow();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateClient client=null;
+  try {
+    client=new KvStateClient(1,stats);
+    int availablePort=NetUtils.getAvailablePort();
+    KvStateServerAddress serverAddress=new KvStateServerAddress(InetAddress.getLocalHost(),availablePort);
+    Future<byte[]> future=client.getKvState(serverAddress,new KvStateID(),new byte[0]);
+    try {
+      Await.result(future,deadline.timeLeft());
+      fail("Did not throw expected ConnectException");
+    }
+ catch (    ConnectException ignored) {
+    }
+  }
+  finally {
+    if (client != null) {
+      client.shutDown();
+    }
+    assertEquals("Channel leak",0,stats.getNumConnections());
+  }
+}

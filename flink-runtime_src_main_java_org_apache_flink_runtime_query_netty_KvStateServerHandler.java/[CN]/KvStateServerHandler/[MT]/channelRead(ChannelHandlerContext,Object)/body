@@ -1,0 +1,41 @@
+{
+  KvStateRequest request=null;
+  try {
+    ByteBuf buf=(ByteBuf)msg;
+    KvStateRequestType msgType=KvStateRequestSerializer.deserializeHeader(buf);
+    if (msgType == KvStateRequestType.REQUEST) {
+      request=KvStateRequestSerializer.deserializeKvStateRequest(buf);
+      stats.reportRequest();
+      KvState<?,?,?,?,?> kvState=registry.getKvState(request.getKvStateId());
+      if (kvState != null) {
+        queryExecutor.submit(new AsyncKvStateQueryTask(ctx,request,kvState,stats));
+      }
+ else {
+        ByteBuf unknown=KvStateRequestSerializer.serializeKvStateRequestFailure(ctx.alloc(),request.getRequestId(),new UnknownKvStateID(request.getKvStateId()));
+        ctx.writeAndFlush(unknown);
+        stats.reportFailedRequest();
+      }
+    }
+ else {
+      ByteBuf failure=KvStateRequestSerializer.serializeServerFailure(ctx.alloc(),new IllegalArgumentException("Unexpected message type " + msgType + ". KvStateServerHandler expects "+ KvStateRequestType.REQUEST+ " messages."));
+      ctx.writeAndFlush(failure);
+    }
+  }
+ catch (  Throwable t) {
+    String stringifiedCause=ExceptionUtils.stringifyException(t);
+    ByteBuf err;
+    if (request != null) {
+      String errMsg="Failed to handle incoming request with ID " + request.getRequestId() + ". Caused by: "+ stringifiedCause;
+      err=KvStateRequestSerializer.serializeKvStateRequestFailure(ctx.alloc(),request.getRequestId(),new RuntimeException(errMsg));
+      stats.reportFailedRequest();
+    }
+ else {
+      String errMsg="Failed to handle incoming message. Caused by: " + stringifiedCause;
+      err=KvStateRequestSerializer.serializeServerFailure(ctx.alloc(),new RuntimeException(errMsg));
+    }
+    ctx.writeAndFlush(err);
+  }
+ finally {
+    ReferenceCountUtil.release(msg);
+  }
+}

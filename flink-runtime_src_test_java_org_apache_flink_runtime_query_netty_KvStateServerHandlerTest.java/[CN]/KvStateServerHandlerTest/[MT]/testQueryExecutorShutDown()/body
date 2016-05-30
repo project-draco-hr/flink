@@ -1,0 +1,22 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  ExecutorService closedExecutor=Executors.newSingleThreadExecutor();
+  closedExecutor.shutdown();
+  assertTrue(closedExecutor.isShutdown());
+  KvStateServerHandler handler=new KvStateServerHandler(registry,closedExecutor,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(getFrameDecoder(),handler);
+  ValueStateDescriptor<Integer> desc=new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null);
+  desc.setQueryable("any");
+  MemValueState<Integer,VoidNamespace,Integer> kvState=new MemValueState<>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
+  KvStateID kvStateId=registry.registerKvState(new JobID(),new JobVertexID(),0,"vanilla",kvState);
+  ByteBuf request=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),282872,kvStateId,new byte[0]);
+  channel.writeInbound(request);
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.REQUEST_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  KvStateRequestFailure response=KvStateRequestSerializer.deserializeKvStateRequestFailure(buf);
+  assertTrue(response.getCause().getMessage().contains("RejectedExecutionException"));
+  assertEquals(1,stats.getNumRequests());
+  assertEquals(1,stats.getNumFailed());
+}

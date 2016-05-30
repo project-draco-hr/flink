@@ -1,0 +1,14 @@
+{
+  KvStateRegistry registry=new KvStateRegistry();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateServerHandler handler=new KvStateServerHandler(registry,TEST_THREAD_POOL,stats);
+  EmbeddedChannel channel=new EmbeddedChannel(handler);
+  channel.pipeline().fireExceptionCaught(new RuntimeException("Expected test Exception"));
+  ByteBuf buf=(ByteBuf)readInboundBlocking(channel);
+  buf.skipBytes(4);
+  assertEquals(KvStateRequestType.SERVER_FAILURE,KvStateRequestSerializer.deserializeHeader(buf));
+  Throwable response=KvStateRequestSerializer.deserializeServerFailure(buf);
+  assertTrue(response.getMessage().contains("Expected test Exception"));
+  channel.closeFuture().await(READ_TIMEOUT_MILLIS);
+  assertFalse(channel.isActive());
+}

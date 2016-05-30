@@ -1,0 +1,31 @@
+{
+  PromiseAndTimestamp requestPromiseTs=new PromiseAndTimestamp(Futures.<byte[]>promise(),System.nanoTime());
+  try {
+    final long requestId=requestCount.getAndIncrement();
+    pendingRequests.put(requestId,requestPromiseTs);
+    stats.reportRequest();
+    ByteBuf buf=KvStateRequestSerializer.serializeKvStateRequest(channel.alloc(),requestId,kvStateId,serializedKeyAndNamespace);
+    channel.writeAndFlush(buf).addListener(new ChannelFutureListener(){
+      @Override public void operationComplete(      ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          PromiseAndTimestamp pending=pendingRequests.remove(requestId);
+          if (pending != null && pending.promise.tryFailure(future.cause())) {
+            stats.reportFailedRequest();
+          }
+        }
+      }
+    }
+);
+    Throwable failure=failureCause.get();
+    if (failure != null) {
+      PromiseAndTimestamp p=pendingRequests.remove(requestId);
+      if (p != null && p.promise.tryFailure(failure)) {
+        stats.reportFailedRequest();
+      }
+    }
+  }
+ catch (  Throwable t) {
+    requestPromiseTs.promise.tryFailure(t);
+  }
+  return requestPromiseTs.promise.future();
+}

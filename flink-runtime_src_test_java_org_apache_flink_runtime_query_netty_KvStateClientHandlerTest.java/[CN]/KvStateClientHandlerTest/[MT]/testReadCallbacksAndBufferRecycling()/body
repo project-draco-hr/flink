@@ -1,0 +1,26 @@
+{
+  KvStateClientHandlerCallback callback=mock(KvStateClientHandlerCallback.class);
+  EmbeddedChannel channel=new EmbeddedChannel(new KvStateClientHandler(callback));
+  ByteBuf buf=KvStateRequestSerializer.serializeKvStateRequestResult(channel.alloc(),1222112277,new byte[0]);
+  buf.skipBytes(4);
+  channel.writeInbound(buf);
+  verify(callback,times(1)).onRequestResult(eq(1222112277L),any(byte[].class));
+  assertEquals("Buffer not recycled",0,buf.refCnt());
+  buf=KvStateRequestSerializer.serializeKvStateRequestFailure(channel.alloc(),1222112278,new RuntimeException("Expected test Exception"));
+  buf.skipBytes(4);
+  channel.writeInbound(buf);
+  verify(callback,times(1)).onRequestFailure(eq(1222112278L),any(RuntimeException.class));
+  assertEquals("Buffer not recycled",0,buf.refCnt());
+  buf=KvStateRequestSerializer.serializeServerFailure(channel.alloc(),new RuntimeException("Expected test Exception"));
+  buf.skipBytes(4);
+  channel.writeInbound(buf);
+  verify(callback,times(1)).onFailure(any(RuntimeException.class));
+  buf=channel.alloc().buffer(4).writeInt(1223823);
+  channel.writeInbound(buf);
+  verify(callback,times(2)).onFailure(any(IllegalStateException.class));
+  assertEquals("Buffer not recycled",0,buf.refCnt());
+  channel.pipeline().fireExceptionCaught(new RuntimeException("Expected test Exception"));
+  verify(callback,times(3)).onFailure(any(RuntimeException.class));
+  channel.pipeline().fireChannelInactive();
+  verify(callback,times(4)).onFailure(any(ClosedChannelException.class));
+}

@@ -1,0 +1,67 @@
+{
+  Deadline deadline=TEST_TIMEOUT.fromNow();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  ExecutorService executor=null;
+  KvStateClient client=null;
+  Channel serverChannel=null;
+  final byte[] serializedResult=new byte[1024];
+  ThreadLocalRandom.current().nextBytes(serializedResult);
+  try {
+    int numQueryTasks=4;
+    final int numQueriesPerTask=1024;
+    executor=Executors.newFixedThreadPool(numQueryTasks);
+    client=new KvStateClient(1,stats);
+    serverChannel=createServerChannel(new ChannelInboundHandlerAdapter(){
+      @Override public void channelRead(      ChannelHandlerContext ctx,      Object msg) throws Exception {
+        ByteBuf buf=(ByteBuf)msg;
+        assertEquals(KvStateRequestType.REQUEST,KvStateRequestSerializer.deserializeHeader(buf));
+        KvStateRequest request=KvStateRequestSerializer.deserializeKvStateRequest(buf);
+        buf.release();
+        ByteBuf response=KvStateRequestSerializer.serializeKvStateRequestResult(ctx.alloc(),request.getRequestId(),serializedResult);
+        ctx.channel().writeAndFlush(response);
+      }
+    }
+);
+    final KvStateServerAddress serverAddress=getKvStateServerAddress(serverChannel);
+    final KvStateClient finalClient=client;
+    Callable<List<Future<byte[]>>> queryTask=new Callable<List<Future<byte[]>>>(){
+      @Override public List<Future<byte[]>> call() throws Exception {
+        List<Future<byte[]>> results=new ArrayList<>(numQueriesPerTask);
+        for (int i=0; i < numQueriesPerTask; i++) {
+          results.add(finalClient.getKvState(serverAddress,new KvStateID(),new byte[0]));
+        }
+        return results;
+      }
+    }
+;
+    List<java.util.concurrent.Future<List<Future<byte[]>>>> futures=new ArrayList<>();
+    for (int i=0; i < numQueryTasks; i++) {
+      futures.add(executor.submit(queryTask));
+    }
+    for (    java.util.concurrent.Future<List<Future<byte[]>>> future : futures) {
+      List<Future<byte[]>> results=future.get(deadline.timeLeft().toMillis(),TimeUnit.MILLISECONDS);
+      for (      Future<byte[]> result : results) {
+        byte[] actual=Await.result(result,deadline.timeLeft());
+        assertArrayEquals(serializedResult,actual);
+      }
+    }
+    int totalQueries=numQueryTasks * numQueriesPerTask;
+    while (deadline.hasTimeLeft() && (stats.getNumSuccessful() != totalQueries || stats.getNumFailed() != totalQueries)) {
+      Thread.sleep(100);
+    }
+    assertEquals(totalQueries,stats.getNumRequests());
+    assertEquals(totalQueries,stats.getNumSuccessful());
+  }
+  finally {
+    if (executor != null) {
+      executor.shutdown();
+    }
+    if (serverChannel != null) {
+      serverChannel.close();
+    }
+    if (client != null) {
+      client.shutDown();
+    }
+    assertEquals("Channel leak",0,stats.getNumConnections());
+  }
+}

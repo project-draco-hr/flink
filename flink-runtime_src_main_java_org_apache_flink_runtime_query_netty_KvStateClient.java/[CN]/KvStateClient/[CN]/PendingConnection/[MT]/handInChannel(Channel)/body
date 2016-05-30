@@ -1,0 +1,22 @@
+{
+synchronized (connectLock) {
+    if (closed || failureCause != null) {
+      channel.close();
+    }
+ else {
+      established=new EstablishedConnection(serverAddress,channel);
+      PendingRequest pending;
+      while ((pending=queuedRequests.poll()) != null) {
+        Future<byte[]> resultFuture=established.getKvState(pending.kvStateId,pending.serializedKeyAndNamespace);
+        pending.promise.completeWith(resultFuture);
+      }
+      establishedConnections.put(serverAddress,established);
+      pendingConnections.remove(serverAddress);
+      if (shutDown.get()) {
+        if (establishedConnections.remove(serverAddress,established)) {
+          established.close();
+        }
+      }
+    }
+  }
+}

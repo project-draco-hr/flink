@@ -1,0 +1,76 @@
+{
+  Deadline deadline=TEST_TIMEOUT.fromNow();
+  AtomicKvStateRequestStats stats=new AtomicKvStateRequestStats();
+  KvStateClient client=null;
+  Channel serverChannel=null;
+  try {
+    client=new KvStateClient(1,stats);
+    final byte[] expected=new byte[1024];
+    ThreadLocalRandom.current().nextBytes(expected);
+    final LinkedBlockingQueue<ByteBuf> received=new LinkedBlockingQueue<>();
+    final AtomicReference<Channel> channel=new AtomicReference<>();
+    serverChannel=createServerChannel(new ChannelInboundHandlerAdapter(){
+      @Override public void channelActive(      ChannelHandlerContext ctx) throws Exception {
+        channel.set(ctx.channel());
+      }
+      @Override public void channelRead(      ChannelHandlerContext ctx,      Object msg) throws Exception {
+        received.add((ByteBuf)msg);
+      }
+    }
+);
+    KvStateServerAddress serverAddress=getKvStateServerAddress(serverChannel);
+    List<Future<byte[]>> futures=new ArrayList<>();
+    int numQueries=1024;
+    for (int i=0; i < numQueries; i++) {
+      futures.add(client.getKvState(serverAddress,new KvStateID(),new byte[0]));
+    }
+    Exception testException=new RuntimeException("Expected test Exception");
+    for (int i=0; i < numQueries; i++) {
+      ByteBuf buf=received.poll(deadline.timeLeft().toMillis(),TimeUnit.MILLISECONDS);
+      assertNotNull("Receive timed out",buf);
+      Channel ch=channel.get();
+      assertNotNull("Channel not active",ch);
+      assertEquals(KvStateRequestType.REQUEST,KvStateRequestSerializer.deserializeHeader(buf));
+      KvStateRequest request=KvStateRequestSerializer.deserializeKvStateRequest(buf);
+      buf.release();
+      if (i % 2 == 0) {
+        ByteBuf response=KvStateRequestSerializer.serializeKvStateRequestResult(serverChannel.alloc(),request.getRequestId(),expected);
+        ch.writeAndFlush(response);
+      }
+ else {
+        ByteBuf response=KvStateRequestSerializer.serializeKvStateRequestFailure(serverChannel.alloc(),request.getRequestId(),testException);
+        ch.writeAndFlush(response);
+      }
+    }
+    for (int i=0; i < numQueries; i++) {
+      if (i % 2 == 0) {
+        byte[] serializedResult=Await.result(futures.get(i),deadline.timeLeft());
+        assertArrayEquals(expected,serializedResult);
+      }
+ else {
+        try {
+          Await.result(futures.get(i),deadline.timeLeft());
+          fail("Did not throw expected Exception");
+        }
+ catch (        RuntimeException ignored) {
+        }
+      }
+    }
+    assertEquals(numQueries,stats.getNumRequests());
+    int expectedRequests=numQueries / 2;
+    while (deadline.hasTimeLeft() && (stats.getNumSuccessful() != expectedRequests || stats.getNumFailed() != expectedRequests)) {
+      Thread.sleep(100);
+    }
+    assertEquals(expectedRequests,stats.getNumSuccessful());
+    assertEquals(expectedRequests,stats.getNumFailed());
+  }
+  finally {
+    if (client != null) {
+      client.shutDown();
+    }
+    if (serverChannel != null) {
+      serverChannel.close();
+    }
+    assertEquals("Channel leak",0,stats.getNumConnections());
+  }
+}
