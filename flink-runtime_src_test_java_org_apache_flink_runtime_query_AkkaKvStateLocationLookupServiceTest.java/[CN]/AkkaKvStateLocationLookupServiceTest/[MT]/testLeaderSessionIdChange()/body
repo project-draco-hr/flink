@@ -1,0 +1,25 @@
+{
+  TestingLeaderRetrievalService leaderRetrievalService=new TestingLeaderRetrievalService();
+  Queue<LookupKvStateLocation> received=new LinkedBlockingQueue<>();
+  AkkaKvStateLocationLookupService lookupService=new AkkaKvStateLocationLookupService(leaderRetrievalService,testActorSystem,TIMEOUT,new AkkaKvStateLocationLookupService.DisabledLookupRetryStrategyFactory());
+  lookupService.start();
+  KvStateLocation expected1=new KvStateLocation(new JobID(),new JobVertexID(),8282,"salt");
+  UUID leaderSessionId1=UUID.randomUUID();
+  ActorRef testActor1=LookupResponseActor.create(received,leaderSessionId1,expected1);
+  String testActorAddress1=AkkaUtils.getAkkaURL(testActorSystem,testActor1);
+  KvStateLocation expected2=new KvStateLocation(new JobID(),new JobVertexID(),22321,"pepper");
+  UUID leaderSessionId2=UUID.randomUUID();
+  ActorRef testActor2=LookupResponseActor.create(received,leaderSessionId1,expected2);
+  String testActorAddress2=AkkaUtils.getAkkaURL(testActorSystem,testActor2);
+  JobID jobId=new JobID();
+  leaderRetrievalService.notifyListener(testActorAddress1,leaderSessionId1);
+  KvStateLocation location=Await.result(lookupService.getKvStateLookupInfo(jobId,"rock"),TIMEOUT);
+  assertEquals(expected1,location);
+  assertEquals(1,received.size());
+  verifyLookupMsg(received.poll(),jobId,"rock");
+  leaderRetrievalService.notifyListener(testActorAddress2,leaderSessionId2);
+  location=Await.result(lookupService.getKvStateLookupInfo(jobId,"roll"),TIMEOUT);
+  assertEquals(expected2,location);
+  assertEquals(1,received.size());
+  verifyLookupMsg(received.poll(),jobId,"roll");
+}

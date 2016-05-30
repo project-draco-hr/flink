@@ -1,0 +1,16 @@
+{
+  TestingLeaderRetrievalService leaderRetrievalService=new TestingLeaderRetrievalService();
+  Queue<LookupKvStateLocation> received=new LinkedBlockingQueue<>();
+  AkkaKvStateLocationLookupService lookupService=new AkkaKvStateLocationLookupService(leaderRetrievalService,testActorSystem,TIMEOUT,new AkkaKvStateLocationLookupService.DisabledLookupRetryStrategyFactory());
+  lookupService.start();
+  String expected="unexpected-response-type";
+  ActorRef testActor=LookupResponseActor.create(received,null,expected);
+  String testActorAddress=AkkaUtils.getAkkaURL(testActorSystem,testActor);
+  leaderRetrievalService.notifyListener(testActorAddress,null);
+  try {
+    Await.result(lookupService.getKvStateLookupInfo(new JobID(),"spicy"),TIMEOUT);
+    fail("Did not throw expected Exception");
+  }
+ catch (  Throwable ignored) {
+  }
+}

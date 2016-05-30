@@ -1,0 +1,36 @@
+{
+  TestingLeaderRetrievalService leaderRetrievalService=new TestingLeaderRetrievalService();
+  Queue<LookupKvStateLocation> received=new LinkedBlockingQueue<>();
+  AkkaKvStateLocationLookupService lookupService=new AkkaKvStateLocationLookupService(leaderRetrievalService,testActorSystem,TIMEOUT,new AkkaKvStateLocationLookupService.DisabledLookupRetryStrategyFactory());
+  lookupService.start();
+  try {
+    JobID jobId=new JobID();
+    String name="coffee";
+    Future<KvStateLocation> locationFuture=lookupService.getKvStateLookupInfo(jobId,name);
+    Await.result(locationFuture,TIMEOUT);
+    fail("Did not throw expected Exception");
+  }
+ catch (  UnknownJobManager ignored) {
+  }
+  assertEquals("Received unexpected lookup",0,received.size());
+  UUID leaderSessionId=null;
+  KvStateLocation expected=new KvStateLocation(new JobID(),new JobVertexID(),8282,"tea");
+  ActorRef testActor=LookupResponseActor.create(received,leaderSessionId,expected);
+  String testActorAddress=AkkaUtils.getAkkaURL(testActorSystem,testActor);
+  leaderRetrievalService.notifyListener(testActorAddress,leaderSessionId);
+  JobID jobId=new JobID();
+  String name="tea";
+  KvStateLocation location=Await.result(lookupService.getKvStateLookupInfo(jobId,name),TIMEOUT);
+  assertEquals(expected,location);
+  assertEquals(1,received.size());
+  verifyLookupMsg(received.poll(),jobId,name);
+  leaderRetrievalService.notifyListener(null,null);
+  try {
+    Future<KvStateLocation> locationFuture=lookupService.getKvStateLookupInfo(new JobID(),"coffee");
+    Await.result(locationFuture,TIMEOUT);
+    fail("Did not throw expected Exception");
+  }
+ catch (  UnknownJobManager ignored) {
+  }
+  assertEquals(0,received.size());
+}

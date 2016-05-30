@@ -1,0 +1,24 @@
+{
+  return jobManagerFuture.flatMap(new Mapper<ActorGateway,Future<Object>>(){
+    @Override public Future<Object> apply(    ActorGateway jobManager){
+      Object msg=new KvStateMessage.LookupKvStateLocation(jobId,registrationName);
+      return jobManager.ask(msg,askTimeout);
+    }
+  }
+,actorSystem.dispatcher()).mapTo(ClassTag$.MODULE$.<KvStateLocation>apply(KvStateLocation.class)).recoverWith(new Recover<Future<KvStateLocation>>(){
+    @Override public Future<KvStateLocation> recover(    Throwable failure) throws Throwable {
+      if (failure instanceof UnknownJobManager && lookupRetryStrategy.tryRetry()) {
+        return Patterns.after(lookupRetryStrategy.getRetryDelay(),actorSystem.scheduler(),actorSystem.dispatcher(),new Callable<Future<KvStateLocation>>(){
+          @Override public Future<KvStateLocation> call() throws Exception {
+            return getKvStateLookupInfo(jobId,registrationName,lookupRetryStrategy);
+          }
+        }
+);
+      }
+ else {
+        return Futures.failed(failure);
+      }
+    }
+  }
+,actorSystem.dispatcher());
+}

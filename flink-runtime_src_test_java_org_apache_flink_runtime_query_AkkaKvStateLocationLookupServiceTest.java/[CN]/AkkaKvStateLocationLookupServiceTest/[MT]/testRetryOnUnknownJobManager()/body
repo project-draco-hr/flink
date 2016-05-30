@@ -1,0 +1,44 @@
+{
+  final Queue<LookupRetryStrategy> retryStrategies=new LinkedBlockingQueue<>();
+  LookupRetryStrategyFactory retryStrategy=new LookupRetryStrategyFactory(){
+    @Override public LookupRetryStrategy createRetryStrategy(){
+      return retryStrategies.poll();
+    }
+  }
+;
+  final TestingLeaderRetrievalService leaderRetrievalService=new TestingLeaderRetrievalService();
+  AkkaKvStateLocationLookupService lookupService=new AkkaKvStateLocationLookupService(leaderRetrievalService,testActorSystem,TIMEOUT,retryStrategy);
+  lookupService.start();
+  final AtomicBoolean hasRetried=new AtomicBoolean();
+  retryStrategies.add(new LookupRetryStrategy(){
+    @Override public FiniteDuration getRetryDelay(){
+      return FiniteDuration.Zero();
+    }
+    @Override public boolean tryRetry(){
+      if (hasRetried.compareAndSet(false,true)) {
+        return true;
+      }
+      return false;
+    }
+  }
+);
+  Future<KvStateLocation> locationFuture=lookupService.getKvStateLookupInfo(new JobID(),"yessir");
+  Await.ready(locationFuture,TIMEOUT);
+  assertTrue("Did not retry ",hasRetried.get());
+  Queue<LookupKvStateLocation> received=new LinkedBlockingQueue<>();
+  KvStateLocation expected=new KvStateLocation(new JobID(),new JobVertexID(),12122,"garlic");
+  ActorRef testActor=LookupResponseActor.create(received,null,expected);
+  final String testActorAddress=AkkaUtils.getAkkaURL(testActorSystem,testActor);
+  retryStrategies.add(new LookupRetryStrategy(){
+    @Override public FiniteDuration getRetryDelay(){
+      return FiniteDuration.apply(100,TimeUnit.MILLISECONDS);
+    }
+    @Override public boolean tryRetry(){
+      leaderRetrievalService.notifyListener(testActorAddress,null);
+      return true;
+    }
+  }
+);
+  KvStateLocation location=Await.result(lookupService.getKvStateLookupInfo(new JobID(),"yessir"),TIMEOUT);
+  assertEquals(expected,location);
+}
