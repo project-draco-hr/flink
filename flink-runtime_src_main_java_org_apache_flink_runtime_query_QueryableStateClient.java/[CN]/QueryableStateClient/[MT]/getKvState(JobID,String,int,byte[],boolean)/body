@@ -1,0 +1,16 @@
+{
+  return getKvStateLookupInfo(jobId,queryableStateName,forceLookup).flatMap(new Mapper<KvStateLocation,Future<byte[]>>(){
+    @Override public Future<byte[]> apply(    KvStateLocation lookup){
+      int keyGroupIndex=MathUtils.murmurHash(keyHashCode) % lookup.getNumKeyGroups();
+      KvStateServerAddress serverAddress=lookup.getKvStateServerAddress(keyGroupIndex);
+      if (serverAddress == null) {
+        return Futures.failed(new UnknownKvStateKeyGroupLocation());
+      }
+ else {
+        KvStateID kvStateId=lookup.getKvStateID(keyGroupIndex);
+        return kvStateClient.getKvState(serverAddress,kvStateId,serializedKeyAndNamespace);
+      }
+    }
+  }
+,executionContext);
+}

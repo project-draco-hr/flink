@@ -1,0 +1,24 @@
+{
+  if (forceUpdate) {
+    Future<KvStateLocation> lookupFuture=lookupService.getKvStateLookupInfo(jobId,queryableStateName);
+    lookupCache.put(new Tuple2<>(jobId,queryableStateName),lookupFuture);
+    return lookupFuture;
+  }
+ else {
+    Tuple2<JobID,String> cacheKey=new Tuple2<>(jobId,queryableStateName);
+    final Future<KvStateLocation> cachedFuture=lookupCache.get(cacheKey);
+    if (cachedFuture == null) {
+      Future<KvStateLocation> lookupFuture=lookupService.getKvStateLookupInfo(jobId,queryableStateName);
+      Future<KvStateLocation> previous=lookupCache.putIfAbsent(cacheKey,lookupFuture);
+      if (previous == null) {
+        return lookupFuture;
+      }
+ else {
+        return previous;
+      }
+    }
+ else {
+      return cachedFuture;
+    }
+  }
+}

@@ -22,10 +22,20 @@ synchronized (lock) {
       }
       try {
         kvStateRegistry=new KvStateRegistry();
-        kvStateServer=new KvStateServer(connectionInfo.address(),0,1,10,kvStateRegistry,new AtomicKvStateRequestStats());
-        kvStateServer.start();
-        KvStateRegistryListener listener=new JobManagerKvStateRegistryListener(jobManagerGateway,kvStateServer.getAddress());
-        kvStateRegistry.registerListener(listener);
+        if (nettyConfig.isDefined()) {
+          int numNetworkThreads=configuration.queryServerNetworkThreads();
+          if (numNetworkThreads == 0) {
+            numNetworkThreads=nettyConfig.get().getNumberOfSlots();
+          }
+          int numQueryThreads=configuration.queryServerNetworkThreads();
+          if (numQueryThreads == 0) {
+            numQueryThreads=nettyConfig.get().getNumberOfSlots();
+          }
+          kvStateServer=new KvStateServer(connectionInfo.address(),configuration.queryServerPort(),numNetworkThreads,numQueryThreads,kvStateRegistry,new DisabledKvStateRequestStats());
+          kvStateServer.start();
+          KvStateRegistryListener listener=new JobManagerKvStateRegistryListener(jobManagerGateway,kvStateServer.getAddress());
+          kvStateRegistry.registerListener(listener);
+        }
       }
  catch (      Throwable t) {
         throw new IOException("Failed to instantiate KvState management components: " + t.getMessage(),t);

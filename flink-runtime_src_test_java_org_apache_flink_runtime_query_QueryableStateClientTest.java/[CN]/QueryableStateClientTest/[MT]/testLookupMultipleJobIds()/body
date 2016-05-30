@@ -1,0 +1,16 @@
+{
+  String name="unique-per-job";
+  KvStateLocation location=new KvStateLocation(new JobID(),new JobVertexID(),1,name);
+  location.registerKvState(0,new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),892));
+  JobID jobId1=new JobID();
+  JobID jobId2=new JobID();
+  KvStateLocationLookupService lookupService=mock(KvStateLocationLookupService.class);
+  when(lookupService.getKvStateLookupInfo(any(JobID.class),anyString())).thenReturn(Futures.successful(location));
+  KvStateClient networkClient=mock(KvStateClient.class);
+  when(networkClient.getKvState(any(KvStateServerAddress.class),any(KvStateID.class),any(byte[].class))).thenReturn(Futures.successful(new byte[0]));
+  QueryableStateClient client=new QueryableStateClient(lookupService,networkClient,testActorSystem.dispatcher());
+  client.getKvState(jobId1,name,0,new byte[0]);
+  client.getKvState(jobId2,name,0,new byte[0]);
+  verify(lookupService,times(1)).getKvStateLookupInfo(eq(jobId1),eq(name));
+  verify(lookupService,times(1)).getKvStateLookupInfo(eq(jobId2),eq(name));
+}

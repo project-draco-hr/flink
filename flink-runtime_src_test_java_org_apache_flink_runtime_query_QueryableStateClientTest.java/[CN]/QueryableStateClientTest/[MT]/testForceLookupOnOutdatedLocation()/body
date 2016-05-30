@@ -1,0 +1,75 @@
+{
+  KvStateLocationLookupService lookupService=mock(KvStateLocationLookupService.class);
+  KvStateClient networkClient=mock(KvStateClient.class);
+  QueryableStateClient client=new QueryableStateClient(lookupService,networkClient,testActorSystem.dispatcher());
+  try {
+    JobID jobId=new JobID();
+    int numKeyGroups=4;
+    String query1="lucky";
+    Future<KvStateLocation> unknownKvStateLocation=Futures.failed(new UnknownKvStateLocation(query1));
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq(query1))).thenReturn(unknownKvStateLocation);
+    Future<byte[]> result=client.getKvState(jobId,query1,0,new byte[0]);
+    try {
+      Await.result(result,timeout);
+      fail("Did not throw expected UnknownKvStateLocation exception");
+    }
+ catch (    UnknownKvStateLocation ignored) {
+    }
+    verify(lookupService,times(2)).getKvStateLookupInfo(eq(jobId),eq(query1));
+    String query2="unlucky";
+    Future<KvStateLocation> unknownKeyGroupLocation=Futures.successful(new KvStateLocation(jobId,new JobVertexID(),numKeyGroups,query2));
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq(query2))).thenReturn(unknownKeyGroupLocation);
+    result=client.getKvState(jobId,query2,0,new byte[0]);
+    try {
+      Await.result(result,timeout);
+      fail("Did not throw expected UnknownKvStateKeyGroupLocation exception");
+    }
+ catch (    UnknownKvStateKeyGroupLocation ignored) {
+    }
+    verify(lookupService,times(2)).getKvStateLookupInfo(eq(jobId),eq(query2));
+    String query3="water";
+    KvStateID kvStateId=new KvStateID();
+    Future<byte[]> unknownKvStateId=Futures.failed(new UnknownKvStateID(kvStateId));
+    KvStateServerAddress serverAddress=new KvStateServerAddress(InetAddress.getLocalHost(),12323);
+    KvStateLocation location=new KvStateLocation(jobId,new JobVertexID(),numKeyGroups,query3);
+    for (int i=0; i < numKeyGroups; i++) {
+      location.registerKvState(i,kvStateId,serverAddress);
+    }
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq(query3))).thenReturn(Futures.successful(location));
+    when(networkClient.getKvState(eq(serverAddress),eq(kvStateId),any(byte[].class))).thenReturn(unknownKvStateId);
+    result=client.getKvState(jobId,query3,0,new byte[0]);
+    try {
+      Await.result(result,timeout);
+      fail("Did not throw expected UnknownKvStateID exception");
+    }
+ catch (    UnknownKvStateID ignored) {
+    }
+    verify(lookupService,times(2)).getKvStateLookupInfo(eq(jobId),eq(query3));
+    String query4="space";
+    Future<byte[]> connectException=Futures.failed(new ConnectException());
+    kvStateId=new KvStateID();
+    serverAddress=new KvStateServerAddress(InetAddress.getLocalHost(),11123);
+    location=new KvStateLocation(jobId,new JobVertexID(),numKeyGroups,query4);
+    for (int i=0; i < numKeyGroups; i++) {
+      location.registerKvState(i,kvStateId,serverAddress);
+    }
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq(query4))).thenReturn(Futures.successful(location));
+    when(networkClient.getKvState(eq(serverAddress),eq(kvStateId),any(byte[].class))).thenReturn(connectException);
+    result=client.getKvState(jobId,query4,0,new byte[0]);
+    try {
+      Await.result(result,timeout);
+      fail("Did not throw expected ConnectException exception");
+    }
+ catch (    ConnectException ignored) {
+    }
+    verify(lookupService,times(2)).getKvStateLookupInfo(eq(jobId),eq(query4));
+    String query5="universe";
+    Future<KvStateLocation> exception=Futures.failed(new RuntimeException("Test exception"));
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq(query5))).thenReturn(exception);
+    client.getKvState(jobId,query5,0,new byte[0]);
+    verify(lookupService,times(1)).getKvStateLookupInfo(eq(jobId),eq(query5));
+  }
+  finally {
+    client.shutDown();
+  }
+}

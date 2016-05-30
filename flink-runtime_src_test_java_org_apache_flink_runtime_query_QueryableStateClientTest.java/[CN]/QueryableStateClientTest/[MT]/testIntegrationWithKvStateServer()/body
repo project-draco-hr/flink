@@ -1,0 +1,87 @@
+{
+  int numServers=2;
+  int numKeys=1024;
+  JobID jobId=new JobID();
+  JobVertexID jobVertexId=new JobVertexID();
+  KvStateServer[] servers=new KvStateServer[numServers];
+  AtomicKvStateRequestStats[] serverStats=new AtomicKvStateRequestStats[numServers];
+  QueryableStateClient client=null;
+  KvStateClient networkClient=null;
+  AtomicKvStateRequestStats networkClientStats=new AtomicKvStateRequestStats();
+  try {
+    KvStateRegistry[] registries=new KvStateRegistry[numServers];
+    KvStateID[] kvStateIds=new KvStateID[numServers];
+    List<MemValueState<Integer,VoidNamespace,Integer>> kvStates=new ArrayList<>();
+    for (int i=0; i < numServers; i++) {
+      registries[i]=new KvStateRegistry();
+      serverStats[i]=new AtomicKvStateRequestStats();
+      servers[i]=new KvStateServer(InetAddress.getLocalHost(),0,1,1,registries[i],serverStats[i]);
+      servers[i].start();
+      MemValueState<Integer,VoidNamespace,Integer> kvState=new MemValueState<>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null));
+      kvStates.add(kvState);
+      kvStateIds[i]=registries[i].registerKvState(jobId,new JobVertexID(),i,"choco",kvState);
+    }
+    int[] expectedRequests=new int[numServers];
+    for (int key=0; key < numKeys; key++) {
+      int targetKeyGroupIndex=MathUtils.murmurHash(key) % numServers;
+      expectedRequests[targetKeyGroupIndex]++;
+      MemValueState<Integer,VoidNamespace,Integer> kvState=kvStates.get(targetKeyGroupIndex);
+      kvState.setCurrentKey(key);
+      kvState.setCurrentNamespace(VoidNamespace.INSTANCE);
+      kvState.update(1337 + key);
+    }
+    KvStateLocation location=new KvStateLocation(jobId,jobVertexId,numServers,"choco");
+    for (int keyGroupIndex=0; keyGroupIndex < numServers; keyGroupIndex++) {
+      location.registerKvState(keyGroupIndex,kvStateIds[keyGroupIndex],servers[keyGroupIndex].getAddress());
+    }
+    KvStateLocationLookupService lookupService=mock(KvStateLocationLookupService.class);
+    when(lookupService.getKvStateLookupInfo(eq(jobId),eq("choco"))).thenReturn(Futures.successful(location));
+    networkClient=new KvStateClient(1,networkClientStats);
+    client=new QueryableStateClient(lookupService,networkClient,testActorSystem.dispatcher());
+    List<Future<byte[]>> futures=new ArrayList<>(numKeys);
+    for (int key=0; key < numKeys; key++) {
+      byte[] serializedKeyAndNamespace=KvStateRequestSerializer.serializeKeyAndNamespace(key,IntSerializer.INSTANCE,VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE);
+      futures.add(client.getKvState(jobId,"choco",key,serializedKeyAndNamespace));
+    }
+    Future<Iterable<byte[]>> future=Futures.sequence(futures,testActorSystem.dispatcher());
+    Iterable<byte[]> results=Await.result(future,timeout);
+    int index=0;
+    for (    byte[] buffer : results) {
+      int deserializedValue=KvStateRequestSerializer.deserializeValue(buffer,IntSerializer.INSTANCE);
+      assertEquals(1337 + index,deserializedValue);
+      index++;
+    }
+    for (int i=0; i < numServers; i++) {
+      int numRetries=10;
+      for (int retry=0; retry < numRetries; retry++) {
+        try {
+          assertEquals("Unexpected number of requests",expectedRequests[i],serverStats[i].getNumRequests());
+          assertEquals("Unexpected success requests",expectedRequests[i],serverStats[i].getNumSuccessful());
+          assertEquals("Unexpected failed requests",0,serverStats[i].getNumFailed());
+          break;
+        }
+ catch (        Throwable t) {
+          if (retry == numRetries - 1) {
+            throw t;
+          }
+ else {
+            Thread.sleep(100);
+          }
+        }
+      }
+    }
+  }
+  finally {
+    if (client != null) {
+      client.shutDown();
+    }
+    if (networkClient != null) {
+      networkClient.shutDown();
+    }
+    for (    KvStateServer server : servers) {
+      if (server != null) {
+        server.shutDown();
+      }
+    }
+  }
+}
