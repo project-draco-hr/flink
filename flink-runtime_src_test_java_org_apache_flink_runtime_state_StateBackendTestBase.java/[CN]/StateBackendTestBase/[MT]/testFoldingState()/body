@@ -2,15 +2,23 @@
   try {
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     FoldingStateDescriptor<Integer,String> kvId=new FoldingStateDescriptor<>("id","Fold-Initial:",new AppendingFold(),String.class);
-    FoldingState<Integer,String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    kvId.initializeSerializerUnlessSet(new ExecutionConfig());
+    TypeSerializer<Integer> keySerializer=IntSerializer.INSTANCE;
+    TypeSerializer<VoidNamespace> namespaceSerializer=VoidNamespaceSerializer.INSTANCE;
+    TypeSerializer<String> valueSerializer=kvId.getSerializer();
+    FoldingState<Integer,String> state=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> kvState=(KvState<Integer,VoidNamespace,?,?,B>)state;
     backend.setCurrentKey(1);
     assertEquals(null,state.get());
+    assertEquals(null,getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     state.add(1);
     backend.setCurrentKey(2);
     assertEquals(null,state.get());
+    assertEquals(null,getSerializedValue(kvState,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     state.add(2);
     backend.setCurrentKey(1);
     assertEquals("Fold-Initial:,1",state.get());
+    assertEquals("Fold-Initial:,1",getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot1=backend.snapshotPartitionedState(682375462378L,2);
     for (    String key : snapshot1.keySet()) {
       if (snapshot1.get(key) instanceof AsynchronousKvStateSnapshot) {
@@ -32,34 +40,44 @@
     }
     backend.setCurrentKey(1);
     assertEquals("Fold-Initial:,101",state.get());
+    assertEquals("Fold-Initial:,101",getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("Fold-Initial:,2,102",state.get());
+    assertEquals("Fold-Initial:,2,102",getSerializedValue(kvState,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(3);
     assertEquals("Fold-Initial:,103",state.get());
+    assertEquals("Fold-Initial:,103",getSerializedValue(kvState,3,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.dispose();
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     backend.injectKeyValueStateSnapshots((HashMap)snapshot1);
     for (    String key : snapshot1.keySet()) {
       snapshot1.get(key).discardState();
     }
-    FoldingState<Integer,String> restored1=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    FoldingState<Integer,String> restored1=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> restoredKvState1=(KvState<Integer,VoidNamespace,?,?,B>)restored1;
     backend.setCurrentKey(1);
     assertEquals("Fold-Initial:,1",restored1.get());
+    assertEquals("Fold-Initial:,1",getSerializedValue(restoredKvState1,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("Fold-Initial:,2",restored1.get());
+    assertEquals("Fold-Initial:,2",getSerializedValue(restoredKvState1,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.dispose();
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     backend.injectKeyValueStateSnapshots((HashMap)snapshot2);
     for (    String key : snapshot2.keySet()) {
       snapshot2.get(key).discardState();
     }
-    @SuppressWarnings("unchecked") FoldingState<Integer,String> restored2=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") FoldingState<Integer,String> restored2=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> restoredKvState2=(KvState<Integer,VoidNamespace,?,?,B>)restored2;
     backend.setCurrentKey(1);
     assertEquals("Fold-Initial:,101",restored2.get());
+    assertEquals("Fold-Initial:,101",getSerializedValue(restoredKvState2,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("Fold-Initial:,2,102",restored2.get());
+    assertEquals("Fold-Initial:,2,102",getSerializedValue(restoredKvState2,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(3);
     assertEquals("Fold-Initial:,103",restored2.get());
+    assertEquals("Fold-Initial:,103",getSerializedValue(restoredKvState2,3,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
   }
  catch (  Exception e) {
     e.printStackTrace();

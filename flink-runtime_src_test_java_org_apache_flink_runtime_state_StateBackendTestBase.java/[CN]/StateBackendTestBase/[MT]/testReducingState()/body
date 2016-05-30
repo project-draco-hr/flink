@@ -2,15 +2,23 @@
   try {
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     ReducingStateDescriptor<String> kvId=new ReducingStateDescriptor<>("id",new AppendingReduce(),String.class);
-    ReducingState<String> state=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    kvId.initializeSerializerUnlessSet(new ExecutionConfig());
+    TypeSerializer<Integer> keySerializer=IntSerializer.INSTANCE;
+    TypeSerializer<VoidNamespace> namespaceSerializer=VoidNamespaceSerializer.INSTANCE;
+    TypeSerializer<String> valueSerializer=kvId.getSerializer();
+    ReducingState<String> state=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> kvState=(KvState<Integer,VoidNamespace,?,?,B>)state;
     backend.setCurrentKey(1);
     assertEquals(null,state.get());
+    assertNull(getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     state.add("1");
     backend.setCurrentKey(2);
     assertEquals(null,state.get());
+    assertNull(getSerializedValue(kvState,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     state.add("2");
     backend.setCurrentKey(1);
     assertEquals("1",state.get());
+    assertEquals("1",getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot1=backend.snapshotPartitionedState(682375462378L,2);
     for (    String key : snapshot1.keySet()) {
       if (snapshot1.get(key) instanceof AsynchronousKvStateSnapshot) {
@@ -31,34 +39,44 @@
     }
     backend.setCurrentKey(1);
     assertEquals("1,u1",state.get());
+    assertEquals("1,u1",getSerializedValue(kvState,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("2,u2",state.get());
+    assertEquals("2,u2",getSerializedValue(kvState,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(3);
     assertEquals("u3",state.get());
+    assertEquals("u3",getSerializedValue(kvState,3,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.dispose();
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     backend.injectKeyValueStateSnapshots((HashMap)snapshot1);
     for (    String key : snapshot1.keySet()) {
       snapshot1.get(key).discardState();
     }
-    ReducingState<String> restored1=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    ReducingState<String> restored1=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> restoredKvState1=(KvState<Integer,VoidNamespace,?,?,B>)restored1;
     backend.setCurrentKey(1);
     assertEquals("1",restored1.get());
+    assertEquals("1",getSerializedValue(restoredKvState1,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("2",restored1.get());
+    assertEquals("2",getSerializedValue(restoredKvState1,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.dispose();
     backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
     backend.injectKeyValueStateSnapshots((HashMap)snapshot2);
     for (    String key : snapshot2.keySet()) {
       snapshot2.get(key).discardState();
     }
-    ReducingState<String> restored2=backend.getPartitionedState(null,VoidSerializer.INSTANCE,kvId);
+    ReducingState<String> restored2=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
+    @SuppressWarnings("unchecked") KvState<Integer,VoidNamespace,?,?,B> restoredKvState2=(KvState<Integer,VoidNamespace,?,?,B>)restored2;
     backend.setCurrentKey(1);
     assertEquals("1,u1",restored2.get());
+    assertEquals("1,u1",getSerializedValue(restoredKvState2,1,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(2);
     assertEquals("2,u2",restored2.get());
+    assertEquals("2,u2",getSerializedValue(restoredKvState2,2,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
     backend.setCurrentKey(3);
     assertEquals("u3",restored2.get());
+    assertEquals("u3",getSerializedValue(restoredKvState2,3,keySerializer,VoidNamespace.INSTANCE,namespaceSerializer,valueSerializer));
   }
  catch (  Exception e) {
     e.printStackTrace();
