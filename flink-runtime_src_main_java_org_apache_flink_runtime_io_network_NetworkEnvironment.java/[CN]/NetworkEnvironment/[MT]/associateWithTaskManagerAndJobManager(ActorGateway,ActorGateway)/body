@@ -5,7 +5,7 @@ synchronized (lock) {
     if (isShutdown) {
       throw new IllegalStateException("environment is shut down");
     }
-    if (this.partitionConsumableNotifier == null && this.partitionManager == null && this.taskEventDispatcher == null && this.connectionManager == null) {
+    if (this.partitionConsumableNotifier == null && this.partitionManager == null && this.taskEventDispatcher == null && this.connectionManager == null && this.kvStateRegistry == null && this.kvStateServer == null) {
       LOG.debug("Starting result partition manager and network connection manager");
       this.partitionManager=new ResultPartitionManager();
       this.taskEventDispatcher=new TaskEventDispatcher();
@@ -19,6 +19,16 @@ synchronized (lock) {
       }
  catch (      Throwable t) {
         throw new IOException("Failed to instantiate network connection manager: " + t.getMessage(),t);
+      }
+      try {
+        kvStateRegistry=new KvStateRegistry();
+        kvStateServer=new KvStateServer(connectionInfo.address(),0,1,10,kvStateRegistry,new AtomicKvStateRequestStats());
+        kvStateServer.start();
+        KvStateRegistryListener listener=new JobManagerKvStateRegistryListener(jobManagerGateway,kvStateServer.getAddress());
+        kvStateRegistry.registerListener(listener);
+      }
+ catch (      Throwable t) {
+        throw new IOException("Failed to instantiate KvState management components: " + t.getMessage(),t);
       }
     }
  else {
