@@ -1,0 +1,43 @@
+{
+  final Deadline deadline=TEST_TIMEOUT.fromNow();
+  final int numKeys=1024;
+  JobID jobId=null;
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(NUM_SLOTS);
+    env.setRestartStrategy(RestartStrategies.fixedDelayRestart(Integer.MAX_VALUE,1000));
+    DataStream<Tuple2<Integer,Long>> source=env.addSource(new TestKeyRangeSource(numKeys));
+    ReducingStateDescriptor<Tuple2<Integer,Long>> reducingState=new ReducingStateDescriptor<>("any-name",new SumReduce(),source.getType());
+    final String queryName="duplicate-me";
+    final QueryableStateStream<Integer,Tuple2<Integer,Long>> queryableState=source.keyBy(new KeySelector<Tuple2<Integer,Long>,Integer>(){
+      @Override public Integer getKey(      Tuple2<Integer,Long> value) throws Exception {
+        return value.f0;
+      }
+    }
+).asQueryableState(queryName,reducingState);
+    final QueryableStateStream<Integer,Tuple2<Integer,Long>> duplicate=source.keyBy(new KeySelector<Tuple2<Integer,Long>,Integer>(){
+      @Override public Integer getKey(      Tuple2<Integer,Long> value) throws Exception {
+        return value.f0;
+      }
+    }
+).asQueryableState(queryName);
+    JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+    jobId=jobGraph.getJobID();
+    Future<TestingJobManagerMessages.JobStatusIs> failedFuture=cluster.getLeaderGateway(deadline.timeLeft()).ask(new NotifyWhenJobStatus(jobId,JobStatus.FAILED),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<JobStatusIs>apply(JobStatusIs.class));
+    cluster.submitJobDetached(jobGraph);
+    JobStatusIs jobStatus=Await.result(failedFuture,deadline.timeLeft());
+    assertEquals(JobStatus.FAILED,jobStatus.state());
+    JobFound jobFound=Await.result(cluster.getLeaderGateway(deadline.timeLeft()).ask(new JobManagerMessages.RequestJob(jobId),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<JobFound>apply(JobFound.class)),deadline.timeLeft());
+    Throwable failureCause=jobFound.executionGraph().getFailureCause();
+    assertTrue("Not instance of SuppressRestartsException",failureCause instanceof SuppressRestartsException);
+    assertTrue("Not caused by IllegalStateException",failureCause.getCause() instanceof IllegalStateException);
+    Throwable duplicateException=failureCause.getCause();
+    assertTrue("Exception does not contain registration name",duplicateException.getMessage().contains(queryName));
+  }
+  finally {
+    if (jobId != null) {
+      Future<CancellationSuccess> cancellation=cluster.getLeaderGateway(deadline.timeLeft()).ask(new JobManagerMessages.CancelJob(jobId),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<CancellationSuccess>apply(CancellationSuccess.class));
+      Await.ready(cancellation,deadline.timeLeft());
+    }
+  }
+}

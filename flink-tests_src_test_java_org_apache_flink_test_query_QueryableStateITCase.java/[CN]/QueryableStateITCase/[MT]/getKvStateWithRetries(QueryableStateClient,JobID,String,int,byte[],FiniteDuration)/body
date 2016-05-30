@@ -1,0 +1,18 @@
+{
+  return client.getKvState(jobId,queryName,key,serializedKey).recoverWith(new Recover<Future<byte[]>>(){
+    @Override public Future<byte[]> recover(    Throwable failure) throws Throwable {
+      if (failure instanceof AssertionError) {
+        return Futures.failed(failure);
+      }
+ else {
+        return Patterns.after(retryDelay,TEST_ACTOR_SYSTEM.scheduler(),TEST_ACTOR_SYSTEM.dispatcher(),new Callable<Future<byte[]>>(){
+          @Override public Future<byte[]> call() throws Exception {
+            return getKvStateWithRetries(client,jobId,queryName,key,serializedKey,retryDelay);
+          }
+        }
+);
+      }
+    }
+  }
+,TEST_ACTOR_SYSTEM.dispatcher());
+}

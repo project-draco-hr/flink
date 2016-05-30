@@ -1,0 +1,91 @@
+{
+  final Deadline deadline=TEST_TIMEOUT.fromNow();
+  final int numKeys=1024;
+  final QueryableStateClient client=new QueryableStateClient(cluster.configuration());
+  JobID jobId=null;
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(NUM_SLOTS);
+    env.setRestartStrategy(RestartStrategies.fixedDelayRestart(Integer.MAX_VALUE,1000));
+    env.getCheckpointConfig().setCheckpointInterval(1000);
+    DataStream<Tuple2<Integer,Long>> source=env.addSource(new TestKeyRangeSource(numKeys));
+    ReducingStateDescriptor<Tuple2<Integer,Long>> reducingState=new ReducingStateDescriptor<>("any-name",new SumReduce(),source.getType());
+    final String queryName="hakuna-matata";
+    final QueryableStateStream<Integer,Tuple2<Integer,Long>> queryableState=source.keyBy(new KeySelector<Tuple2<Integer,Long>,Integer>(){
+      @Override public Integer getKey(      Tuple2<Integer,Long> value) throws Exception {
+        return value.f0;
+      }
+    }
+).asQueryableState(queryName,reducingState);
+    JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+    cluster.submitJobDetached(jobGraph);
+    jobId=jobGraph.getJobID();
+    final int key=ThreadLocalRandom.current().nextInt(numKeys);
+    final byte[] serializedKey=KvStateRequestSerializer.serializeKeyAndNamespace(key,queryableState.getKeySerializer(),VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE);
+    long countForKey=0;
+    boolean success=false;
+    while (!success && deadline.hasTimeLeft()) {
+      final FiniteDuration retryDelay=new FiniteDuration(1,TimeUnit.SECONDS);
+      Future<byte[]> serializedResultFuture=getKvStateWithRetries(client,jobId,queryName,key,serializedKey,retryDelay);
+      byte[] serializedResult=Await.result(serializedResultFuture,deadline.timeLeft());
+      Tuple2<Integer,Long> result=KvStateRequestSerializer.deserializeValue(serializedResult,queryableState.getValueSerializer());
+      countForKey=result.f1;
+      assertEquals("Key mismatch",key,result.f0.intValue());
+      success=countForKey > 1000;
+    }
+    assertTrue("No progress for count",countForKey > 1000);
+    long currentCheckpointId=TestKeyRangeSource.LATEST_CHECKPOINT_ID.get();
+    long waitUntilCheckpointId=currentCheckpointId + 5;
+    while (deadline.hasTimeLeft() && TestKeyRangeSource.LATEST_CHECKPOINT_ID.get() < waitUntilCheckpointId) {
+      Thread.sleep(500);
+    }
+    assertTrue("Did not complete enough checkpoints to continue",TestKeyRangeSource.LATEST_CHECKPOINT_ID.get() >= waitUntilCheckpointId);
+    int keyGroupIndex=MathUtils.murmurHash(key) % NUM_SLOTS;
+    Future<ExecutionGraph> egFuture=cluster.getLeaderGateway(deadline.timeLeft()).ask(new RequestExecutionGraph(jobId),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<ExecutionGraphFound>apply(ExecutionGraphFound.class)).map(new Mapper<TestingJobManagerMessages.ExecutionGraphFound,ExecutionGraph>(){
+      @Override public ExecutionGraph apply(      ExecutionGraphFound found){
+        return found.executionGraph();
+      }
+    }
+,TEST_ACTOR_SYSTEM.dispatcher());
+    ExecutionGraph eg=Await.result(egFuture,deadline.timeLeft());
+    Future<KvStateLocation> locationFuture=cluster.getLeaderGateway(deadline.timeLeft()).ask(new KvStateMessage.LookupKvStateLocation(jobId,queryName),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<KvStateLocation>apply(KvStateLocation.class));
+    KvStateLocation location=Await.result(locationFuture,deadline.timeLeft());
+    ExecutionAttemptID executionId=eg.getJobVertex(location.getJobVertexId()).getTaskVertices()[keyGroupIndex].getCurrentExecutionAttempt().getAttemptId();
+    List<ActorRef> taskManagers=cluster.getTaskManagersAsJava();
+    ActorRef taskManagerToKill=null;
+    for (    ActorRef taskManager : taskManagers) {
+      Future<ResponseRunningTasks> runningFuture=Patterns.ask(taskManager,TestingTaskManagerMessages.getRequestRunningTasksMessage(),deadline.timeLeft().toMillis()).mapTo(ClassTag$.MODULE$.<ResponseRunningTasks>apply(ResponseRunningTasks.class));
+      ResponseRunningTasks running=Await.result(runningFuture,deadline.timeLeft());
+      if (running.asJava().containsKey(executionId)) {
+        taskManagerToKill=taskManager;
+        break;
+      }
+    }
+    assertNotNull("Did not find TaskManager holding the key",taskManagerToKill);
+    taskManagerToKill.tell(PoisonPill.getInstance(),ActorRef.noSender());
+    success=false;
+    for (int i=0; i < 10 && !success; i++) {
+      try {
+        Await.result(client.getKvState(jobId,queryName,key,serializedKey),deadline.timeLeft());
+        Thread.sleep(500);
+      }
+ catch (      Throwable ignored) {
+        success=true;
+      }
+    }
+    assertTrue("Query did not fail",success);
+    cluster.addTaskManager();
+    final FiniteDuration retryDelay=new FiniteDuration(1,TimeUnit.SECONDS);
+    Future<byte[]> serializedResultFuture=getKvStateWithRetries(client,jobId,queryName,key,serializedKey,retryDelay);
+    byte[] serializedResult=Await.result(serializedResultFuture,deadline.timeLeft());
+    Tuple2<Integer,Long> result=KvStateRequestSerializer.deserializeValue(serializedResult,queryableState.getValueSerializer());
+    assertTrue("Count moved backwards",result.f1 >= countForKey);
+  }
+  finally {
+    if (jobId != null) {
+      Future<CancellationSuccess> cancellation=cluster.getLeaderGateway(deadline.timeLeft()).ask(new JobManagerMessages.CancelJob(jobId),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<CancellationSuccess>apply(CancellationSuccess.class));
+      Await.ready(cancellation,deadline.timeLeft());
+    }
+    client.shutDown();
+  }
+}

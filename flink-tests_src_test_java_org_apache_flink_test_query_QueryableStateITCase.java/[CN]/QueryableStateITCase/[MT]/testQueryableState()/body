@@ -1,0 +1,64 @@
+{
+  final Deadline deadline=TEST_TIMEOUT.fromNow();
+  final int numKeys=1024;
+  final QueryableStateClient client=new QueryableStateClient(cluster.configuration());
+  JobID jobId=null;
+  try {
+    StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(NUM_SLOTS);
+    env.setRestartStrategy(RestartStrategies.fixedDelayRestart(Integer.MAX_VALUE,1000));
+    DataStream<Tuple2<Integer,Long>> source=env.addSource(new TestKeyRangeSource(numKeys));
+    ReducingStateDescriptor<Tuple2<Integer,Long>> reducingState=new ReducingStateDescriptor<>("any-name",new SumReduce(),source.getType());
+    final String queryName="hakuna-matata";
+    final QueryableStateStream<Integer,Tuple2<Integer,Long>> queryableState=source.keyBy(new KeySelector<Tuple2<Integer,Long>,Integer>(){
+      @Override public Integer getKey(      Tuple2<Integer,Long> value) throws Exception {
+        return value.f0;
+      }
+    }
+).asQueryableState(queryName,reducingState);
+    JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+    cluster.submitJobDetached(jobGraph);
+    jobId=jobGraph.getJobID();
+    final AtomicLongArray counts=new AtomicLongArray(numKeys);
+    final FiniteDuration retryDelay=new FiniteDuration(1,TimeUnit.SECONDS);
+    boolean allNonZero=false;
+    while (!allNonZero && deadline.hasTimeLeft()) {
+      allNonZero=true;
+      final List<Future<byte[]>> futures=new ArrayList<>(numKeys);
+      for (int i=0; i < numKeys; i++) {
+        final int key=i;
+        if (counts.get(key) > 0) {
+          continue;
+        }
+ else {
+          allNonZero=false;
+        }
+        final byte[] serializedKey=KvStateRequestSerializer.serializeKeyAndNamespace(key,queryableState.getKeySerializer(),VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE);
+        Future<byte[]> serializedResult=getKvStateWithRetries(client,jobId,queryName,key,serializedKey,retryDelay);
+        serializedResult.onSuccess(new OnSuccess<byte[]>(){
+          @Override public void onSuccess(          byte[] result) throws Throwable {
+            Tuple2<Integer,Long> value=KvStateRequestSerializer.deserializeValue(result,queryableState.getValueSerializer());
+            counts.set(key,value.f1);
+            assertEquals("Key mismatch",key,value.f0.intValue());
+          }
+        }
+,TEST_ACTOR_SYSTEM.dispatcher());
+        futures.add(serializedResult);
+      }
+      Future<Iterable<byte[]>> futureSequence=Futures.sequence(futures,TEST_ACTOR_SYSTEM.dispatcher());
+      Await.ready(futureSequence,deadline.timeLeft());
+    }
+    assertTrue("Not all keys are non-zero",allNonZero);
+    for (int i=0; i < numKeys; i++) {
+      long count=counts.get(i);
+      assertTrue("Count at position " + i + " is "+ count,count > 0);
+    }
+  }
+  finally {
+    if (jobId != null) {
+      Future<CancellationSuccess> cancellation=cluster.getLeaderGateway(deadline.timeLeft()).ask(new JobManagerMessages.CancelJob(jobId),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<CancellationSuccess>apply(CancellationSuccess.class));
+      Await.ready(cancellation,deadline.timeLeft());
+    }
+    client.shutDown();
+  }
+}
