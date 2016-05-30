@@ -9,10 +9,15 @@
     TypeInformation<User> te=TypeExtractor.createTypeInfo(User.class);
     Assert.assertEquals(AvroTypeInfo.class,te.getClass());
     TypeSerializer<User> tser=te.createSerializer(ec);
-    ComparatorTestBase.TestOutputView target=new ComparatorTestBase.TestOutputView();
-    tser.serialize(rec,target);
-    User newRec=tser.deserialize(target.getInputView());
-    assertNotNull(newRec);
+    ByteArrayOutputStream out=new ByteArrayOutputStream();
+    try (DataOutputViewStreamWrapper outView=new DataOutputViewStreamWrapper(out)){
+      tser.serialize(rec,outView);
+    }
+     User newRec;
+    try (DataInputViewStreamWrapper inView=new DataInputViewStreamWrapper(new ByteArrayInputStream(out.toByteArray()))){
+      newRec=tser.deserialize(inView);
+    }
+     assertNotNull(newRec);
     assertEquals("name not equal",TEST_NAME,newRec.getName().toString());
     assertEquals("enum not equal",TEST_ENUM_COLOR.toString(),newRec.getTypeEnum().toString());
   }
