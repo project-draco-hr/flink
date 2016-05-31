@@ -1,0 +1,29 @@
+{
+  AtomicInteger closeCalled=new AtomicInteger(0);
+  final int WINDOW_SIZE=4;
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  ListStateDescriptor<StreamRecord<Tuple2<String,Integer>>> stateDesc=new ListStateDescriptor<>("window-contents",new StreamRecordSerializer<>(inputType.createSerializer(new ExecutionConfig())));
+  EvictingWindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new EvictingWindowOperator<>(TumblingEventTimeWindows.of(Time.of(WINDOW_SIZE,TimeUnit.SECONDS)),new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalIterableWindowFunction<>(new RichSumReducer<TimeWindow>(closeCalled)),EventTimeTrigger.create(),CountEvictor.of(WINDOW_SIZE),0);
+  operator.setInputType(inputType,new ExecutionConfig());
+  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  long initialTime=0L;
+  testHarness.open();
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 10));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 100));
+  testHarness.processWatermark(new Watermark(1999));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 1997));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 1998));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 2310));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),initialTime + 2310));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 2310));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 2310));
+  testHarness.processWatermark(new Watermark(3999));
+  ConcurrentLinkedQueue<Object> expectedOutput=new ConcurrentLinkedQueue<>();
+  expectedOutput.add(new Watermark(1999));
+  expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1",4),3999));
+  expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2",2),3999));
+  expectedOutput.add(new Watermark(3999));
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new EvictingWindowOperatorTest.ResultSortComparator());
+  testHarness.close();
+}

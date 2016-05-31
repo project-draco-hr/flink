@@ -1,0 +1,27 @@
+{
+  final int WINDOW_SIZE=1;
+  final long LATENESS=2000;
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  ReducingStateDescriptor<Tuple2<String,Integer>> stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
+  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new WindowOperator<>(TumblingEventTimeWindows.of(Time.of(WINDOW_SIZE,TimeUnit.SECONDS)),new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,TimeWindow,Tuple2<String,Integer>>()),EventTimeTrigger.create(),LATENESS);
+  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  operator.setInputType(inputType,new ExecutionConfig());
+  testHarness.open();
+  ConcurrentLinkedQueue<Object> expected=new ConcurrentLinkedQueue<>();
+  long timestamp=Long.MAX_VALUE - 1750;
+  long windowSize=WINDOW_SIZE * 1000;
+  long endOfWindow=(timestamp - (timestamp % windowSize)) + windowSize - 1;
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),Long.MAX_VALUE - 1750));
+  testHarness.processWatermark(new Watermark(Long.MAX_VALUE - 1500));
+  testHarness.processWatermark(new Watermark(endOfWindow));
+  Assert.assertTrue(endOfWindow + LATENESS < endOfWindow);
+  Assert.assertTrue(endOfWindow + LATENESS < Long.MAX_VALUE - 1500);
+  Assert.assertTrue(Long.MAX_VALUE - 1500 < endOfWindow);
+  Assert.assertTrue(endOfWindow < Long.MAX_VALUE);
+  expected.add(new Watermark(Long.MAX_VALUE - 1500));
+  expected.add(new StreamRecord<>(new Tuple2<>("key2",1),endOfWindow));
+  expected.add(new Watermark(endOfWindow));
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expected,testHarness.getOutput(),new Tuple2ResultSortComparator());
+  testHarness.close();
+}

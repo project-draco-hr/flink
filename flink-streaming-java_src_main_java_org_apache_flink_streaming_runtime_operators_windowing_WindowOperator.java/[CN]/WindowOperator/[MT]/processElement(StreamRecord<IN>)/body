@@ -13,11 +13,16 @@
           for (          W m : mergedWindows) {
             context.window=m;
             context.clear();
+            deleteCleanupTimer(m);
           }
           getStateBackend().mergePartitionedStates(stateWindowResult,mergedStateWindows,windowSerializer,(StateDescriptor<? extends MergingState<?,?>,?>)windowStateDescriptor);
         }
       }
 );
+      if (isLate(actualWindow)) {
+        LOG.info("Dropped element " + element + " for window "+ actualWindow+ " due to lateness.");
+        continue;
+      }
       W stateWindow=mergingWindows.getStateWindow(actualWindow);
       AppendingState<IN,ACC> windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
       windowState.add(element.getValue());
@@ -25,17 +30,33 @@
       context.window=actualWindow;
       TriggerResult triggerResult=context.onElement(element);
       TriggerResult combinedTriggerResult=TriggerResult.merge(triggerResult,mergeTriggerResult.f0);
-      processTriggerResult(combinedTriggerResult,actualWindow);
+      fireOrContinue(combinedTriggerResult,actualWindow,windowState);
+      if (combinedTriggerResult.isPurge()) {
+        cleanup(actualWindow,windowState,mergingWindows);
+      }
+ else {
+        registerCleanupTimer(actualWindow);
+      }
     }
   }
  else {
     for (    W window : elementWindows) {
+      if (isLate(window)) {
+        LOG.info("Dropped element " + element + " for window "+ window+ " due to lateness.");
+        continue;
+      }
       AppendingState<IN,ACC> windowState=getPartitionedState(window,windowSerializer,windowStateDescriptor);
       windowState.add(element.getValue());
       context.key=key;
       context.window=window;
       TriggerResult triggerResult=context.onElement(element);
-      processTriggerResult(triggerResult,window);
+      fireOrContinue(triggerResult,window,windowState);
+      if (triggerResult.isPurge()) {
+        cleanup(window,windowState,null);
+      }
+ else {
+        registerCleanupTimer(window);
+      }
     }
   }
 }

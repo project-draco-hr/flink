@@ -1,0 +1,29 @@
+{
+  final int WINDOW_SIZE=2;
+  final long LATENESS=500;
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  ReducingStateDescriptor<Tuple2<String,Integer>> stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
+  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new WindowOperator<>(TumblingEventTimeWindows.of(Time.of(WINDOW_SIZE,TimeUnit.SECONDS)),new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,TimeWindow,Tuple2<String,Integer>>()),EventTimeTrigger.create(),LATENESS);
+  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  operator.setInputType(inputType,new ExecutionConfig());
+  testHarness.open();
+  long initialTime=0L;
+  ConcurrentLinkedQueue<Object> expected=new ConcurrentLinkedQueue<>();
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 500));
+  testHarness.processWatermark(new Watermark(initialTime + 1500));
+  expected.add(new Watermark(initialTime + 1500));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 1300));
+  testHarness.processWatermark(new Watermark(initialTime + 2300));
+  expected.add(new StreamRecord<>(new Tuple2<>("key2",2),initialTime + 1999));
+  expected.add(new Watermark(initialTime + 2300));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 1997));
+  testHarness.processWatermark(new Watermark(initialTime + 6000));
+  expected.add(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 1999));
+  expected.add(new Watermark(initialTime + 6000));
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),initialTime + 1998));
+  testHarness.processWatermark(new Watermark(initialTime + 7000));
+  expected.add(new Watermark(initialTime + 7000));
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expected,testHarness.getOutput(),new Tuple2ResultSortComparator());
+  testHarness.close();
+}

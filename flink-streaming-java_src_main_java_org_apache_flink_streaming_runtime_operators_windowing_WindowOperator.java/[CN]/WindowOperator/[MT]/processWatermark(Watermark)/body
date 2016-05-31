@@ -1,5 +1,35 @@
 {
-  processTriggersFor(mark);
+  boolean fire;
+  do {
+    Timer<K,W> timer=watermarkTimersQueue.peek();
+    if (timer != null && timer.timestamp <= mark.getTimestamp()) {
+      fire=true;
+      watermarkTimers.remove(timer);
+      watermarkTimersQueue.remove();
+      context.key=timer.key;
+      context.window=timer.window;
+      setKeyContext(timer.key);
+      AppendingState<IN,ACC> windowState;
+      MergingWindowSet<W> mergingWindows=null;
+      if (windowAssigner instanceof MergingWindowAssigner) {
+        mergingWindows=getMergingWindowSet();
+        W stateWindow=mergingWindows.getStateWindow(context.window);
+        windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
+      }
+ else {
+        windowState=getPartitionedState(context.window,windowSerializer,windowStateDescriptor);
+      }
+      TriggerResult triggerResult=context.onEventTime(timer.timestamp);
+      fireOrContinue(triggerResult,context.window,windowState);
+      if (triggerResult.isPurge() || (windowAssigner.isEventTime() && isCleanupTime(timer.window,timer.timestamp))) {
+        cleanup(timer.window,windowState,mergingWindows);
+      }
+    }
+ else {
+      fire=false;
+    }
+  }
+ while (fire);
   output.emitWatermark(mark);
   this.currentWatermark=mark.getTimestamp();
 }
