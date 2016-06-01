@@ -2,18 +2,22 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug(this.taskContext.formatLogString("Reducer preprocessing done. Running Reducer code."));
   }
+  final Counter numRecordsIn=this.taskContext.getMetricGroup().counter("numRecordsIn");
+  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
   final MutableObjectIterator<T> input=this.input;
   final TypeSerializer<T> serializer=this.serializer;
   final TypeComparator<T> comparator=this.comparator;
   final ReduceFunction<T> function=this.taskContext.getStub();
-  final Collector<T> output=this.taskContext.getOutputCollector();
+  final Collector<T> output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   if (objectReuseEnabled) {
     T reuse1=input.next();
     T reuse2=serializer.createInstance();
     T value=reuse1;
     while (this.running && value != null) {
+      numRecordsIn.inc();
       comparator.setReference(value);
       while ((reuse2=input.next(reuse2)) != null) {
+        numRecordsIn.inc();
         if (comparator.equalToReference(reuse2)) {
           value=function.reduce(value,reuse2);
           if (value == reuse2) {
@@ -36,9 +40,11 @@
  else {
     T value=input.next();
     while (this.running && value != null) {
+      numRecordsIn.inc();
       comparator.setReference(value);
       T res=value;
       while ((value=input.next()) != null) {
+        numRecordsIn.inc();
         if (comparator.equalToReference(value)) {
           res=function.reduce(res,value);
         }

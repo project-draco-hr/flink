@@ -2,8 +2,10 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug(this.taskContext.formatLogString("Running Cross with Block-Nested-Loops: " + "First input is outer (blocking) side, second input is inner (spilling) side."));
   }
-  final MutableObjectIterator<T1> in1=this.taskContext.getInput(0);
-  final MutableObjectIterator<T2> in2=this.taskContext.getInput(1);
+  final Counter numRecordsIn=taskContext.getMetricGroup().counter("numRecordsIn");
+  final Counter numRecordsOut=taskContext.getMetricGroup().counter("numRecordsOut");
+  final MutableObjectIterator<T1> in1=new CountingMutableObjectIterator<>(this.taskContext.<T1>getInput(0),numRecordsIn);
+  final MutableObjectIterator<T2> in2=new CountingMutableObjectIterator<>(this.taskContext.<T2>getInput(1),numRecordsIn);
   final TypeSerializer<T1> serializer1=this.taskContext.<T1>getInputSerializer(0).getSerializer();
   final TypeSerializer<T2> serializer2=this.taskContext.<T2>getInputSerializer(1).getSerializer();
   final BlockResettableMutableObjectIterator<T1> blockVals=new BlockResettableMutableObjectIterator<T1>(this.memManager,in1,serializer1,this.memPagesForBlockSide,this.taskContext.getOwningNepheleTask());
@@ -11,7 +13,7 @@
   final SpillingResettableMutableObjectIterator<T2> spillVals=new SpillingResettableMutableObjectIterator<T2>(in2,serializer2,this.memManager,this.taskContext.getIOManager(),this.memPagesForSpillingSide,this.taskContext.getOwningNepheleTask());
   this.spillIter=spillVals;
   final CrossFunction<T1,T2,OT> crosser=this.taskContext.getStub();
-  final Collector<OT> collector=this.taskContext.getOutputCollector();
+  final Collector<OT> collector=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   if (objectReuseEnabled) {
     final T1 val1Reuse=serializer1.createInstance();
     final T2 val2Reuse=serializer2.createInstance();

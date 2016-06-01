@@ -9,8 +9,11 @@
   }
   LOG.debug(getLogString("Finished registering input and output"));
   LOG.debug(getLogString("Starting data source operator"));
+  RuntimeContext ctx=createRuntimeContext();
+  Counter splitCounter=ctx.getMetricGroup().counter("numSplitsProcessed");
+  Counter numRecordsOut=ctx.getMetricGroup().counter("numRecordsOut");
   if (RichInputFormat.class.isAssignableFrom(this.format.getClass())) {
-    ((RichInputFormat)this.format).setRuntimeContext(createRuntimeContext());
+    ((RichInputFormat)this.format).setRuntimeContext(ctx);
     LOG.debug(getLogString("Rich Source detected. Initializing runtime context."));
     ((RichInputFormat)this.format).openInputFormat();
     LOG.debug(getLogString("Rich Source detected. Opening the InputFormat."));
@@ -29,7 +32,7 @@
       format.open(split);
       LOG.debug(getLogString("Starting to read input from split " + split.toString()));
       try {
-        final Collector<OT> output=this.output;
+        final Collector<OT> output=new CountingCollector<>(this.output,numRecordsOut);
         if (objectReuseEnabled) {
           OT reuse=serializer.createInstance();
           while (!this.taskCanceled && !format.reachedEnd()) {
@@ -54,6 +57,7 @@
   finally {
         format.close();
       }
+      splitCounter.inc();
     }
     this.output.close();
     BatchTask.closeChainedTasks(this.chainedTasks,this);

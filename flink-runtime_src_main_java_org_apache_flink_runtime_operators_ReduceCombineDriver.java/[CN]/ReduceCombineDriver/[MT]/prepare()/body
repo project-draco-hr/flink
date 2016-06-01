@@ -2,11 +2,12 @@
   if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_PARTIAL_REDUCE) {
     throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
   }
+  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
   final TypeSerializerFactory<T> serializerFactory=this.taskContext.getInputSerializer(0);
   this.comparator=this.taskContext.getDriverComparator(0);
   this.serializer=serializerFactory.getSerializer();
   this.reducer=this.taskContext.getStub();
-  this.output=this.taskContext.getOutputCollector();
+  this.output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   MemoryManager memManager=this.taskContext.getMemoryManager();
   final int numMemoryPages=memManager.computeNumberOfPages(this.taskContext.getTaskConfig().getRelativeMemoryDriver());
   this.memory=memManager.allocatePages(this.taskContext.getOwningNepheleTask(),numMemoryPages);

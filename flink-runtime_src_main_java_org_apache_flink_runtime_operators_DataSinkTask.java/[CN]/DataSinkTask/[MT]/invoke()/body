@@ -9,8 +9,10 @@
   }
   LOG.debug(getLogString("Finished registering input and output"));
   LOG.debug(getLogString("Starting data sink operator"));
+  RuntimeContext ctx=createRuntimeContext();
+  final Counter numRecordsIn=ctx.getMetricGroup().counter("numRecordsIn");
   if (RichOutputFormat.class.isAssignableFrom(this.format.getClass())) {
-    ((RichOutputFormat)this.format).setRuntimeContext(createRuntimeContext());
+    ((RichOutputFormat)this.format).setRuntimeContext(ctx);
     LOG.debug(getLogString("Rich Sink detected. Initializing runtime context."));
   }
   ExecutionConfig executionConfig=getExecutionConfig();
@@ -50,12 +52,14 @@ format.open(this.getEnvironment().getTaskInfo().getIndexOfThisSubtask(),this.get
 if (objectReuseEnabled) {
 IT record=serializer.createInstance();
 while (!this.taskCanceled && ((record=input.next(record)) != null)) {
+numRecordsIn.inc();
 format.writeRecord(record);
 }
 }
  else {
 IT record;
 while (!this.taskCanceled && ((record=input.next()) != null)) {
+numRecordsIn.inc();
 format.writeRecord(record);
 }
 }

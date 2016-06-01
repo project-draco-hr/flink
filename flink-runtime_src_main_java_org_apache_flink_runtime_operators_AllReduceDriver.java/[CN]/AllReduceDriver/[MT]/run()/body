@@ -2,17 +2,22 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug(this.taskContext.formatLogString("AllReduce preprocessing done. Running Reducer code."));
   }
+  final Counter numRecordsIn=this.taskContext.getMetricGroup().counter("numRecordsIn");
+  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
   final ReduceFunction<T> stub=this.taskContext.getStub();
   final MutableObjectIterator<T> input=this.input;
   final TypeSerializer<T> serializer=this.serializer;
+  final Collector<T> collector=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   T val1;
   if ((val1=input.next()) == null) {
     return;
   }
+  numRecordsIn.inc();
   if (objectReuseEnabled) {
     T val2=serializer.createInstance();
     T value=val1;
     while (running && (val2=input.next(val2)) != null) {
+      numRecordsIn.inc();
       value=stub.reduce(value,val2);
       if (value == val2) {
         T tmp=val1;
@@ -20,13 +25,14 @@
         val2=tmp;
       }
     }
-    this.taskContext.getOutputCollector().collect(value);
+    collector.collect(value);
   }
  else {
     T val2;
     while (running && (val2=input.next()) != null) {
+      numRecordsIn.inc();
       val1=stub.reduce(val1,val2);
     }
-    this.taskContext.getOutputCollector().collect(val1);
+    collector.collect(val1);
   }
 }

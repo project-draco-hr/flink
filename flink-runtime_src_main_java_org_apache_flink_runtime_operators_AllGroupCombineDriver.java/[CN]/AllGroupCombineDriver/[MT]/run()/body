@@ -2,11 +2,13 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("AllGroupCombine starting.");
   }
+  final Counter numRecordsIn=this.taskContext.getMetricGroup().counter("numRecordsIn");
+  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
   final TypeSerializerFactory<IN> serializerFactory=this.taskContext.getInputSerializer(0);
   TypeSerializer<IN> serializer=serializerFactory.getSerializer();
-  final MutableObjectIterator<IN> in=this.taskContext.getInput(0);
+  final MutableObjectIterator<IN> in=new CountingMutableObjectIterator<>(this.taskContext.<IN>getInput(0),numRecordsIn);
   final GroupCombineFunction<IN,OUT> reducer=this.taskContext.getStub();
-  final Collector<OUT> output=this.taskContext.getOutputCollector();
+  final Collector<OUT> output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   if (objectReuseEnabled) {
     final ReusingMutableToRegularIteratorWrapper<IN> inIter=new ReusingMutableToRegularIteratorWrapper<IN>(in,serializer);
     if (inIter.hasNext()) {

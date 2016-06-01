@@ -1,15 +1,19 @@
 {
+  final Counter numRecordsIn=this.taskContext.getMetricGroup().counter("numRecordsIn");
+  final Counter numRecordsOut=this.taskContext.getMetricGroup().counter("numRecordsOut");
   final MutableObjectIterator<T> input=this.taskContext.getInput(0);
-  final Collector<T> output=this.taskContext.getOutputCollector();
+  final Collector<T> output=new CountingCollector<>(this.taskContext.getOutputCollector(),numRecordsOut);
   if (objectReuseEnabled) {
     T record=this.taskContext.<T>getInputSerializer(0).getSerializer().createInstance();
     while (this.running && ((record=input.next(record)) != null)) {
+      numRecordsIn.inc();
       output.collect(record);
     }
   }
  else {
     T record;
     while (this.running && ((record=input.next()) != null)) {
+      numRecordsIn.inc();
       output.collect(record);
     }
   }
