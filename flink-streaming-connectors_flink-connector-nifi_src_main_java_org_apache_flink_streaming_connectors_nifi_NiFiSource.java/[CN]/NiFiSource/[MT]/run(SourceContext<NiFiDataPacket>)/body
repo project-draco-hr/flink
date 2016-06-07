@@ -1,46 +1,41 @@
 {
-  try {
-    while (isRunning) {
-      final Transaction transaction=client.createTransaction(TransferDirection.RECEIVE);
-      if (transaction == null) {
-        LOG.warn("A transaction could not be created, waiting and will try again...");
-        try {
-          Thread.sleep(waitTimeMs);
-        }
- catch (        InterruptedException ignored) {
-        }
-        continue;
+  while (isRunning) {
+    final Transaction transaction=client.createTransaction(TransferDirection.RECEIVE);
+    if (transaction == null) {
+      LOG.warn("A transaction could not be created, waiting and will try again...");
+      try {
+        Thread.sleep(waitTimeMs);
       }
-      DataPacket dataPacket=transaction.receive();
-      if (dataPacket == null) {
-        transaction.confirm();
-        transaction.complete();
-        LOG.debug("No data available to pull, waiting and will try again...");
-        try {
-          Thread.sleep(waitTimeMs);
-        }
- catch (        InterruptedException ignored) {
-        }
-        continue;
+ catch (      InterruptedException ignored) {
       }
-      final List<NiFiDataPacket> niFiDataPackets=new ArrayList<>();
-      do {
-        final InputStream inStream=dataPacket.getData();
-        final byte[] data=new byte[(int)dataPacket.getSize()];
-        StreamUtils.fillBuffer(inStream,data);
-        final Map<String,String> attributes=dataPacket.getAttributes();
-        niFiDataPackets.add(new StandardNiFiDataPacket(data,attributes));
-        dataPacket=transaction.receive();
-      }
- while (dataPacket != null);
-      transaction.confirm();
-      for (      NiFiDataPacket dp : niFiDataPackets) {
-        ctx.collect(dp);
-      }
-      transaction.complete();
+      continue;
     }
-  }
-  finally {
-    ctx.close();
+    DataPacket dataPacket=transaction.receive();
+    if (dataPacket == null) {
+      transaction.confirm();
+      transaction.complete();
+      LOG.debug("No data available to pull, waiting and will try again...");
+      try {
+        Thread.sleep(waitTimeMs);
+      }
+ catch (      InterruptedException ignored) {
+      }
+      continue;
+    }
+    final List<NiFiDataPacket> niFiDataPackets=new ArrayList<>();
+    do {
+      final InputStream inStream=dataPacket.getData();
+      final byte[] data=new byte[(int)dataPacket.getSize()];
+      StreamUtils.fillBuffer(inStream,data);
+      final Map<String,String> attributes=dataPacket.getAttributes();
+      niFiDataPackets.add(new StandardNiFiDataPacket(data,attributes));
+      dataPacket=transaction.receive();
+    }
+ while (dataPacket != null);
+    transaction.confirm();
+    for (    NiFiDataPacket dp : niFiDataPackets) {
+      ctx.collect(dp);
+    }
+    transaction.complete();
   }
 }
