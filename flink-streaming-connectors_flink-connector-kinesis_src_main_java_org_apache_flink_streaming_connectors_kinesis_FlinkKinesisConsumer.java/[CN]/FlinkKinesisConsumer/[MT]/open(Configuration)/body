@@ -1,63 +1,13 @@
 {
   super.open(parameters);
-  final int numFlinkConsumerTasks=getRuntimeContext().getNumberOfParallelSubtasks();
-  final int thisConsumerTaskIndex=getRuntimeContext().getIndexOfThisSubtask();
-  List<KinesisStreamShard> assignedShards=assignShards(this.shards,numFlinkConsumerTasks,thisConsumerTaskIndex);
-  if (assignedShards.isEmpty()) {
-    LOG.info("Consumer task {} has no shards assigned to it",thisConsumerTaskIndex);
-    hasAssignedShards=false;
-    return;
-  }
- else {
-    hasAssignedShards=true;
-  }
-  if (LOG.isInfoEnabled()) {
-    StringBuilder sb=new StringBuilder();
-    for (    KinesisStreamShard shard : assignedShards) {
-      sb.append(shard.getStreamName()).append(":").append(shard.getShardId()).append(", ");
-    }
-    LOG.info("Consumer task {} will read shards {} out of a total of {} shards",thisConsumerTaskIndex,sb.toString(),this.shards.size());
-  }
-  fetcher=new KinesisDataFetcher(assignedShards,configProps,getRuntimeContext().getTaskName());
   if (sequenceNumsToRestore != null) {
     if (LOG.isInfoEnabled()) {
-      LOG.info("Consumer task {} is restoring sequence numbers from previous checkpointed state",thisConsumerTaskIndex);
+      LOG.info("Subtask {} is restoring sequence numbers {} from previous checkpointed state",getRuntimeContext().getIndexOfThisSubtask(),sequenceNumsToRestore.toString());
     }
-    for (    Map.Entry<KinesisStreamShard,SequenceNumber> restoreSequenceNum : sequenceNumsToRestore.entrySet()) {
-      fetcher.advanceSequenceNumberTo(restoreSequenceNum.getKey(),restoreSequenceNum.getValue());
-    }
-    if (LOG.isInfoEnabled()) {
-      StringBuilder sb=new StringBuilder();
-      for (      Map.Entry<KinesisStreamShard,SequenceNumber> restoreSequenceNo : sequenceNumsToRestore.entrySet()) {
-        KinesisStreamShard shard=restoreSequenceNo.getKey();
-        sb.append(shard.getStreamName()).append(":").append(shard.getShardId()).append(" -> ").append(restoreSequenceNo.getValue()).append(", ");
-      }
-      LOG.info("Advanced the starting sequence numbers of consumer task {}: {}",thisConsumerTaskIndex,sb.toString());
-    }
-    lastSequenceNums=sequenceNumsToRestore;
+    lastStateSnapshot=sequenceNumsToRestore;
     sequenceNumsToRestore=null;
   }
  else {
-    lastSequenceNums=new HashMap<>();
-    InitialPosition initialPosition=InitialPosition.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_STREAM_INIT_POSITION_TYPE,InitialPosition.LATEST.toString()));
-    SentinelSequenceNumber sentinelSequenceNum;
-switch (initialPosition) {
-case TRIM_HORIZON:
-      sentinelSequenceNum=SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM;
-    break;
-case LATEST:
-default :
-  sentinelSequenceNum=SentinelSequenceNumber.SENTINEL_LATEST_SEQUENCE_NUM;
-}
-for (KinesisStreamShard assignedShard : assignedShards) {
-fetcher.advanceSequenceNumberTo(assignedShard,sentinelSequenceNum.get());
-}
-if (LOG.isInfoEnabled()) {
-StringBuilder sb=new StringBuilder();
-for (KinesisStreamShard assignedShard : assignedShards) {
-  sb.append(assignedShard.getStreamName()).append(":").append(assignedShard.getShardId()).append(" -> ").append(sentinelSequenceNum.get()).append(", ");
-}
-LOG.info("Advanced the starting sequence numbers of consumer task {}: {}",thisConsumerTaskIndex,sb.toString());
-}
-}
+    lastStateSnapshot=new HashMap<>();
+  }
 }

@@ -1,0 +1,53 @@
+{
+  String nextShardItr;
+  try {
+    if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_LATEST_SEQUENCE_NUM.get())) {
+      if (subscribedShard.isClosed()) {
+        nextShardItr=null;
+      }
+ else {
+        nextShardItr=kinesis.getShardIterator(subscribedShard,ShardIteratorType.LATEST.toString(),null);
+      }
+    }
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.get())) {
+      nextShardItr=kinesis.getShardIterator(subscribedShard,ShardIteratorType.TRIM_HORIZON.toString(),null);
+    }
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.get())) {
+      nextShardItr=null;
+    }
+ else {
+      if (lastSequenceNum.isAggregated()) {
+        String itrForLastAggregatedRecord=kinesis.getShardIterator(subscribedShard,ShardIteratorType.AT_SEQUENCE_NUMBER.toString(),lastSequenceNum.getSequenceNumber());
+        GetRecordsResult getRecordsResult=kinesis.getRecords(itrForLastAggregatedRecord,1);
+        List<UserRecord> fetchedRecords=deaggregateRecords(getRecordsResult.getRecords(),subscribedShard.getShard().getHashKeyRange().getStartingHashKey(),subscribedShard.getShard().getHashKeyRange().getEndingHashKey());
+        long lastSubSequenceNum=lastSequenceNum.getSubSequenceNumber();
+        for (        UserRecord record : fetchedRecords) {
+          if (record.getSubSequenceNumber() > lastSubSequenceNum) {
+            deserializeRecordForCollectionAndUpdateState(record);
+          }
+        }
+        nextShardItr=getRecordsResult.getNextShardIterator();
+      }
+ else {
+        nextShardItr=kinesis.getShardIterator(subscribedShard,ShardIteratorType.AFTER_SEQUENCE_NUMBER.toString(),lastSequenceNum.getSequenceNumber());
+      }
+    }
+    while (isRunning()) {
+      if (nextShardItr == null) {
+        fetcherRef.updateState(subscribedShardStateIndex,SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.get());
+        break;
+      }
+ else {
+        GetRecordsResult getRecordsResult=kinesis.getRecords(nextShardItr,maxNumberOfRecordsPerFetch);
+        List<UserRecord> fetchedRecords=deaggregateRecords(getRecordsResult.getRecords(),subscribedShard.getShard().getHashKeyRange().getStartingHashKey(),subscribedShard.getShard().getHashKeyRange().getEndingHashKey());
+        for (        UserRecord record : fetchedRecords) {
+          deserializeRecordForCollectionAndUpdateState(record);
+        }
+        nextShardItr=getRecordsResult.getNextShardIterator();
+      }
+    }
+  }
+ catch (  Throwable t) {
+    fetcherRef.stopWithError(t);
+  }
+}

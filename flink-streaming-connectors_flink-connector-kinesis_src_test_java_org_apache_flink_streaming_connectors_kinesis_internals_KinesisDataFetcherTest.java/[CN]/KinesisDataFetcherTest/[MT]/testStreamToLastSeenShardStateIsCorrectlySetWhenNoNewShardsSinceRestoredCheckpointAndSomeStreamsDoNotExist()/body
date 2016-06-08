@@ -1,0 +1,46 @@
+{
+  List<String> fakeStreams=new LinkedList<>();
+  fakeStreams.add("fakeStream1");
+  fakeStreams.add("fakeStream2");
+  fakeStreams.add("fakeStream3");
+  fakeStreams.add("fakeStream4");
+  Map<KinesisStreamShard,String> restoredStateUnderTest=new HashMap<>();
+  restoredStateUnderTest.put(new KinesisStreamShard("fakeStream1",new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(0))),UUID.randomUUID().toString());
+  restoredStateUnderTest.put(new KinesisStreamShard("fakeStream1",new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(1))),UUID.randomUUID().toString());
+  restoredStateUnderTest.put(new KinesisStreamShard("fakeStream1",new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(2))),UUID.randomUUID().toString());
+  restoredStateUnderTest.put(new KinesisStreamShard("fakeStream2",new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(0))),UUID.randomUUID().toString());
+  restoredStateUnderTest.put(new KinesisStreamShard("fakeStream2",new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(1))),UUID.randomUUID().toString());
+  Map<String,Integer> streamToShardCount=new HashMap<>();
+  streamToShardCount.put("fakeStream1",3);
+  streamToShardCount.put("fakeStream2",2);
+  streamToShardCount.put("fakeStream3",0);
+  streamToShardCount.put("fakeStream4",0);
+  HashMap<String,String> subscribedStreamsToLastSeenShardIdsUnderTest=KinesisDataFetcher.createInitialSubscribedStreamsToLastDiscoveredShardsState(fakeStreams);
+  final TestableKinesisDataFetcher fetcher=new TestableKinesisDataFetcher(fakeStreams,new Properties(),10,2,new AtomicReference<Throwable>(),new LinkedList<KinesisStreamShardState>(),subscribedStreamsToLastSeenShardIdsUnderTest,FakeKinesisBehavioursFactory.nonReshardedStreamsBehaviour(streamToShardCount));
+  for (  Map.Entry<KinesisStreamShard,String> restoredState : restoredStateUnderTest.entrySet()) {
+    fetcher.advanceLastDiscoveredShardOfStream(restoredState.getKey().getStreamName(),restoredState.getKey().getShard().getShardId());
+    fetcher.registerNewSubscribedShardState(new KinesisStreamShardState(restoredState.getKey(),new SequenceNumber(restoredState.getValue())));
+  }
+  fetcher.setIsRestoringFromFailure(true);
+  PowerMockito.whenNew(ShardConsumer.class).withAnyArguments().thenReturn(Mockito.mock(ShardConsumer.class));
+  Thread runFetcherThread=new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        fetcher.runFetcher();
+      }
+ catch (      Exception e) {
+      }
+    }
+  }
+);
+  runFetcherThread.start();
+  Thread.sleep(1000);
+  fetcher.shutdownFetcher();
+  Set<String> streamsInState=subscribedStreamsToLastSeenShardIdsUnderTest.keySet();
+  assertTrue(streamsInState.size() == fakeStreams.size());
+  assertTrue(streamsInState.containsAll(fakeStreams));
+  assertTrue(subscribedStreamsToLastSeenShardIdsUnderTest.get("fakeStream1").equals(KinesisShardIdGenerator.generateFromShardOrder(2)));
+  assertTrue(subscribedStreamsToLastSeenShardIdsUnderTest.get("fakeStream2").equals(KinesisShardIdGenerator.generateFromShardOrder(1)));
+  assertTrue(subscribedStreamsToLastSeenShardIdsUnderTest.get("fakeStream3") == null);
+  assertTrue(subscribedStreamsToLastSeenShardIdsUnderTest.get("fakeStream4") == null);
+}

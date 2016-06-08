@@ -1,0 +1,137 @@
+{
+  final ParameterTool pt=ParameterTool.fromArgs(args);
+  LOG.info("Starting exactly once with stream resharding test");
+  final String streamName="flink-test-" + UUID.randomUUID().toString();
+  final String accessKey=pt.getRequired("accessKey");
+  final String secretKey=pt.getRequired("secretKey");
+  final String region=pt.getRequired("region");
+  final Properties configProps=new Properties();
+  configProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_ACCESSKEYID,accessKey);
+  configProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_SECRETKEY,secretKey);
+  configProps.setProperty(KinesisConfigConstants.CONFIG_AWS_REGION,region);
+  configProps.setProperty(KinesisConfigConstants.CONFIG_SHARD_DISCOVERY_INTERVAL_MILLIS,"0");
+  final AmazonKinesisClient client=AWSUtil.createKinesisClient(configProps);
+  client.createStream(streamName,1);
+  DescribeStreamResult status=client.describeStream(streamName);
+  LOG.info("status {}",status);
+  while (!status.getStreamDescription().getStreamStatus().equals("ACTIVE")) {
+    status=client.describeStream(streamName);
+    LOG.info("Status of stream {}",status);
+    Thread.sleep(1000);
+  }
+  final Configuration flinkConfig=new Configuration();
+  flinkConfig.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,1);
+  flinkConfig.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,8);
+  flinkConfig.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY,16);
+  flinkConfig.setString(ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY,"0 s");
+  ForkableFlinkMiniCluster flink=new ForkableFlinkMiniCluster(flinkConfig,false);
+  flink.start();
+  final int flinkPort=flink.getLeaderRPCPort();
+  try {
+    final AtomicReference<Throwable> producerError=new AtomicReference<>();
+    Runnable manualGenerate=new Runnable(){
+      @Override public void run(){
+        AmazonKinesisClient client=AWSUtil.createKinesisClient(configProps);
+        int count=0;
+        final int batchSize=30;
+        while (true) {
+          try {
+            Thread.sleep(10);
+            Set<PutRecordsRequestEntry> batch=new HashSet<>();
+            for (int i=count; i < count + batchSize; i++) {
+              if (i >= TOTAL_EVENT_COUNT) {
+                break;
+              }
+              batch.add(new PutRecordsRequestEntry().withData(ByteBuffer.wrap(((i) + "-" + RandomStringUtils.randomAlphabetic(12)).getBytes())).withPartitionKey(UUID.randomUUID().toString()));
+            }
+            count+=batchSize;
+            PutRecordsResult result=client.putRecords(new PutRecordsRequest().withStreamName(streamName).withRecords(batch));
+            if (result.getFailedRecordCount() > 0) {
+              producerError.set(new RuntimeException("The producer has failed records in one of the put batch attempts."));
+              break;
+            }
+            if (count >= TOTAL_EVENT_COUNT) {
+              break;
+            }
+          }
+ catch (          Exception e) {
+            producerError.set(e);
+          }
+        }
+      }
+    }
+;
+    Thread producerThread=new Thread(manualGenerate);
+    producerThread.start();
+    final AtomicReference<Throwable> consumerError=new AtomicReference<>();
+    Thread consumerThread=ExactlyOnceValidatingConsumerThread.create(TOTAL_EVENT_COUNT,10000,2,500,500,accessKey,secretKey,region,streamName,consumerError,flinkPort,flinkConfig);
+    consumerThread.start();
+    Runnable splitShard=new Runnable(){
+      @Override public void run(){
+        try {
+          Thread.sleep(5000);
+          LOG.info("Splitting shard ...");
+          client.splitShard(streamName,KinesisShardIdGenerator.generateFromShardOrder(0),"170141183460469231731687303715884105727");
+          DescribeStreamResult status;
+          Random rand=new Random();
+          do {
+            status=null;
+            while (status == null) {
+              try {
+                status=client.describeStream(streamName);
+              }
+ catch (              LimitExceededException lee) {
+                LOG.warn("LimitExceededException while describing stream ... retrying ...");
+                Thread.sleep(rand.nextInt(1200));
+              }
+            }
+          }
+ while (!status.getStreamDescription().getStreamStatus().equals("ACTIVE"));
+          Thread.sleep(7000);
+          LOG.info("Merging shards ...");
+          client.mergeShards(streamName,KinesisShardIdGenerator.generateFromShardOrder(1),KinesisShardIdGenerator.generateFromShardOrder(2));
+        }
+ catch (        InterruptedException iex) {
+        }
+      }
+    }
+;
+    Thread splitShardThread=new Thread(splitShard);
+    splitShardThread.start();
+    boolean deadlinePassed=false;
+    long deadline=System.currentTimeMillis() + (1000 * 5 * 60);
+    while ((consumerThread.isAlive() || producerThread.isAlive()) && (producerError.get() == null && consumerError.get() == null)) {
+      Thread.sleep(1000);
+      if (System.currentTimeMillis() >= deadline) {
+        LOG.warn("Deadline passed");
+        deadlinePassed=true;
+        break;
+      }
+    }
+    if (producerThread.isAlive()) {
+      producerThread.interrupt();
+    }
+    if (consumerThread.isAlive()) {
+      consumerThread.interrupt();
+    }
+    if (producerError.get() != null) {
+      LOG.info("+++ TEST failed! +++");
+      throw new RuntimeException("Producer failed",producerError.get());
+    }
+    if (consumerError.get() != null) {
+      LOG.info("+++ TEST failed! +++");
+      throw new RuntimeException("Consumer failed",consumerError.get());
+    }
+    if (!deadlinePassed) {
+      LOG.info("+++ TEST passed! +++");
+    }
+ else {
+      LOG.info("+++ TEST failed! +++");
+    }
+  }
+  finally {
+    client.deleteStream(streamName);
+    client.shutdown();
+    flink.stop();
+  }
+}

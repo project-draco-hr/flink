@@ -1,0 +1,28 @@
+{
+  Runnable exactlyOnceValidationConsumer=new Runnable(){
+    @Override public void run(){
+      try {
+        StreamExecutionEnvironment see=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort,flinkConfig);
+        see.setParallelism(parallelism);
+        see.enableCheckpointing(checkpointInterval);
+        see.setRestartStrategy(RestartStrategies.fixedDelayRestart(2,restartDelay));
+        Properties consumerProps=new Properties();
+        consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_ACCESSKEYID,awsAccessKey);
+        consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_CREDENTIALS_PROVIDER_BASIC_SECRETKEY,awsSecretKey);
+        consumerProps.setProperty(KinesisConfigConstants.CONFIG_AWS_REGION,awsRegion);
+        consumerProps.setProperty(KinesisConfigConstants.CONFIG_STREAM_INIT_POSITION_TYPE,InitialPosition.TRIM_HORIZON.name());
+        DataStream<String> consuming=see.addSource(new FlinkKinesisConsumer<>(kinesisStreamName,new SimpleStringSchema(),consumerProps));
+        consuming.flatMap(new ArtificialFailOnceFlatMapper(failAtRecordCount)).flatMap(new ExactlyOnceValidatingMapper(totalEventCount)).setParallelism(1);
+        LOG.info("Starting consuming topology");
+        tryExecute(see,"Consuming topo");
+        LOG.info("Consuming topo finished");
+      }
+ catch (      Exception e) {
+        LOG.warn("Error while running consuming topology",e);
+        errorHandler.set(e);
+      }
+    }
+  }
+;
+  return new Thread(exactlyOnceValidationConsumer);
+}

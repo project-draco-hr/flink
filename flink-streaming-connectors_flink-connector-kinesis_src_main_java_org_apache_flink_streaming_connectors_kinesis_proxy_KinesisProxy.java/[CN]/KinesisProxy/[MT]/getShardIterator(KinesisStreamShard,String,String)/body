@@ -1,3 +1,18 @@
 {
-  return kinesisClient.getShardIterator(shard.getStreamName(),shard.getShardId(),shardIteratorType,startingSeqNum).getShardIterator();
+  GetShardIteratorResult getShardIteratorResult=null;
+  int attempt=0;
+  while (attempt <= getShardIteratorMaxAttempts && getShardIteratorResult == null) {
+    try {
+      getShardIteratorResult=kinesisClient.getShardIterator(shard.getStreamName(),shard.getShard().getShardId(),shardIteratorType,startingSeqNum);
+    }
+ catch (    ProvisionedThroughputExceededException ex) {
+      long backoffMillis=fullJitterBackoff(getShardIteratorBaseBackoffMillis,getShardIteratorMaxBackoffMillis,getShardIteratorExpConstant,attempt++);
+      LOG.warn("Got ProvisionedThroughputExceededException. Backing off for " + backoffMillis + " millis.");
+      Thread.sleep(backoffMillis);
+    }
+  }
+  if (getShardIteratorResult == null) {
+    throw new RuntimeException("Rate Exceeded for getShardIterator operation - all " + getShardIteratorMaxAttempts + "retry"+ "attempts returned ProvisionedThroughputExceededException.");
+  }
+  return getShardIteratorResult.getShardIterator();
 }

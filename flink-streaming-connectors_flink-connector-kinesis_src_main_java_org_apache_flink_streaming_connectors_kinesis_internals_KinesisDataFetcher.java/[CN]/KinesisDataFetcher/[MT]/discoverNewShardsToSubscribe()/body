@@ -1,0 +1,17 @@
+{
+  List<KinesisStreamShard> newShardsToSubscribe=new LinkedList<>();
+  GetShardListResult shardListResult=kinesis.getShardList(subscribedStreamsToLastDiscoveredShardIds);
+  if (shardListResult.hasRetrievedShards()) {
+    Set<String> streamsWithNewShards=shardListResult.getStreamsWithRetrievedShards();
+    for (    String stream : streamsWithNewShards) {
+      List<KinesisStreamShard> newShardsOfStream=shardListResult.getRetrievedShardListOfStream(stream);
+      for (      KinesisStreamShard newShard : newShardsOfStream) {
+        if (isThisSubtaskShouldSubscribeTo(newShard,totalNumberOfConsumerSubtasks,indexOfThisConsumerSubtask)) {
+          newShardsToSubscribe.add(newShard);
+        }
+      }
+      advanceLastDiscoveredShardOfStream(stream,shardListResult.getLastSeenShardOfStream(stream).getShard().getShardId());
+    }
+  }
+  return newShardsToSubscribe;
+}

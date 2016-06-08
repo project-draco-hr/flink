@@ -3,35 +3,25 @@
   describeStreamRequest.setStreamName(streamName);
   describeStreamRequest.setExclusiveStartShardId(startShardId);
   DescribeStreamResult describeStreamResult=null;
-  String streamStatus=null;
-  int remainingRetryTimes=Integer.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_STREAM_DESCRIBE_RETRIES,Integer.toString(KinesisConfigConstants.DEFAULT_STREAM_DESCRIBE_RETRY_TIMES)));
-  long describeStreamBackoffTimeInMillis=Long.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_STREAM_DESCRIBE_BACKOFF,Long.toString(KinesisConfigConstants.DEFAULT_STREAM_DESCRIBE_BACKOFF)));
-  while ((remainingRetryTimes >= 0) && (describeStreamResult == null)) {
+  int attemptCount=0;
+  while (describeStreamResult == null) {
     try {
       describeStreamResult=kinesisClient.describeStream(describeStreamRequest);
-      streamStatus=describeStreamResult.getStreamDescription().getStreamStatus();
     }
  catch (    LimitExceededException le) {
-      LOG.warn("Got LimitExceededException when describing stream " + streamName + ". Backing off for "+ describeStreamBackoffTimeInMillis+ " millis.");
-      try {
-        Thread.sleep(describeStreamBackoffTimeInMillis);
-      }
- catch (      InterruptedException ie) {
-        LOG.debug("Stream " + streamName + " : Sleep  was interrupted ",ie);
-      }
+      long backoffMillis=fullJitterBackoff(describeStreamBaseBackoffMillis,describeStreamMaxBackoffMillis,describeStreamExpConstant,attemptCount++);
+      LOG.warn("Got LimitExceededException when describing stream " + streamName + ". Backing off for "+ backoffMillis+ " millis.");
+      Thread.sleep(backoffMillis);
     }
 catch (    ResourceNotFoundException re) {
       throw new RuntimeException("Error while getting stream details",re);
     }
-    remainingRetryTimes--;
   }
-  if (streamStatus == null) {
-    throw new RuntimeException("Can't get stream info from after 3 retries due to LimitExceededException");
+  String streamStatus=describeStreamResult.getStreamDescription().getStreamStatus();
+  if (!(streamStatus.equals(StreamStatus.ACTIVE.toString()) || streamStatus.equals(StreamStatus.UPDATING.toString()))) {
+    if (LOG.isWarnEnabled()) {
+      LOG.warn("The status of stream " + streamName + " is "+ streamStatus+ "; result of the current "+ "describeStream operation will not contain any shard information.");
+    }
   }
- else   if (streamStatus.equals(StreamStatus.ACTIVE.toString()) || streamStatus.equals(StreamStatus.UPDATING.toString())) {
-    return describeStreamResult;
-  }
- else {
-    throw new RuntimeException("Stream is not Active or Updating");
-  }
+  return describeStreamResult;
 }

@@ -1,0 +1,77 @@
+{
+  if (!running) {
+    return;
+  }
+  this.mainThread=Thread.currentThread();
+  if (LOG.isDebugEnabled()) {
+    String logFormat=(isRestoredFromFailure) ? "Subtask {} is trying to discover initial shards ..." : "Subtask {} is trying to discover any new shards that were created while the consumer wasn't" + "running due to failure ...";
+    LOG.debug(logFormat,indexOfThisConsumerSubtask);
+  }
+  List<KinesisStreamShard> newShardsCreatedWhileNotRunning=discoverNewShardsToSubscribe();
+  for (  KinesisStreamShard shard : newShardsCreatedWhileNotRunning) {
+    SentinelSequenceNumber startingStateForNewShard=(isRestoredFromFailure) ? SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM : KinesisConfigUtil.getInitialPositionAsSentinelSequenceNumber(configProps);
+    if (LOG.isInfoEnabled()) {
+      String logFormat=(isRestoredFromFailure) ? "Subtask {} will be seeded with initial shard {}, starting state set as sequence number {}" : "Subtask {} will be seeded with new shard {} that was created while the consumer wasn't" + "running due to failure, starting state set as sequence number {}";
+      LOG.info(logFormat,indexOfThisConsumerSubtask,shard.toString(),startingStateForNewShard.get());
+    }
+    registerNewSubscribedShardState(new KinesisStreamShardState(shard,startingStateForNewShard.get()));
+  }
+  boolean hasShards=false;
+  StringBuilder streamsWithNoShardsFound=new StringBuilder();
+  for (  Map.Entry<String,String> streamToLastDiscoveredShardEntry : subscribedStreamsToLastDiscoveredShardIds.entrySet()) {
+    if (streamToLastDiscoveredShardEntry.getValue() != null) {
+      hasShards=true;
+    }
+ else {
+      streamsWithNoShardsFound.append(streamToLastDiscoveredShardEntry.getKey()).append(", ");
+    }
+  }
+  if (streamsWithNoShardsFound.length() != 0 && LOG.isWarnEnabled()) {
+    LOG.warn("Subtask {} has failed to find any shards for the following subscribed streams: {}",indexOfThisConsumerSubtask,streamsWithNoShardsFound.toString());
+  }
+  if (!hasShards) {
+    throw new RuntimeException("No shards can be found for all subscribed streams: " + streams);
+  }
+  for (int seededStateIndex=0; seededStateIndex < subscribedShardsState.size(); seededStateIndex++) {
+    KinesisStreamShardState seededShardState=subscribedShardsState.get(seededStateIndex);
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Subtask {} will start consuming seeded shard {} from sequence number {} with ShardConsumer {}",indexOfThisConsumerSubtask,seededShardState.getKinesisStreamShard().toString(),seededShardState.getLastProcessedSequenceNum(),seededStateIndex);
+    }
+    shardConsumersExecutor.submit(new ShardConsumer<>(this,seededStateIndex,subscribedShardsState.get(seededStateIndex).getKinesisStreamShard(),subscribedShardsState.get(seededStateIndex).getLastProcessedSequenceNum()));
+  }
+  final long discoveryIntervalMillis=Long.valueOf(configProps.getProperty(KinesisConfigConstants.CONFIG_SHARD_DISCOVERY_INTERVAL_MILLIS,Long.toString(KinesisConfigConstants.DEFAULT_SHARD_DISCOVERY_INTERVAL_MILLIS)));
+  while (running) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Subtask {} is trying to discover new shards that were created due to resharding ...",indexOfThisConsumerSubtask);
+    }
+    List<KinesisStreamShard> newShardsDueToResharding=discoverNewShardsToSubscribe();
+    for (    KinesisStreamShard shard : newShardsDueToResharding) {
+      KinesisStreamShardState newShardState=new KinesisStreamShardState(shard,SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.get());
+      int newStateIndex=registerNewSubscribedShardState(newShardState);
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Subtask {} has discovered a new shard {} due to resharding, and will start consuming " + "the shard from sequence number {} with ShardConsumer {}",indexOfThisConsumerSubtask,newShardState.getKinesisStreamShard().toString(),newShardState.getLastProcessedSequenceNum(),newStateIndex);
+      }
+      shardConsumersExecutor.submit(new ShardConsumer<>(this,newStateIndex,newShardState.getKinesisStreamShard(),newShardState.getLastProcessedSequenceNum()));
+    }
+    if (running && discoveryIntervalMillis != 0) {
+      try {
+        Thread.sleep(discoveryIntervalMillis);
+      }
+ catch (      InterruptedException iex) {
+      }
+    }
+  }
+  awaitTermination();
+  Throwable throwable=this.error.get();
+  if (throwable != null) {
+    if (throwable instanceof Exception) {
+      throw (Exception)throwable;
+    }
+ else     if (throwable instanceof Error) {
+      throw (Error)throwable;
+    }
+ else {
+      throw new Exception(throwable);
+    }
+  }
+}

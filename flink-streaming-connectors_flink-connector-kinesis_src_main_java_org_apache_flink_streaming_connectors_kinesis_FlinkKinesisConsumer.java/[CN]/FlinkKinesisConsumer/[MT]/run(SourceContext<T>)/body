@@ -1,19 +1,20 @@
 {
-  if (hasAssignedShards) {
-    fetcher.run(sourceContext,deserializer,lastSequenceNums);
-  }
- else {
-    sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
-    final Object waitLock=new Object();
-    while (running) {
-      try {
-synchronized (waitLock) {
-          waitLock.wait();
-        }
+  fetcher=new KinesisDataFetcher<>(streams,sourceContext,getRuntimeContext(),configProps,deserializer);
+  boolean isRestoringFromFailure=!lastStateSnapshot.isEmpty();
+  fetcher.setIsRestoringFromFailure(isRestoringFromFailure);
+  if (isRestoringFromFailure) {
+    for (    Map.Entry<KinesisStreamShard,SequenceNumber> restored : lastStateSnapshot.entrySet()) {
+      fetcher.advanceLastDiscoveredShardOfStream(restored.getKey().getStreamName(),restored.getKey().getShard().getShardId());
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Subtask {} is seeding the fetcher with restored shard {}," + "starting state set to the restored sequence number {}" + getRuntimeContext().getIndexOfThisSubtask(),restored.getKey().toString(),restored.getValue());
       }
- catch (      InterruptedException e) {
-      }
+      fetcher.registerNewSubscribedShardState(new KinesisStreamShardState(restored.getKey(),restored.getValue()));
     }
   }
+  if (!running) {
+    return;
+  }
+  fetcher.runFetcher();
+  fetcher.awaitTermination();
   sourceContext.close();
 }
