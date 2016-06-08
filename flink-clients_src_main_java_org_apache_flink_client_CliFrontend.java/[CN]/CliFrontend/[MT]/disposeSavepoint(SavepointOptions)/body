@@ -1,0 +1,65 @@
+{
+  try {
+    String savepointPath=options.getSavepointPath();
+    if (savepointPath == null) {
+      throw new IllegalArgumentException("Missing required argument: savepoint path. " + "Usage: bin/flink savepoint -d <savepoint-path>");
+    }
+    String jarFile=options.getJarFilePath();
+    ActorGateway jobManager=getJobManagerGateway(options);
+    List<BlobKey> blobKeys=null;
+    if (jarFile != null) {
+      logAndSysout("Disposing savepoint '" + savepointPath + "' with JAR "+ jarFile+ ".");
+      List<File> libs=null;
+      try {
+        libs=PackagedProgram.extractContainedLibraries(new File(jarFile).toURI().toURL());
+        if (!libs.isEmpty()) {
+          List<Path> libPaths=new ArrayList<>(libs.size());
+          for (          File f : libs) {
+            libPaths.add(new Path(f.toURI()));
+          }
+          logAndSysout("Uploading JAR files.");
+          LOG.debug("JAR files: " + libPaths);
+          blobKeys=BlobClient.uploadJarFiles(jobManager,clientTimeout,libPaths);
+          LOG.debug("Blob keys: " + blobKeys.toString());
+        }
+      }
+  finally {
+        if (libs != null) {
+          PackagedProgram.deleteExtractedLibraries(libs);
+        }
+      }
+    }
+ else {
+      logAndSysout("Disposing savepoint '" + savepointPath + "'.");
+    }
+    Object msg=new DisposeSavepoint(savepointPath,Option.apply(blobKeys));
+    Future<Object> response=jobManager.ask(msg,clientTimeout);
+    Object result;
+    try {
+      logAndSysout("Waiting for response...");
+      result=Await.result(response,clientTimeout);
+    }
+ catch (    Exception e) {
+      throw new Exception("Disposing the savepoint with path" + savepointPath + " failed.",e);
+    }
+    if (result.getClass() == JobManagerMessages.getDisposeSavepointSuccess().getClass()) {
+      logAndSysout("Savepoint '" + savepointPath + "' disposed.");
+      return 0;
+    }
+ else     if (result instanceof DisposeSavepointFailure) {
+      DisposeSavepointFailure failure=(DisposeSavepointFailure)result;
+      if (failure.cause() instanceof ClassNotFoundException) {
+        throw new ClassNotFoundException("Savepoint disposal failed, because of a " + "missing class. This is most likely caused by a custom state " + "instance, which cannot be disposed without the user code class "+ "loader. Please provide the program jar with which you have created "+ "the savepoint via -j <JAR> for disposal.",failure.cause().getCause());
+      }
+ else {
+        throw failure.cause();
+      }
+    }
+ else {
+      throw new IllegalStateException("Unknown JobManager response of type " + result.getClass());
+    }
+  }
+ catch (  Throwable t) {
+    return handleError(t);
+  }
+}

@@ -1,0 +1,17 @@
+{
+  replaceStdOutAndStdErr();
+  try {
+    Future<Object> classNotFoundFailure=Futures.<Object>successful(new DisposeSavepointFailure(new ClassNotFoundException("Test exception")));
+    ActorGateway jobManager=mock(ActorGateway.class);
+    when(jobManager.ask(any(DisposeSavepoint.class),any(FiniteDuration.class))).thenReturn(classNotFoundFailure);
+    CliFrontend frontend=new MockCliFrontend(CliFrontendTestUtils.getConfigDir(),jobManager);
+    String[] parameters={"-d","any-path"};
+    int returnCode=frontend.savepoint(parameters);
+    assertTrue(returnCode != 0);
+    String out=buffer.toString();
+    assertTrue(out.contains("Please provide the program jar with which you have created " + "the savepoint via -j <JAR> for disposal"));
+  }
+  finally {
+    restoreStdOutAndStdErr();
+  }
+}

@@ -1,0 +1,23 @@
+{
+  final String jarFile=args[0];
+  final String host=args[1];
+  final int port=Integer.parseInt(args[2]);
+  final int parallelism=Integer.parseInt(args[3]);
+  final String checkpointPath=args[4];
+  final int checkpointingInterval=Integer.parseInt(args[5]);
+  final String outputPath=args[6];
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.createRemoteEnvironment(host,port,jarFile);
+  env.setParallelism(parallelism);
+  env.getConfig().disableSysoutLogging();
+  env.enableCheckpointing(checkpointingInterval);
+  env.setStateBackend(new FsStateBackend(checkpointPath));
+  DataStream<Integer> source=env.addSource(new InfiniteIntegerSource());
+  source.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=-9044152404048903826L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return ThreadLocalRandom.current().nextInt(parallelism);
+    }
+  }
+).flatMap(new ReducingStateFlatMap()).writeAsText(outputPath);
+  env.execute();
+}
