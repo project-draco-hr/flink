@@ -1,0 +1,25 @@
+{
+  FiniteDuration timeout=new FiniteDuration(1,TimeUnit.MINUTES);
+  Deadline deadline=timeout.fromNow();
+  Instance instance=ExecutionGraphTestUtils.getInstance(new SimpleActorGateway(TestingUtils.directExecutionContext()),NUM_TASKS);
+  Scheduler scheduler=new Scheduler(TestingUtils.defaultExecutionContext());
+  scheduler.newInstanceAvailable(instance);
+  JobVertex sender=new JobVertex("Task");
+  sender.setInvokableClass(Tasks.NoOpInvokable.class);
+  sender.setParallelism(NUM_TASKS);
+  JobGraph jobGraph=new JobGraph("Pointwise job",sender);
+  ControllableRestartStrategy controllableRestartStrategy=new ControllableRestartStrategy(timeout);
+  ExecutionGraph eg=new ExecutionGraph(TestingUtils.defaultExecutionContext(),new JobID(),"Test job",new Configuration(),ExecutionConfigTest.getSerializedConfig(),AkkaUtils.getDefaultTimeout(),controllableRestartStrategy);
+  eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+  assertEquals(JobStatus.CREATED,eg.getState());
+  eg.scheduleForExecution(scheduler);
+  assertEquals(JobStatus.RUNNING,eg.getState());
+  instance.markDead();
+  Await.ready(controllableRestartStrategy.getReachedCanRestart(),deadline.timeLeft());
+  assertEquals(JobStatus.RESTARTING,eg.getState());
+  eg.suspend(new Exception("Test exception"));
+  assertEquals(JobStatus.SUSPENDED,eg.getState());
+  controllableRestartStrategy.unlockRestart();
+  Await.ready(controllableRestartStrategy.getRestartDone(),deadline.timeLeft());
+  assertEquals(JobStatus.SUSPENDED,eg.getState());
+}

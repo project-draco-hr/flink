@@ -21,22 +21,26 @@ synchronized (progressLock) {
           }
         }
  else         if (current == JobStatus.FAILING) {
-          if (restartStrategy.canRestart() && transitionState(current,JobStatus.RESTARTING)) {
-            if (restartStrategy.canRestart()) {
-              restartStrategy.restart(this);
-              break;
-            }
- else {
-              fail(new Exception("ExecutionGraph went into RESTARTING state but " + "then the restart strategy was disabled."));
-            }
+          boolean allowRestart=!(failureCause instanceof SuppressRestartsException);
+          if (allowRestart && restartStrategy.canRestart() && transitionState(current,JobStatus.RESTARTING)) {
+            restartStrategy.restart(this);
+            break;
           }
- else           if (!restartStrategy.canRestart() && transitionState(current,JobStatus.FAILED,failureCause)) {
+ else           if ((!allowRestart || !restartStrategy.canRestart()) && transitionState(current,JobStatus.FAILED,failureCause)) {
             postRunCleanup();
             break;
           }
         }
+ else         if (current == JobStatus.SUSPENDED) {
+          break;
+        }
+ else         if (current.isGloballyTerminalState()) {
+          LOG.warn("Job has entered globally terminal state without waiting for all " + "job vertices to reach final state.");
+          break;
+        }
  else {
           fail(new Exception("ExecutionGraph went into final state from state " + current));
+          break;
         }
       }
       progressLock.notifyAll();

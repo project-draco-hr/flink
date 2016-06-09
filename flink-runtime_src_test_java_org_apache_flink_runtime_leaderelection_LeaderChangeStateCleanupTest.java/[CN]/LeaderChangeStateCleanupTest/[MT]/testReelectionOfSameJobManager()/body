@@ -10,14 +10,17 @@
   Future<Object> wait=jm.ask(new WaitForAllVerticesToBeRunningOrFinished(job.getJobID()),timeout);
   Await.ready(wait,timeout);
   Future<Object> jobRemoval=jm.ask(new NotifyWhenJobRemoved(job.getJobID()),timeout);
+  LOG.info("Make JM(0) again the leader. This should first revoke the leadership.");
   cluster.grantLeadership(0,newLeaderSessionID);
   Await.ready(jobRemoval,timeout);
+  LOG.info("Job removed.");
   try {
     cluster.waitForTaskManagersToBeRegistered(shortTimeout);
     fail("TaskManager should not be able to register at JobManager.");
   }
  catch (  TimeoutException e) {
   }
+  LOG.info("Notify TMs about the new (old) leader.");
   cluster.notifyRetrievalListeners(0,newLeaderSessionID);
   cluster.waitForTaskManagersToBeRegistered(timeout);
   ActorGateway leaderGateway=cluster.getLeaderGateway(timeout);
