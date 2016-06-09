@@ -7,20 +7,6 @@
   this.output=outputParam;
   this.watermarkInterval=watermarkInterval;
   this.reuse=new StreamRecord<T>(null);
-  this.scheduleExecutor=Executors.newScheduledThreadPool(1);
-  this.watermarkTimer=scheduleExecutor.scheduleAtFixedRate(new Runnable(){
-    @Override public void run(){
-      final long currentTime=System.currentTimeMillis();
-      if (currentTime > nextWatermarkTime) {
-        final long watermarkTime=currentTime - (currentTime % watermarkInterval);
-synchronized (lockingObjectParam) {
-          if (currentTime > nextWatermarkTime) {
-            outputParam.emitWatermark(new Watermark(watermarkTime));
-            nextWatermarkTime+=watermarkInterval;
-          }
-        }
-      }
-    }
-  }
-,0,watermarkInterval,TimeUnit.MILLISECONDS);
+  long now=owner.getCurrentProcessingTime();
+  this.watermarkTimer=owner.registerTimer(now + watermarkInterval,new WatermarkEmittingTask(owner,lockingObjectParam,outputParam));
 }
