@@ -1,34 +1,50 @@
 {
-  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
-  env.setParallelism(DEFAULT_PARALLELISM - 1);
-  KeySelector<Integer,Integer> key=new KeySelector<Integer,Integer>(){
-    @Override public Integer getKey(    Integer value) throws Exception {
-      return value % 3;
-    }
-  }
+  int numRetries=5;
+  int timeoutScale=1;
+  for (int numRetry=0; numRetry < numRetries; numRetry++) {
+    try {
+      StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+      env.setParallelism(DEFAULT_PARALLELISM - 1);
+      KeySelector<Integer,Integer> key=new KeySelector<Integer,Integer>(){
+        @Override public Integer getKey(        Integer value) throws Exception {
+          return value % 3;
+        }
+      }
 ;
-  DataStream<Integer> source=env.fromElements(1,2,3).map(NoOpIntMap).name("ParallelizeMap");
-  IterativeStream<Integer> it=source.keyBy(key).iterate(3000);
-  DataStream<Integer> head=it.flatMap(new RichFlatMapFunction<Integer,Integer>(){
-    int received=0;
-    int key=-1;
-    @Override public void flatMap(    Integer value,    Collector<Integer> out) throws Exception {
-      received++;
-      if (key == -1) {
-        key=MathUtils.murmurHash(value % 3) % 3;
+      DataStream<Integer> source=env.fromElements(1,2,3).map(NoOpIntMap).name("ParallelizeMap");
+      IterativeStream<Integer> it=source.keyBy(key).iterate(3000 * timeoutScale);
+      DataStream<Integer> head=it.flatMap(new RichFlatMapFunction<Integer,Integer>(){
+        int received=0;
+        int key=-1;
+        @Override public void flatMap(        Integer value,        Collector<Integer> out) throws Exception {
+          received++;
+          if (key == -1) {
+            key=MathUtils.murmurHash(value % 3) % 3;
+          }
+ else {
+            assertEquals(key,MathUtils.murmurHash(value % 3) % 3);
+          }
+          if (value > 0) {
+            out.collect(value - 1);
+          }
+        }
+        @Override public void close(){
+          assertTrue(received > 1);
+        }
+      }
+);
+      it.closeWith(head.keyBy(key).union(head.map(NoOpIntMap).keyBy(key))).addSink(new ReceiveCheckNoOpSink<Integer>());
+      env.execute();
+      break;
+    }
+ catch (    Throwable t) {
+      LOG.info("Run " + (numRetry + 1) + "/"+ numRetries+ " failed",t);
+      if (numRetry >= numRetries - 1) {
+        throw t;
       }
  else {
-        assertEquals(key,MathUtils.murmurHash(value % 3) % 3);
+        timeoutScale*=2;
       }
-      if (value > 0) {
-        out.collect(value - 1);
-      }
-    }
-    @Override public void close(){
-      assertTrue(received > 1);
     }
   }
-);
-  it.closeWith(head.keyBy(key).union(head.map(NoOpIntMap).keyBy(key))).addSink(new ReceiveCheckNoOpSink<Integer>());
-  env.execute();
 }
