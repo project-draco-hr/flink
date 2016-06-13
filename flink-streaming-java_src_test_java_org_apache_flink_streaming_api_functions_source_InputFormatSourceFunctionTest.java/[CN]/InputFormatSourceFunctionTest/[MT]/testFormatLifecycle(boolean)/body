@@ -1,0 +1,18 @@
+{
+  final int noOfSplits=5;
+  final int cancelAt=2;
+  final LifeCycleTestInputFormat format=new LifeCycleTestInputFormat();
+  final InputFormatSourceFunction<Integer> reader=new InputFormatSourceFunction<>(format,TypeInformation.of(Integer.class));
+  reader.setRuntimeContext(new MockRuntimeContext(format,noOfSplits));
+  Assert.assertTrue(!format.isConfigured);
+  Assert.assertTrue(!format.isInputFormatOpen);
+  Assert.assertTrue(!format.isSplitOpen);
+  reader.open(new Configuration());
+  Assert.assertTrue(format.isConfigured);
+  TestSourceContext ctx=new TestSourceContext(reader,format,midCancel,cancelAt);
+  reader.run(ctx);
+  int splitsSeen=ctx.getSplitsSeen();
+  Assert.assertTrue(midCancel ? splitsSeen == cancelAt : splitsSeen == noOfSplits);
+  Assert.assertTrue(!format.isSplitOpen);
+  Assert.assertTrue(!format.isInputFormatOpen);
+}
