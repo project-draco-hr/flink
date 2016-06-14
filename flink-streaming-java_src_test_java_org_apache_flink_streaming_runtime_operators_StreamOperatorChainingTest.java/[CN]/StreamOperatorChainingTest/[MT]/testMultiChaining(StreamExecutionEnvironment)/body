@@ -1,0 +1,57 @@
+{
+  DataStream<Integer> input=env.fromElements(1,2,3);
+  sink1Results=new ArrayList<>();
+  sink2Results=new ArrayList<>();
+  input=input.map(new MapFunction<Integer,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer map(    Integer value) throws Exception {
+      return value;
+    }
+  }
+);
+  input.map(new MapFunction<Integer,String>(){
+    private static final long serialVersionUID=1L;
+    @Override public String map(    Integer value) throws Exception {
+      return "First: " + value;
+    }
+  }
+).addSink(new SinkFunction<String>(){
+    private static final long serialVersionUID=1L;
+    @Override public void invoke(    String value) throws Exception {
+      sink1Results.add(value);
+    }
+  }
+);
+  input.map(new MapFunction<Integer,String>(){
+    private static final long serialVersionUID=1L;
+    @Override public String map(    Integer value) throws Exception {
+      return "Second: " + value;
+    }
+  }
+).addSink(new SinkFunction<String>(){
+    private static final long serialVersionUID=1L;
+    @Override public void invoke(    String value) throws Exception {
+      sink2Results.add(value);
+    }
+  }
+);
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  Assert.assertTrue(jobGraph.getVerticesSortedTopologicallyFromSources().size() == 2);
+  JobVertex chainedVertex=jobGraph.getVerticesSortedTopologicallyFromSources().get(1);
+  Configuration configuration=chainedVertex.getConfiguration();
+  StreamConfig streamConfig=new StreamConfig(configuration);
+  StreamMap<Integer,Integer> headOperator=streamConfig.getStreamOperator(Thread.currentThread().getContextClassLoader());
+  StreamTask<Integer,StreamMap<Integer,Integer>> mockTask=createMockTask(streamConfig,chainedVertex.getName());
+  OperatorChain<Integer> operatorChain=new OperatorChain<>(mockTask,headOperator,mock(AccumulatorRegistry.Reporter.class));
+  headOperator.setup(mockTask,streamConfig,operatorChain.getChainEntryPoint());
+  for (  StreamOperator<?> operator : operatorChain.getAllOperators()) {
+    if (operator != null) {
+      operator.open();
+    }
+  }
+  headOperator.processElement(new StreamRecord<>(1));
+  headOperator.processElement(new StreamRecord<>(2));
+  headOperator.processElement(new StreamRecord<>(3));
+  assertThat(sink1Results,contains("First: 1","First: 2","First: 3"));
+  assertThat(sink2Results,contains("Second: 1","Second: 2","Second: 3"));
+}
