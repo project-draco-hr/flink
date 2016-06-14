@@ -1,0 +1,26 @@
+{
+  final String fullName=group.getScopeString() + '.' + metricName;
+synchronized (this) {
+    if (metric instanceof Counter) {
+      counters.put((Counter)metric,fullName);
+      registry.register(fullName,new FlinkCounterWrapper((Counter)metric));
+    }
+ else     if (metric instanceof Gauge) {
+      gauges.put((Gauge<?>)metric,fullName);
+      registry.register(fullName,FlinkGaugeWrapper.fromGauge((Gauge<?>)metric));
+    }
+ else     if (metric instanceof Histogram) {
+      Histogram histogram=(Histogram)metric;
+      histograms.put(histogram,fullName);
+      if (histogram instanceof DropwizardHistogramWrapper) {
+        registry.register(fullName,((DropwizardHistogramWrapper)histogram).getDropwizarHistogram());
+      }
+ else {
+        registry.register(fullName,new FlinkHistogramWrapper(histogram));
+      }
+    }
+ else {
+      log.warn("Cannot add metric of type {}. This indicates that the reporter " + "does not support this metric type.",metric.getClass().getName());
+    }
+  }
+}
