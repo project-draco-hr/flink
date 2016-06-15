@@ -1,5 +1,5 @@
 {
-  producer=new org.apache.kafka.clients.producer.KafkaProducer<>(this.producerConfig);
+  producer=getKafkaProducer(this.producerConfig);
   RuntimeContext ctx=getRuntimeContext();
   if (partitioner != null) {
     partitioner.open(ctx.getIndexOfThisSubtask(),ctx.getNumberOfParallelSubtasks(),partitions);
@@ -20,12 +20,20 @@
       }
     }
   }
+  if (flushOnCheckpoint && !((StreamingRuntimeContext)this.getRuntimeContext()).isCheckpointingEnabled()) {
+    LOG.warn("Flushing on checkpoint is enabled, but checkpointing is not enabled. Disabling flushing.");
+    flushOnCheckpoint=false;
+  }
+  if (flushOnCheckpoint) {
+    pendingRecordsLock=new Object();
+  }
   if (logFailuresOnly) {
     callback=new Callback(){
       @Override public void onCompletion(      RecordMetadata metadata,      Exception e){
         if (e != null) {
           LOG.error("Error while sending record to Kafka: " + e.getMessage(),e);
         }
+        acknowledgeMessage();
       }
     }
 ;
@@ -36,6 +44,7 @@
         if (exception != null && asyncException == null) {
           asyncException=exception;
         }
+        acknowledgeMessage();
       }
     }
 ;
