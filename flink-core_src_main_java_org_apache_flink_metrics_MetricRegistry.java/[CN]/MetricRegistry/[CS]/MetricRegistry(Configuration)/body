@@ -12,11 +12,11 @@
   if (className == null) {
     LOG.info("No metrics reporter configured, exposing metrics via JMX");
     this.reporter=new JMXReporter();
-    this.timer=null;
+    this.executor=null;
   }
  else {
     MetricReporter reporter;
-    java.util.Timer timer;
+    ScheduledExecutorService executor=null;
     try {
       String configuredPeriod=config.getString(KEY_METRICS_REPORTER_INTERVAL,null);
       TimeUnit timeunit=TimeUnit.SECONDS;
@@ -36,21 +36,17 @@
       reporter=(MetricReporter)reporterClass.newInstance();
       reporter.open(reporterConfig);
       if (reporter instanceof Scheduled) {
+        executor=Executors.newSingleThreadScheduledExecutor();
         LOG.info("Periodically reporting metrics in intervals of {} {}",period,timeunit.name());
-        long millis=timeunit.toMillis(period);
-        timer=new java.util.Timer("Periodic Metrics Reporter",true);
-        timer.schedule(new ReporterTask((Scheduled)reporter),millis,millis);
-      }
- else {
-        timer=null;
+        executor.scheduleWithFixedDelay(new ReporterTask((Scheduled)reporter),period,period,timeunit);
       }
     }
  catch (    Throwable t) {
       reporter=new JMXReporter();
-      timer=null;
+      shutdownExecutor();
       LOG.error("Could not instantiate custom metrics reporter. Defaulting to JMX metrics export.",t);
     }
     this.reporter=reporter;
-    this.timer=timer;
+    this.executor=executor;
   }
 }
