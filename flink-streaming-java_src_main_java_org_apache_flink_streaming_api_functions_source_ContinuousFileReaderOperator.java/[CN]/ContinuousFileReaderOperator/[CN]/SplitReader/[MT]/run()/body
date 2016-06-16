@@ -29,6 +29,7 @@ synchronized (checkpointLock) {
           }
           this.format.open(currentSplit);
         }
+        this.isSplitOpen=true;
       }
       LOG.info("Reading split: " + currentSplit);
       try {
@@ -46,8 +47,11 @@ synchronized (checkpointLock) {
         }
       }
   finally {
-        this.format.close();
-        this.currentSplit=null;
+synchronized (checkpointLock) {
+          this.format.close();
+          this.isSplitOpen=false;
+          this.currentSplit=null;
+        }
       }
     }
   }
@@ -61,6 +65,8 @@ synchronized (checkpointLock) {
 synchronized (checkpointLock) {
       LOG.info("Reader terminated, and exiting...");
       this.format.closeInputFormat();
+      this.isSplitOpen=false;
+      this.currentSplit=null;
       this.isRunning=false;
       checkpointLock.notifyAll();
     }
