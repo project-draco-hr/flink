@@ -1,9 +1,9 @@
 {
-  if (!isConnected) {
-    throw new IllegalStateException("The cluster has been not been connected to the ApplicationMaster.");
-  }
   if (hasBeenShutDown.getAndSet(true)) {
     return;
+  }
+  if (!isConnected) {
+    throw new IllegalStateException("The cluster has been not been connected to the ApplicationMaster.");
   }
   try {
     Runtime.getRuntime().removeShutdownHook(clientShutdownHook);
@@ -21,8 +21,6 @@
         LOG.warn("Error while stopping YARN Application Client",e);
       }
     }
-    actorSystem.shutdown();
-    actorSystem.awaitTermination();
   }
   try {
     File propertiesFile=FlinkYarnSessionCli.getYarnPropertiesLocation(flinkConfig);
@@ -53,19 +51,23 @@
     LOG.warn("Session file directory not set. Not deleting session files");
   }
   try {
-    actorRunner.join(1000);
-  }
- catch (  InterruptedException e) {
-    LOG.warn("Shutdown of the actor runner was interrupted",e);
-    Thread.currentThread().interrupt();
-  }
-  try {
     pollingRunner.stopRunner();
     pollingRunner.join(1000);
   }
  catch (  InterruptedException e) {
     LOG.warn("Shutdown of the polling runner was interrupted",e);
     Thread.currentThread().interrupt();
+  }
+  try {
+    ApplicationReport appReport=yarnClient.getApplicationReport(appId);
+    LOG.info("Application " + appId + " finished with state "+ appReport.getYarnApplicationState()+ " and final state "+ appReport.getFinalApplicationStatus()+ " at "+ appReport.getFinishTime());
+    if (appReport.getYarnApplicationState() == YarnApplicationState.FAILED || appReport.getYarnApplicationState() == YarnApplicationState.KILLED) {
+      LOG.warn("Application failed. Diagnostics " + appReport.getDiagnostics());
+      LOG.warn("If log aggregation is activated in the Hadoop cluster, we recommend to retrieve " + "the full application log using this command:\n" + "\tyarn logs -applicationId " + appReport.getApplicationId() + "\n"+ "(It sometimes takes a few seconds until the logs are aggregated)");
+    }
+  }
+ catch (  Exception e) {
+    LOG.warn("Couldn't get final report",e);
   }
   LOG.info("YARN Client is shutting down");
   yarnClient.stop();
