@@ -1,22 +1,9 @@
 {
-  final Object lock=context.getCheckpointLock();
-  if (currentSplitsToFwd != null) {
-synchronized (lock) {
-      forwardSplits(currentSplitsToFwd,context);
-    }
-  }
-  currentSplitsToFwd=null;
-  if (splitsToFwdOrderedAscByModTime == null) {
-    splitsToFwdOrderedAscByModTime=getInputSplitSortedOnModTime(fs);
-  }
-  Iterator<Tuple2<Long,List<FileInputSplit>>> it=splitsToFwdOrderedAscByModTime.iterator();
+  assert(Thread.holdsLock(checkpointLock));
+  List<Tuple2<Long,List<FileInputSplit>>> splitsByModTime=getInputSplitSortedOnModTime(fs);
+  Iterator<Tuple2<Long,List<FileInputSplit>>> it=splitsByModTime.iterator();
   while (it.hasNext()) {
-synchronized (lock) {
-      currentSplitsToFwd=it.next();
-      it.remove();
-      forwardSplits(currentSplitsToFwd,context);
-    }
+    forwardSplits(it.next(),context);
+    it.remove();
   }
-  splitsToFwdOrderedAscByModTime=null;
-  currentSplitsToFwd=null;
 }

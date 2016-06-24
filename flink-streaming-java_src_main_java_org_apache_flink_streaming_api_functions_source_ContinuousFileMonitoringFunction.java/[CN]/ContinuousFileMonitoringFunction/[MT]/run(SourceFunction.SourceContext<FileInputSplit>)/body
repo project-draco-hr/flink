@@ -1,16 +1,21 @@
 {
   FileSystem fileSystem=FileSystem.get(new URI(path));
+  checkpointLock=context.getCheckpointLock();
 switch (watchType) {
 case PROCESS_CONTINUOUSLY:
     while (isRunning) {
-      monitorDirAndForwardSplits(fileSystem,context);
+synchronized (checkpointLock) {
+        monitorDirAndForwardSplits(fileSystem,context);
+      }
       Thread.sleep(interval);
     }
-  isRunning=false;
-break;
+  break;
 case PROCESS_ONCE:
-monitorDirAndForwardSplits(fileSystem,context);
-isRunning=false;
+synchronized (checkpointLock) {
+  monitorDirAndForwardSplits(fileSystem,context);
+  globalModificationTime=Long.MAX_VALUE;
+  isRunning=false;
+}
 break;
 default :
 isRunning=false;
