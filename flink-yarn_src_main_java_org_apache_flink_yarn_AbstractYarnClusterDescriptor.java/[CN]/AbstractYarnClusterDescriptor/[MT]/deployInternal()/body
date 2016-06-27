@@ -5,18 +5,6 @@
   LOG.info("\tJobManager memory = {}",jobManagerMemoryMb);
   LOG.info("\tTaskManager memory = {}",taskManagerMemoryMb);
   final YarnClient yarnClient=getYarnClient();
-  final YarnClientApplication yarnApplication=yarnClient.createApplication();
-  GetNewApplicationResponse appResponse=yarnApplication.getNewApplicationResponse();
-  Map<String,String> dynProperties=getDynamicProperties(dynamicPropertiesEncoded);
-  for (  Map.Entry<String,String> dynProperty : dynProperties.entrySet()) {
-    flinkConfiguration.setString(dynProperty.getKey(),dynProperty.getValue());
-  }
-  try {
-    org.apache.flink.core.fs.FileSystem.setDefaultScheme(flinkConfiguration);
-  }
- catch (  IOException e) {
-    throw new IOException("Error while setting the default " + "filesystem scheme from configuration.",e);
-  }
   try {
     List<QueueInfo> queues=yarnClient.getAllQueues();
     if (queues.size() > 0 && this.yarnQueue != null) {
@@ -45,6 +33,20 @@
       LOG.debug("Error details",e);
     }
   }
+  Map<String,String> dynProperties=getDynamicProperties(dynamicPropertiesEncoded);
+  for (  Map.Entry<String,String> dynProperty : dynProperties.entrySet()) {
+    flinkConfiguration.setString(dynProperty.getKey(),dynProperty.getValue());
+  }
+  try {
+    org.apache.flink.core.fs.FileSystem.setDefaultScheme(flinkConfiguration);
+  }
+ catch (  IOException e) {
+    throw new IOException("Error while setting the default " + "filesystem scheme from configuration.",e);
+  }
+  final FileSystem fs=FileSystem.get(conf);
+  if (!fs.getClass().getSimpleName().equals("GoogleHadoopFileSystem") && fs.getScheme().startsWith("file")) {
+    LOG.warn("The file system scheme is '" + fs.getScheme() + "'. This indicates that the "+ "specified Hadoop configuration path is wrong and the system is using the default Hadoop configuration values."+ "The Flink YARN client needs to store its files in a distributed file system");
+  }
   final int yarnMinAllocationMB=conf.getInt("yarn.scheduler.minimum-allocation-mb",0);
   if (jobManagerMemoryMb < yarnMinAllocationMB || taskManagerMemoryMb < yarnMinAllocationMB) {
     LOG.warn("The JobManager or TaskManager memory is below the smallest possible YARN Container size. " + "The value of 'yarn.scheduler.minimum-allocation-mb' is '" + yarnMinAllocationMB + "'. Please increase the memory size."+ "YARN will allocate the smaller containers but the scheduler will account for the minimum-allocation-mb, maybe not all instances "+ "you requested will start.");
@@ -55,6 +57,8 @@
   if (taskManagerMemoryMb < yarnMinAllocationMB) {
     taskManagerMemoryMb=yarnMinAllocationMB;
   }
+  final YarnClientApplication yarnApplication=yarnClient.createApplication();
+  GetNewApplicationResponse appResponse=yarnApplication.getNewApplicationResponse();
   Resource maxRes=appResponse.getMaximumResourceCapability();
   final String NOTE="Please check the 'yarn.scheduler.maximum-allocation-mb' and the 'yarn.nodemanager.resource.memory-mb' configuration values\n";
   if (jobManagerMemoryMb > maxRes.getMemory()) {
@@ -86,35 +90,25 @@
       LOG.warn("There is not enough memory available in the YARN cluster. " + "The TaskManager(s) require " + taskManagerMemoryMb + "MB each. "+ "NodeManagers available: "+ Arrays.toString(freeClusterMem.nodeManagersFree)+ "\n"+ "After allocating the JobManager ("+ jobManagerMemoryMb+ "MB) and ("+ i+ "/"+ taskManagerCount+ ") TaskManagers, "+ "the following NodeManagers are available: "+ Arrays.toString(nmFree)+ NOTE_RSC);
     }
   }
-  final String javaOpts=flinkConfiguration.getString(ConfigConstants.FLINK_JVM_OPTIONS,"");
-  String logbackFile=configurationDirectory + File.separator + CONFIG_FILE_LOGBACK_NAME;
-  boolean hasLogback=new File(logbackFile).exists();
-  String log4jFile=configurationDirectory + File.separator + CONFIG_FILE_LOG4J_NAME;
-  boolean hasLog4j=new File(log4jFile).exists();
+  Set<File> effectiveShipFiles=new HashSet<>(shipFiles.size());
+  for (  File file : shipFiles) {
+    effectiveShipFiles.add(file.getAbsoluteFile());
+  }
+  File logbackFile=new File(configurationDirectory + File.separator + CONFIG_FILE_LOGBACK_NAME);
+  final boolean hasLogback=logbackFile.exists();
   if (hasLogback) {
-    shipFiles.add(new File(logbackFile));
+    effectiveShipFiles.add(logbackFile);
   }
+  File log4jFile=new File(configurationDirectory + File.separator + CONFIG_FILE_LOG4J_NAME);
+  final boolean hasLog4j=log4jFile.exists();
   if (hasLog4j) {
-    shipFiles.add(new File(log4jFile));
-  }
-  ContainerLaunchContext amContainer=Records.newRecord(ContainerLaunchContext.class);
-  String amCommand="$JAVA_HOME/bin/java" + " -Xmx" + Utils.calculateHeapSize(jobManagerMemoryMb,flinkConfiguration) + "M "+ javaOpts;
-  if (hasLogback || hasLog4j) {
-    amCommand+=" -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager.log\"";
+    effectiveShipFiles.add(log4jFile);
     if (hasLogback) {
-      amCommand+=" -Dlogback.configurationFile=file:" + CONFIG_FILE_LOGBACK_NAME;
-    }
-    if (hasLog4j) {
-      amCommand+=" -Dlog4j.configuration=file:" + CONFIG_FILE_LOG4J_NAME;
+      LOG.warn("The configuration directory ('" + configurationDirectory + "') contains both LOG4J and "+ "Logback configuration files. Please delete or rename one of them.");
     }
   }
-  amCommand+=" " + getApplicationMasterClass().getName() + " "+ " 1>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager.out"+ " 2>"+ ApplicationConstants.LOG_DIR_EXPANSION_VAR+ "/jobmanager.err";
-  amContainer.setCommands(Collections.singletonList(amCommand));
-  LOG.debug("Application Master start command: " + amCommand);
-  final FileSystem fs=FileSystem.get(conf);
-  if (!fs.getClass().getSimpleName().equals("GoogleHadoopFileSystem") && fs.getScheme().startsWith("file")) {
-    LOG.warn("The file system scheme is '" + fs.getScheme() + "'. This indicates that the "+ "specified Hadoop configuration path is wrong and the system is using the default Hadoop configuration values."+ "The Flink YARN client needs to store its files in a distributed file system");
-  }
+  addLibFolderToShipFiles(effectiveShipFiles);
+  final ContainerLaunchContext amContainer=setupApplicationMasterContainer(hasLogback,hasLog4j);
   ApplicationSubmissionContext appContext=yarnApplication.getApplicationSubmissionContext();
   if (RecoveryMode.isHighAvailabilityModeActivated(flinkConfiguration)) {
     appContext.setMaxAppAttempts(flinkConfiguration.getInteger(ConfigConstants.YARN_APPLICATION_ATTEMPTS,YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS));
@@ -124,37 +118,44 @@
     appContext.setMaxAppAttempts(flinkConfiguration.getInteger(ConfigConstants.YARN_APPLICATION_ATTEMPTS,1));
   }
   final ApplicationId appId=appContext.getApplicationId();
+  final Map<String,LocalResource> localResources=new HashMap<>(2 + effectiveShipFiles.size());
+  final List<Path> paths=new ArrayList<>(2 + effectiveShipFiles.size());
+  final StringBuilder classPathBuilder=new StringBuilder();
+  StringBuilder envShipFileList=new StringBuilder();
+  for (  File shipFile : effectiveShipFiles) {
+    LocalResource shipResources=Records.newRecord(LocalResource.class);
+    Path shipLocalPath=new Path("file://" + shipFile.getAbsolutePath());
+    Path remotePath=Utils.setupLocalResource(fs,appId.toString(),shipLocalPath,shipResources,fs.getHomeDirectory());
+    paths.add(remotePath);
+    localResources.put(shipFile.getName(),shipResources);
+    classPathBuilder.append(ApplicationConstants.Environment.PWD.$());
+    classPathBuilder.append(File.separator);
+    classPathBuilder.append(shipFile.getName());
+    if (shipFile.isDirectory()) {
+      classPathBuilder.append(File.separator).append("*");
+    }
+    classPathBuilder.append(File.pathSeparator);
+    envShipFileList.append(remotePath).append(",");
+  }
   LocalResource appMasterJar=Records.newRecord(LocalResource.class);
   LocalResource flinkConf=Records.newRecord(LocalResource.class);
   Path remotePathJar=Utils.setupLocalResource(fs,appId.toString(),flinkJarPath,appMasterJar,fs.getHomeDirectory());
   Path remotePathConf=Utils.setupLocalResource(fs,appId.toString(),flinkConfigurationPath,flinkConf,fs.getHomeDirectory());
-  Map<String,LocalResource> localResources=new HashMap<>(2);
   localResources.put("flink.jar",appMasterJar);
   localResources.put("flink-conf.yaml",flinkConf);
-  final Path[] paths=new Path[2 + shipFiles.size()];
-  StringBuilder envShipFileList=new StringBuilder();
-  for (int i=0; i < shipFiles.size(); i++) {
-    File shipFile=shipFiles.get(i);
-    LocalResource shipResources=Records.newRecord(LocalResource.class);
-    Path shipLocalPath=new Path("file://" + shipFile.getAbsolutePath());
-    paths[2 + i]=Utils.setupLocalResource(fs,appId.toString(),shipLocalPath,shipResources,fs.getHomeDirectory());
-    localResources.put(shipFile.getName(),shipResources);
-    envShipFileList.append(paths[2 + i]);
-    if (i + 1 < shipFiles.size()) {
-      envShipFileList.append(',');
-    }
-  }
-  paths[0]=remotePathJar;
-  paths[1]=remotePathConf;
+  paths.add(remotePathJar);
+  classPathBuilder.append(ApplicationConstants.Environment.PWD.$()).append(File.separator).append("flink.jar").append(File.pathSeparator);
+  paths.add(remotePathConf);
+  classPathBuilder.append(ApplicationConstants.Environment.PWD.$()).append(File.separator).append("flink-conf.yaml").append(File.pathSeparator);
   sessionFilesDir=new Path(fs.getHomeDirectory(),".flink/" + appId.toString() + "/");
   FsPermission permission=new FsPermission(FsAction.ALL,FsAction.NONE,FsAction.NONE);
   fs.setPermission(sessionFilesDir,permission);
   Utils.setTokensFor(amContainer,paths,conf);
   amContainer.setLocalResources(localResources);
   fs.close();
-  Map<String,String> appMasterEnv=new HashMap<>();
+  final Map<String,String> appMasterEnv=new HashMap<>();
   appMasterEnv.putAll(Utils.getEnvironmentVariables(ConfigConstants.YARN_APPLICATION_MASTER_ENV_PREFIX,flinkConfiguration));
-  Utils.setupEnv(conf,appMasterEnv);
+  appMasterEnv.put(YarnConfigKeys.ENV_FLINK_CLASSPATH,classPathBuilder.toString());
   appMasterEnv.put(YarnConfigKeys.ENV_TM_COUNT,String.valueOf(taskManagerCount));
   appMasterEnv.put(YarnConfigKeys.ENV_TM_MEMORY,String.valueOf(taskManagerMemoryMb));
   appMasterEnv.put(YarnConfigKeys.FLINK_JAR_PATH,remotePathJar.toString());
@@ -167,6 +168,7 @@
   if (dynamicPropertiesEncoded != null) {
     appMasterEnv.put(YarnConfigKeys.ENV_DYNAMIC_PROPERTIES,dynamicPropertiesEncoded);
   }
+  Utils.setupYarnClassPath(conf,appMasterEnv);
   amContainer.setEnvironment(appMasterEnv);
   Resource capability=Records.newRecord(Resource.class);
   capability.setMemory(jobManagerMemoryMb);
@@ -233,7 +235,6 @@ Runtime.getRuntime().removeShutdownHook(deploymentFailureHook);
 }
 String host=report.getHost();
 int port=report.getRpcPort();
-String trackingURL=report.getTrackingUrl();
 flinkConfiguration.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,host);
 flinkConfiguration.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,port);
 return createYarnClusterClient(this,yarnClient,report,flinkConfiguration,sessionFilesDir,true);
