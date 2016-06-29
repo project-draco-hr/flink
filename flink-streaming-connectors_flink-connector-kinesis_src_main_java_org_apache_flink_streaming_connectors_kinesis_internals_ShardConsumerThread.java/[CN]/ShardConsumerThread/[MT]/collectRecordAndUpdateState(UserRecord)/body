@@ -1,0 +1,16 @@
+{
+  ByteBuffer recordData=record.getData();
+  byte[] dataBytes=new byte[recordData.remaining()];
+  recordData.get(dataBytes);
+  byte[] keyBytes=record.getPartitionKey().getBytes();
+  final T value=deserializer.deserialize(keyBytes,dataBytes,assignedShard.getStreamName(),record.getSequenceNumber());
+synchronized (sourceContext.getCheckpointLock()) {
+    sourceContext.collect(value);
+    if (record.isAggregated()) {
+      seqNoState.put(assignedShard,new SequenceNumber(record.getSequenceNumber(),record.getSubSequenceNumber()));
+    }
+ else {
+      seqNoState.put(assignedShard,new SequenceNumber(record.getSequenceNumber()));
+    }
+  }
+}

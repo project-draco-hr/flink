@@ -1,6 +1,7 @@
 {
+  String nextShardItr;
   try {
-    if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_LATEST_SEQUENCE_NUM.toString())) {
+    if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_LATEST_SEQUENCE_NUM.get())) {
       if (assignedShard.isClosed()) {
         nextShardItr=null;
       }
@@ -8,38 +9,41 @@
         nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.LATEST.toString(),null);
       }
     }
- else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.toString())) {
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.get())) {
       nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.TRIM_HORIZON.toString(),null);
     }
- else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.toString())) {
+ else     if (lastSequenceNum.equals(SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.get())) {
       nextShardItr=null;
     }
  else {
-      nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.AFTER_SEQUENCE_NUMBER.toString(),lastSequenceNum);
+      if (lastSequenceNum.isAggregated()) {
+        String itrForLastAggregatedRecord=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.AT_SEQUENCE_NUMBER.toString(),lastSequenceNum.getSequenceNumber());
+        GetRecordsResult getRecordsResult=kinesisProxy.getRecords(itrForLastAggregatedRecord,1);
+        List<UserRecord> fetchedRecords=deaggregateRecords(getRecordsResult.getRecords(),assignedShard.getStartingHashKey(),assignedShard.getEndingHashKey());
+        long lastSubSequenceNum=lastSequenceNum.getSubSequenceNumber();
+        for (        UserRecord record : fetchedRecords) {
+          if (record.getSubSequenceNumber() > lastSubSequenceNum) {
+            collectRecordAndUpdateState(record);
+          }
+        }
+        nextShardItr=getRecordsResult.getNextShardIterator();
+      }
+ else {
+        nextShardItr=kinesisProxy.getShardIterator(assignedShard,ShardIteratorType.AFTER_SEQUENCE_NUMBER.toString(),lastSequenceNum.getSequenceNumber());
+      }
     }
     while (running) {
       if (nextShardItr == null) {
-        lastSequenceNum=SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.toString();
 synchronized (sourceContext.getCheckpointLock()) {
-          seqNoState.put(assignedShard,lastSequenceNum);
+          seqNoState.put(assignedShard,SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.get());
         }
         break;
       }
  else {
         GetRecordsResult getRecordsResult=kinesisProxy.getRecords(nextShardItr,maxNumberOfRecordsPerFetch);
-        List<Record> fetchedRecords=getRecordsResult.getRecords();
-        fetchedRecords=deaggregateRecords(fetchedRecords,assignedShard.getStartingHashKey(),assignedShard.getEndingHashKey());
-        for (        Record record : fetchedRecords) {
-          ByteBuffer recordData=record.getData();
-          byte[] dataBytes=new byte[recordData.remaining()];
-          recordData.get(dataBytes);
-          byte[] keyBytes=record.getPartitionKey().getBytes();
-          final T value=deserializer.deserialize(keyBytes,dataBytes,assignedShard.getStreamName(),record.getSequenceNumber());
-synchronized (sourceContext.getCheckpointLock()) {
-            sourceContext.collect(value);
-            seqNoState.put(assignedShard,record.getSequenceNumber());
-          }
-          lastSequenceNum=record.getSequenceNumber();
+        List<UserRecord> fetchedRecords=deaggregateRecords(getRecordsResult.getRecords(),assignedShard.getStartingHashKey(),assignedShard.getEndingHashKey());
+        for (        UserRecord record : fetchedRecords) {
+          collectRecordAndUpdateState(record);
         }
         nextShardItr=getRecordsResult.getNextShardIterator();
       }
