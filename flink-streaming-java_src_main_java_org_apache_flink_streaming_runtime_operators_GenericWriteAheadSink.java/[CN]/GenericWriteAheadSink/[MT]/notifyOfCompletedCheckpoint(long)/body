@@ -8,10 +8,15 @@ synchronized (state.pendingHandles) {
         if (!committer.isCheckpointCommitted(pastCheckpointId)) {
           Tuple2<Long,StateHandle<DataInputView>> handle=state.pendingHandles.get(pastCheckpointId);
           DataInputView in=handle.f1.getState(getUserCodeClassloader());
-          sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(in,serializer),serializer),handle.f0);
-          committer.commitCheckpoint(pastCheckpointId);
+          boolean success=sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(in,serializer),serializer),handle.f0);
+          if (success) {
+            committer.commitCheckpoint(pastCheckpointId);
+            checkpointsToRemove.add(pastCheckpointId);
+          }
         }
-        checkpointsToRemove.add(pastCheckpointId);
+ else {
+          checkpointsToRemove.add(pastCheckpointId);
+        }
       }
     }
     for (    Long toRemove : checkpointsToRemove) {

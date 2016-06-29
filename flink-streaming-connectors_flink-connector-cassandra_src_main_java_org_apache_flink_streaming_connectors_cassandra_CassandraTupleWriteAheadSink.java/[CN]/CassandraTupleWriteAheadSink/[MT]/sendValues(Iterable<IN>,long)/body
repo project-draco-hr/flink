@@ -1,7 +1,29 @@
 {
-  if (exception != null) {
-    throw new Exception(exception);
+  final IntValue updatesCount=new IntValue(0);
+  final AtomicInteger updatesConfirmed=new AtomicInteger(0);
+  final AtomicReference<Throwable> exception=new AtomicReference<>();
+  FutureCallback<ResultSet> callback=new FutureCallback<ResultSet>(){
+    @Override public void onSuccess(    ResultSet resultSet){
+      updatesConfirmed.incrementAndGet();
+      if (updatesCount.getValue() > 0) {
+        if (updatesCount.getValue() == updatesConfirmed.get()) {
+synchronized (updatesConfirmed) {
+            updatesConfirmed.notifyAll();
+          }
+        }
+      }
+    }
+    @Override public void onFailure(    Throwable throwable){
+      if (exception.compareAndSet(null,throwable)) {
+        LOG.error("Error while sending value.",throwable);
+synchronized (updatesConfirmed) {
+          updatesConfirmed.notifyAll();
+        }
+      }
+    }
   }
+;
+  int updatesSent=0;
   for (  IN value : values) {
     for (int x=0; x < value.getArity(); x++) {
       fields[x]=value.getField(x);
@@ -14,13 +36,16 @@
       Futures.addCallback(result,callback);
     }
   }
-  try {
+  updatesCount.setValue(updatesSent);
+synchronized (updatesConfirmed) {
     while (updatesSent != updatesConfirmed.get()) {
-      Thread.sleep(100);
+      if (exception.get() != null) {
+        LOG.warn("Sending a value failed.",exception.get());
+        break;
+      }
+      updatesConfirmed.wait();
     }
   }
- catch (  InterruptedException e) {
-  }
-  updatesSent=0;
-  updatesConfirmed.set(0);
+  boolean success=updatesSent == updatesConfirmed.get();
+  return success;
 }
