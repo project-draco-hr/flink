@@ -1,0 +1,21 @@
+{
+  Field field=SavepointSerializers.class.getDeclaredField("SERIALIZERS");
+  field.setAccessible(true);
+  Map<Integer,SavepointSerializer<?>> serializers=(Map<Integer,SavepointSerializer<?>>)field.get(null);
+  assertTrue(serializers.size() >= 1);
+  FsSavepointStore store=new FsSavepointStore(tmp.getRoot().getPath(),"fs-savepoint-store-test-");
+  assertEquals(0,tmp.getRoot().listFiles().length);
+  int version=ThreadLocalRandom.current().nextInt();
+  long checkpointId=ThreadLocalRandom.current().nextLong();
+  serializers.put(version,NewSavepointSerializer.INSTANCE);
+  TestSavepoint newSavepoint=new TestSavepoint(version,checkpointId);
+  String pathNewSavepoint=store.storeSavepoint(newSavepoint);
+  assertEquals(1,tmp.getRoot().listFiles().length);
+  Savepoint savepoint=new SavepointV0(checkpointId,SavepointV01Test.createTaskStates(4,32));
+  String pathSavepoint=store.storeSavepoint(savepoint);
+  assertEquals(2,tmp.getRoot().listFiles().length);
+  Savepoint loaded=store.loadSavepoint(pathNewSavepoint);
+  assertEquals(newSavepoint,loaded);
+  loaded=store.loadSavepoint(pathSavepoint);
+  assertEquals(savepoint,loaded);
+}

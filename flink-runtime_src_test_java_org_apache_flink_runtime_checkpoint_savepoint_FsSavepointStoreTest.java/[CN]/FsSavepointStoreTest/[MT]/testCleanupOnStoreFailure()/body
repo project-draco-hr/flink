@@ -1,0 +1,18 @@
+{
+  Field field=SavepointSerializers.class.getDeclaredField("SERIALIZERS");
+  field.setAccessible(true);
+  Map<Integer,SavepointSerializer<?>> serializers=(Map<Integer,SavepointSerializer<?>>)field.get(null);
+  final int version=123123;
+  SavepointSerializer<TestSavepoint> serializer=mock(SavepointSerializer.class);
+  doThrow(new RuntimeException("Test Exception")).when(serializer).serialize(Matchers.any(TestSavepoint.class),any(DataOutputStream.class));
+  FsSavepointStore store=new FsSavepointStore(tmp.getRoot().getPath(),"fs-savepoint-store-test-");
+  serializers.put(version,serializer);
+  Savepoint savepoint=new TestSavepoint(version,12123123);
+  assertEquals(0,tmp.getRoot().listFiles().length);
+  try {
+    store.storeSavepoint(savepoint);
+  }
+ catch (  Throwable ignored) {
+  }
+  assertEquals("Savepoint file not cleaned up on failure",0,tmp.getRoot().listFiles().length);
+}

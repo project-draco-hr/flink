@@ -1,0 +1,35 @@
+{
+  Preconditions.checkNotNull(savepoint,"Savepoint");
+  Exception latestException=null;
+  Path path=null;
+  FSDataOutputStream fdos=null;
+  for (int attempt=0; attempt < 10; attempt++) {
+    path=new Path(rootPath,FileUtils.getRandomFilename(prefix));
+    try {
+      fdos=fileSystem.create(path,false);
+      break;
+    }
+ catch (    Exception e) {
+      latestException=e;
+    }
+  }
+  if (fdos == null) {
+    throw new IOException("Failed to create file output stream at " + path,latestException);
+  }
+  boolean success=false;
+  try (DataOutputStream dos=new DataOutputStream(fdos)){
+    dos.writeInt(MAGIC_NUMBER);
+    dos.writeInt(savepoint.getVersion());
+    SavepointSerializer<T> serializer=SavepointSerializers.getSerializer(savepoint);
+    serializer.serialize(savepoint,dos);
+    success=true;
+  }
+  finally {
+    if (!success && fileSystem.exists(path)) {
+      if (!fileSystem.delete(path,true)) {
+        LOG.warn("Failed to delete file " + path + " after failed write.");
+      }
+    }
+  }
+  return path.toString();
+}

@@ -44,8 +44,8 @@
     LOG.info("Retrieved savepoint path: " + savepointPath + ".");
     LOG.info("Requesting the savepoint.");
     Future<Object> savepointFuture=jobManager.ask(new RequestSavepoint(savepointPath),deadline.timeLeft());
-    CompletedCheckpoint savepoint=((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
-    LOG.info("Retrieved savepoint: " + savepoint + ".");
+    SavepointV0 savepoint=(SavepointV0)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
+    LOG.info("Retrieved savepoint: " + savepointPath + ".");
     LOG.info("Shutting down Flink cluster.");
     flink.shutdown();
     String errMsg="Checkpoints directory not cleaned up properly.";
@@ -106,10 +106,9 @@
 ;
     errMsg="Error during gathering of TaskDeploymentDescriptors";
     assertNull(errMsg,error[0]);
-    for (    Map.Entry<JobVertexID,TaskState> entry : savepoint.getTaskStates().entrySet()) {
-      Collection<TaskDeploymentDescriptor> taskTdds=tdds.get(entry.getKey());
-      TaskState taskState=entry.getValue();
-      errMsg="Missing task for savepoint state for operator " + entry.getKey() + ".";
+    for (    TaskState taskState : savepoint.getTaskStates()) {
+      Collection<TaskDeploymentDescriptor> taskTdds=tdds.get(taskState.getJobVertexID());
+      errMsg="Missing task for savepoint state for operator " + taskState.getJobVertexID() + ".";
       assertTrue(errMsg,taskTdds.size() > 0);
       assertEquals(taskState.getNumberCollectedStates(),taskTdds.size());
       for (      TaskDeploymentDescriptor tdd : taskTdds) {
@@ -127,7 +126,7 @@
     Object resp=Await.result(disposeFuture,deadline.timeLeft());
     assertTrue(errMsg,resp.getClass() == getDisposeSavepointSuccess().getClass());
     List<File> checkpointFiles=new ArrayList<>();
-    for (    TaskState stateForTaskGroup : savepoint.getTaskStates().values()) {
+    for (    TaskState stateForTaskGroup : savepoint.getTaskStates()) {
       for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
         StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
         for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
@@ -146,7 +145,7 @@
       assertFalse(errMsg,parent.exists());
     }
     errMsg="Savepoints directory not cleaned up properly: " + Arrays.toString(savepointDir.listFiles()) + ".";
-    assertNull(errMsg,savepointDir.listFiles());
+    assertEquals(errMsg,0,savepointDir.listFiles().length);
   }
   finally {
     if (flink != null) {

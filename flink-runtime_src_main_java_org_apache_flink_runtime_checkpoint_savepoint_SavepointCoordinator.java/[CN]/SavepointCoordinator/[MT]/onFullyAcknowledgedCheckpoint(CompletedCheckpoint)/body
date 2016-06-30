@@ -1,0 +1,18 @@
+{
+  Promise<String> promise=savepointPromises.remove(checkpoint.getCheckpointID());
+  if (promise == null) {
+    LOG.info("Pending savepoint with ID " + checkpoint.getCheckpointID() + "  has been "+ "removed before receiving acknowledgment.");
+  }
+  if (promise.isCompleted()) {
+    throw new IllegalStateException("Savepoint promise completed");
+  }
+  try {
+    Savepoint savepoint=new SavepointV0(checkpoint.getCheckpointID(),checkpoint.getTaskStates().values());
+    String path=savepointStore.storeSavepoint(savepoint);
+    promise.success(path);
+  }
+ catch (  Exception e) {
+    LOG.warn("Failed to store savepoint.",e);
+    promise.failure(e);
+  }
+}

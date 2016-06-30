@@ -1,0 +1,38 @@
+{
+  JobID jobId=new JobID();
+  long checkpointTimeout=60 * 1000;
+  long timestamp=1272635;
+  ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(jobId),mockExecutionVertex(jobId)};
+  MockCheckpointIdCounter checkpointIdCounter=new MockCheckpointIdCounter();
+  final File tmpDir=CommonTestUtils.createTempDirectory();
+  try {
+    FsSavepointStore savepointStore=new FsSavepointStore(tmpDir.toURI().toString(),"sp-");
+    SavepointCoordinator coordinator=createSavepointCoordinator(jobId,checkpointTimeout,vertices,vertices,vertices,checkpointIdCounter,savepointStore);
+    Future<String> savepointPathFuture=coordinator.triggerSavepoint(timestamp);
+    assertFalse(savepointPathFuture.isCompleted());
+    long checkpointId=checkpointIdCounter.getLastReturnedCount();
+    assertEquals(0,checkpointId);
+    for (    ExecutionVertex vertex : vertices) {
+      verifyTriggerCheckpoint(vertex,checkpointId,timestamp);
+    }
+    PendingCheckpoint pendingCheckpoint=coordinator.getPendingCheckpoints().get(checkpointId);
+    verifyPendingCheckpoint(pendingCheckpoint,jobId,checkpointId,timestamp,0,2,0,false,false);
+    for (    ExecutionVertex vertex : vertices) {
+      coordinator.receiveAcknowledgeMessage(new AcknowledgeCheckpoint(jobId,vertex.getCurrentExecutionAttempt().getAttemptId(),checkpointId,createSerializedStateHandle(vertex),0));
+    }
+    assertTrue(pendingCheckpoint.isDiscarded());
+    assertEquals(0,coordinator.getSuccessfulCheckpoints().size());
+    for (    ExecutionVertex vertex : vertices) {
+      verifyNotifyCheckpointComplete(vertex,checkpointId,timestamp);
+    }
+    assertTrue(savepointPathFuture.isCompleted());
+    String savepointPath=Await.result(savepointPathFuture,FiniteDuration.Zero());
+    assertEquals(0,getSavepointPromises(coordinator).size());
+    coordinator.shutdown();
+    Savepoint savepoint=savepointStore.loadSavepoint(savepointPath);
+    verifySavepoint(savepoint,checkpointId,vertices);
+  }
+  finally {
+    FileUtils.deleteDirectory(tmpDir);
+  }
+}

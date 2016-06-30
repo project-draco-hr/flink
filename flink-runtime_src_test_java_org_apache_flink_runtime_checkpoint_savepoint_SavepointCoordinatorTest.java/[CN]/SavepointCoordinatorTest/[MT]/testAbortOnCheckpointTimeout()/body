@@ -1,0 +1,31 @@
+{
+  JobID jobId=new JobID();
+  ExecutionVertex[] vertices=new ExecutionVertex[]{mockExecutionVertex(jobId),mockExecutionVertex(jobId)};
+  ExecutionVertex commitVertex=mockExecutionVertex(jobId);
+  MockCheckpointIdCounter checkpointIdCounter=new MockCheckpointIdCounter();
+  long checkpointTimeout=1000;
+  SavepointCoordinator coordinator=createSavepointCoordinator(jobId,checkpointTimeout,vertices,vertices,new ExecutionVertex[]{commitVertex},checkpointIdCounter,new HeapSavepointStore());
+  Future<String> savepointPathFuture=coordinator.triggerSavepoint(12731273);
+  assertFalse(savepointPathFuture.isCompleted());
+  long checkpointId=checkpointIdCounter.getLastReturnedCount();
+  PendingCheckpoint pendingCheckpoint=coordinator.getPendingCheckpoints().get(checkpointId);
+  assertNotNull("Checkpoint not pending (test race)",pendingCheckpoint);
+  assertFalse("Checkpoint already discarded (test race)",pendingCheckpoint.isDiscarded());
+  Deadline deadline=FiniteDuration.apply(60,"s").fromNow();
+  while (deadline.hasTimeLeft() && !pendingCheckpoint.isDiscarded() && coordinator.getNumberOfPendingCheckpoints() > 0) {
+    Thread.sleep(250);
+  }
+  assertTrue("Savepoint not discarded within timeout",pendingCheckpoint.isDiscarded());
+  assertEquals(0,coordinator.getNumberOfPendingCheckpoints());
+  assertEquals(0,coordinator.getNumberOfRetainedSuccessfulCheckpoints());
+  verify(commitVertex,times(0)).sendMessageToCurrentExecution(any(NotifyCheckpointComplete.class),any(ExecutionAttemptID.class));
+  assertTrue(savepointPathFuture.isCompleted());
+  try {
+    Await.result(savepointPathFuture,FiniteDuration.Zero());
+    fail("Did not throw expected Exception after timeout");
+  }
+ catch (  Exception ignored) {
+  }
+  assertEquals(0,getSavepointPromises(coordinator).size());
+  coordinator.shutdown();
+}

@@ -41,15 +41,15 @@
     LOG.info("Retrieved savepoint path: " + savepointPath + ".");
     LOG.info("Requesting the savepoint.");
     Future<Object> savepointFuture=jobManager.ask(new RequestSavepoint(savepointPath),deadline.timeLeft());
-    CompletedCheckpoint savepoint=((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
-    LOG.info("Retrieved savepoint: " + savepoint + ".");
+    SavepointV0 savepoint=(SavepointV0)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
+    LOG.info("Retrieved savepoint: " + savepointPath + ".");
     LOG.info("Cancelling job " + jobId + ".");
     Future<Object> cancelRespFuture=jobManager.ask(new CancelJob(jobId),deadline.timeLeft());
     assertTrue(Await.result(cancelRespFuture,deadline.timeLeft()) instanceof CancellationSuccess);
     LOG.info("Waiting for job " + jobId + " to be removed.");
     Future<Object> removedRespFuture=jobManager.ask(new NotifyWhenJobRemoved(jobId),deadline.timeLeft());
     assertTrue((Boolean)Await.result(removedRespFuture,deadline.timeLeft()));
-    for (    TaskState stateForTaskGroup : savepoint.getTaskStates().values()) {
+    for (    TaskState stateForTaskGroup : savepoint.getTaskStates()) {
       for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
         StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
         for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
