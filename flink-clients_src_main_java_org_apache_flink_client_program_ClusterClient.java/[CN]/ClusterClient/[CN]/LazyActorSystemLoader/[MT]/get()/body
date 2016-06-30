@@ -1,0 +1,20 @@
+{
+  if (!isLoaded()) {
+    LOG.info("Starting client actor system.");
+    String hostName=flinkConfig.getString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY,null);
+    int port=flinkConfig.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,-1);
+    if (hostName == null || port == -1) {
+      throw new RuntimeException("The initial JobManager address has not been set correctly.");
+    }
+    InetSocketAddress initialJobManagerAddress=new InetSocketAddress(hostName,port);
+    InetAddress ownHostname;
+    try {
+      ownHostname=ConnectionUtils.findConnectingAddress(initialJobManagerAddress,2000,400);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Failed to resolve JobManager address at " + initialJobManagerAddress,e);
+    }
+    actorSystem=AkkaUtils.createActorSystem(flinkConfig,new Some<>(new Tuple2<String,Object>(ownHostname.getCanonicalHostName(),0)));
+  }
+  return actorSystem;
+}

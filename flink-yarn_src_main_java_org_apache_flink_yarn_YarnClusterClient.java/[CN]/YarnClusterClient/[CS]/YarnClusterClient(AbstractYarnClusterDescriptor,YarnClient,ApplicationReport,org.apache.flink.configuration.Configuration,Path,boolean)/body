@@ -6,46 +6,13 @@
   this.yarnClient=yarnClient;
   this.hadoopConfig=yarnClient.getConfig();
   this.sessionFilesDir=sessionFilesDir;
-  this.applicationId=appReport;
+  this.appReport=appReport;
   this.appId=appReport.getApplicationId();
   this.trackingURL=appReport.getTrackingUrl();
   this.perJobCluster=perJobCluster;
-  LeaderRetrievalService leaderRetrievalService;
-  try {
-    leaderRetrievalService=LeaderRetrievalUtils.createLeaderRetrievalService(flinkConfig);
-  }
- catch (  Exception e) {
-    throw new IOException("Could not create the leader retrieval service.",e);
-  }
-  LOG.info("Start application client.");
-  applicationClient=actorSystem.actorOf(Props.create(ApplicationClient.class,flinkConfig,leaderRetrievalService),"applicationClient");
+  this.applicationClient=new LazApplicationClientLoader();
   pollingRunner=new PollingThread(yarnClient,appId);
   pollingRunner.setDaemon(true);
   pollingRunner.start();
   Runtime.getRuntime().addShutdownHook(clientShutdownHook);
-  isConnected=true;
-  if (perJobCluster) {
-    logAndSysout("Waiting until all TaskManagers have connected");
-    for (GetClusterStatusResponse currentStatus, lastStatus=null; ; lastStatus=currentStatus) {
-      currentStatus=getClusterStatus();
-      if (currentStatus != null && !currentStatus.equals(lastStatus)) {
-        logAndSysout("TaskManager status (" + currentStatus.numRegisteredTaskManagers() + "/"+ clusterDescriptor.getTaskManagerCount()+ ")");
-        if (currentStatus.numRegisteredTaskManagers() >= clusterDescriptor.getTaskManagerCount()) {
-          logAndSysout("All TaskManagers are connected");
-          break;
-        }
-      }
- else       if (lastStatus == null) {
-        logAndSysout("No status updates from the YARN cluster received so far. Waiting ...");
-      }
-      try {
-        Thread.sleep(250);
-      }
- catch (      InterruptedException e) {
-        LOG.error("Interrupted while waiting for TaskManagers");
-        System.err.println("Thread is interrupted");
-        throw new IOException("Interrupted while waiting for TaskManagers",e);
-      }
-    }
-  }
 }
