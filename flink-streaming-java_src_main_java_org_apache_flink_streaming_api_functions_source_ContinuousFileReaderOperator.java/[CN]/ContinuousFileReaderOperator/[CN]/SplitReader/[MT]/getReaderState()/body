@@ -6,12 +6,18 @@
   if (this.currentSplit != null && this.currentSplit.equals(pendingSplits.peek())) {
     this.pendingSplits.remove();
   }
-  if (this.format instanceof CheckpointableInputFormat && this.currentSplit != null) {
-    S formatState=this.isSplitOpen ? (S)((CheckpointableInputFormat)format).getCurrentState() : restoredFormatState;
-    return new Tuple3<>(snapshot,currentSplit,formatState);
+  if (this.currentSplit != null) {
+    if (this.format instanceof CheckpointableInputFormat) {
+      @SuppressWarnings("unchecked") CheckpointableInputFormat<FileInputSplit,S> checkpointableFormat=(CheckpointableInputFormat<FileInputSplit,S>)this.format;
+      S formatState=this.isSplitOpen ? checkpointableFormat.getCurrentState() : restoredFormatState;
+      return new Tuple3<>(snapshot,currentSplit,formatState);
+    }
+ else {
+      LOG.info("The format used is not checkpointable. The current input split will be restarted upon recovery.");
+      return new Tuple3<>(snapshot,currentSplit,null);
+    }
   }
  else {
-    LOG.info("The format used is not checkpointable. The current input split will be restarted upon recovery.");
-    return new Tuple3<>(snapshot,currentSplit,null);
+    return new Tuple3<>(snapshot,null,null);
   }
 }
