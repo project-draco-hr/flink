@@ -1,0 +1,19 @@
+{
+  DeserializationSchema<Row> deserializationSchema=createRowDeserializationSchema();
+  FlinkKafkaConsumerBase<Row> source=kafkaServer.getConsumer(TOPIC,deserializationSchema,standardProps);
+  env.addSource(source).setParallelism(PARALLELISM).map(new RichMapFunction<Row,Integer>(){
+    @Override public Integer map(    Row value){
+      return (Integer)value.productElement(0);
+    }
+  }
+).setParallelism(PARALLELISM).addSink(new SinkFunction<Integer>(){
+    HashSet<Integer> ids=new HashSet<>();
+    @Override public void invoke(    Integer value) throws Exception {
+      ids.add(value);
+      if (ids.size() == 100) {
+        throw new SuccessException();
+      }
+    }
+  }
+).setParallelism(1);
+}
