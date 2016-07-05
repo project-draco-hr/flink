@@ -1,0 +1,40 @@
+{
+  KeySelector<Event,Integer> keySelector=new KeySelector<Event,Integer>(){
+    private static final long serialVersionUID=-4873366487571254798L;
+    @Override public Integer getKey(    Event value) throws Exception {
+      return value.getId();
+    }
+  }
+;
+  OneInputStreamOperatorTestHarness<Event,Map<String,Event>> harness=new OneInputStreamOperatorTestHarness<>(new KeyedCEPPatternOperator<>(Event.createTypeSerializer(),false,keySelector,IntSerializer.INSTANCE,new NFAFactory()));
+  harness.configureForKeyedStream(keySelector,BasicTypeInfo.INT_TYPE_INFO);
+  harness.open();
+  Event startEvent=new Event(42,"start",1.0);
+  SubEvent middleEvent=new SubEvent(42,"foo",1.0,10.0);
+  Event endEvent=new Event(42,"end",1.0);
+  harness.processElement(new StreamRecord<Event>(startEvent,1));
+  harness.processElement(new StreamRecord<Event>(new Event(42,"foobar",1.0),2));
+  harness.processElement(new StreamRecord<Event>(new SubEvent(42,"barfoo",1.0,5.0),3));
+  harness.processWatermark(new Watermark(2));
+  StreamTaskState snapshot=harness.snapshot(0,0);
+  harness=new OneInputStreamOperatorTestHarness<>(new KeyedCEPPatternOperator<>(Event.createTypeSerializer(),false,keySelector,IntSerializer.INSTANCE,new NFAFactory()));
+  harness.configureForKeyedStream(keySelector,BasicTypeInfo.INT_TYPE_INFO);
+  harness.setup();
+  harness.restore(snapshot,1);
+  harness.open();
+  harness.processElement(new StreamRecord<Event>(middleEvent,3));
+  harness.processElement(new StreamRecord<Event>(new Event(42,"start",1.0),4));
+  harness.processElement(new StreamRecord<Event>(endEvent,5));
+  harness.processWatermark(new Watermark(Long.MAX_VALUE));
+  ConcurrentLinkedQueue<Object> result=harness.getOutput();
+  assertEquals(2,result.size());
+  Object resultObject=result.poll();
+  assertTrue(resultObject instanceof StreamRecord);
+  StreamRecord<?> resultRecord=(StreamRecord<?>)resultObject;
+  assertTrue(resultRecord.getValue() instanceof Map);
+  @SuppressWarnings("unchecked") Map<String,Event> patternMap=(Map<String,Event>)resultRecord.getValue();
+  assertEquals(startEvent,patternMap.get("start"));
+  assertEquals(middleEvent,patternMap.get("middle"));
+  assertEquals(endEvent,patternMap.get("end"));
+  harness.close();
+}
