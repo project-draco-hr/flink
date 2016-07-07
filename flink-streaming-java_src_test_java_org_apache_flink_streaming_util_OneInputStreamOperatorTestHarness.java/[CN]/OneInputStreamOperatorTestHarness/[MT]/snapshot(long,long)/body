@@ -1,3 +1,24 @@
 {
-  return operator.snapshotOperatorState(checkpointId,timestamp);
+  StreamTaskState snapshot=operator.snapshotOperatorState(checkpointId,timestamp);
+  if (snapshot != null) {
+    if (snapshot.getFunctionState() instanceof AsynchronousStateHandle) {
+      AsynchronousStateHandle<Serializable> asyncState=(AsynchronousStateHandle<Serializable>)snapshot.getFunctionState();
+      snapshot.setFunctionState(asyncState.materialize());
+    }
+    if (snapshot.getOperatorState() instanceof AsynchronousStateHandle) {
+      AsynchronousStateHandle<?> asyncState=(AsynchronousStateHandle<?>)snapshot.getOperatorState();
+      snapshot.setOperatorState(asyncState.materialize());
+    }
+    if (snapshot.getKvStates() != null) {
+      Set<String> keys=snapshot.getKvStates().keySet();
+      HashMap<String,KvStateSnapshot<?,?,?,?,?>> kvStates=snapshot.getKvStates();
+      for (      String key : keys) {
+        if (kvStates.get(key) instanceof AsynchronousKvStateSnapshot) {
+          AsynchronousKvStateSnapshot<?,?,?,?,?> asyncHandle=(AsynchronousKvStateSnapshot<?,?,?,?,?>)kvStates.get(key);
+          kvStates.put(key,asyncHandle.materialize());
+        }
+      }
+    }
+  }
+  return snapshot;
 }
