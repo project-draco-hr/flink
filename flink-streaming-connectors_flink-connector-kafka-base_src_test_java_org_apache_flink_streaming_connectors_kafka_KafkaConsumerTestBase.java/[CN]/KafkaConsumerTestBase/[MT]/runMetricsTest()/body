@@ -1,0 +1,86 @@
+{
+  final String topic="metricsStream";
+  createTestTopic(topic,5,1);
+  final Tuple1<Throwable> error=new Tuple1<>(null);
+  Runnable job=new Runnable(){
+    @Override public void run(){
+      try {
+        final StreamExecutionEnvironment env1=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+        env1.setParallelism(1);
+        env1.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+        env1.getConfig().disableSysoutLogging();
+        env1.disableOperatorChaining();
+        TypeInformationSerializationSchema<Tuple2<Integer,Integer>> schema=new TypeInformationSerializationSchema<>(TypeInfoParser.<Tuple2<Integer,Integer>>parse("Tuple2<Integer, Integer>"),env1.getConfig());
+        DataStream<Tuple2<Integer,Integer>> fromKafka=env1.addSource(kafkaServer.getConsumer(topic,schema,standardProps));
+        fromKafka.flatMap(new FlatMapFunction<Tuple2<Integer,Integer>,Void>(){
+          @Override public void flatMap(          Tuple2<Integer,Integer> value,          Collector<Void> out) throws Exception {
+          }
+        }
+);
+        DataStream<Tuple2<Integer,Integer>> fromGen=env1.addSource(new RichSourceFunction<Tuple2<Integer,Integer>>(){
+          boolean running=true;
+          @Override public void run(          SourceContext<Tuple2<Integer,Integer>> ctx) throws Exception {
+            int i=0;
+            while (running) {
+              ctx.collect(Tuple2.of(i++,getRuntimeContext().getIndexOfThisSubtask()));
+              Thread.sleep(1);
+            }
+          }
+          @Override public void cancel(){
+            running=false;
+          }
+        }
+);
+        fromGen.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(schema),standardProps,null));
+        env1.execute("Metrics test job");
+      }
+ catch (      Throwable t) {
+        LOG.warn("Got exception during execution",t);
+        if (!(t.getCause() instanceof JobCancellationException)) {
+          error.f0=t;
+        }
+      }
+    }
+  }
+;
+  Thread jobThread=new Thread(job);
+  jobThread.start();
+  try {
+    MBeanServer mBeanServer=ManagementFactory.getPlatformMBeanServer();
+    Set<ObjectName> offsetMetrics=mBeanServer.queryNames(new ObjectName("*:key7=current-offsets,*"),null);
+    while (offsetMetrics.size() < 5) {
+      if (error.f0 != null) {
+        throw error.f0;
+      }
+      offsetMetrics=mBeanServer.queryNames(new ObjectName("*:key7=current-offsets,*"),null);
+      Thread.sleep(50);
+    }
+    Assert.assertEquals(5,offsetMetrics.size());
+    while (true) {
+      int numPosOffsets=0;
+      for (      ObjectName object : offsetMetrics) {
+        Object offset=mBeanServer.getAttribute(object,"Value");
+        if ((long)offset >= 0) {
+          numPosOffsets++;
+        }
+      }
+      if (numPosOffsets == 5) {
+        break;
+      }
+      Thread.sleep(50);
+    }
+    Set<ObjectName> producerMetrics=mBeanServer.queryNames(new ObjectName("*:key6=KafkaProducer,*"),null);
+    Assert.assertTrue("No producer metrics found",producerMetrics.size() > 30);
+    LOG.info("Found all JMX metrics. Cancelling job.");
+  }
+  finally {
+    JobManagerCommunicationUtils.cancelCurrentJob(flink.getLeaderGateway(timeout));
+  }
+  while (jobThread.isAlive()) {
+    Thread.sleep(50);
+  }
+  if (error.f0 != null) {
+    throw error.f0;
+  }
+  deleteTestTopic(topic);
+}

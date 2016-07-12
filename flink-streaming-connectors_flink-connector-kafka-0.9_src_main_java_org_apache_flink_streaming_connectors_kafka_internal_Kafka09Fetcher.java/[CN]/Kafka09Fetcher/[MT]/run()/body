@@ -10,18 +10,16 @@
   }
   try {
     consumer.assign(convertKafkaPartitions(subscribedPartitions()));
-    if (forwardKafkaMetrics) {
+    if (useMetrics) {
+      final MetricGroup kafkaMetricGroup=runtimeContext.getMetricGroup().addGroup("KafkaConsumer");
+      addOffsetStateGauge(kafkaMetricGroup);
       Map<MetricName,? extends Metric> metrics=consumer.metrics();
       if (metrics == null) {
         LOG.info("Consumer implementation does not support metrics");
       }
  else {
         for (        Map.Entry<MetricName,? extends Metric> metric : metrics.entrySet()) {
-          String name="KafkaConsumer-" + metric.getKey().name();
-          DefaultKafkaMetricAccumulator kafkaAccumulator=DefaultKafkaMetricAccumulator.createFor(metric.getValue());
-          if (kafkaAccumulator != null) {
-            runtimeContext.addAccumulator(name,kafkaAccumulator);
-          }
+          kafkaMetricGroup.gauge(metric.getKey().name(),new KafkaMetricWrapper(metric.getValue()));
         }
       }
     }

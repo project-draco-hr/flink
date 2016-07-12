@@ -1,0 +1,16 @@
+{
+  final int ELEMENT_COUNT=300;
+  final String topic=writeSequence("testEndOfStream",ELEMENT_COUNT,1,1);
+  final StreamExecutionEnvironment env1=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
+  env1.setParallelism(1);
+  env1.getConfig().setRestartStrategy(RestartStrategies.noRestart());
+  env1.getConfig().disableSysoutLogging();
+  DataStream<Tuple2<Integer,Integer>> fromKafka=env1.addSource(kafkaServer.getConsumer(topic,new FixedNumberDeserializationSchema(ELEMENT_COUNT),standardProps));
+  fromKafka.flatMap(new FlatMapFunction<Tuple2<Integer,Integer>,Void>(){
+    @Override public void flatMap(    Tuple2<Integer,Integer> value,    Collector<Void> out) throws Exception {
+    }
+  }
+);
+  JobExecutionResult result=tryExecute(env1,"Consume " + ELEMENT_COUNT + " elements from Kafka");
+  deleteTestTopic(topic);
+}
