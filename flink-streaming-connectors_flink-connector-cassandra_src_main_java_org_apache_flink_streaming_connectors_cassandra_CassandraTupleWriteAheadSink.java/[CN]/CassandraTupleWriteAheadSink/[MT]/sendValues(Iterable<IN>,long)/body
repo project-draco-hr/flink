@@ -1,12 +1,12 @@
 {
-  final IntValue updatesCount=new IntValue(0);
+  final AtomicInteger updatesCount=new AtomicInteger(0);
   final AtomicInteger updatesConfirmed=new AtomicInteger(0);
   final AtomicReference<Throwable> exception=new AtomicReference<>();
   FutureCallback<ResultSet> callback=new FutureCallback<ResultSet>(){
     @Override public void onSuccess(    ResultSet resultSet){
       updatesConfirmed.incrementAndGet();
-      if (updatesCount.getValue() > 0) {
-        if (updatesCount.getValue() == updatesConfirmed.get()) {
+      if (updatesCount.get() > 0) {
+        if (updatesCount.get() == updatesConfirmed.get()) {
 synchronized (updatesConfirmed) {
             updatesConfirmed.notifyAll();
           }
@@ -36,16 +36,17 @@ synchronized (updatesConfirmed) {
       Futures.addCallback(result,callback);
     }
   }
-  updatesCount.setValue(updatesSent);
+  updatesCount.set(updatesSent);
 synchronized (updatesConfirmed) {
-    while (updatesSent != updatesConfirmed.get()) {
-      if (exception.get() != null) {
-        LOG.warn("Sending a value failed.",exception.get());
-        break;
-      }
+    while (exception.get() == null && updatesSent != updatesConfirmed.get()) {
       updatesConfirmed.wait();
     }
   }
-  boolean success=updatesSent == updatesConfirmed.get();
-  return success;
+  if (exception.get() != null) {
+    LOG.warn("Sending a value failed.",exception.get());
+    return false;
+  }
+ else {
+    return true;
+  }
 }
