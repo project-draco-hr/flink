@@ -1,0 +1,28 @@
+{
+  closeCurrentPartFile(bucketState);
+  FileSystem fs=new Path(basePath).getFileSystem(hadoopConf);
+  if (!fs.exists(bucketPath)) {
+    try {
+      if (fs.mkdirs(bucketPath)) {
+        LOG.debug("Created new bucket directory: {}",bucketPath);
+      }
+    }
+ catch (    IOException e) {
+      throw new RuntimeException("Could not create new bucket path.",e);
+    }
+  }
+  Path partPath=new Path(bucketPath,partPrefix + "-" + subtaskIndex+ "-"+ bucketState.partCounter);
+  while (fs.exists(partPath) || fs.exists(new Path(partPath.getParent(),pendingPrefix + partPath.getName()).suffix(pendingSuffix))) {
+    bucketState.partCounter++;
+    partPath=new Path(bucketPath,partPrefix + "-" + subtaskIndex+ "-"+ bucketState.partCounter);
+  }
+  bucketState.partCounter++;
+  LOG.debug("Next part path is {}",partPath.toString());
+  bucketState.currentFile=partPath.toString();
+  Path inProgressPath=new Path(partPath.getParent(),inProgressPrefix + partPath.getName()).suffix(inProgressSuffix);
+  if (bucketState.writer == null) {
+    bucketState.writer=writerTemplate.duplicate();
+  }
+  bucketState.writer.open(fs,inProgressPath);
+  bucketState.isWriterOpen=true;
+}

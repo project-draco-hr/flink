@@ -1,0 +1,36 @@
+{
+  File dataDir=tempFolder.newFolder();
+  final int step1NumIds=4;
+  final int step2NumIds=2;
+  final int numElementsPerStep=20;
+  TestTimeServiceProvider clock=new TestTimeServiceProvider();
+  clock.setCurrentTime(0L);
+  OneInputStreamOperatorTestHarness<String,Object> testHarness=createTestSink(dataDir,clock);
+  testHarness.setup();
+  testHarness.open();
+  for (int i=0; i < numElementsPerStep; i++) {
+    testHarness.processElement(new StreamRecord<>(Integer.toString(i % step1NumIds)));
+  }
+  clock.setCurrentTime(2 * 60 * 1000L);
+  for (int i=0; i < numElementsPerStep; i++) {
+    testHarness.processElement(new StreamRecord<>(Integer.toString(i % step2NumIds)));
+  }
+  clock.setCurrentTime(6 * 60 * 1000L);
+  for (int i=0; i < numElementsPerStep; i++) {
+    testHarness.processElement(new StreamRecord<>(Integer.toString(i % step2NumIds)));
+  }
+  int numFiles=0;
+  int numInProgress=0;
+  for (  File file : FileUtils.listFiles(dataDir,null,true)) {
+    if (file.getAbsolutePath().endsWith("crc")) {
+      continue;
+    }
+    if (file.getPath().contains("in-progress")) {
+      numInProgress++;
+    }
+    numFiles++;
+  }
+  testHarness.close();
+  Assert.assertEquals(4,numFiles);
+  Assert.assertEquals(2,numInProgress);
+}

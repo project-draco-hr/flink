@@ -1,0 +1,43 @@
+{
+  Pattern messageRegex=Pattern.compile("message (\\d*)");
+  Set<Integer> readNumbers=Sets.newHashSet();
+  int numRead=0;
+  RemoteIterator<LocatedFileStatus> files=dfs.listFiles(new Path(outPath),true);
+  while (files.hasNext()) {
+    LocatedFileStatus file=files.next();
+    if (!file.getPath().toString().endsWith(".valid-length")) {
+      int validLength=(int)file.getLen();
+      if (dfs.exists(file.getPath().suffix(".valid-length"))) {
+        FSDataInputStream inStream=dfs.open(file.getPath().suffix(".valid-length"));
+        String validLengthString=inStream.readUTF();
+        validLength=Integer.parseInt(validLengthString);
+        System.out.println("VALID LENGTH: " + validLength);
+      }
+      FSDataInputStream inStream=dfs.open(file.getPath());
+      byte[] buffer=new byte[validLength];
+      inStream.readFully(0,buffer,0,validLength);
+      inStream.close();
+      ByteArrayInputStream bais=new ByteArrayInputStream(buffer);
+      InputStreamReader inStreamReader=new InputStreamReader(bais);
+      BufferedReader br=new BufferedReader(inStreamReader);
+      String line=br.readLine();
+      while (line != null) {
+        Matcher matcher=messageRegex.matcher(line);
+        if (matcher.matches()) {
+          numRead++;
+          int messageId=Integer.parseInt(matcher.group(1));
+          readNumbers.add(messageId);
+        }
+ else {
+          Assert.fail("Read line does not match expected pattern.");
+        }
+        line=br.readLine();
+      }
+      br.close();
+      inStreamReader.close();
+      bais.close();
+    }
+  }
+  Assert.assertEquals(NUM_STRINGS,readNumbers.size());
+  Assert.assertEquals(NUM_STRINGS,numRead);
+}

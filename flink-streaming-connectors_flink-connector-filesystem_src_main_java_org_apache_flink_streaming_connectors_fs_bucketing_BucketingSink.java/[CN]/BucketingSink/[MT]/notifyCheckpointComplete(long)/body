@@ -1,0 +1,33 @@
+{
+synchronized (state.bucketStates) {
+    Iterator<Map.Entry<String,BucketState<T>>> it=state.bucketStates.entrySet().iterator();
+    while (it.hasNext()) {
+      BucketState<T> bucketState=it.next().getValue();
+synchronized (bucketState.pendingFilesPerCheckpoint) {
+        Set<Long> pastCheckpointIds=bucketState.pendingFilesPerCheckpoint.keySet();
+        Set<Long> checkpointsToRemove=new HashSet<>();
+        for (        Long pastCheckpointId : pastCheckpointIds) {
+          if (pastCheckpointId <= checkpointId) {
+            LOG.debug("Moving pending files to final location for checkpoint {}",pastCheckpointId);
+            for (            String filename : bucketState.pendingFilesPerCheckpoint.get(pastCheckpointId)) {
+              Path finalPath=new Path(filename);
+              Path pendingPath=new Path(finalPath.getParent(),pendingPrefix + finalPath.getName()).suffix(pendingSuffix);
+              FileSystem fs=pendingPath.getFileSystem(hadoopConf);
+              fs.rename(pendingPath,finalPath);
+              LOG.debug("Moving pending file {} to final location having completed checkpoint {}.",pendingPath,pastCheckpointId);
+            }
+            checkpointsToRemove.add(pastCheckpointId);
+          }
+        }
+        if (!bucketState.isWriterOpen && bucketState.pendingFiles.isEmpty()) {
+          it.remove();
+        }
+ else {
+          for (          Long toRemove : checkpointsToRemove) {
+            bucketState.pendingFilesPerCheckpoint.remove(toRemove);
+          }
+        }
+      }
+    }
+  }
+}

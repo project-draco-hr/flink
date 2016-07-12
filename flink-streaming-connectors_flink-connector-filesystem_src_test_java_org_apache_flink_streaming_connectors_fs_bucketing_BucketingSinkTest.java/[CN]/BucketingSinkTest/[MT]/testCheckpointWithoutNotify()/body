@@ -1,0 +1,34 @@
+{
+  File dataDir=tempFolder.newFolder();
+  TestTimeServiceProvider clock=new TestTimeServiceProvider();
+  clock.setCurrentTime(0L);
+  OneInputStreamOperatorTestHarness<String,Object> testHarness=createTestSink(dataDir,clock);
+  testHarness.setup();
+  testHarness.open();
+  testHarness.processElement(new StreamRecord<>("Hello"));
+  testHarness.processElement(new StreamRecord<>("Hello"));
+  testHarness.processElement(new StreamRecord<>("Hello"));
+  clock.setCurrentTime(10000L);
+  StreamTaskState snapshot1=testHarness.snapshot(0,0);
+  testHarness=createTestSink(dataDir,clock);
+  testHarness.setup();
+  testHarness.restore(snapshot1,1);
+  testHarness.open();
+  testHarness.processElement(new StreamRecord<>("Hello"));
+  testHarness.close();
+  int numComplete=0;
+  int numPending=0;
+  for (  File file : FileUtils.listFiles(dataDir,null,true)) {
+    if (file.getAbsolutePath().endsWith("crc")) {
+      continue;
+    }
+    if (file.getPath().contains("pending")) {
+      numPending++;
+    }
+ else     if (file.getName().startsWith("part")) {
+      numComplete++;
+    }
+  }
+  Assert.assertEquals(1,numComplete);
+  Assert.assertEquals(1,numPending);
+}
