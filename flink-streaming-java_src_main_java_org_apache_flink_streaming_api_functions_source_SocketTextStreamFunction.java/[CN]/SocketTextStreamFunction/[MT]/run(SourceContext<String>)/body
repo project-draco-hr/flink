@@ -7,17 +7,18 @@
       LOG.info("Connecting to server socket " + hostname + ':'+ port);
       socket.connect(new InetSocketAddress(hostname,port),CONNECTION_TIMEOUT_TIME);
       BufferedReader reader=new BufferedReader(new InputStreamReader(socket.getInputStream()));
-      int data;
-      while (isRunning && (data=reader.read()) != -1) {
-        if (data != delimiter) {
-          buffer.append((char)data);
-        }
- else {
-          if (delimiter == '\n' && buffer.length() > 0 && buffer.charAt(buffer.length() - 1) == '\r') {
-            buffer.setLength(buffer.length() - 1);
+      char[] cbuf=new char[8192];
+      int bytesRead;
+      while (isRunning && (bytesRead=reader.read(cbuf)) != -1) {
+        buffer.append(cbuf,0,bytesRead);
+        int delimPos;
+        while (buffer.length() >= delimiter.length() && (delimPos=buffer.indexOf(delimiter)) != -1) {
+          String record=buffer.substring(0,delimPos);
+          if (delimiter.equals("\n") && record.endsWith("\r")) {
+            record=record.substring(0,record.length() - 1);
           }
-          ctx.collect(buffer.toString());
-          buffer.setLength(0);
+          ctx.collect(record);
+          buffer.delete(0,delimPos + delimiter.length());
         }
       }
     }
