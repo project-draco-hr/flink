@@ -39,50 +39,10 @@ synchronized (lock) {
       }
  else {
         String threadName="Materialize checkpoint state " + checkpointId + " - "+ getName();
-        Thread checkpointThread=new Thread(threadName){
-          @Override public void run(){
-            try {
-              for (              StreamTaskState state : states) {
-                if (state != null) {
-                  if (state.getFunctionState() instanceof AsynchronousStateHandle) {
-                    AsynchronousStateHandle<Serializable> asyncState=(AsynchronousStateHandle<Serializable>)state.getFunctionState();
-                    state.setFunctionState(asyncState.materialize());
-                  }
-                  if (state.getOperatorState() instanceof AsynchronousStateHandle) {
-                    AsynchronousStateHandle<?> asyncState=(AsynchronousStateHandle<?>)state.getOperatorState();
-                    state.setOperatorState(asyncState.materialize());
-                  }
-                  if (state.getKvStates() != null) {
-                    Set<String> keys=state.getKvStates().keySet();
-                    HashMap<String,KvStateSnapshot<?,?,?,?,?>> kvStates=state.getKvStates();
-                    for (                    String key : keys) {
-                      if (kvStates.get(key) instanceof AsynchronousKvStateSnapshot) {
-                        AsynchronousKvStateSnapshot<?,?,?,?,?> asyncHandle=(AsynchronousKvStateSnapshot<?,?,?,?,?>)kvStates.get(key);
-                        kvStates.put(key,asyncHandle.materialize());
-                      }
-                    }
-                  }
-                }
-              }
-              StreamTaskStateList allStates=new StreamTaskStateList(states);
-              StreamTask.this.lastCheckpointSize=allStates.getStateSize();
-              getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
-              LOG.debug("Finished asynchronous checkpoints for checkpoint {} on task {}",checkpointId,getName());
-            }
- catch (            Exception e) {
-              if (isRunning()) {
-                LOG.error("Caught exception while materializing asynchronous checkpoints.",e);
-              }
-              if (asyncException == null) {
-                asyncException=new AsynchronousException(e);
-              }
-            }
-            asyncCheckpointThreads.remove(this);
-          }
+        AsyncCheckpointThread checkpointThread=new AsyncCheckpointThread(threadName,this,cancelables,states,checkpointId);
+synchronized (cancelables) {
+          cancelables.add(checkpointThread);
         }
-;
-        asyncCheckpointThreads.add(checkpointThread);
-        checkpointThread.setDaemon(true);
         checkpointThread.start();
       }
       return true;

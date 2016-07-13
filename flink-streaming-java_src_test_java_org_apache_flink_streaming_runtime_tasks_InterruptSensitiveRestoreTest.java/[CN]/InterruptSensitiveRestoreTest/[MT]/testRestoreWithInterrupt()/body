@@ -1,0 +1,21 @@
+{
+  Configuration taskConfig=new Configuration();
+  StreamConfig cfg=new StreamConfig(taskConfig);
+  cfg.setTimeCharacteristic(TimeCharacteristic.ProcessingTime);
+  cfg.setStreamOperator(new StreamSource<>(new TestSource()));
+  StateHandle<Serializable> lockingHandle=new InterruptLockingStateHandle();
+  StreamTaskState opState=new StreamTaskState();
+  opState.setFunctionState(lockingHandle);
+  StreamTaskStateList taskState=new StreamTaskStateList(new StreamTaskState[]{opState});
+  TaskDeploymentDescriptor tdd=createTaskDeploymentDescriptor(taskConfig,taskState);
+  Task task=createTask(tdd);
+  task.startTaskThread();
+  IN_RESTORE_LATCH.await();
+  task.cancelExecution();
+  task.getExecutingThread().join(30000);
+  if (task.getExecutionState() == ExecutionState.CANCELING) {
+    fail("Task is stuck and not canceling");
+  }
+  assertEquals(ExecutionState.CANCELED,task.getExecutionState());
+  assertNull(task.getFailureCause());
+}
