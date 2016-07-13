@@ -1,0 +1,18 @@
+{
+  super.restoreState(state);
+  StreamStateHandle stream=(StreamStateHandle)state.getOperatorState();
+  final InputStream is=stream.getState(getUserCodeClassloader());
+  final ObjectInputStream ois=new ObjectInputStream(is);
+  final DataInputViewStreamWrapper div=new DataInputViewStreamWrapper(is);
+  FileInputSplit currSplit=(FileInputSplit)ois.readObject();
+  List<FileInputSplit> pendingSplits=new LinkedList<>();
+  int noOfSplits=div.readInt();
+  for (int i=0; i < noOfSplits; i++) {
+    FileInputSplit split=(FileInputSplit)ois.readObject();
+    pendingSplits.add(split);
+  }
+  @SuppressWarnings("unchecked") S formatState=(S)ois.readObject();
+  Preconditions.checkState(this.readerState == null,"The reader state has already been initialized.");
+  this.readerState=new Tuple3<>(pendingSplits,currSplit,formatState);
+  div.close();
+}
