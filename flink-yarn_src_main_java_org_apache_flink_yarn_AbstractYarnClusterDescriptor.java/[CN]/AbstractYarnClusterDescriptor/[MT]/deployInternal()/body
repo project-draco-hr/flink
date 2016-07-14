@@ -110,6 +110,13 @@
   addLibFolderToShipFiles(effectiveShipFiles);
   final ContainerLaunchContext amContainer=setupApplicationMasterContainer(hasLogback,hasLog4j);
   ApplicationSubmissionContext appContext=yarnApplication.getApplicationSubmissionContext();
+  final ApplicationId appId=appContext.getApplicationId();
+  String zkNamespace=getZookeeperNamespace();
+  if (zkNamespace == null || zkNamespace.isEmpty()) {
+    zkNamespace=flinkConfiguration.getString(ConfigConstants.ZOOKEEPER_NAMESPACE_KEY,String.valueOf(appId));
+    setZookeeperNamespace(zkNamespace);
+  }
+  flinkConfiguration.setString(ConfigConstants.ZOOKEEPER_NAMESPACE_KEY,zkNamespace);
   if (RecoveryMode.isHighAvailabilityModeActivated(flinkConfiguration)) {
     appContext.setMaxAppAttempts(flinkConfiguration.getInteger(ConfigConstants.YARN_APPLICATION_ATTEMPTS,YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS));
     activateHighAvailabilitySupport(appContext);
@@ -117,7 +124,6 @@
  else {
     appContext.setMaxAppAttempts(flinkConfiguration.getInteger(ConfigConstants.YARN_APPLICATION_ATTEMPTS,1));
   }
-  final ApplicationId appId=appContext.getApplicationId();
   final Map<String,LocalResource> localResources=new HashMap<>(2 + effectiveShipFiles.size());
   final List<Path> paths=new ArrayList<>(2 + effectiveShipFiles.size());
   final StringBuilder classPathBuilder=new StringBuilder();
@@ -163,6 +169,7 @@
   appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
   appMasterEnv.put(YarnConfigKeys.ENV_SLOTS,String.valueOf(slots));
   appMasterEnv.put(YarnConfigKeys.ENV_DETACHED,String.valueOf(detached));
+  appMasterEnv.put(YarnConfigKeys.ENV_ZOOKEEPER_NAMESPACE,getZookeeperNamespace());
   if (dynamicPropertiesEncoded != null) {
     appMasterEnv.put(YarnConfigKeys.ENV_DYNAMIC_PROPERTIES,dynamicPropertiesEncoded);
   }
