@@ -9,24 +9,38 @@ case "csv":
 {
       String lineDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_line_delimiter",CsvOutputFormat.DEFAULT_LINE_DELIMITER));
       String fieldDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_field_delimiter",CsvOutputFormat.DEFAULT_FIELD_DELIMITER));
-      Graph<LongValue,NullValue,NullValue> graph=Graph.fromCsvReader(parameters.get("input_filename"),env).ignoreCommentsEdges("#").lineDelimiterEdges(lineDelimiter).fieldDelimiterEdges(fieldDelimiter).keyType(LongValue.class);
-      hits=graph.run(new org.apache.flink.graph.library.link_analysis.HITS<LongValue,NullValue,NullValue>(iterations));
+      GraphCsvReader reader=Graph.fromCsvReader(parameters.get("input_filename"),env).ignoreCommentsEdges("#").lineDelimiterEdges(lineDelimiter).fieldDelimiterEdges(fieldDelimiter);
+switch (parameters.get("type","")) {
+case "integer":
+{
+          hits=reader.keyType(LongValue.class).run(new org.apache.flink.graph.library.link_analysis.HITS<LongValue,NullValue,NullValue>(iterations));
+        }
+      break;
+case "string":
+{
+      hits=reader.keyType(StringValue.class).run(new org.apache.flink.graph.library.link_analysis.HITS<StringValue,NullValue,NullValue>(iterations));
     }
   break;
+default :
+printUsage();
+return;
+}
+}
+break;
 case "rmat":
 {
-  int scale=parameters.getInt("scale",DEFAULT_SCALE);
-  int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
-  RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
-  long vertexCount=1L << scale;
-  long edgeCount=vertexCount * edgeFactor;
-  Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).generate();
-  if (scale > 32) {
-    hits=graph.run(new Simplify<LongValue,NullValue,NullValue>()).run(new org.apache.flink.graph.library.link_analysis.HITS<LongValue,NullValue,NullValue>(iterations));
-  }
+int scale=parameters.getInt("scale",DEFAULT_SCALE);
+int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
+RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
+long vertexCount=1L << scale;
+long edgeCount=vertexCount * edgeFactor;
+Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).generate();
+if (scale > 32) {
+hits=graph.run(new Simplify<LongValue,NullValue,NullValue>()).run(new org.apache.flink.graph.library.link_analysis.HITS<LongValue,NullValue,NullValue>(iterations));
+}
  else {
-    hits=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new Simplify<IntValue,NullValue,NullValue>()).run(new org.apache.flink.graph.library.link_analysis.HITS<IntValue,NullValue,NullValue>(iterations));
-  }
+hits=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new Simplify<IntValue,NullValue,NullValue>()).run(new org.apache.flink.graph.library.link_analysis.HITS<IntValue,NullValue,NullValue>(iterations));
+}
 }
 break;
 default :

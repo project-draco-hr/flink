@@ -14,50 +14,73 @@ case "csv":
 {
       String lineDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_line_delimiter",CsvOutputFormat.DEFAULT_LINE_DELIMITER));
       String fieldDelimiter=StringEscapeUtils.unescapeJava(parameters.get("input_field_delimiter",CsvOutputFormat.DEFAULT_FIELD_DELIMITER));
-      Graph<LongValue,NullValue,NullValue> graph=Graph.fromCsvReader(parameters.get("input_filename"),env).ignoreCommentsEdges("#").lineDelimiterEdges(lineDelimiter).fieldDelimiterEdges(fieldDelimiter).keyType(LongValue.class);
+      GraphCsvReader reader=Graph.fromCsvReader(parameters.get("input_filename"),env).ignoreCommentsEdges("#").lineDelimiterEdges(lineDelimiter).fieldDelimiterEdges(fieldDelimiter);
+switch (parameters.get("type","")) {
+case "integer":
+{
+          Graph<LongValue,NullValue,NullValue> graph=reader.keyType(LongValue.class);
+          if (directedAlgorithm) {
+            gcc=graph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
+            lcc=graph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+          }
+ else {
+            gcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
+            lcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+          }
+        }
+      break;
+case "string":
+{
+      Graph<StringValue,NullValue,NullValue> graph=reader.keyType(StringValue.class);
       if (directedAlgorithm) {
-        gcc=graph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
-        lcc=graph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+        gcc=graph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<StringValue,NullValue,NullValue>());
+        lcc=graph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<StringValue,NullValue,NullValue>());
       }
  else {
-        gcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
-        lcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+        gcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<StringValue,NullValue,NullValue>());
+        lcc=graph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<StringValue,NullValue,NullValue>());
       }
     }
   break;
+default :
+printUsage();
+return;
+}
+}
+break;
 case "rmat":
 {
-  int scale=parameters.getInt("scale",DEFAULT_SCALE);
-  int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
-  RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
-  long vertexCount=1L << scale;
-  long edgeCount=vertexCount * edgeFactor;
-  Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).generate();
-  if (directedAlgorithm) {
-    if (scale > 32) {
-      Graph<LongValue,NullValue,NullValue> newGraph=graph.run(new org.apache.flink.graph.asm.simple.directed.Simplify<LongValue,NullValue,NullValue>());
-      gcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
-      lcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
-    }
+int scale=parameters.getInt("scale",DEFAULT_SCALE);
+int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
+RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
+long vertexCount=1L << scale;
+long edgeCount=vertexCount * edgeFactor;
+Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).generate();
+if (directedAlgorithm) {
+if (scale > 32) {
+Graph<LongValue,NullValue,NullValue> newGraph=graph.run(new org.apache.flink.graph.asm.simple.directed.Simplify<LongValue,NullValue,NullValue>());
+gcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
+lcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+}
  else {
-      Graph<IntValue,NullValue,NullValue> newGraph=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new org.apache.flink.graph.asm.simple.directed.Simplify<IntValue,NullValue,NullValue>());
-      gcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<IntValue,NullValue,NullValue>());
-      lcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<IntValue,NullValue,NullValue>());
-    }
-  }
+Graph<IntValue,NullValue,NullValue> newGraph=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new org.apache.flink.graph.asm.simple.directed.Simplify<IntValue,NullValue,NullValue>());
+gcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.GlobalClusteringCoefficient<IntValue,NullValue,NullValue>());
+lcc=newGraph.run(new org.apache.flink.graph.library.clustering.directed.LocalClusteringCoefficient<IntValue,NullValue,NullValue>());
+}
+}
  else {
-    boolean clipAndFlip=parameters.getBoolean("clip_and_flip",DEFAULT_CLIP_AND_FLIP);
-    if (scale > 32) {
-      Graph<LongValue,NullValue,NullValue> newGraph=graph.run(new org.apache.flink.graph.asm.simple.undirected.Simplify<LongValue,NullValue,NullValue>(clipAndFlip));
-      gcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
-      lcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
-    }
+boolean clipAndFlip=parameters.getBoolean("clip_and_flip",DEFAULT_CLIP_AND_FLIP);
+if (scale > 32) {
+Graph<LongValue,NullValue,NullValue> newGraph=graph.run(new org.apache.flink.graph.asm.simple.undirected.Simplify<LongValue,NullValue,NullValue>(clipAndFlip));
+gcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<LongValue,NullValue,NullValue>());
+lcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<LongValue,NullValue,NullValue>());
+}
  else {
-      Graph<IntValue,NullValue,NullValue> newGraph=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new org.apache.flink.graph.asm.simple.undirected.Simplify<IntValue,NullValue,NullValue>(clipAndFlip));
-      gcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<IntValue,NullValue,NullValue>());
-      lcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<IntValue,NullValue,NullValue>());
-    }
-  }
+Graph<IntValue,NullValue,NullValue> newGraph=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new org.apache.flink.graph.asm.simple.undirected.Simplify<IntValue,NullValue,NullValue>(clipAndFlip));
+gcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.GlobalClusteringCoefficient<IntValue,NullValue,NullValue>());
+lcc=newGraph.run(new org.apache.flink.graph.library.clustering.undirected.LocalClusteringCoefficient<IntValue,NullValue,NullValue>());
+}
+}
 }
 break;
 default :
