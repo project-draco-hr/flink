@@ -1,0 +1,37 @@
+{
+  Protos.TaskInfo.Builder info=Protos.TaskInfo.newBuilder();
+  Protos.CommandInfo.Builder cmd=Protos.CommandInfo.newBuilder();
+  log.info("Setting up artifacts for TaskManagers");
+  String shipListString=env.get(MesosConfigKeys.ENV_CLIENT_SHIP_FILES);
+  require(shipListString != null,"Environment variable %s not set",MesosConfigKeys.ENV_CLIENT_SHIP_FILES);
+  String clientUsername=env.get(MesosConfigKeys.ENV_CLIENT_USERNAME);
+  require(clientUsername != null,"Environment variable %s not set",MesosConfigKeys.ENV_CLIENT_USERNAME);
+  String classPathString=env.get(MesosConfigKeys.ENV_FLINK_CLASSPATH);
+  require(classPathString != null,"Environment variable %s not set",MesosConfigKeys.ENV_FLINK_CLASSPATH);
+  final File flinkJarFile=new File(workingDirectory,"flink.jar");
+  cmd.addUris(uri(artifactServer.addFile(flinkJarFile,"flink.jar"),true));
+  final File taskManagerConfigFile=new File(workingDirectory,UUID.randomUUID() + "-taskmanager-conf.yaml");
+  LOG.debug("Writing TaskManager configuration to {}",taskManagerConfigFile.getAbsolutePath());
+  BootstrapTools.writeConfiguration(taskManagerConfig,taskManagerConfigFile);
+  cmd.addUris(uri(artifactServer.addFile(taskManagerConfigFile,GlobalConfiguration.FLINK_CONF_FILENAME),true));
+  for (  String pathStr : shipListString.split(",")) {
+    if (!pathStr.isEmpty()) {
+      File shipFile=new File(workingDirectory,pathStr);
+      cmd.addUris(uri(artifactServer.addFile(shipFile,shipFile.getName()),true));
+    }
+  }
+  log.info("Creating task info for TaskManagers");
+  boolean hasLogback=new File(workingDirectory,"logback.xml").exists();
+  boolean hasLog4j=new File(workingDirectory,"log4j.properties").exists();
+  String launchCommand=BootstrapTools.getTaskManagerShellCommand(flinkConfig,tmParams.containeredParameters(),".",".",hasLogback,hasLog4j,taskManagerMainClass);
+  cmd.setValue(launchCommand);
+  Protos.Environment.Builder envBuilder=Protos.Environment.newBuilder();
+  for (  Map.Entry<String,String> entry : tmParams.containeredParameters().taskManagerEnv().entrySet()) {
+    envBuilder.addVariables(variable(entry.getKey(),entry.getValue()));
+  }
+  envBuilder.addVariables(variable(MesosConfigKeys.ENV_CLASSPATH,classPathString));
+  envBuilder.addVariables(variable(MesosConfigKeys.ENV_CLIENT_USERNAME,clientUsername));
+  cmd.setEnvironment(envBuilder);
+  info.setCommand(cmd);
+  return info;
+}

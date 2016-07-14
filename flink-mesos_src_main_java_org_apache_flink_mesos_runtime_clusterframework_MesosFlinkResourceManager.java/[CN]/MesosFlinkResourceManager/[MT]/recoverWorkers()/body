@@ -1,0 +1,31 @@
+{
+  final List<MesosWorkerStore.Worker> tasksFromPreviousAttempts=workerStore.recoverWorkers();
+  if (!tasksFromPreviousAttempts.isEmpty()) {
+    LOG.info("Retrieved {} TaskManagers from previous attempt",tasksFromPreviousAttempts.size());
+    List<Tuple2<TaskRequest,String>> toAssign=new ArrayList<>(tasksFromPreviousAttempts.size());
+    List<LaunchableTask> toLaunch=new ArrayList<>(tasksFromPreviousAttempts.size());
+    for (    final MesosWorkerStore.Worker worker : tasksFromPreviousAttempts) {
+      LaunchableMesosWorker launchable=createLaunchableMesosWorker(worker.taskID());
+switch (worker.state()) {
+case New:
+        workersInNew.put(extractResourceID(worker.taskID()),worker);
+      toLaunch.add(launchable);
+    break;
+case Launched:
+  workersInLaunch.put(extractResourceID(worker.taskID()),worker);
+toAssign.add(new Tuple2<>(launchable.taskRequest(),worker.hostname().get()));
+break;
+case Released:
+workersBeingReturned.put(extractResourceID(worker.taskID()),worker);
+break;
+}
+taskRouter.tell(new TaskMonitor.TaskGoalStateUpdated(extractGoalState(worker)),self());
+}
+if (toAssign.size() >= 1) {
+launchCoordinator.tell(new LaunchCoordinator.Assign(toAssign),self());
+}
+if (toLaunch.size() >= 1) {
+launchCoordinator.tell(new LaunchCoordinator.Launch(toLaunch),self());
+}
+}
+}

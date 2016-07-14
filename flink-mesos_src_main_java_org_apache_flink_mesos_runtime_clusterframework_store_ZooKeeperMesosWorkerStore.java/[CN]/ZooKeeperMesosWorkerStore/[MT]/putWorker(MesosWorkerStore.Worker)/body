@@ -1,0 +1,26 @@
+{
+  checkNotNull(worker,"worker");
+  String path=getPathForWorker(worker.taskID());
+synchronized (cacheLock) {
+    verifyIsRunning();
+    int currentVersion=workersInZooKeeper.exists(path);
+    if (currentVersion == -1) {
+      try {
+        workersInZooKeeper.add(path,worker);
+        LOG.debug("Added {} in ZooKeeper.",worker);
+      }
+ catch (      KeeperException.NodeExistsException ex) {
+        throw new ConcurrentModificationException("ZooKeeper unexpectedly modified",ex);
+      }
+    }
+ else {
+      try {
+        workersInZooKeeper.replace(path,currentVersion,worker);
+        LOG.debug("Updated {} in ZooKeeper.",worker);
+      }
+ catch (      KeeperException.NoNodeException ex) {
+        throw new ConcurrentModificationException("ZooKeeper unexpectedly modified",ex);
+      }
+    }
+  }
+}

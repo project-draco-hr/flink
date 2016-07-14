@@ -1,0 +1,15 @@
+{
+  try {
+    LOG.info("Releasing worker {}",worker.taskID());
+    worker=worker.releaseTask();
+    workerStore.putWorker(worker);
+    workersBeingReturned.put(extractResourceID(worker.taskID()),worker);
+    taskRouter.tell(new TaskMonitor.TaskGoalStateUpdated(extractGoalState(worker)),self());
+    if (worker.hostname().isDefined()) {
+      launchCoordinator.tell(new LaunchCoordinator.Unassign(worker.taskID(),worker.hostname().get()),self());
+    }
+  }
+ catch (  Exception ex) {
+    fatalError("unable to release worker",ex);
+  }
+}

@@ -1,0 +1,18 @@
+{
+  final Configuration dynamicProperties=new Configuration();
+  final Protos.TaskInfo.Builder taskInfo=template.clone().setSlaveId(slaveId).setTaskId(taskID).setName(taskID.getValue()).addResources(scalar("cpus",assignment.getRequest().getCPUs())).addResources(scalar("mem",assignment.getRequest().getMemory()));
+  if (assignment.getAssignedPorts().size() != TM_PORT_KEYS.length) {
+    throw new IllegalArgumentException("unsufficient # of ports assigned");
+  }
+  for (int i=0; i < TM_PORT_KEYS.length; i++) {
+    int port=assignment.getAssignedPorts().get(i);
+    String key=TM_PORT_KEYS[i];
+    taskInfo.addResources(ranges("ports",range(port,port)));
+    dynamicProperties.setInteger(key,port);
+  }
+  final Protos.Environment.Builder environmentBuilder=taskInfo.getCommandBuilder().getEnvironmentBuilder();
+  environmentBuilder.addVariables(variable(MesosConfigKeys.ENV_FLINK_CONTAINER_ID,taskInfo.getTaskId().getValue()));
+  String dynamicPropertiesEncoded=FlinkMesosSessionCli.encodeDynamicProperties(dynamicProperties);
+  environmentBuilder.addVariables(variable(MesosConfigKeys.ENV_DYNAMIC_PROPERTIES,dynamicPropertiesEncoded));
+  return taskInfo.build();
+}

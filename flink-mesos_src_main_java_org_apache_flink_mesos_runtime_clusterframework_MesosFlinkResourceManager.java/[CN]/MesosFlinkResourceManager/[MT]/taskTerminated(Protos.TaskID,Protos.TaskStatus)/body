@@ -1,0 +1,35 @@
+{
+  final ResourceID id=extractResourceID(taskID);
+  try {
+    workerStore.removeWorker(taskID);
+  }
+ catch (  Exception ex) {
+    fatalError("unable to remove worker",ex);
+    return;
+  }
+  if (workersBeingReturned.remove(id) != null) {
+    LOG.info("Worker {} finished successfully with diagnostics: {}",id,status.getMessage());
+  }
+ else {
+    final MesosWorkerStore.Worker launched=workersInLaunch.remove(id);
+    if (launched != null) {
+      LOG.info("Mesos task {} failed, with a TaskManager in launch or registration. " + "State: {} Reason: {} ({})",id,status.getState(),status.getReason(),status.getMessage());
+    }
+ else {
+      LOG.info("Mesos task {} failed, with a registered TaskManager. " + "State: {} Reason: {} ({})",id,status.getState(),status.getReason(),status.getMessage());
+      notifyWorkerFailed(id,"Mesos task " + id + " failed.  State: "+ status.getState());
+    }
+    failedTasksSoFar++;
+    String diagMessage=String.format("Diagnostics for task %s in state %s : " + "reason=%s message=%s",id,status.getState(),status.getReason(),status.getMessage());
+    sendInfoMessage(diagMessage);
+    LOG.info(diagMessage);
+    LOG.info("Total number of failed tasks so far: " + failedTasksSoFar);
+    if (maxFailedTasks >= 0 && failedTasksSoFar > maxFailedTasks) {
+      String msg="Stopping Mesos session because the number of failed tasks (" + failedTasksSoFar + ") exceeded the maximum failed tasks ("+ maxFailedTasks+ "). This number is controlled by the '"+ ConfigConstants.MESOS_MAX_FAILED_TASKS+ "' configuration setting. "+ "By default its the number of requested tasks.";
+      LOG.error(msg);
+      self().tell(decorateMessage(new StopCluster(ApplicationStatus.FAILED,msg)),ActorRef.noSender());
+      return;
+    }
+  }
+  triggerCheckWorkers();
+}

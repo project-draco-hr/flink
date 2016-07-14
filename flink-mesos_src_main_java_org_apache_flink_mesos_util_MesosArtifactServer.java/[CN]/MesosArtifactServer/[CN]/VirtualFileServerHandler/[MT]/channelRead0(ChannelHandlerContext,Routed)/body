@@ -1,0 +1,43 @@
+{
+  HttpRequest request=routed.request();
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(request.getMethod() + " request for file '" + file.getAbsolutePath()+ '\'');
+  }
+  if (!(request.getMethod() == GET || request.getMethod() == HEAD)) {
+    sendMethodNotAllowed(ctx);
+    return;
+  }
+  final RandomAccessFile raf;
+  try {
+    raf=new RandomAccessFile(file,"r");
+  }
+ catch (  FileNotFoundException e) {
+    sendError(ctx,GONE);
+    return;
+  }
+  try {
+    long fileLength=raf.length();
+    HttpResponse response=new DefaultHttpResponse(HTTP_1_1,OK);
+    if (HttpHeaders.isKeepAlive(request)) {
+      response.headers().set(CONNECTION,HttpHeaders.Values.KEEP_ALIVE);
+    }
+    HttpHeaders.setHeader(response,CACHE_CONTROL,"private");
+    HttpHeaders.setHeader(response,CONTENT_TYPE,Mimetypes.MIMETYPE_OCTET_STREAM);
+    HttpHeaders.setContentLength(response,fileLength);
+    ctx.write(response);
+    if (request.getMethod() == GET) {
+      ctx.write(new DefaultFileRegion(raf.getChannel(),0,fileLength),ctx.newProgressivePromise());
+    }
+ else {
+      raf.close();
+    }
+    ChannelFuture lastContentFuture=ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+    if (!HttpHeaders.isKeepAlive(request)) {
+      lastContentFuture.addListener(ChannelFutureListener.CLOSE);
+    }
+  }
+ catch (  Exception ex) {
+    raf.close();
+    throw ex;
+  }
+}

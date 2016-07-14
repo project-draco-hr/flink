@@ -1,0 +1,24 @@
+{
+  LOG.info("Initializing Mesos resource master");
+  workerStore.start();
+  schedulerCallbackHandler=new SchedulerProxy(self());
+  FrameworkInfo.Builder frameworkInfo=mesosConfig.frameworkInfo().clone().setCheckpoint(true);
+  Option<Protos.FrameworkID> frameworkID=workerStore.getFrameworkID();
+  if (frameworkID.isEmpty()) {
+    LOG.info("Registering as new framework.");
+  }
+ else {
+    LOG.info("Recovery scenario: re-registering using framework ID {}.",frameworkID.get().getValue());
+    frameworkInfo.setId(frameworkID.get());
+  }
+  MesosConfiguration initializedMesosConfig=mesosConfig.withFrameworkInfo(frameworkInfo);
+  MesosConfiguration.logMesosConfig(LOG,initializedMesosConfig);
+  schedulerDriver=initializedMesosConfig.createDriver(schedulerCallbackHandler,false);
+  connectionMonitor=createConnectionMonitor();
+  launchCoordinator=createLaunchCoordinator();
+  reconciliationCoordinator=createReconciliationCoordinator();
+  taskRouter=createTaskRouter();
+  recoverWorkers();
+  connectionMonitor.tell(new ConnectionMonitor.Start(),self());
+  schedulerDriver.start();
+}
