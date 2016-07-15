@@ -1,0 +1,56 @@
+{
+  new JavaTestKit(actorSystem){
+{
+      ActorGateway jm=null;
+      ActorGateway taskManager=null;
+      try {
+        FiniteDuration timeout=new FiniteDuration(5,TimeUnit.SECONDS);
+        jm=TestingUtils.createForwardingActor(actorSystem,getTestActor(),Option.<String>empty());
+        final ActorGateway jmGateway=jm;
+        long refusedRegistrationPause=500;
+        long initialRegistrationPause=100;
+        long maxDelay=30000;
+        Configuration tmConfig=new Configuration(config);
+        tmConfig.setString(ConfigConstants.TASK_MANAGER_REFUSED_REGISTRATION_PAUSE,refusedRegistrationPause + " ms");
+        tmConfig.setString(ConfigConstants.TASK_MANAGER_INITIAL_REGISTRATION_PAUSE,initialRegistrationPause + " ms");
+        taskManager=createTaskManager(actorSystem,jmGateway,tmConfig,true,false);
+        final ActorGateway taskManagerGateway=taskManager;
+        final Deadline deadline=timeout.fromNow();
+        try {
+          while (deadline.hasTimeLeft()) {
+            expectMsgClass(deadline.timeLeft(),RegisterTaskManager.class);
+            taskManagerGateway.tell(new RefuseRegistration(new Exception("test reason")),jmGateway);
+          }
+        }
+ catch (        AssertionError error) {
+        }
+        RegisterTaskManager[] registerTaskManagerMessages=new ReceiveWhile<RegisterTaskManager>(RegisterTaskManager.class,timeout){
+          @Override protected RegisterTaskManager match(          Object msg) throws Exception {
+            if (msg instanceof RegisterTaskManager) {
+              return (RegisterTaskManager)msg;
+            }
+ else {
+              throw noMatch();
+            }
+          }
+        }
+.get();
+        int maxExponent=(int)Math.floor(Math.log(((double)maxDelay / initialRegistrationPause + 1)) / Math.log(2));
+        int exponent=(int)Math.ceil(Math.log(((double)timeout.toMillis() / initialRegistrationPause + 1)) / Math.log(2));
+        int exp=Math.min(maxExponent,exponent);
+        long difference=timeout.toMillis() - (initialRegistrationPause * (1 << exp));
+        int numberRegisterTaskManagerMessages=exp;
+        if (difference > 0) {
+          numberRegisterTaskManagerMessages+=Math.ceil((double)difference / maxDelay);
+        }
+        int maxExpectedNumberOfRegisterTaskManagerMessages=numberRegisterTaskManagerMessages * 2;
+        assertTrue("The number of RegisterTaskManager messages #" + registerTaskManagerMessages.length + " should be less than #"+ maxExpectedNumberOfRegisterTaskManagerMessages,registerTaskManagerMessages.length <= maxExpectedNumberOfRegisterTaskManagerMessages);
+      }
+  finally {
+        stopActor(taskManager);
+        stopActor(jm);
+      }
+    }
+  }
+;
+}

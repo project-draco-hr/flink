@@ -1,0 +1,24 @@
+{
+  if (message instanceof RequestNumberOfRegisteredResources) {
+    getSender().tell(getNumberOfStartedTaskManagers(),getSelf());
+  }
+ else   if (message instanceof NotifyWhenResourcesRegistered) {
+    NotifyWhenResourcesRegistered notifyMessage=(NotifyWhenResourcesRegistered)message;
+    if (getNumberOfStartedTaskManagers() >= notifyMessage.getNumberResources()) {
+      getSender().tell(true,getSelf());
+    }
+ else {
+      waitingQueue.offer(Tuple2.of(notifyMessage.getNumberResources(),getSender()));
+    }
+  }
+ else   if (message instanceof NotifyResourceStarted) {
+    super.handleMessage(message);
+    while (!waitingQueue.isEmpty() && waitingQueue.peek().f0 <= getNumberOfStartedTaskManagers()) {
+      ActorRef receiver=waitingQueue.poll().f1;
+      receiver.tell(true,getSelf());
+    }
+  }
+ else {
+    super.handleMessage(message);
+  }
+}

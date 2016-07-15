@@ -6,7 +6,10 @@
       try {
         jm=TestingUtils.createForwardingActor(actorSystem,getTestActor(),Option.<String>empty());
         final ActorGateway jmGateway=jm;
-        taskManager=createTaskManager(actorSystem,jmGateway,config,true,false);
+        FiniteDuration refusedRegistrationPause=new FiniteDuration(500,TimeUnit.MILLISECONDS);
+        Configuration tmConfig=new Configuration(config);
+        tmConfig.setString(ConfigConstants.TASK_MANAGER_REFUSED_REGISTRATION_PAUSE,refusedRegistrationPause.toString());
+        taskManager=createTaskManager(actorSystem,jmGateway,tmConfig,true,false);
         final ActorGateway taskManagerGateway=taskManager;
         new Within(timeout){
           @Override protected void run(){
@@ -15,7 +18,7 @@
           }
         }
 ;
-        FiniteDuration maxDelay=(FiniteDuration)TaskManager.DELAY_AFTER_REFUSED_REGISTRATION().$times(2.0);
+        FiniteDuration maxDelay=(FiniteDuration)refusedRegistrationPause.$times(3.0);
         new Within(maxDelay){
           @Override protected void run(){
             expectMsgClass(RegisterTaskManager.class);
