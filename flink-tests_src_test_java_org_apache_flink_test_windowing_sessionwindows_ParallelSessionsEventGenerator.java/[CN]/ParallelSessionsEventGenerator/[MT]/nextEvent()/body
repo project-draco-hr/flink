@@ -1,0 +1,24 @@
+{
+  if (subGeneratorLists.isEmpty()) {
+    return null;
+  }
+  final long globalWatermark=getWatermark();
+  final int choice=randomGenerator.choseRandomIndex(subGeneratorLists);
+  for (int i=choice; i < choice + subGeneratorLists.size(); ++i) {
+    final int index=i % subGeneratorLists.size();
+    EventGenerator<K,E> subGenerator=subGeneratorLists.get(index);
+    if (subGenerator.canProduceEventAtWatermark(globalWatermark)) {
+      E event=subGenerator.generateEvent(globalWatermark);
+      if (!subGenerator.hasMoreEvents()) {
+        if (streamFactory.getProducedGeneratorsCount() < sessionCountLimit) {
+          subGeneratorLists.set(index,streamFactory.newSessionStreamForKey(randomGenerator.choseRandomElement(sessionKeys),getWatermark()));
+        }
+ else {
+          subGeneratorLists.remove(index);
+        }
+      }
+      return event;
+    }
+  }
+  throw new IllegalStateException("Unable to find an open sub-generator that can produce events");
+}

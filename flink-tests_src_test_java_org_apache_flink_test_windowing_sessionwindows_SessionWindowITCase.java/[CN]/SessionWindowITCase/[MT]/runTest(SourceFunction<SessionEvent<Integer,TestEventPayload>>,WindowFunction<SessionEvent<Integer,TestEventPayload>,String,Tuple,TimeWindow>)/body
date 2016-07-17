@@ -1,0 +1,13 @@
+{
+  LocalStreamEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
+  env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+  WindowedStream<SessionEvent<Integer,TestEventPayload>,Tuple,TimeWindow> windowedStream=env.addSource(dataSource).keyBy("sessionKey").window(EventTimeSessionWindows.withGap(Time.milliseconds(MAX_SESSION_EVENT_GAP_MS)));
+  if (ALLOWED_LATENESS_MS != Long.MAX_VALUE) {
+    windowedStream=windowedStream.allowedLateness(Time.milliseconds(ALLOWED_LATENESS_MS));
+  }
+  if (!PURGE_WINDOW_ON_FIRE) {
+    windowedStream=windowedStream.trigger(new NonPurgingEventTimeTriggerWrapper());
+  }
+  windowedStream.apply(windowFunction).print();
+  env.execute();
+}
