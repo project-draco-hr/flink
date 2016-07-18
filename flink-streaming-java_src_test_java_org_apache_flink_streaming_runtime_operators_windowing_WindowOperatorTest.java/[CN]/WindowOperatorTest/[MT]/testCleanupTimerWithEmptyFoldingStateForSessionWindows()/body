@@ -1,0 +1,26 @@
+{
+  final int GAP_SIZE=3;
+  final long LATENESS=10;
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  FoldingStateDescriptor<Tuple2<String,Integer>,Tuple2<String,Integer>> windowStateDesc=new FoldingStateDescriptor<>("window-contents",new Tuple2<>((String)null,0),new FoldFunction<Tuple2<String,Integer>,Tuple2<String,Integer>>(){
+    @Override public Tuple2<String,Integer> fold(    Tuple2<String,Integer> accumulator,    Tuple2<String,Integer> value) throws Exception {
+      return new Tuple2<>(value.f0,accumulator.f1 + value.f1);
+    }
+  }
+,inputType);
+  WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,TimeWindow> operator=new WindowOperator<>(EventTimeSessionWindows.withGap(Time.seconds(GAP_SIZE)),new TimeWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),windowStateDesc,new InternalSingleValueWindowFunction<>(new PassThroughFunction()),EventTimeTrigger.create(),LATENESS);
+  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  operator.setInputType(inputType,new ExecutionConfig());
+  testHarness.open();
+  ConcurrentLinkedQueue<Object> expected=new ConcurrentLinkedQueue<>();
+  testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1000));
+  testHarness.processWatermark(new Watermark(4998));
+  expected.add(new StreamRecord<>(new Tuple2<>("key2",1),3999));
+  expected.add(new Watermark(4998));
+  testHarness.processWatermark(new Watermark(14600));
+  expected.add(new Watermark(14600));
+  ConcurrentLinkedQueue<Object> actual=testHarness.getOutput();
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expected,actual,new Tuple2ResultSortComparator());
+  testHarness.close();
+}

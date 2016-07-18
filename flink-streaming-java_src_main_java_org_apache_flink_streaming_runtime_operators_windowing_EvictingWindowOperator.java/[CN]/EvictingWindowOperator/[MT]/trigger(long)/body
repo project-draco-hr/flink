@@ -16,15 +16,24 @@
       if (windowAssigner instanceof MergingWindowAssigner) {
         mergingWindows=getMergingWindowSet();
         W stateWindow=mergingWindows.getStateWindow(context.window);
+        if (stateWindow == null) {
+          continue;
+        }
         windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
       }
  else {
         windowState=getPartitionedState(context.window,windowSerializer,windowStateDescriptor);
       }
+      Iterable<StreamRecord<IN>> contents=windowState.get();
+      if (contents == null) {
+        continue;
+      }
       TriggerResult triggerResult=context.onProcessingTime(timer.timestamp);
-      fireOrContinue(triggerResult,context.window,windowState);
-      if (triggerResult.isPurge() || (!windowAssigner.isEventTime() && isCleanupTime(timer.window,timer.timestamp))) {
-        cleanup(timer.window,windowState,mergingWindows);
+      if (triggerResult.isFire()) {
+        fire(context.window,contents);
+      }
+      if (triggerResult.isPurge() || (!windowAssigner.isEventTime() && isCleanupTime(context.window,timer.timestamp))) {
+        cleanup(context.window,windowState,mergingWindows);
       }
     }
  else {
