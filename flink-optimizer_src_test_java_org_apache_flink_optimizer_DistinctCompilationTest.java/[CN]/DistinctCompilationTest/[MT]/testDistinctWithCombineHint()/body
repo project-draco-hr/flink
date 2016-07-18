@@ -3,8 +3,7 @@
     ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
     env.setParallelism(8);
     DataSet<Tuple2<String,Double>> data=env.readCsvFile("file:///will/never/be/read").types(String.class,Double.class).name("source").setParallelism(6);
-    DistinctOperator<Tuple2<String,Double>> reduced=data.distinct(1).name("reducer");
-    reduced.output(new DiscardingOutputFormat<Tuple2<String,Double>>()).name("sink");
+    data.distinct().setCombineHint(CombineHint.HASH).name("reducer").output(new DiscardingOutputFormat<Tuple2<String,Double>>()).name("sink");
     Plan p=env.createProgramPlan();
     OptimizedPlan op=compileNoStats(p);
     OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(op);
@@ -15,10 +14,10 @@
     assertEquals(sourceNode,combineNode.getInput().getSource());
     assertEquals(reduceNode,sinkNode.getInput().getSource());
     assertEquals(DriverStrategy.SORTED_REDUCE,reduceNode.getDriverStrategy());
-    assertEquals(DriverStrategy.SORTED_PARTIAL_REDUCE,combineNode.getDriverStrategy());
-    assertEquals(new FieldList(1),reduceNode.getKeys(0));
-    assertEquals(new FieldList(1),combineNode.getKeys(0));
-    assertEquals(new FieldList(1),reduceNode.getInput().getLocalStrategyKeys());
+    assertEquals(DriverStrategy.HASHED_PARTIAL_REDUCE,combineNode.getDriverStrategy());
+    assertEquals(new FieldList(0,1),reduceNode.getKeys(0));
+    assertEquals(new FieldList(0,1),combineNode.getKeys(0));
+    assertEquals(new FieldList(0,1),reduceNode.getInput().getLocalStrategyKeys());
     assertEquals(6,sourceNode.getParallelism());
     assertEquals(6,combineNode.getParallelism());
     assertEquals(8,reduceNode.getParallelism());

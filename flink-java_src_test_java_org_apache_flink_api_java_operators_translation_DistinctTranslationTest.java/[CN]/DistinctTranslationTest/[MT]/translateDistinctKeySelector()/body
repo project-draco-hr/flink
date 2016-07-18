@@ -11,7 +11,8 @@
 ).setParallelism(4).output(new DiscardingOutputFormat<Tuple3<Double,StringValue,LongValue>>());
     Plan p=env.createProgramPlan();
     GenericDataSinkBase<?> sink=p.getDataSinks().iterator().next();
-    PlanUnwrappingReduceGroupOperator<?,?,?> reducer=(PlanUnwrappingReduceGroupOperator<?,?,?>)sink.getInput();
+    MapOperatorBase<?,?,?> keyRemover=(MapOperatorBase<?,?,?>)sink.getInput();
+    PlanUnwrappingReduceOperator<?,?> reducer=(PlanUnwrappingReduceOperator<?,?>)keyRemover.getInput();
     MapOperatorBase<?,?,?> keyExtractor=(MapOperatorBase<?,?,?>)reducer.getInput();
     assertEquals(1,keyExtractor.getParallelism());
     assertEquals(4,reducer.getParallelism());
@@ -19,7 +20,9 @@
     assertEquals(initialData.getType(),keyExtractor.getOperatorInfo().getInputType());
     assertEquals(keyValueInfo,keyExtractor.getOperatorInfo().getOutputType());
     assertEquals(keyValueInfo,reducer.getOperatorInfo().getInputType());
-    assertEquals(initialData.getType(),reducer.getOperatorInfo().getOutputType());
+    assertEquals(keyValueInfo,reducer.getOperatorInfo().getOutputType());
+    assertEquals(keyValueInfo,keyRemover.getOperatorInfo().getInputType());
+    assertEquals(initialData.getType(),keyRemover.getOperatorInfo().getOutputType());
     assertEquals(KeyExtractingMapper.class,keyExtractor.getUserCodeWrapper().getUserCodeClass());
     assertTrue(keyExtractor.getInput() instanceof GenericDataSourceBase<?,?>);
   }

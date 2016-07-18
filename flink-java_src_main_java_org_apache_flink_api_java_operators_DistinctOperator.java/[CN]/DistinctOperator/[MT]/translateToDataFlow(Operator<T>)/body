@@ -1,11 +1,11 @@
 {
-  final GroupReduceFunction<T,T> function=new DistinctFunction<>();
+  final ReduceFunction<T> function=new DistinctFunction<>();
   String name=getName() != null ? getName() : "Distinct at " + distinctLocationName;
   if (keys instanceof Keys.ExpressionKeys) {
     int[] logicalKeyPositions=keys.computeLogicalKeyPositions();
     UnaryOperatorInformation<T,T> operatorInfo=new UnaryOperatorInformation<>(getInputType(),getResultType());
-    GroupReduceOperatorBase<T,T,GroupReduceFunction<T,T>> po=new GroupReduceOperatorBase<>(function,operatorInfo,logicalKeyPositions,name);
-    po.setCombinable(true);
+    ReduceOperatorBase<T,ReduceFunction<T>> po=new ReduceOperatorBase<>(function,operatorInfo,logicalKeyPositions,name);
+    po.setCombineHint(hint);
     po.setInput(input);
     po.setParallelism(getParallelism());
     if (getType().isTupleType()) {
@@ -19,8 +19,7 @@
   }
  else   if (keys instanceof SelectorFunctionKeys) {
     @SuppressWarnings("unchecked") SelectorFunctionKeys<T,?> selectorKeys=(SelectorFunctionKeys<T,?>)keys;
-    PlanUnwrappingReduceGroupOperator<T,T,?> po=translateSelectorFunctionDistinct(selectorKeys,function,getResultType(),name,input);
-    po.setParallelism(this.getParallelism());
+    org.apache.flink.api.common.operators.SingleInputOperator<?,T,?> po=translateSelectorFunctionDistinct(selectorKeys,function,getResultType(),name,input,parallelism,hint);
     return po;
   }
  else {
