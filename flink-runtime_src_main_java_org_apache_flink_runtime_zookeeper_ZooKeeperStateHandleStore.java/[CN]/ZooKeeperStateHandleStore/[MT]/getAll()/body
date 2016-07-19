@@ -2,20 +2,26 @@
   final List<Tuple2<StateHandle<T>,String>> stateHandles=new ArrayList<>();
   boolean success=false;
   retry:   while (!success) {
-    int initialCVersion=client.checkExists().forPath("/").getCversion();
-    List<String> children=client.getChildren().forPath("/");
-    for (    String path : children) {
-      path="/" + path;
-      try {
-        final StateHandle<T> stateHandle=get(path);
-        stateHandles.add(new Tuple2<>(stateHandle,path));
-      }
- catch (      KeeperException.NoNodeException ignored) {
-        continue retry;
-      }
+    Stat stat=client.checkExists().forPath("/");
+    if (stat == null) {
+      break;
     }
-    int finalCVersion=client.checkExists().forPath("/").getCversion();
-    success=initialCVersion == finalCVersion;
+ else {
+      int initialCVersion=stat.getCversion();
+      List<String> children=client.getChildren().forPath("/");
+      for (      String path : children) {
+        path="/" + path;
+        try {
+          final StateHandle<T> stateHandle=get(path);
+          stateHandles.add(new Tuple2<>(stateHandle,path));
+        }
+ catch (        KeeperException.NoNodeException ignored) {
+          continue retry;
+        }
+      }
+      int finalCVersion=client.checkExists().forPath("/").getCversion();
+      success=initialCVersion == finalCVersion;
+    }
   }
   return stateHandles;
 }
