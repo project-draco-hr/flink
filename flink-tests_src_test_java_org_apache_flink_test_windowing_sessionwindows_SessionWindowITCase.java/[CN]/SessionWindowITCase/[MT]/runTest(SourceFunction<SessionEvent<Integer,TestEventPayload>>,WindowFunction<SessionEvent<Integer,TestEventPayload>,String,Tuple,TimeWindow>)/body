@@ -1,5 +1,5 @@
 {
-  LocalStreamEnvironment env=StreamExecutionEnvironment.createLocalEnvironment(1);
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
   env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
   WindowedStream<SessionEvent<Integer,TestEventPayload>,Tuple,TimeWindow> windowedStream=env.addSource(dataSource).keyBy("sessionKey").window(EventTimeSessionWindows.withGap(Time.milliseconds(MAX_SESSION_EVENT_GAP_MS)));
   if (ALLOWED_LATENESS_MS != Long.MAX_VALUE) {
@@ -9,5 +9,7 @@
     windowedStream=windowedStream.trigger(new NonPurgingEventTimeTriggerWrapper());
   }
   windowedStream.apply(windowFunction).print();
-  env.execute();
+  JobExecutionResult result=env.execute();
+  Assert.assertEquals((LATE_EVENTS_PER_SESSION + 1) * NUMBER_OF_SESSIONS * EVENTS_PER_SESSION,result.getAccumulatorResult(SESSION_COUNTER_ON_TIME_KEY));
+  Assert.assertEquals(NUMBER_OF_SESSIONS * (LATE_EVENTS_PER_SESSION * (LATE_EVENTS_PER_SESSION + 1) / 2),result.getAccumulatorResult(SESSION_COUNTER_LATE_KEY));
 }
