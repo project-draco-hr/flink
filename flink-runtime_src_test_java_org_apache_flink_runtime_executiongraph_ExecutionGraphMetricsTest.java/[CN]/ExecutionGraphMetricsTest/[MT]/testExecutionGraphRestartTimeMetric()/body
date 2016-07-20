@@ -1,0 +1,102 @@
+{
+  int parallelism=1;
+  JobVertex jobVertex=new JobVertex("TestVertex");
+  jobVertex.setParallelism(parallelism);
+  jobVertex.setInvokableClass(Tasks.NoOpInvokable.class);
+  JobGraph jobGraph=new JobGraph("Test Job",jobVertex);
+  Configuration config=new Configuration();
+  config.setString(ConfigConstants.METRICS_REPORTER_CLASS,TestingReporter.class.getName());
+  Configuration jobConfig=new Configuration();
+  FiniteDuration timeout=new FiniteDuration(10,TimeUnit.SECONDS);
+  MetricRegistry metricRegistry=new MetricRegistry(config);
+  MetricReporter reporter=metricRegistry.getReporter();
+  assertTrue(reporter instanceof TestingReporter);
+  TestingReporter testingReporter=(TestingReporter)reporter;
+  MetricGroup metricGroup=new JobManagerMetricGroup(metricRegistry,"localhost");
+  Scheduler scheduler=mock(Scheduler.class);
+  SimpleSlot simpleSlot=mock(SimpleSlot.class);
+  Instance instance=mock(Instance.class);
+  InstanceConnectionInfo instanceConnectionInfo=mock(InstanceConnectionInfo.class);
+  Slot rootSlot=mock(Slot.class);
+  ActorGateway actorGateway=mock(ActorGateway.class);
+  when(simpleSlot.isAlive()).thenReturn(true);
+  when(simpleSlot.getInstance()).thenReturn(instance);
+  when(simpleSlot.setExecutedVertex(Matchers.any(Execution.class))).thenReturn(true);
+  when(simpleSlot.getRoot()).thenReturn(rootSlot);
+  when(scheduler.scheduleImmediately(Matchers.any(ScheduledUnit.class))).thenReturn(simpleSlot);
+  when(instance.getInstanceConnectionInfo()).thenReturn(instanceConnectionInfo);
+  when(instance.getActorGateway()).thenReturn(actorGateway);
+  when(instanceConnectionInfo.getHostname()).thenReturn("localhost");
+  when(rootSlot.getSlotNumber()).thenReturn(0);
+  when(actorGateway.ask(Matchers.any(Object.class),Matchers.any(FiniteDuration.class))).thenReturn(Future$.MODULE$.<Object>successful(Messages.getAcknowledge()));
+  TestingRestartStrategy testingRestartStrategy=new TestingRestartStrategy();
+  ExecutionGraph executionGraph=new ExecutionGraph(ExecutionContext$.MODULE$.fromExecutor(new ForkJoinPool()),jobGraph.getJobID(),jobGraph.getName(),jobConfig,new SerializedValue<ExecutionConfig>(null),timeout,testingRestartStrategy,Collections.<BlobKey>emptyList(),Collections.<URL>emptyList(),getClass().getClassLoader(),metricGroup);
+  Metric metric=testingReporter.getMetric(ExecutionGraph.RESTARTING_TIME_METRIC_NAME);
+  assertNotNull(metric);
+  assertTrue(metric instanceof Gauge);
+  Gauge<Long> restartingTime=(Gauge<Long>)metric;
+  assertTrue(0L == restartingTime.getValue());
+  executionGraph.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+  executionGraph.scheduleForExecution(scheduler);
+  assertTrue(0L == restartingTime.getValue());
+  List<ExecutionAttemptID> executionIDs=new ArrayList<>();
+  for (  ExecutionVertex executionVertex : executionGraph.getAllExecutionVertices()) {
+    executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
+  }
+  for (  ExecutionAttemptID executionID : executionIDs) {
+    executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(),executionID,ExecutionState.RUNNING));
+  }
+  assertEquals(JobStatus.RUNNING,executionGraph.getState());
+  assertTrue(0L == restartingTime.getValue());
+  for (  ExecutionAttemptID executionID : executionIDs) {
+    executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(),executionID,ExecutionState.FAILED,new Exception()));
+  }
+  assertEquals(JobStatus.RESTARTING,executionGraph.getState());
+  long firstRestartingTimestamp=executionGraph.getStatusTimestamp(JobStatus.RESTARTING);
+  Thread.sleep(50);
+  long previousRestartingTime=restartingTime.getValue();
+  for (int i=0; i < 10; i++) {
+    long currentRestartingTime=restartingTime.getValue();
+    assertTrue(currentRestartingTime >= previousRestartingTime);
+    previousRestartingTime=currentRestartingTime;
+  }
+  assertTrue(previousRestartingTime > 0);
+  testingRestartStrategy.restartExecutionGraph();
+  executionIDs.clear();
+  for (  ExecutionVertex executionVertex : executionGraph.getAllExecutionVertices()) {
+    executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
+  }
+  for (  ExecutionAttemptID executionID : executionIDs) {
+    executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(),executionID,ExecutionState.RUNNING));
+  }
+  assertEquals(JobStatus.RUNNING,executionGraph.getState());
+  assertTrue(firstRestartingTimestamp != 0);
+  previousRestartingTime=restartingTime.getValue();
+  for (int i=0; i < 10; i++) {
+    long currentRestartingTime=restartingTime.getValue();
+    assertTrue(currentRestartingTime == previousRestartingTime);
+    previousRestartingTime=currentRestartingTime;
+  }
+  for (  ExecutionAttemptID executionID : executionIDs) {
+    executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(),executionID,ExecutionState.FAILED,new Exception()));
+  }
+  assertEquals(JobStatus.RESTARTING,executionGraph.getState());
+  long secondRestartingTimestamp=executionGraph.getStatusTimestamp(JobStatus.RESTARTING);
+  assertTrue(firstRestartingTimestamp != secondRestartingTimestamp);
+  Thread.sleep(50);
+  previousRestartingTime=restartingTime.getValue();
+  for (int i=0; i < 10; i++) {
+    long currentRestartingTime=restartingTime.getValue();
+    assertTrue(currentRestartingTime >= previousRestartingTime);
+    previousRestartingTime=currentRestartingTime;
+  }
+  assertTrue(previousRestartingTime > 0);
+  executionGraph.fail(new Exception());
+  assertEquals(JobStatus.FAILED,executionGraph.getState());
+  previousRestartingTime=restartingTime.getValue();
+  for (int i=0; i < 10; i++) {
+    long currentRestartingTime=restartingTime.getValue();
+    assertTrue(currentRestartingTime == previousRestartingTime);
+    previousRestartingTime=currentRestartingTime;
+  }
+}
