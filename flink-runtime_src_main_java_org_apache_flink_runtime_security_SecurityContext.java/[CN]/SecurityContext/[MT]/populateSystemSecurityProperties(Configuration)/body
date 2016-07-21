@@ -1,0 +1,44 @@
+{
+  System.setProperty(JAVA_SECURITY_AUTH_LOGIN_CONFIG,"");
+  if (configuration == null) {
+    return;
+  }
+  boolean disableSaslClient=configuration.getBoolean(ConfigConstants.ZOOKEEPER_SASL_DISABLE,ConfigConstants.DEFAULT_ZOOKEEPER_SASL_DISABLE);
+  if (disableSaslClient) {
+    LOG.info("SASL client auth for ZK will be disabled");
+    System.setProperty(ZOOKEEPER_SASL_CLIENT,"false");
+    return;
+  }
+  String baseDir=configuration.getString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,null);
+  if (baseDir == null) {
+    String message="SASL auth is enabled for ZK but unable to locate pseudo Jaas config " + "since " + ConfigConstants.FLINK_BASE_DIR_PATH_KEY + " is not provided";
+    LOG.error(message);
+    throw new IllegalConfigurationException(message);
+  }
+  File f=new File(baseDir);
+  if (!f.exists() || !f.isDirectory()) {
+    LOG.error("Invalid flink base directory {} configuration provided",baseDir);
+    throw new IllegalConfigurationException("Invalid flink base directory configuration provided");
+  }
+  File jaasConfigFile=new File(f,JAAS_CONF_FILENAME);
+  if (!jaasConfigFile.exists() || !jaasConfigFile.isFile()) {
+    File confDir=new File(f,"conf");
+    if (!confDir.exists() || !confDir.isDirectory()) {
+      LOG.error("Could not locate " + JAAS_CONF_FILENAME);
+      throw new IllegalConfigurationException("Could not locate " + JAAS_CONF_FILENAME);
+    }
+    jaasConfigFile=new File(confDir,JAAS_CONF_FILENAME);
+    if (!jaasConfigFile.exists() || !jaasConfigFile.isFile()) {
+      LOG.error("Could not locate " + JAAS_CONF_FILENAME);
+      throw new IllegalConfigurationException("Could not locate " + JAAS_CONF_FILENAME);
+    }
+  }
+  LOG.info("Enabling {} property with pseudo JAAS config file: {}",JAVA_SECURITY_AUTH_LOGIN_CONFIG,jaasConfigFile);
+  System.setProperty(JAVA_SECURITY_AUTH_LOGIN_CONFIG,jaasConfigFile.getAbsolutePath());
+  System.setProperty(ZOOKEEPER_SASL_CLIENT,"true");
+  String zkSaslServiceName=configuration.getString(ConfigConstants.ZOOKEEPER_SASL_SERVICE_NAME,null);
+  if (!StringUtils.isBlank(zkSaslServiceName)) {
+    LOG.info("ZK SASL service name: {} is provided in the configuration",zkSaslServiceName);
+    System.setProperty(ZOOKEEPER_SASL_CLIENT_USERNAME,zkSaslServiceName);
+  }
+}

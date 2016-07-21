@@ -1,23 +1,45 @@
 {
   try {
     LOG.debug("All environment variables: {}",ENV);
-    final String yarnClientUsername=ENV.get(YarnConfigKeys.ENV_CLIENT_USERNAME);
-    require(yarnClientUsername != null,"YARN client user name environment variable {} not set",YarnConfigKeys.ENV_CLIENT_USERNAME);
-    final UserGroupInformation currentUser;
-    try {
-      currentUser=UserGroupInformation.getCurrentUser();
+    final String yarnClientUsername=ENV.get(YarnConfigKeys.ENV_HADOOP_USER_NAME);
+    require(yarnClientUsername != null,"YARN client user name environment variable {} not set",YarnConfigKeys.ENV_HADOOP_USER_NAME);
+    final String currDir=ENV.get(Environment.PWD.key());
+    require(currDir != null,"Current working directory variable (%s) not set",Environment.PWD.key());
+    LOG.debug("Current working Directory: {}",currDir);
+    final String remoteKeytabPath=ENV.get(YarnConfigKeys.KEYTAB_PATH);
+    LOG.debug("remoteKeytabPath obtained {}",remoteKeytabPath);
+    final String remoteKeytabPrincipal=ENV.get(YarnConfigKeys.KEYTAB_PRINCIPAL);
+    LOG.info("remoteKeytabPrincipal obtained {}",remoteKeytabPrincipal);
+    String keytabPath=null;
+    if (remoteKeytabPath != null) {
+      File f=new File(currDir,Utils.KEYTAB_FILE_NAME);
+      keytabPath=f.getAbsolutePath();
+      LOG.debug("keytabPath: {}",keytabPath);
     }
- catch (    Throwable t) {
-      throw new Exception("Cannot access UserGroupInformation information for current user",t);
+    UserGroupInformation currentUser=UserGroupInformation.getCurrentUser();
+    LOG.info("YARN daemon is running as: {} Yarn client user obtainer: {}",currentUser.getShortUserName(),yarnClientUsername);
+    SecurityContext.SecurityConfiguration sc=new SecurityContext.SecurityConfiguration();
+    File krb5Conf=new File(currDir,Utils.KRB5_FILE_NAME);
+    if (krb5Conf.exists() && krb5Conf.canRead()) {
+      String krb5Path=krb5Conf.getAbsolutePath();
+      LOG.info("KRB5 Conf: {}",krb5Path);
+      org.apache.hadoop.conf.Configuration conf=new org.apache.hadoop.conf.Configuration();
+      conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,"kerberos");
+      conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION,"true");
+      sc.setHadoopConfiguration(conf);
     }
-    LOG.info("YARN daemon runs as user {}. Running Flink Application Master/JobManager as user {}",currentUser.getShortUserName(),yarnClientUsername);
-    UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
-    for (    Token<?> token : currentUser.getTokens()) {
-      ugi.addToken(token);
+    final Map<String,String> dynamicProperties=FlinkYarnSessionCli.getDynamicProperties(ENV.get(YarnConfigKeys.ENV_DYNAMIC_PROPERTIES));
+    LOG.debug("YARN dynamic properties: {}",dynamicProperties);
+    final Configuration flinkConfig=createConfiguration(currDir,dynamicProperties);
+    if (keytabPath != null && remoteKeytabPrincipal != null) {
+      flinkConfig.setString(ConfigConstants.SECURITY_KEYTAB_KEY,keytabPath);
+      flinkConfig.setString(ConfigConstants.SECURITY_PRINCIPAL_KEY,remoteKeytabPrincipal);
     }
-    return ugi.doAs(new PrivilegedAction<Integer>(){
+    flinkConfig.setString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,currDir);
+    SecurityContext.install(sc.setFlinkConfiguration(flinkConfig));
+    return SecurityContext.getInstalled().runSecured(new SecurityContext.FlinkSecuredRunner<Integer>(){
       @Override public Integer run(){
-        return runApplicationMaster();
+        return runApplicationMaster(flinkConfig);
       }
     }
 );

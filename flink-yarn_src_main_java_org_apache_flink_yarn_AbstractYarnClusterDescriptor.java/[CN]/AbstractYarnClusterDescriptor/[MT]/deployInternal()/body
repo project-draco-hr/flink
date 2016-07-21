@@ -107,8 +107,11 @@
       LOG.warn("The configuration directory ('" + configurationDirectory + "') contains both LOG4J and "+ "Logback configuration files. Please delete or rename one of them.");
     }
   }
+  File jaasConfigFile=new File(configurationDirectory + File.separator + SecurityContext.JAAS_CONF_FILENAME);
+  if (jaasConfigFile.exists() && jaasConfigFile.isFile()) {
+    effectiveShipFiles.add(jaasConfigFile);
+  }
   addLibFolderToShipFiles(effectiveShipFiles);
-  final ContainerLaunchContext amContainer=setupApplicationMasterContainer(hasLogback,hasLog4j);
   ApplicationSubmissionContext appContext=yarnApplication.getApplicationSubmissionContext();
   final ApplicationId appId=appContext.getApplicationId();
   String zkNamespace=getZookeeperNamespace();
@@ -154,7 +157,42 @@
   sessionFilesDir=new Path(fs.getHomeDirectory(),".flink/" + appId.toString() + "/");
   FsPermission permission=new FsPermission(FsAction.ALL,FsAction.NONE,FsAction.NONE);
   fs.setPermission(sessionFilesDir,permission);
-  Utils.setTokensFor(amContainer,paths,conf);
+  Path remoteKrb5Path=null;
+  Path remoteYarnSiteXmlPath=null;
+  boolean hasKrb5=false;
+  if (System.getenv("IN_TESTS") != null) {
+    String krb5Config=System.getProperty("java.security.krb5.conf");
+    if (krb5Config != null && krb5Config.length() != 0) {
+      File krb5=new File(krb5Config);
+      LOG.info("Adding KRB5 configuration {} to the AM container local resource bucket",krb5.getAbsolutePath());
+      LocalResource krb5ConfResource=Records.newRecord(LocalResource.class);
+      Path krb5ConfPath=new Path(krb5.getAbsolutePath());
+      remoteKrb5Path=Utils.setupLocalResource(fs,appId.toString(),krb5ConfPath,krb5ConfResource,fs.getHomeDirectory());
+      localResources.put(Utils.KRB5_FILE_NAME,krb5ConfResource);
+      File f=new File(System.getenv("YARN_CONF_DIR"),Utils.YARN_SITE_FILE_NAME);
+      LOG.info("Adding Yarn configuration {} to the AM container local resource bucket",f.getAbsolutePath());
+      LocalResource yarnConfResource=Records.newRecord(LocalResource.class);
+      Path yarnSitePath=new Path(f.getAbsolutePath());
+      remoteYarnSiteXmlPath=Utils.setupLocalResource(fs,appId.toString(),yarnSitePath,yarnConfResource,fs.getHomeDirectory());
+      localResources.put(Utils.YARN_SITE_FILE_NAME,yarnConfResource);
+      hasKrb5=true;
+    }
+  }
+  LocalResource keytabResource=null;
+  Path remotePathKeytab=null;
+  String keytab=flinkConfiguration.getString(ConfigConstants.SECURITY_KEYTAB_KEY,null);
+  if (keytab != null) {
+    LOG.info("Adding keytab {} to the AM container local resource bucket",keytab);
+    keytabResource=Records.newRecord(LocalResource.class);
+    Path keytabPath=new Path(keytab);
+    remotePathKeytab=Utils.setupLocalResource(fs,appId.toString(),keytabPath,keytabResource,fs.getHomeDirectory());
+    localResources.put(Utils.KEYTAB_FILE_NAME,keytabResource);
+  }
+  final ContainerLaunchContext amContainer=setupApplicationMasterContainer(hasLogback,hasLog4j,hasKrb5);
+  if (UserGroupInformation.isSecurityEnabled() && keytab == null) {
+    LOG.info("Adding delegation token to the AM container..");
+    Utils.setTokensFor(amContainer,paths,conf);
+  }
   amContainer.setLocalResources(localResources);
   fs.close();
   final Map<String,String> appMasterEnv=new HashMap<>();
@@ -166,10 +204,19 @@
   appMasterEnv.put(YarnConfigKeys.ENV_APP_ID,appId.toString());
   appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_HOME_DIR,fs.getHomeDirectory().toString());
   appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_SHIP_FILES,envShipFileList.toString());
-  appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_USERNAME,UserGroupInformation.getCurrentUser().getShortUserName());
   appMasterEnv.put(YarnConfigKeys.ENV_SLOTS,String.valueOf(slots));
   appMasterEnv.put(YarnConfigKeys.ENV_DETACHED,String.valueOf(detached));
   appMasterEnv.put(YarnConfigKeys.ENV_ZOOKEEPER_NAMESPACE,getZookeeperNamespace());
+  appMasterEnv.put(YarnConfigKeys.ENV_HADOOP_USER_NAME,UserGroupInformation.getCurrentUser().getUserName());
+  if (keytabResource != null) {
+    appMasterEnv.put(YarnConfigKeys.KEYTAB_PATH,remotePathKeytab.toString());
+    String principal=flinkConfiguration.getString(ConfigConstants.SECURITY_PRINCIPAL_KEY,null);
+    appMasterEnv.put(YarnConfigKeys.KEYTAB_PRINCIPAL,principal);
+  }
+  if (remoteYarnSiteXmlPath != null && remoteKrb5Path != null) {
+    appMasterEnv.put(YarnConfigKeys.ENV_YARN_SITE_XML_PATH,remoteYarnSiteXmlPath.toString());
+    appMasterEnv.put(YarnConfigKeys.ENV_KRB5_PATH,remoteKrb5Path.toString());
+  }
   if (dynamicPropertiesEncoded != null) {
     appMasterEnv.put(YarnConfigKeys.ENV_DYNAMIC_PROPERTIES,dynamicPropertiesEncoded);
   }
@@ -211,6 +258,7 @@
       throw new YarnDeploymentException("Failed to deploy the cluster: " + e.getMessage());
     }
     YarnApplicationState appState=report.getYarnApplicationState();
+    LOG.debug("Application State: {}",appState);
 switch (appState) {
 case FAILED:
 case FINISHED:

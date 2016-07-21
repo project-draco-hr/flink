@@ -30,6 +30,7 @@
 ).setParallelism(parallelism);
     Properties producerProperties=FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings);
     producerProperties.setProperty("retries","0");
+    producerProperties.putAll(secureProps);
     stream.addSink(kafkaServer.getProducer(topicName,serSchema,producerProperties,new Tuple2Partitioner(parallelism))).setParallelism(parallelism);
     try {
       writeEnv.execute("Write sequence");
@@ -49,6 +50,7 @@
     readEnv.setParallelism(parallelism);
     Properties readProps=(Properties)standardProps.clone();
     readProps.setProperty("group.id","flink-tests-validator");
+    readProps.putAll(secureProps);
     FlinkKafkaConsumerBase<Tuple2<Integer,Integer>> consumer=kafkaServer.getConsumer(topicName,deserSchema,readProps);
     readEnv.addSource(consumer).map(new RichMapFunction<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>>(){
       private final int totalCount=parallelism * numElements;

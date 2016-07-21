@@ -24,8 +24,14 @@
       }
     }
 ).setParallelism(1);
-    stream.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(serSchema),FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings),new CustomPartitioner(parallelism))).setParallelism(parallelism);
-    FlinkKafkaConsumerBase<Tuple2<Long,String>> source=kafkaServer.getConsumer(topic,deserSchema,standardProps);
+    Properties props=new Properties();
+    props.putAll(FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings));
+    props.putAll(secureProps);
+    stream.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(serSchema),props,new CustomPartitioner(parallelism))).setParallelism(parallelism);
+    Properties consumerProps=new Properties();
+    consumerProps.putAll(standardProps);
+    consumerProps.putAll(secureProps);
+    FlinkKafkaConsumerBase<Tuple2<Long,String>> source=kafkaServer.getConsumer(topic,deserSchema,consumerProps);
     env.addSource(source).setParallelism(parallelism).map(new RichMapFunction<Tuple2<Long,String>,Integer>(){
       private int ourPartition=-1;
       @Override public Integer map(      Tuple2<Long,String> value){

@@ -1,0 +1,31 @@
+{
+  LOG.debug("In TestingJaasConfiguration - Application Requested: {}",applicationName);
+  AppConfigurationEntry[] appConfigurationEntry=super.getAppConfigurationEntry(applicationName);
+  if (clientSecurityConfigurationMap != null && clientSecurityConfigurationMap.size() > 0) {
+    if (clientSecurityConfigurationMap.containsKey(applicationName)) {
+      LOG.debug("In TestingJaasConfiguration - Application: {} found in the supplied context",applicationName);
+      TestingSecurityContext.ClientSecurityConfiguration conf=clientSecurityConfigurationMap.get(applicationName);
+      if (appConfigurationEntry != null && appConfigurationEntry.length > 0) {
+        for (int count=0; count < appConfigurationEntry.length; count++) {
+          AppConfigurationEntry ace=appConfigurationEntry[count];
+          if (ace.getOptions().containsKey("keyTab")) {
+            String keyTab=conf.getKeytab();
+            String principal=conf.getPrincipal();
+            LOG.debug("In TestingJaasConfiguration - Application: {} from the supplied context will " + "use Client Specific Keytab: {} and Principal: {}",applicationName,keyTab,principal);
+            Map<String,String> newKeytabKerberosOptions=new HashMap<>();
+            newKeytabKerberosOptions.putAll(getKeytabKerberosOptions());
+            newKeytabKerberosOptions.put("keyTab",keyTab);
+            newKeytabKerberosOptions.put("principal",principal);
+            AppConfigurationEntry keytabKerberosAce=new AppConfigurationEntry(KerberosUtil.getKrb5LoginModuleName(),AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,newKeytabKerberosOptions);
+            appConfigurationEntry=new AppConfigurationEntry[]{keytabKerberosAce};
+            LOG.debug("---->Login Module is using Keytab based configuration<------");
+            LOG.debug("Login Module Name: " + keytabKerberosAce.getLoginModuleName());
+            LOG.debug("Control Flag: " + keytabKerberosAce.getControlFlag());
+            LOG.debug("Options: " + keytabKerberosAce.getOptions());
+          }
+        }
+      }
+    }
+  }
+  return appConfigurationEntry;
+}

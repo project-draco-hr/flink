@@ -8,8 +8,16 @@
   require(clientHomeDir != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_HOME_DIR);
   String shipListString=env.get(YarnConfigKeys.ENV_CLIENT_SHIP_FILES);
   require(shipListString != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_SHIP_FILES);
-  String yarnClientUsername=env.get(YarnConfigKeys.ENV_CLIENT_USERNAME);
-  require(yarnClientUsername != null,"Environment variable %s not set",YarnConfigKeys.ENV_CLIENT_USERNAME);
+  String yarnClientUsername=env.get(YarnConfigKeys.ENV_HADOOP_USER_NAME);
+  require(yarnClientUsername != null,"Environment variable %s not set",YarnConfigKeys.ENV_HADOOP_USER_NAME);
+  final String remoteKeytabPath=env.get(YarnConfigKeys.KEYTAB_PATH);
+  LOG.info("TM:remoteKeytabPath obtained {}",remoteKeytabPath);
+  final String remoteKeytabPrincipal=env.get(YarnConfigKeys.KEYTAB_PRINCIPAL);
+  LOG.info("TM:remoteKeytabPrincipal obtained {}",remoteKeytabPrincipal);
+  final String remoteYarnConfPath=env.get(YarnConfigKeys.ENV_YARN_SITE_XML_PATH);
+  LOG.info("TM:remoteYarnConfPath obtained {}",remoteYarnConfPath);
+  final String remoteKrb5Path=env.get(YarnConfigKeys.ENV_KRB5_PATH);
+  LOG.info("TM:remotekrb5Path obtained {}",remoteKrb5Path);
   String classPathString=env.get(YarnConfigKeys.ENV_FLINK_CLASSPATH);
   require(classPathString != null,"Environment variable %s not set",YarnConfigKeys.ENV_FLINK_CLASSPATH);
   final org.apache.hadoop.fs.FileSystem yarnFileSystem;
@@ -18,6 +26,27 @@
   }
  catch (  IOException e) {
     throw new Exception("Could not access YARN's default file system",e);
+  }
+  LocalResource keytabResource=null;
+  if (remoteKeytabPath != null) {
+    LOG.info("Adding keytab {} to the AM container local resource bucket",remoteKeytabPath);
+    keytabResource=Records.newRecord(LocalResource.class);
+    Path keytabPath=new Path(remoteKeytabPath);
+    Utils.registerLocalResource(yarnFileSystem,keytabPath,keytabResource);
+  }
+  LocalResource yarnConfResource=null;
+  LocalResource krb5ConfResource=null;
+  boolean hasKrb5=false;
+  if (remoteYarnConfPath != null && remoteKrb5Path != null) {
+    LOG.info("TM:Adding remoteYarnConfPath {} to the container local resource bucket",remoteYarnConfPath);
+    yarnConfResource=Records.newRecord(LocalResource.class);
+    Path yarnConfPath=new Path(remoteYarnConfPath);
+    Utils.registerLocalResource(yarnFileSystem,yarnConfPath,yarnConfResource);
+    LOG.info("TM:Adding remoteKrb5Path {} to the container local resource bucket",remoteKrb5Path);
+    krb5ConfResource=Records.newRecord(LocalResource.class);
+    Path krb5ConfPath=new Path(remoteKrb5Path);
+    Utils.registerLocalResource(yarnFileSystem,krb5ConfPath,krb5ConfResource);
+    hasKrb5=true;
   }
   LocalResource flinkJar=Records.newRecord(LocalResource.class);
 {
@@ -35,6 +64,13 @@
   Map<String,LocalResource> taskManagerLocalResources=new HashMap<>();
   taskManagerLocalResources.put("flink.jar",flinkJar);
   taskManagerLocalResources.put("flink-conf.yaml",flinkConf);
+  if (yarnConfResource != null && krb5ConfResource != null) {
+    taskManagerLocalResources.put(Utils.YARN_SITE_FILE_NAME,yarnConfResource);
+    taskManagerLocalResources.put(Utils.KRB5_FILE_NAME,krb5ConfResource);
+  }
+  if (keytabResource != null) {
+    taskManagerLocalResources.put(Utils.KEYTAB_FILE_NAME,keytabResource);
+  }
   for (  String pathStr : shipListString.split(",")) {
     if (!pathStr.isEmpty()) {
       LocalResource resource=Records.newRecord(LocalResource.class);
@@ -46,7 +82,7 @@
   log.info("Creating container launch context for TaskManagers");
   boolean hasLogback=new File(workingDirectory,"logback.xml").exists();
   boolean hasLog4j=new File(workingDirectory,"log4j.properties").exists();
-  String launchCommand=BootstrapTools.getTaskManagerShellCommand(flinkConfig,tmParams,".",ApplicationConstants.LOG_DIR_EXPANSION_VAR,hasLogback,hasLog4j,taskManagerMainClass);
+  String launchCommand=BootstrapTools.getTaskManagerShellCommand(flinkConfig,tmParams,".",ApplicationConstants.LOG_DIR_EXPANSION_VAR,hasLogback,hasLog4j,hasKrb5,taskManagerMainClass);
   log.info("Starting TaskManagers with command: " + launchCommand);
   ContainerLaunchContext ctx=Records.newRecord(ContainerLaunchContext.class);
   ctx.setCommands(Collections.singletonList(launchCommand));
@@ -55,9 +91,14 @@
   containerEnv.putAll(tmParams.taskManagerEnv());
   containerEnv.put(ENV_FLINK_CLASSPATH,classPathString);
   Utils.setupYarnClassPath(yarnConfig,containerEnv);
-  containerEnv.put(YarnConfigKeys.ENV_CLIENT_USERNAME,yarnClientUsername);
+  containerEnv.put(YarnConfigKeys.ENV_HADOOP_USER_NAME,UserGroupInformation.getCurrentUser().getUserName());
+  if (remoteKeytabPath != null && remoteKeytabPrincipal != null) {
+    containerEnv.put(YarnConfigKeys.KEYTAB_PATH,remoteKeytabPath);
+    containerEnv.put(YarnConfigKeys.KEYTAB_PRINCIPAL,remoteKeytabPrincipal);
+  }
   ctx.setEnvironment(containerEnv);
   try (DataOutputBuffer dob=new DataOutputBuffer()){
+    LOG.debug("Adding security tokens to Task Manager Container launch Context....");
     UserGroupInformation user=UserGroupInformation.getCurrentUser();
     Credentials credentials=user.getCredentials();
     credentials.writeTokenStorageToStream(dob);

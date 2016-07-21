@@ -25,6 +25,7 @@
   KeyedSerializationSchema<Tuple2<Long,PojoValue>> schema=new TypeInformationKeyValueSerializationSchema<>(Long.class,PojoValue.class,env.getConfig());
   Properties producerProperties=FlinkKafkaProducerBase.getPropertiesFromBrokerList(brokerConnectionStrings);
   producerProperties.setProperty("retries","3");
+  producerProperties.putAll(secureProps);
   kvStream.addSink(kafkaServer.getProducer(topic,schema,producerProperties,null));
   env.execute("Write KV to Kafka");
   env=StreamExecutionEnvironment.createRemoteEnvironment("localhost",flinkPort);
@@ -32,7 +33,10 @@
   env.setRestartStrategy(RestartStrategies.noRestart());
   env.getConfig().disableSysoutLogging();
   KeyedDeserializationSchema<Tuple2<Long,PojoValue>> readSchema=new TypeInformationKeyValueSerializationSchema<>(Long.class,PojoValue.class,env.getConfig());
-  DataStream<Tuple2<Long,PojoValue>> fromKafka=env.addSource(kafkaServer.getConsumer(topic,readSchema,standardProps));
+  Properties props=new Properties();
+  props.putAll(standardProps);
+  props.putAll(secureProps);
+  DataStream<Tuple2<Long,PojoValue>> fromKafka=env.addSource(kafkaServer.getConsumer(topic,readSchema,props));
   fromKafka.flatMap(new RichFlatMapFunction<Tuple2<Long,PojoValue>,Object>(){
     long counter=0;
     @Override public void flatMap(    Tuple2<Long,PojoValue> value,    Collector<Object> out) throws Exception {

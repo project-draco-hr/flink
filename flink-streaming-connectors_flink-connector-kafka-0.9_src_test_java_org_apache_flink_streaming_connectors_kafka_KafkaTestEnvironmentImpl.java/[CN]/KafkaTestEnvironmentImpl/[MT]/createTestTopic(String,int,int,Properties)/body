@@ -7,18 +7,29 @@
   finally {
     zkUtils.close();
   }
-  final long deadline=System.currentTimeMillis() + 30000;
+  LOG.info("Topic {} create request is successfully posted",topic);
+  final long deadline=System.currentTimeMillis() + Integer.parseInt(zkTimeout);
   do {
     try {
-      Thread.sleep(100);
+      if (secureMode) {
+        int wait=Integer.parseInt(zkTimeout) / 100;
+        LOG.info("waiting for {} msecs before the topic {} can be checked",wait,topic);
+        Thread.sleep(wait);
+      }
+ else {
+        Thread.sleep(100);
+      }
     }
  catch (    InterruptedException e) {
     }
+    LOG.info("Validating if the topic {} has been created or not",topic);
     ZkUtils checkZKConn=getZkUtils();
     if (AdminUtils.topicExists(checkZKConn,topic)) {
+      LOG.info("topic {} has been created successfully",topic);
       checkZKConn.close();
       return;
     }
+    LOG.info("topic {} has not been created yet. Will check again...",topic);
     checkZKConn.close();
   }
  while (System.currentTimeMillis() < deadline);

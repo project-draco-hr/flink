@@ -10,8 +10,11 @@
         env1.getConfig().setRestartStrategy(RestartStrategies.noRestart());
         env1.getConfig().disableSysoutLogging();
         env1.disableOperatorChaining();
+        Properties props=new Properties();
+        props.putAll(standardProps);
+        props.putAll(secureProps);
         TypeInformationSerializationSchema<Tuple2<Integer,Integer>> schema=new TypeInformationSerializationSchema<>(TypeInfoParser.<Tuple2<Integer,Integer>>parse("Tuple2<Integer, Integer>"),env1.getConfig());
-        DataStream<Tuple2<Integer,Integer>> fromKafka=env1.addSource(kafkaServer.getConsumer(topic,schema,standardProps));
+        DataStream<Tuple2<Integer,Integer>> fromKafka=env1.addSource(kafkaServer.getConsumer(topic,schema,props));
         fromKafka.flatMap(new FlatMapFunction<Tuple2<Integer,Integer>,Void>(){
           @Override public void flatMap(          Tuple2<Integer,Integer> value,          Collector<Void> out) throws Exception {
           }
@@ -31,7 +34,7 @@
           }
         }
 );
-        fromGen.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(schema),standardProps,null));
+        fromGen.addSink(kafkaServer.getProducer(topic,new KeyedSerializationSchemaWrapper<>(schema),props,null));
         env1.execute("Metrics test job");
       }
  catch (      Throwable t) {

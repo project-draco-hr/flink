@@ -1,0 +1,24 @@
+{
+  try {
+    LOG.info("Starting Flink and ZK in secure mode");
+    dfs.mkdirs(new Path("/flink/checkpoints"));
+    dfs.mkdirs(new Path("/flink/recovery"));
+    org.apache.flink.configuration.Configuration config=new org.apache.flink.configuration.Configuration();
+    config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER,1);
+    config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS,DEFAULT_PARALLELISM);
+    config.setBoolean(ConfigConstants.LOCAL_START_WEBSERVER,false);
+    config.setInteger(ConfigConstants.LOCAL_NUMBER_JOB_MANAGER,3);
+    config.setString(ConfigConstants.RECOVERY_MODE,"zookeeper");
+    config.setString(ConfigConstants.STATE_BACKEND,"filesystem");
+    config.setString(ConfigConstants.ZOOKEEPER_CHECKPOINTS_PATH,hdfsURI + "/flink/checkpoints");
+    config.setString(ConfigConstants.ZOOKEEPER_RECOVERY_PATH,hdfsURI + "/flink/recovery");
+    config.setString("state.backend.fs.checkpointdir",hdfsURI + "/flink/checkpoints");
+    SecureTestEnvironment.populateFlinkSecureConfigurations(config);
+    cluster=TestBaseUtils.startCluster(config,false);
+    TestStreamEnvironment.setAsContext(cluster,DEFAULT_PARALLELISM);
+  }
+ catch (  Exception e) {
+    LOG.error("Exception occured while creating MiniFlink cluster. Reason: {}",e);
+    throw new RuntimeException(e);
+  }
+}

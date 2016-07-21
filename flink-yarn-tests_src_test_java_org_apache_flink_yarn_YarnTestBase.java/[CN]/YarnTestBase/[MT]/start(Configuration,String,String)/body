@@ -1,0 +1,71 @@
+{
+  File homeDir=null;
+  try {
+    homeDir=tmp.newFolder();
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+    Assert.fail(e.getMessage());
+  }
+  System.setProperty("user.home",homeDir.getAbsolutePath());
+  String uberjarStartLoc="..";
+  LOG.info("Trying to locate uberjar in {}",new File(uberjarStartLoc));
+  flinkUberjar=findFile(uberjarStartLoc,new RootDirFilenameFilter());
+  Assert.assertNotNull("Flink uberjar not found",flinkUberjar);
+  String flinkDistRootDir=flinkUberjar.getParentFile().getParent();
+  flinkLibFolder=flinkUberjar.getParentFile();
+  Assert.assertNotNull("Flink flinkLibFolder not found",flinkLibFolder);
+  Assert.assertTrue("lib folder not found",flinkLibFolder.exists());
+  Assert.assertTrue("lib folder not found",flinkLibFolder.isDirectory());
+  if (!flinkUberjar.exists()) {
+    Assert.fail("Unable to locate yarn-uberjar.jar");
+  }
+  try {
+    LOG.info("Starting up MiniYARNCluster");
+    if (yarnCluster == null) {
+      yarnCluster=new MiniYARNCluster(conf.get(YarnTestBase.TEST_CLUSTER_NAME_KEY),NUM_NODEMANAGERS,1,1);
+      yarnCluster.init(conf);
+      yarnCluster.start();
+    }
+    Map<String,String> map=new HashMap<String,String>(System.getenv());
+    File flinkConfDirPath=findFile(flinkDistRootDir,new ContainsName(new String[]{"flink-conf.yaml"}));
+    Assert.assertNotNull(flinkConfDirPath);
+    if (!StringUtils.isBlank(principal) && !StringUtils.isBlank(keytab)) {
+      tempConfPathForSecureRun=tmp.newFolder("conf");
+      String confDirPath=flinkConfDirPath.getParentFile().getAbsolutePath();
+      FileUtils.copyDirectory(new File(confDirPath),tempConfPathForSecureRun);
+      try (FileWriter fw=new FileWriter(new File(tempConfPathForSecureRun,"flink-conf.yaml"),true);BufferedWriter bw=new BufferedWriter(fw);PrintWriter out=new PrintWriter(bw)){
+        LOG.info("writing keytab: " + keytab + " and principal: "+ principal+ " to config file");
+        out.println("");
+        out.println("#Security Configurations Auto Populated ");
+        out.println(ConfigConstants.SECURITY_KEYTAB_KEY + ": " + keytab);
+        out.println(ConfigConstants.SECURITY_PRINCIPAL_KEY + ": " + principal);
+        out.println("");
+      }
+ catch (      IOException e) {
+        LOG.error("Exception occured while trying to append the security configurations. Reason: {}",e.getMessage());
+        throw new RuntimeException(e);
+      }
+      String configDir=tempConfPathForSecureRun.getAbsolutePath();
+      LOG.info("Temporary Flink configuration directory to be used for secure test: {}",configDir);
+      Assert.assertNotNull(configDir);
+      map.put(ConfigConstants.ENV_FLINK_CONF_DIR,configDir);
+    }
+ else {
+      map.put(ConfigConstants.ENV_FLINK_CONF_DIR,flinkConfDirPath.getParent());
+    }
+    File yarnConfFile=writeYarnSiteConfigXML(conf);
+    map.put("YARN_CONF_DIR",yarnConfFile.getParentFile().getAbsolutePath());
+    map.put("IN_TESTS","yes we are in tests");
+    TestBaseUtils.setEnv(map);
+    Assert.assertTrue(yarnCluster.getServiceState() == Service.STATE.STARTED);
+    while (!yarnCluster.waitForNodeManagersToConnect(500)) {
+      LOG.info("Waiting for Nodemanagers to connect");
+    }
+  }
+ catch (  Exception ex) {
+    ex.printStackTrace();
+    LOG.error("setup failure",ex);
+    Assert.fail();
+  }
+}

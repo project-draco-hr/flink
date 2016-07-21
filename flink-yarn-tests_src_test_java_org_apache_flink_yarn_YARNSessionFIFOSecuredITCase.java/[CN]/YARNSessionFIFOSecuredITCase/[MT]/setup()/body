@@ -1,0 +1,28 @@
+{
+  LOG.info("starting secure cluster environment for testing");
+  yarnConfiguration.setClass(YarnConfiguration.RM_SCHEDULER,FifoScheduler.class,ResourceScheduler.class);
+  yarnConfiguration.setInt(YarnConfiguration.NM_PMEM_MB,768);
+  yarnConfiguration.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,512);
+  yarnConfiguration.set(YarnTestBase.TEST_CLUSTER_NAME_KEY,"flink-yarn-tests-fifo-secured");
+  SecureTestEnvironment.prepare(tmp);
+  populateYarnSecureConfigurations(yarnConfiguration,SecureTestEnvironment.getHadoopServicePrincipal(),SecureTestEnvironment.getTestKeytab());
+  Configuration flinkConfig=new Configuration();
+  flinkConfig.setString(ConfigConstants.SECURITY_KEYTAB_KEY,SecureTestEnvironment.getTestKeytab());
+  flinkConfig.setString(ConfigConstants.SECURITY_PRINCIPAL_KEY,SecureTestEnvironment.getHadoopServicePrincipal());
+  SecurityContext.SecurityConfiguration ctx=new SecurityContext.SecurityConfiguration();
+  ctx.setFlinkConfiguration(flinkConfig);
+  ctx.setHadoopConfiguration(yarnConfiguration);
+  try {
+    TestingSecurityContext.install(ctx,SecureTestEnvironment.getClientSecurityConfigurationMap());
+    SecurityContext.getInstalled().runSecured(new SecurityContext.FlinkSecuredRunner<Integer>(){
+      @Override public Integer run(){
+        startYARNSecureMode(yarnConfiguration,SecureTestEnvironment.getHadoopServicePrincipal(),SecureTestEnvironment.getTestKeytab());
+        return null;
+      }
+    }
+);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Exception occurred while setting up secure test context. Reason: {}",e);
+  }
+}

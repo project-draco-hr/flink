@@ -7,6 +7,7 @@
   while (getRunningContainers() < 2) {
     sleep(500);
   }
+  sleep(2000);
   LOG.info("Two containers are running. Killing the application");
   try {
     YarnClient yc=YarnClient.createYarnClient();
@@ -25,6 +26,23 @@
  catch (  Throwable t) {
     LOG.warn("Killing failed",t);
     Assert.fail();
+  }
+ finally {
+    String confDirPath=System.getenv("FLINK_CONF_DIR");
+    File configDirectory=new File(confDirPath);
+    LOG.info("testDetachedPerJobYarnClusterInternal: Using configuration directory " + configDirectory.getAbsolutePath());
+    LOG.info("testDetachedPerJobYarnClusterInternal: Trying to load configuration file");
+    GlobalConfiguration.loadConfiguration(configDirectory.getAbsolutePath());
+    try {
+      File yarnPropertiesFile=FlinkYarnSessionCli.getYarnPropertiesLocation(GlobalConfiguration.loadConfiguration());
+      if (yarnPropertiesFile.exists()) {
+        LOG.info("testDetachedPerJobYarnClusterInternal: Cleaning up temporary Yarn address reference: {}",yarnPropertiesFile.getAbsolutePath());
+        yarnPropertiesFile.delete();
+      }
+    }
+ catch (    Exception e) {
+      LOG.warn("testDetachedPerJobYarnClusterInternal: Exception while deleting the JobManager address file",e);
+    }
   }
   LOG.info("Finished testDetachedMode()");
 }

@@ -1,0 +1,34 @@
+{
+  LOG.info("starting secure cluster environment for testing");
+  dataDir=tempFolder.newFolder();
+  conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR,dataDir.getAbsolutePath());
+  SecureTestEnvironment.prepare(tempFolder);
+  populateSecureConfigurations();
+  Configuration flinkConfig=new Configuration();
+  flinkConfig.setString(ConfigConstants.SECURITY_KEYTAB_KEY,SecureTestEnvironment.getTestKeytab());
+  flinkConfig.setString(ConfigConstants.SECURITY_PRINCIPAL_KEY,SecureTestEnvironment.getHadoopServicePrincipal());
+  SecurityContext.SecurityConfiguration ctx=new SecurityContext.SecurityConfiguration();
+  ctx.setFlinkConfiguration(flinkConfig);
+  ctx.setHadoopConfiguration(conf);
+  try {
+    TestingSecurityContext.install(ctx,SecureTestEnvironment.getClientSecurityConfigurationMap());
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Exception occurred while setting up secure test context. Reason: {}",e);
+  }
+  File hdfsSiteXML=new File(dataDir.getAbsolutePath() + "/hdfs-site.xml");
+  FileWriter writer=new FileWriter(hdfsSiteXML);
+  conf.writeXml(writer);
+  writer.flush();
+  writer.close();
+  Map<String,String> map=new HashMap<String,String>(System.getenv());
+  map.put("HADOOP_CONF_DIR",hdfsSiteXML.getParentFile().getAbsolutePath());
+  TestBaseUtils.setEnv(map);
+  MiniDFSCluster.Builder builder=new MiniDFSCluster.Builder(conf);
+  builder.checkDataNodeAddrConfig(true);
+  builder.checkDataNodeHostConfig(true);
+  hdfsCluster=builder.build();
+  dfs=hdfsCluster.getFileSystem();
+  hdfsURI="hdfs://" + NetUtils.hostAndPortToUrlString(hdfsCluster.getURI().getHost(),hdfsCluster.getNameNodePort()) + "/";
+  startSecureFlinkClusterWithRecoveryModeEnabled();
+}

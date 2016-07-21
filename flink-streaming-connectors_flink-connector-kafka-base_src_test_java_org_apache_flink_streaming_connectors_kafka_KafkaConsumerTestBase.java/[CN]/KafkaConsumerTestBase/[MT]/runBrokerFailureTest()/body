@@ -14,7 +14,10 @@
   env.enableCheckpointing(500);
   env.setRestartStrategy(RestartStrategies.noRestart());
   env.getConfig().disableSysoutLogging();
-  FlinkKafkaConsumerBase<Integer> kafkaSource=kafkaServer.getConsumer(topic,schema,standardProps);
+  Properties props=new Properties();
+  props.putAll(standardProps);
+  props.putAll(secureProps);
+  FlinkKafkaConsumerBase<Integer> kafkaSource=kafkaServer.getConsumer(topic,schema,props);
   env.addSource(kafkaSource).map(new PartitionValidatingMapper(parallelism,1)).map(new BrokerKillingMapper<Integer>(leaderId,failAfterElements)).addSink(new ValidatingExactlyOnceSink(totalElements)).setParallelism(1);
   BrokerKillingMapper.killedLeaderBefore=false;
   tryExecute(env,"Broker failure once test");

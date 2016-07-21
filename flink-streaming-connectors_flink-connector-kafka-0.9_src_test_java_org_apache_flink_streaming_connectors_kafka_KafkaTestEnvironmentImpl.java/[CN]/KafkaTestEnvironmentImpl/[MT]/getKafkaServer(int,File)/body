@@ -6,8 +6,8 @@
   kafkaProperties.put("zookeeper.connect",zookeeperConnectionString);
   kafkaProperties.put("message.max.bytes",String.valueOf(50 * 1024 * 1024));
   kafkaProperties.put("replica.fetch.max.bytes",String.valueOf(50 * 1024 * 1024));
-  kafkaProperties.put("zookeeper.session.timeout.ms","30000");
-  kafkaProperties.put("zookeeper.connection.timeout.ms","30000");
+  kafkaProperties.put("zookeeper.session.timeout.ms",zkTimeout);
+  kafkaProperties.put("zookeeper.connection.timeout.ms",zkTimeout);
   if (additionalServerProperties != null) {
     kafkaProperties.putAll(additionalServerProperties);
   }
@@ -15,6 +15,12 @@
   for (int i=1; i <= numTries; i++) {
     int kafkaPort=NetUtils.getAvailablePort();
     kafkaProperties.put("port",Integer.toString(kafkaPort));
+    if (secureMode) {
+      LOG.info("Adding Kafka secure configurations");
+      kafkaProperties.put("listeners","SASL_PLAINTEXT://" + KAFKA_HOST + ":"+ kafkaPort);
+      kafkaProperties.put("advertised.listeners","SASL_PLAINTEXT://" + KAFKA_HOST + ":"+ kafkaPort);
+      kafkaProperties.putAll(getSecureProperties());
+    }
     KafkaConfig kafkaConfig=new KafkaConfig(kafkaProperties);
     try {
       scala.Option<String> stringNone=scala.Option.apply(null);

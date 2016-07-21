@@ -12,8 +12,15 @@
     return;
   }
   final Map<String,String> envs=System.getenv();
-  final String yarnClientUsername=envs.get(YarnConfigKeys.ENV_CLIENT_USERNAME);
+  final String yarnClientUsername=envs.get(YarnConfigKeys.ENV_HADOOP_USER_NAME);
   final String localDirs=envs.get(Environment.LOCAL_DIRS.key());
+  LOG.info("Current working/local Directory: {}",localDirs);
+  final String currDir=envs.get(Environment.PWD.key());
+  LOG.info("Current working Directory: {}",currDir);
+  final String remoteKeytabPath=envs.get(YarnConfigKeys.KEYTAB_PATH);
+  LOG.info("TM: remoteKeytabPath obtained {}",remoteKeytabPath);
+  final String remoteKeytabPrincipal=envs.get(YarnConfigKeys.KEYTAB_PRINCIPAL);
+  LOG.info("TM: remoteKeytabPrincipal obtained {}",remoteKeytabPrincipal);
   String flinkTempDirs=configuration.getString(ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,null);
   if (flinkTempDirs == null) {
     LOG.info("Setting directories for temporary file " + localDirs);
@@ -22,26 +29,51 @@
  else {
     LOG.info("Overriding YARN's temporary file directories with those " + "specified in the Flink config: " + flinkTempDirs);
   }
-  LOG.info("YARN daemon runs as '" + UserGroupInformation.getCurrentUser().getShortUserName() + "' setting user to execute Flink TaskManager to '"+ yarnClientUsername+ "'");
   configuration.setBoolean(ConfigConstants.AKKA_JVM_EXIT_ON_FATAL_ERROR,true);
-  UserGroupInformation ugi=UserGroupInformation.createRemoteUser(yarnClientUsername);
-  for (  Token<? extends TokenIdentifier> toks : UserGroupInformation.getCurrentUser().getTokens()) {
-    ugi.addToken(toks);
+  String keytabPath=null;
+  if (remoteKeytabPath != null) {
+    File f=new File(currDir,Utils.KEYTAB_FILE_NAME);
+    keytabPath=f.getAbsolutePath();
+    LOG.info("keytabPath: {}",keytabPath);
   }
+  UserGroupInformation currentUser=UserGroupInformation.getCurrentUser();
+  LOG.info("YARN daemon is running as: {} Yarn client user obtainer: {}",currentUser.getShortUserName(),yarnClientUsername);
   String containerID=Preconditions.checkNotNull(envs.get(YarnFlinkResourceManager.ENV_FLINK_CONTAINER_ID));
   final ResourceID resourceId=new ResourceID(containerID);
   LOG.info("ResourceID assigned for this container: {}",resourceId);
-  ugi.doAs(new PrivilegedAction<Object>(){
-    @Override public Object run(){
-      try {
-        TaskManager.selectNetworkInterfaceAndRunTaskManager(configuration,resourceId,taskManager);
-      }
- catch (      Throwable t) {
-        LOG.error("Error while starting the TaskManager",t);
-        System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
-      }
-      return null;
+  try {
+    SecurityContext.SecurityConfiguration sc=new SecurityContext.SecurityConfiguration();
+    File krb5Conf=new File(currDir,Utils.KRB5_FILE_NAME);
+    if (krb5Conf.exists() && krb5Conf.canRead()) {
+      String krb5Path=krb5Conf.getAbsolutePath();
+      LOG.info("KRB5 Conf: {}",krb5Path);
+      org.apache.hadoop.conf.Configuration conf=new org.apache.hadoop.conf.Configuration();
+      conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,"kerberos");
+      conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION,"true");
+      sc.setHadoopConfiguration(conf);
     }
-  }
+    if (keytabPath != null && remoteKeytabPrincipal != null) {
+      configuration.setString(ConfigConstants.SECURITY_KEYTAB_KEY,keytabPath);
+      configuration.setString(ConfigConstants.SECURITY_PRINCIPAL_KEY,remoteKeytabPrincipal);
+    }
+    configuration.setString(ConfigConstants.FLINK_BASE_DIR_PATH_KEY,currDir);
+    SecurityContext.install(sc.setFlinkConfiguration(configuration));
+    SecurityContext.getInstalled().runSecured(new SecurityContext.FlinkSecuredRunner<Integer>(){
+      @Override public Integer run(){
+        try {
+          TaskManager.selectNetworkInterfaceAndRunTaskManager(configuration,resourceId,taskManager);
+        }
+ catch (        Throwable t) {
+          LOG.error("Error while starting the TaskManager",t);
+          System.exit(TaskManager.STARTUP_FAILURE_RETURN_CODE());
+        }
+        return null;
+      }
+    }
 );
+  }
+ catch (  Exception e) {
+    LOG.error("Exception occurred while launching Task Manager. Reason: {}",e);
+    throw new RuntimeException(e);
+  }
 }

@@ -1,0 +1,55 @@
+{
+  if (installedContext != null) {
+    LOG.warn("overriding previous security context");
+  }
+  JaasConfiguration jaasConfig=new JaasConfiguration(config.keytab,config.principal);
+  javax.security.auth.login.Configuration.setConfiguration(jaasConfig);
+  populateSystemSecurityProperties(config.flinkConf);
+  UserGroupInformation.setConfiguration(config.hadoopConf);
+  UserGroupInformation loginUser;
+  if (UserGroupInformation.isSecurityEnabled() && config.keytab != null && !StringUtils.isBlank(config.principal)) {
+    String keytabPath=(new File(config.keytab)).getAbsolutePath();
+    UserGroupInformation.loginUserFromKeytab(config.principal,keytabPath);
+    loginUser=UserGroupInformation.getLoginUser();
+    String fileLocation=System.getenv(UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION);
+    if (fileLocation != null) {
+      try {
+        Method readTokenStorageFileMethod=Credentials.class.getMethod("readTokenStorageFile",File.class,org.apache.hadoop.conf.Configuration.class);
+        Credentials cred=(Credentials)readTokenStorageFileMethod.invoke(null,new File(fileLocation),config.hadoopConf);
+        Method addCredentialsMethod=UserGroupInformation.class.getMethod("addCredentials",Credentials.class);
+        addCredentialsMethod.invoke(loginUser,cred);
+      }
+ catch (      NoSuchMethodException e) {
+        LOG.warn("Could not find method implementations in the shaded jar. Exception: {}",e);
+      }
+    }
+  }
+ else {
+    try {
+      Method loginUserFromSubjectMethod=UserGroupInformation.class.getMethod("loginUserFromSubject",Subject.class);
+      Subject subject=null;
+      loginUserFromSubjectMethod.invoke(null,subject);
+    }
+ catch (    NoSuchMethodException e) {
+      LOG.warn("Could not find method implementations in the shaded jar. Exception: {}",e);
+    }
+    loginUser=UserGroupInformation.getLoginUser();
+  }
+  boolean delegationToken=false;
+  final Text HDFS_DELEGATION_KIND=new Text("HDFS_DELEGATION_TOKEN");
+  Collection<Token<? extends TokenIdentifier>> usrTok=loginUser.getTokens();
+  for (  Token<? extends TokenIdentifier> token : usrTok) {
+    final Text id=new Text(token.getIdentifier());
+    LOG.debug("Found user token " + id + " with "+ token);
+    if (token.getKind().equals(HDFS_DELEGATION_KIND)) {
+      delegationToken=true;
+    }
+  }
+  if (UserGroupInformation.isSecurityEnabled() && !loginUser.hasKerberosCredentials()) {
+    if (!delegationToken) {
+      LOG.error("Hadoop Security is enabled but current login user does not have Kerberos Credentials");
+      throw new RuntimeException("Hadoop Security is enabled but current login user does not have Kerberos Credentials");
+    }
+  }
+  installedContext=new SecurityContext(loginUser);
+}
