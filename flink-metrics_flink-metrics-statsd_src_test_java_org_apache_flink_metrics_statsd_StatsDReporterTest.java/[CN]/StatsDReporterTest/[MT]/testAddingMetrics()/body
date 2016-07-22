@@ -5,7 +5,8 @@
   String hostname="local::host:";
   String taskManagerId="tas:kMana::ger";
   String counterName="testCounter";
-  configuration.setString(ConfigConstants.METRICS_REPORTER_CLASS,"org.apache.flink.metrics.statsd.StatsDReporterTest$TestingStatsDReporter");
+  configuration.setString(ConfigConstants.METRICS_REPORTERS_LIST,"test");
+  configuration.setString(ConfigConstants.METRICS_REPORTER_PREFIX + "test." + ConfigConstants.METRICS_REPORTER_CLASS_SUFFIX,"org.apache.flink.metrics.statsd.StatsDReporterTest$TestingStatsDReporter");
   configuration.setString(ConfigConstants.METRICS_SCOPE_NAMING_TASK,"<host>.<tm_id>.<job_name>");
   configuration.setString(ConfigConstants.METRICS_SCOPE_DELIMITER,"_");
   MetricRegistry metricRegistry=new MetricRegistry(configuration);
@@ -15,9 +16,9 @@
   TaskMetricGroup taskMetricGroup=new TaskMetricGroup(metricRegistry,tmJobMetricGroup,new AbstractID(),new AbstractID(),taskName,0,0);
   SimpleCounter myCounter=new SimpleCounter();
   taskMetricGroup.counter(counterName,myCounter);
-  Field reporterField=MetricRegistry.class.getDeclaredField("reporter");
-  reporterField.setAccessible(true);
-  MetricReporter metricReporter=(MetricReporter)reporterField.get(metricRegistry);
+  List<MetricReporter> reporters=metricRegistry.getReporters();
+  assertTrue(reporters.size() == 1);
+  MetricReporter metricReporter=reporters.get(0);
   assertTrue("Reporter should be of type StatsDReporter",metricReporter instanceof StatsDReporter);
   TestingStatsDReporter reporter=(TestingStatsDReporter)metricReporter;
   Map<Counter,String> counters=reporter.getCounters();
