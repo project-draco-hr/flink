@@ -1,0 +1,31 @@
+{
+  Configuration cfg=new Configuration();
+  MetricRegistry reg=new MetricRegistry(cfg);
+  TaskManagerMetricGroup mg=new TaskManagerMetricGroup(reg,"host","tm");
+  JMXReporter rep1=new JMXReporter();
+  JMXReporter rep2=new JMXReporter();
+  MetricConfig cfg1=new MetricConfig();
+  cfg1.setProperty("port","9020-9035");
+  rep1.open(cfg1);
+  rep2.open(cfg1);
+  rep1.notifyOfAddedMetric(new Gauge<Integer>(){
+    @Override public Integer getValue(){
+      return 1;
+    }
+  }
+,"rep1",new TaskManagerMetricGroup(reg,"host","tm"));
+  rep2.notifyOfAddedMetric(new Gauge<Integer>(){
+    @Override public Integer getValue(){
+      return 2;
+    }
+  }
+,"rep2",new TaskManagerMetricGroup(reg,"host","tm"));
+  MBeanServer mBeanServer=ManagementFactory.getPlatformMBeanServer();
+  ObjectName objectName1=new ObjectName(JMXReporter.generateJmxName("rep1",mg.getScopeComponents()));
+  ObjectName objectName2=new ObjectName(JMXReporter.generateJmxName("rep2",mg.getScopeComponents()));
+  assertEquals(1,mBeanServer.getAttribute(objectName1,"Value"));
+  assertEquals(2,mBeanServer.getAttribute(objectName2,"Value"));
+  rep1.close();
+  rep2.close();
+  reg.shutdown();
+}

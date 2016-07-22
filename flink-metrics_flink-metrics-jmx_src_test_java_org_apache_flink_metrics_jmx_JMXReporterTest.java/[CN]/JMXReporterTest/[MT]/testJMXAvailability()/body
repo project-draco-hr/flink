@@ -1,0 +1,46 @@
+{
+  Configuration cfg=new Configuration();
+  MetricRegistry reg=new MetricRegistry(cfg);
+  TaskManagerMetricGroup mg=new TaskManagerMetricGroup(reg,"host","tm");
+  JMXReporter rep1=new JMXReporter();
+  JMXReporter rep2=new JMXReporter();
+  MetricConfig cfg1=new MetricConfig();
+  cfg1.setProperty("port","9040-9055");
+  rep1.open(cfg1);
+  rep2.open(cfg1);
+  rep1.notifyOfAddedMetric(new Gauge<Integer>(){
+    @Override public Integer getValue(){
+      return 1;
+    }
+  }
+,"rep1",new TaskManagerMetricGroup(reg,"host","tm"));
+  rep2.notifyOfAddedMetric(new Gauge<Integer>(){
+    @Override public Integer getValue(){
+      return 2;
+    }
+  }
+,"rep2",new TaskManagerMetricGroup(reg,"host","tm"));
+  ObjectName objectName1=new ObjectName(JMXReporter.generateJmxName("rep1",mg.getScopeComponents()));
+  ObjectName objectName2=new ObjectName(JMXReporter.generateJmxName("rep2",mg.getScopeComponents()));
+  JMXServiceURL url1=new JMXServiceURL("service:jmx:rmi://localhost:" + rep1.getPort() + "/jndi/rmi://localhost:"+ rep1.getPort()+ "/jmxrmi");
+  JMXConnector jmxCon1=JMXConnectorFactory.connect(url1);
+  MBeanServerConnection mCon1=jmxCon1.getMBeanServerConnection();
+  assertEquals(1,mCon1.getAttribute(objectName1,"Value"));
+  assertEquals(2,mCon1.getAttribute(objectName2,"Value"));
+  url1=null;
+  jmxCon1.close();
+  jmxCon1=null;
+  mCon1=null;
+  JMXServiceURL url2=new JMXServiceURL("service:jmx:rmi://localhost:" + rep2.getPort() + "/jndi/rmi://localhost:"+ rep2.getPort()+ "/jmxrmi");
+  JMXConnector jmxCon2=JMXConnectorFactory.connect(url2);
+  MBeanServerConnection mCon2=jmxCon2.getMBeanServerConnection();
+  assertEquals(1,mCon2.getAttribute(objectName1,"Value"));
+  assertEquals(2,mCon2.getAttribute(objectName2,"Value"));
+  url2=null;
+  jmxCon2.close();
+  jmxCon2=null;
+  mCon2=null;
+  rep1.close();
+  rep2.close();
+  reg.shutdown();
+}
