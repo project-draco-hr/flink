@@ -1,0 +1,29 @@
+{
+  int maxParallelism=42;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  DataStream<Integer> input1=env.fromElements(1,2,3,4).setMaxParallelism(128);
+  DataStream<Integer> input2=env.fromElements(1,2,3,4).setMaxParallelism(129);
+  env.getConfig().setMaxParallelism(maxParallelism);
+  DataStream<Integer> keyedResult=input1.connect(input2).keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=-6908614081449363419L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+,new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=3195683453223164931L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntCoMap());
+  keyedResult.addSink(new DiscardingSink<Integer>());
+  StreamGraph graph=env.getStreamGraph();
+  StreamNode keyedResultNode=graph.getStreamNode(keyedResult.getId());
+  StreamPartitioner<?> streamPartitioner1=keyedResultNode.getInEdges().get(0).getPartitioner();
+  StreamPartitioner<?> streamPartitioner2=keyedResultNode.getInEdges().get(1).getPartitioner();
+  HashKeyGroupAssigner<?> hashKeyGroupAssigner1=extractHashKeyGroupAssigner(streamPartitioner1);
+  assertEquals(maxParallelism,hashKeyGroupAssigner1.getNumberKeyGroups());
+  HashKeyGroupAssigner<?> hashKeyGroupAssigner2=extractHashKeyGroupAssigner(streamPartitioner2);
+  assertEquals(maxParallelism,hashKeyGroupAssigner2.getNumberKeyGroups());
+}

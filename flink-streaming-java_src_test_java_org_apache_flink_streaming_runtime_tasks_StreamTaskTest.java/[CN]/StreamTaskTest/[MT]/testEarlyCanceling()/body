@@ -1,23 +1,22 @@
 {
-  try {
-    StreamConfig cfg=new StreamConfig(new Configuration());
-    cfg.setStreamOperator(new SlowlyDeserializingOperator());
-    Task task=createTask(SourceStreamTask.class,cfg);
-    task.startTaskThread();
-    while (task.getExecutionState() == ExecutionState.CREATED || task.getExecutionState() == ExecutionState.DEPLOYING) {
-      Thread.sleep(5);
-    }
-    if (task.getExecutionState() != ExecutionState.RUNNING) {
-      fail("Task entered state " + task.getExecutionState() + " with error "+ ExceptionUtils.stringifyException(task.getFailureCause()));
-    }
-    task.cancelExecution();
-    assertTrue(task.getExecutionState() == ExecutionState.CANCELING || task.getExecutionState() == ExecutionState.CANCELED);
-    task.getExecutingThread().join(60000);
-    assertFalse("Task did not cancel",task.getExecutingThread().isAlive());
-    assertEquals(ExecutionState.CANCELED,task.getExecutionState());
+  Deadline deadline=new FiniteDuration(2,TimeUnit.MINUTES).fromNow();
+  StreamConfig cfg=new StreamConfig(new Configuration());
+  cfg.setStreamOperator(new SlowlyDeserializingOperator());
+  cfg.setTimeCharacteristic(TimeCharacteristic.ProcessingTime);
+  Task task=createTask(SourceStreamTask.class,cfg);
+  ExecutionStateListener executionStateListener=new ExecutionStateListener();
+  task.registerExecutionListener(executionStateListener);
+  task.startTaskThread();
+  Future<ExecutionState> running=executionStateListener.notifyWhenExecutionState(ExecutionState.RUNNING);
+  ExecutionState executionState=Await.result(running,deadline.timeLeft());
+  if (executionState != ExecutionState.RUNNING) {
+    fail("Task entered state " + task.getExecutionState() + " with error "+ ExceptionUtils.stringifyException(task.getFailureCause()));
   }
- catch (  Exception e) {
-    e.printStackTrace();
-    fail(e.getMessage());
-  }
+  task.cancelExecution();
+  Future<ExecutionState> canceling=executionStateListener.notifyWhenExecutionState(ExecutionState.CANCELING);
+  executionState=Await.result(canceling,deadline.timeLeft());
+  assertTrue(executionState == ExecutionState.CANCELING || executionState == ExecutionState.CANCELED);
+  task.getExecutingThread().join(deadline.timeLeft().toMillis());
+  assertFalse("Task did not cancel",task.getExecutingThread().isAlive());
+  assertEquals(ExecutionState.CANCELED,task.getExecutionState());
 }

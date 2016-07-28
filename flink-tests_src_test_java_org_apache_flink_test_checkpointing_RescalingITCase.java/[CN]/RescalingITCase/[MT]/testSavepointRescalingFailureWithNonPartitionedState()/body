@@ -1,0 +1,56 @@
+{
+  int parallelism=numSlots / 2;
+  int parallelism2=numSlots;
+  int maxParallelism=13;
+  FiniteDuration timeout=new FiniteDuration(3,TimeUnit.MINUTES);
+  Deadline deadline=timeout.fromNow();
+  JobID jobID=null;
+  ActorGateway jobManager=null;
+  try {
+    jobManager=cluster.getLeaderGateway(deadline.timeLeft());
+    JobGraph jobGraph=createNonPartitionedStateJobGraph(parallelism,maxParallelism,500);
+    jobID=jobGraph.getJobID();
+    cluster.submitJobDetached(jobGraph);
+    Future<Object> allTasksRunning=jobManager.ask(new TestingJobManagerMessages.WaitForAllVerticesToBeRunning(jobID),deadline.timeLeft());
+    Await.ready(allTasksRunning,deadline.timeLeft());
+    Future<Object> savepointPathFuture=jobManager.ask(new JobManagerMessages.TriggerSavepoint(jobID),deadline.timeLeft());
+    Object savepointResponse=Await.result(savepointPathFuture,deadline.timeLeft());
+    assertTrue(savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess);
+    final String savepointPath=((JobManagerMessages.TriggerSavepointSuccess)savepointResponse).savepointPath();
+    Future<Object> jobRemovedFuture=jobManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobID),deadline.timeLeft());
+    Future<Object> cancellationResponseFuture=jobManager.ask(new JobManagerMessages.CancelJob(jobID),deadline.timeLeft());
+    Object cancellationResponse=Await.result(cancellationResponseFuture,deadline.timeLeft());
+    assertTrue(cancellationResponse instanceof JobManagerMessages.CancellationSuccess);
+    Await.ready(jobRemovedFuture,deadline.timeLeft());
+    jobID=null;
+    JobGraph scaledJobGraph=createNonPartitionedStateJobGraph(parallelism2,maxParallelism,500);
+    scaledJobGraph.setSavepointPath(savepointPath);
+    jobID=scaledJobGraph.getJobID();
+    cluster.submitJobAndWait(scaledJobGraph,false);
+    jobID=null;
+  }
+ catch (  JobExecutionException exception) {
+    if (exception.getCause() instanceof SuppressRestartsException) {
+      SuppressRestartsException suppressRestartsException=(SuppressRestartsException)exception.getCause();
+      if (suppressRestartsException.getCause() instanceof IllegalStateException) {
+      }
+ else {
+        throw exception;
+      }
+    }
+ else {
+      throw exception;
+    }
+  }
+ finally {
+    if (jobID != null && jobManager != null) {
+      Future<Object> jobRemovedFuture=jobManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobID),timeout);
+      try {
+        Await.ready(jobRemovedFuture,timeout);
+      }
+ catch (      TimeoutException|InterruptedException ie) {
+        fail("Failed while cleaning up the cluster.");
+      }
+    }
+  }
+}

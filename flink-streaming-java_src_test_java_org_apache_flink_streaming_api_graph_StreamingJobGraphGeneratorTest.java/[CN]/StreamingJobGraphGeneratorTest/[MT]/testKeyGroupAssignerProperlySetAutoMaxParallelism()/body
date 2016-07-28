@@ -1,0 +1,51 @@
+{
+  int globalParallelism=42;
+  int mapParallelism=17;
+  int maxParallelism=43;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(globalParallelism);
+  DataStream<Integer> source=env.fromElements(1,2,3);
+  DataStream<Integer> keyedResult1=source.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=9205556348021992189L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntMap());
+  DataStream<Integer> keyedResult2=keyedResult1.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1250168178707154838L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntMap()).setParallelism(mapParallelism);
+  DataStream<Integer> keyedResult3=keyedResult2.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1250168178707154838L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntMap()).setMaxParallelism(maxParallelism);
+  DataStream<Integer> keyedResult4=keyedResult3.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=1250168178707154838L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntMap()).setMaxParallelism(maxParallelism).setParallelism(mapParallelism);
+  keyedResult4.addSink(new DiscardingSink<Integer>());
+  JobGraph jobGraph=env.getStreamGraph().getJobGraph();
+  List<JobVertex> vertices=jobGraph.getVerticesSortedTopologicallyFromSources();
+  JobVertex keyedResultJV1=vertices.get(1);
+  JobVertex keyedResultJV2=vertices.get(2);
+  JobVertex keyedResultJV3=vertices.get(3);
+  JobVertex keyedResultJV4=vertices.get(4);
+  HashKeyGroupAssigner<Integer> hashKeyGroupAssigner1=extractHashKeyGroupAssigner(keyedResultJV1);
+  HashKeyGroupAssigner<Integer> hashKeyGroupAssigner2=extractHashKeyGroupAssigner(keyedResultJV2);
+  HashKeyGroupAssigner<Integer> hashKeyGroupAssigner3=extractHashKeyGroupAssigner(keyedResultJV3);
+  HashKeyGroupAssigner<Integer> hashKeyGroupAssigner4=extractHashKeyGroupAssigner(keyedResultJV4);
+  assertEquals(globalParallelism,hashKeyGroupAssigner1.getNumberKeyGroups());
+  assertEquals(mapParallelism,hashKeyGroupAssigner2.getNumberKeyGroups());
+  assertEquals(maxParallelism,hashKeyGroupAssigner3.getNumberKeyGroups());
+  assertEquals(maxParallelism,hashKeyGroupAssigner4.getNumberKeyGroups());
+}

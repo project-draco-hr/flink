@@ -1,0 +1,18 @@
+{
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(parallelism);
+  env.getConfig().setMaxParallelism(maxParallelism);
+  env.enableCheckpointing(checkpointingInterval);
+  env.setRestartStrategy(RestartStrategies.noRestart());
+  DataStream<Integer> input=env.addSource(new SubtaskIndexNonPartitionedStateSource(numberKeys,numberElements,terminateAfterEmission)).setParallelism(fixedParallelism).keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=-7952298871120320940L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+);
+  SubtaskIndexFlatMapper.workCompletedLatch=new CountDownLatch(numberKeys);
+  DataStream<Tuple2<Integer,Integer>> result=input.flatMap(new SubtaskIndexFlatMapper(numberElements));
+  result.addSink(new CollectionSink());
+  return env.getStreamGraph().getJobGraph();
+}

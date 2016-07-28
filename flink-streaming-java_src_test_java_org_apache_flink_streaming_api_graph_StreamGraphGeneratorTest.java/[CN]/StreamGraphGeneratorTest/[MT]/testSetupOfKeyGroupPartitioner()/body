@@ -1,0 +1,19 @@
+{
+  int maxParallelism=42;
+  StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
+  env.getConfig().setMaxParallelism(maxParallelism);
+  DataStream<Integer> source=env.fromElements(1,2,3);
+  DataStream<Integer> keyedResult=source.keyBy(new KeySelector<Integer,Integer>(){
+    private static final long serialVersionUID=9205556348021992189L;
+    @Override public Integer getKey(    Integer value) throws Exception {
+      return value;
+    }
+  }
+).map(new NoOpIntMap());
+  keyedResult.addSink(new DiscardingSink<Integer>());
+  StreamGraph graph=env.getStreamGraph();
+  StreamNode keyedResultNode=graph.getStreamNode(keyedResult.getId());
+  StreamPartitioner<?> streamPartitioner=keyedResultNode.getInEdges().get(0).getPartitioner();
+  HashKeyGroupAssigner<?> hashKeyGroupAssigner=extractHashKeyGroupAssigner(streamPartitioner);
+  assertEquals(maxParallelism,hashKeyGroupAssigner.getNumberKeyGroups());
+}
