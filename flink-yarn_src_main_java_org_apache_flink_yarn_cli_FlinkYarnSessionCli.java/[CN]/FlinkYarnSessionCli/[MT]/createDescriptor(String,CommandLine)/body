@@ -16,7 +16,14 @@
   }
  else {
     LOG.info("No path for the flink jar passed. Using the location of " + yarnClusterDescriptor.getClass() + " to locate the jar");
-    localJarPath=new Path("file://" + yarnClusterDescriptor.getClass().getProtectionDomain().getCodeSource().getLocation().getPath());
+    String encodedJarPath=yarnClusterDescriptor.getClass().getProtectionDomain().getCodeSource().getLocation().getPath();
+    try {
+      String decodedPath=URLDecoder.decode(encodedJarPath,Charset.defaultCharset().name());
+      localJarPath=new Path(new File(decodedPath).toURI());
+    }
+ catch (    UnsupportedEncodingException e) {
+      throw new RuntimeException("Couldn't decode the encoded Flink dist jar path: " + encodedJarPath + " Please supply a path manually via the -"+ FLINK_JAR.getOpt()+ " option.");
+    }
   }
   yarnClusterDescriptor.setLocalJarPath(localJarPath);
   List<File> shipFiles=new ArrayList<>();
