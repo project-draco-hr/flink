@@ -1,9 +1,23 @@
 {
+  try {
+    String javaVersionString=System.getProperty("java.runtime.version").substring(0,3);
+    float javaVersion=Float.parseFloat(javaVersionString);
+    Assume.assumeTrue(javaVersion >= 1.8f);
+  }
+ catch (  AssumptionViolatedException e) {
+    System.out.println("Skipping CassandraConnectorTest, because the JDK is < Java 8+");
+    throw e;
+  }
+catch (  Exception e) {
+    LOG.error("Cannot determine Java version",e);
+    e.printStackTrace();
+    fail("Cannot determine Java version");
+  }
   tmpDir=CommonTestUtils.createTempDirectory();
-  ClassLoader classLoader=CassandraTupleWriteAheadSink.class.getClassLoader();
+  ClassLoader classLoader=CassandraConnectorTest.class.getClassLoader();
   File file=new File(classLoader.getResource("cassandra.yaml").getFile());
   File tmp=new File(tmpDir.getAbsolutePath() + File.separator + "cassandra.yaml");
-  tmp.createNewFile();
+  assertTrue(tmp.createNewFile());
   BufferedWriter b=new BufferedWriter(new FileWriter(tmp));
   Scanner scanner=new Scanner(file);
   while (scanner.hasNextLine()) {
@@ -13,7 +27,7 @@
     b.flush();
   }
   scanner.close();
-  System.setProperty("cassandra.config","file:" + File.separator + File.separator+ File.separator+ tmp.getAbsolutePath());
+  System.setProperty("cassandra.config",tmp.getAbsoluteFile().toURI().toString());
   if (EMBEDDED) {
     cassandra=new EmbeddedCassandraService();
     cassandra.start();
