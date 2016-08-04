@@ -1,6 +1,26 @@
 {
   TypeInformation<?> info=null;
-  if (inType instanceof TypeVariable) {
+  final ArrayList<Type> factoryHierarchy=new ArrayList<>(inputTypeHierarchy);
+  final TypeInfoFactory<?> factory=getClosestFactory(factoryHierarchy,inType);
+  if (factory != null) {
+    final Type factoryDefiningType=factoryHierarchy.get(factoryHierarchy.size() - 1);
+    if (factoryDefiningType instanceof ParameterizedType) {
+      final Type[] typeParams=typeToClass(factoryDefiningType).getTypeParameters();
+      final Type[] actualParams=((ParameterizedType)factoryDefiningType).getActualTypeArguments();
+      for (int i=0; i < actualParams.length; i++) {
+        final Map<String,TypeInformation<?>> componentInfo=inTypeInfo.getGenericParameters();
+        final String typeParamName=typeParams[i].toString();
+        if (!componentInfo.containsKey(typeParamName) || componentInfo.get(typeParamName) == null) {
+          throw new InvalidTypesException("TypeInformation '" + inTypeInfo.getClass().getSimpleName() + "' does not supply a mapping of TypeVariable '"+ typeParamName+ "' to corresponding TypeInformation. "+ "Input type inference can only produce a result with this information. "+ "Please implement method 'TypeInformation.getGenericParameters()' for this.");
+        }
+        info=createTypeInfoFromInput(returnTypeVar,factoryHierarchy,actualParams[i],componentInfo.get(typeParamName));
+        if (info != null) {
+          break;
+        }
+      }
+    }
+  }
+ else   if (inType instanceof TypeVariable) {
     inType=materializeTypeVariable(inputTypeHierarchy,(TypeVariable<?>)inType);
     info=findCorrespondingInfo(returnTypeVar,inType,inTypeInfo,inputTypeHierarchy);
   }
