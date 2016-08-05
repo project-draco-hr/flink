@@ -1,0 +1,59 @@
+{
+  ActorSystem s=AkkaUtils.createLocalActorSystem(new Configuration());
+  ActorRef serviceActor=MetricQueryService.startMetricQueryService(s);
+  TestActorRef testActorRef=TestActorRef.create(s,Props.create(TestActor.class));
+  TestActor testActor=(TestActor)testActorRef.underlyingActor();
+  final Counter c=new SimpleCounter();
+  final Gauge<String> g=new Gauge<String>(){
+    @Override public String getValue(){
+      return "Hello";
+    }
+  }
+;
+  final Histogram h=new TestingHistogram();
+  final Meter m=new Meter(){
+    @Override public void markEvent(){
+    }
+    @Override public void markEvent(    long n){
+    }
+    @Override public double getRate(){
+      return 5;
+    }
+    @Override public long getCount(){
+      return 10;
+    }
+  }
+;
+  MetricRegistry registry=new MetricRegistry(new Configuration());
+  final TaskManagerMetricGroup tm=new TaskManagerMetricGroup(registry,"host","id");
+  MetricQueryService.notifyOfAddedMetric(serviceActor,c,"counter",tm);
+  MetricQueryService.notifyOfAddedMetric(serviceActor,g,"gauge",tm);
+  MetricQueryService.notifyOfAddedMetric(serviceActor,h,"histogram",tm);
+  MetricQueryService.notifyOfAddedMetric(serviceActor,m,"meter",tm);
+  MetricQueryService.notifyOfRemovedMetric(serviceActor,c);
+  MetricQueryService.notifyOfRemovedMetric(serviceActor,g);
+  MetricQueryService.notifyOfRemovedMetric(serviceActor,h);
+  MetricQueryService.notifyOfRemovedMetric(serviceActor,m);
+  serviceActor.tell(MetricQueryService.getCreateDump(),testActorRef);
+synchronized (testActor.lock) {
+    if (testActor.message == null) {
+      testActor.lock.wait();
+    }
+  }
+  byte[] dump=(byte[])testActor.message;
+  testActor.message=null;
+  assertTrue(dump.length > 0);
+  serviceActor.tell(MetricQueryService.getCreateDump(),testActorRef);
+synchronized (testActor.lock) {
+    if (testActor.message == null) {
+      testActor.lock.wait();
+    }
+  }
+  byte[] emptyDump=(byte[])testActor.message;
+  testActor.message=null;
+  assertEquals(16,emptyDump.length);
+  for (int x=0; x < 16; x++) {
+    assertEquals(0,emptyDump[x]);
+  }
+  s.shutdown();
+}

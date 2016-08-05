@@ -1,0 +1,67 @@
+{
+  try {
+    QueryScopeInfo info=metric.scopeInfo;
+    TaskManagerMetricStore tm;
+    JobMetricStore job;
+    TaskMetricStore task;
+    String name=info.scope.isEmpty() ? metric.name : info.scope + "." + metric.name;
+    if (name.isEmpty()) {
+      return;
+    }
+switch (info.getCategory()) {
+case INFO_CATEGORY_JM:
+      addMetric(jobManager.metrics,name,metric);
+case INFO_CATEGORY_TM:
+    String tmID=((QueryScopeInfo.TaskManagerQueryScopeInfo)info).taskManagerID;
+  tm=taskManagers.get(tmID);
+if (tm == null) {
+  tm=new TaskManagerMetricStore();
+  taskManagers.put(tmID,tm);
+}
+addMetric(tm.metrics,name,metric);
+break;
+case INFO_CATEGORY_JOB:
+QueryScopeInfo.JobQueryScopeInfo jobInfo=(QueryScopeInfo.JobQueryScopeInfo)info;
+job=jobs.get(jobInfo.jobID);
+if (job == null) {
+job=new JobMetricStore();
+jobs.put(jobInfo.jobID,job);
+}
+addMetric(job.metrics,name,metric);
+break;
+case INFO_CATEGORY_TASK:
+QueryScopeInfo.TaskQueryScopeInfo taskInfo=(QueryScopeInfo.TaskQueryScopeInfo)info;
+job=jobs.get(taskInfo.jobID);
+if (job == null) {
+job=new JobMetricStore();
+jobs.put(taskInfo.jobID,job);
+}
+task=job.tasks.get(taskInfo.vertexID);
+if (task == null) {
+task=new TaskMetricStore();
+job.tasks.put(taskInfo.vertexID,task);
+}
+addMetric(task.metrics,taskInfo.subtaskIndex + "." + name,metric);
+break;
+case INFO_CATEGORY_OPERATOR:
+QueryScopeInfo.OperatorQueryScopeInfo operatorInfo=(QueryScopeInfo.OperatorQueryScopeInfo)info;
+job=jobs.get(operatorInfo.jobID);
+if (job == null) {
+job=new JobMetricStore();
+jobs.put(operatorInfo.jobID,job);
+}
+task=job.tasks.get(operatorInfo.vertexID);
+if (task == null) {
+task=new TaskMetricStore();
+job.tasks.put(operatorInfo.vertexID,task);
+}
+addMetric(task.metrics,operatorInfo.subtaskIndex + "." + operatorInfo.operatorName+ "."+ name,metric);
+break;
+default :
+LOG.debug("Invalid metric dump category: " + info.getCategory());
+}
+}
+ catch (Exception e) {
+LOG.debug("Malformed metric dump.",e);
+}
+}

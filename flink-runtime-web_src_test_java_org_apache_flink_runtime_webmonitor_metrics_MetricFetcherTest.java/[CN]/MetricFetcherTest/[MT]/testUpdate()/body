@@ -1,0 +1,61 @@
+{
+  JobID jobID=new JobID();
+  InstanceID tmID=new InstanceID();
+  ActorGateway taskManagerGateway=mock(ActorGateway.class);
+  when(taskManagerGateway.path()).thenReturn("/tm/address");
+  Instance taskManager=mock(Instance.class);
+  when(taskManager.getActorGateway()).thenReturn(taskManagerGateway);
+  when(taskManager.getId()).thenReturn(tmID);
+  JobDetails details=mock(JobDetails.class);
+  when(details.getJobId()).thenReturn(jobID);
+  ActorGateway jobManagerGateway=mock(ActorGateway.class);
+  Object registeredTaskManagersAnswer=new JobManagerMessages.RegisteredTaskManagers(JavaConverters.collectionAsScalaIterableConverter(Collections.singletonList(taskManager)).asScala());
+  when(jobManagerGateway.ask(isA(RequestJobDetails.class),any(FiniteDuration.class))).thenReturn(Future$.MODULE$.successful((Object)new MultipleJobsDetails(new JobDetails[0],new JobDetails[0])));
+  when(jobManagerGateway.ask(isA(JobManagerMessages.RequestRegisteredTaskManagers$.class),any(FiniteDuration.class))).thenReturn(Future$.MODULE$.successful(registeredTaskManagersAnswer));
+  when(jobManagerGateway.path()).thenReturn("/jm/address");
+  JobManagerRetriever retriever=mock(JobManagerRetriever.class);
+  when(retriever.getJobManagerGatewayAndWebPort()).thenReturn(Option.apply(new scala.Tuple2<ActorGateway,Integer>(jobManagerGateway,0)));
+  Object requestMetricsAnswer=createRequestDumpAnswer(tmID,jobID);
+  final ActorRef jmQueryService=mock(ActorRef.class);
+  final ActorRef tmQueryService=mock(ActorRef.class);
+  ActorSystem actorSystem=mock(ActorSystem.class);
+  when(actorSystem.actorFor(eq("/jm/" + METRIC_QUERY_SERVICE_NAME))).thenReturn(jmQueryService);
+  when(actorSystem.actorFor(eq("/tm/" + METRIC_QUERY_SERVICE_NAME))).thenReturn(tmQueryService);
+  MetricFetcher.BasicGateway jmQueryServiceGateway=mock(MetricFetcher.BasicGateway.class);
+  when(jmQueryServiceGateway.ask(any(MetricQueryService.getCreateDump().getClass()),any(FiniteDuration.class))).thenReturn(Future$.MODULE$.successful((Object)new byte[16]));
+  MetricFetcher.BasicGateway tmQueryServiceGateway=mock(MetricFetcher.BasicGateway.class);
+  when(tmQueryServiceGateway.ask(any(MetricQueryService.getCreateDump().getClass()),any(FiniteDuration.class))).thenReturn(Future$.MODULE$.successful(requestMetricsAnswer));
+  whenNew(MetricFetcher.BasicGateway.class).withArguments(eq(new Object(){
+    @Override public boolean equals(    Object o){
+      return o == jmQueryService;
+    }
+  }
+)).thenReturn(jmQueryServiceGateway);
+  whenNew(MetricFetcher.BasicGateway.class).withArguments(eq(new Object(){
+    @Override public boolean equals(    Object o){
+      return o == tmQueryService;
+    }
+  }
+)).thenReturn(tmQueryServiceGateway);
+  ExecutionContextExecutor context=ExecutionContext$.MODULE$.fromExecutor(new CurrentThreadExecutor());
+  MetricFetcher fetcher=new MetricFetcher(actorSystem,retriever,context);
+  fetcher.update();
+  MetricStore store=fetcher.getMetricStore();
+synchronized (store) {
+    assertEquals(7L,store.jobManager.metrics.get("abc.hist_min"));
+    assertEquals(6L,store.jobManager.metrics.get("abc.hist_max"));
+    assertEquals(4.0,store.jobManager.metrics.get("abc.hist_mean"));
+    assertEquals(0.5,store.jobManager.metrics.get("abc.hist_median"));
+    assertEquals(5.0,store.jobManager.metrics.get("abc.hist_stddev"));
+    assertEquals(0.75,store.jobManager.metrics.get("abc.hist_p75"));
+    assertEquals(0.9,store.jobManager.metrics.get("abc.hist_p90"));
+    assertEquals(0.95,store.jobManager.metrics.get("abc.hist_p95"));
+    assertEquals(0.98,store.jobManager.metrics.get("abc.hist_p98"));
+    assertEquals(0.99,store.jobManager.metrics.get("abc.hist_p99"));
+    assertEquals(0.999,store.jobManager.metrics.get("abc.hist_p999"));
+    assertEquals("x",store.taskManagers.get(tmID.toString()).metrics.get("abc.gauge"));
+    assertEquals(5.0,store.jobs.get(jobID.toString()).metrics.get("abc.jc"));
+    assertEquals(2L,store.jobs.get(jobID.toString()).tasks.get("taskid").metrics.get("2.abc.tc"));
+    assertEquals(1L,store.jobs.get(jobID.toString()).tasks.get("taskid").metrics.get("2.opname.abc.oc"));
+  }
+}

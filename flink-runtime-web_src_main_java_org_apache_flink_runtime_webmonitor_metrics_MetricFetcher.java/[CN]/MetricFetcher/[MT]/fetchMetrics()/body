@@ -1,0 +1,52 @@
+{
+  try {
+    Option<scala.Tuple2<ActorGateway,Integer>> jobManagerGatewayAndWebPort=retriever.getJobManagerGatewayAndWebPort();
+    if (jobManagerGatewayAndWebPort.isDefined()) {
+      ActorGateway jobManager=jobManagerGatewayAndWebPort.get()._1();
+      Future<Object> jobDetailsFuture=jobManager.ask(new RequestJobDetails(true,true),timeout);
+      jobDetailsFuture.onSuccess(new OnSuccess<Object>(){
+        @Override public void onSuccess(        Object result) throws Throwable {
+          MultipleJobsDetails details=(MultipleJobsDetails)result;
+          ArrayList<String> toRetain=new ArrayList<>();
+          for (          JobDetails job : details.getRunningJobs()) {
+            toRetain.add(job.getJobId().toString());
+          }
+          for (          JobDetails job : details.getFinishedJobs()) {
+            toRetain.add(job.getJobId().toString());
+          }
+synchronized (metrics) {
+            metrics.jobs.keySet().retainAll(toRetain);
+          }
+        }
+      }
+,ctx);
+      logErrorOnFailure(jobDetailsFuture,"Fetching of JobDetails failed.");
+      String jobManagerPath=jobManager.path();
+      String queryServicePath=jobManagerPath.substring(0,jobManagerPath.lastIndexOf('/') + 1) + "MetricQueryService";
+      ActorRef jobManagerQueryService=actorSystem.actorFor(queryServicePath);
+      queryMetrics(jobManagerQueryService);
+      Future<Object> registeredTaskManagersFuture=jobManager.ask(JobManagerMessages.getRequestRegisteredTaskManagers(),timeout);
+      registeredTaskManagersFuture.onSuccess(new OnSuccess<Object>(){
+        @Override public void onSuccess(        Object result) throws Throwable {
+          Iterable<Instance> taskManagers=((JobManagerMessages.RegisteredTaskManagers)result).asJavaIterable();
+          List<String> activeTaskManagers=new ArrayList<>();
+          for (          Instance taskManager : taskManagers) {
+            activeTaskManagers.add(taskManager.getId().toString());
+            String taskManagerPath=taskManager.getActorGateway().path();
+            String queryServicePath=taskManagerPath.substring(0,taskManagerPath.lastIndexOf('/') + 1) + "MetricQueryService";
+            ActorRef taskManagerQueryService=actorSystem.actorFor(queryServicePath);
+            queryMetrics(taskManagerQueryService);
+          }
+synchronized (metrics) {
+            metrics.taskManagers.keySet().retainAll(activeTaskManagers);
+          }
+        }
+      }
+,ctx);
+      logErrorOnFailure(registeredTaskManagersFuture,"Fetchin list of registered TaskManagers failed.");
+    }
+  }
+ catch (  Exception e) {
+    LOG.warn("Exception while fetching metrics.",e);
+  }
+}

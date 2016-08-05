@@ -1,0 +1,49 @@
+{
+  try {
+    if (message instanceof AddMetric) {
+      AddMetric added=(AddMetric)message;
+      String metricName=added.metricName;
+      Metric metric=added.metric;
+      AbstractMetricGroup group=added.group;
+      QueryScopeInfo info=group.getQueryServiceMetricInfo(FILTER);
+      if (metric instanceof Counter) {
+        counters.put((Counter)metric,new Tuple2<>(info,FILTER.filterCharacters(metricName)));
+      }
+ else       if (metric instanceof Gauge) {
+        gauges.put((Gauge<?>)metric,new Tuple2<>(info,FILTER.filterCharacters(metricName)));
+      }
+ else       if (metric instanceof Histogram) {
+        histograms.put((Histogram)metric,new Tuple2<>(info,FILTER.filterCharacters(metricName)));
+      }
+ else       if (metric instanceof Meter) {
+        meters.put((Meter)metric,new Tuple2<>(info,FILTER.filterCharacters(metricName)));
+      }
+    }
+ else     if (message instanceof RemoveMetric) {
+      Metric metric=(((RemoveMetric)message).metric);
+      if (metric instanceof Counter) {
+        this.counters.remove(metric);
+      }
+ else       if (metric instanceof Gauge) {
+        this.gauges.remove(metric);
+      }
+ else       if (metric instanceof Histogram) {
+        this.histograms.remove(metric);
+      }
+ else       if (metric instanceof Meter) {
+        this.meters.remove(metric);
+      }
+    }
+ else     if (message instanceof CreateDump) {
+      byte[] dump=serializer.serialize(counters,gauges,histograms,meters);
+      getSender().tell(dump,getSelf());
+    }
+ else {
+      LOG.warn("MetricQueryServiceActor received an invalid message. " + message.toString());
+      getSender().tell(new Status.Failure(new IOException("MetricQueryServiceActor received an invalid message. " + message.toString())),getSelf());
+    }
+  }
+ catch (  Exception e) {
+    LOG.warn("An exception occurred while processing a message.",e);
+  }
+}
