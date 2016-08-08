@@ -1,0 +1,124 @@
+{
+synchronized (lock) {
+    if (shutdown) {
+      return new CheckpointTriggerResult(CheckpointDeclineReason.COORDINATOR_SHUTDOWN);
+    }
+    if (!props.isSavepoint()) {
+      if (triggerRequestQueued) {
+        LOG.warn("Trying to trigger another checkpoint while one was queued already");
+        return new CheckpointTriggerResult(CheckpointDeclineReason.ALREADY_QUEUED);
+      }
+      if (pendingCheckpoints.size() >= maxConcurrentCheckpointAttempts) {
+        triggerRequestQueued=true;
+        if (currentPeriodicTrigger != null) {
+          currentPeriodicTrigger.cancel();
+          currentPeriodicTrigger=null;
+        }
+        return new CheckpointTriggerResult(CheckpointDeclineReason.TOO_MANY_CONCURRENT_CHECKPOINTS);
+      }
+    }
+    if (lastTriggeredCheckpoint + minPauseBetweenCheckpoints > timestamp) {
+      if (currentPeriodicTrigger != null) {
+        currentPeriodicTrigger.cancel();
+        currentPeriodicTrigger=null;
+      }
+      ScheduledTrigger trigger=new ScheduledTrigger();
+      timer.scheduleAtFixedRate(trigger,minPauseBetweenCheckpoints,baseInterval);
+      return new CheckpointTriggerResult(CheckpointDeclineReason.MINIMUM_TIME_BETWEEN_CHECKPOINTS);
+    }
+  }
+  ExecutionAttemptID[] triggerIDs=new ExecutionAttemptID[tasksToTrigger.length];
+  for (int i=0; i < tasksToTrigger.length; i++) {
+    Execution ee=tasksToTrigger[i].getCurrentExecutionAttempt();
+    if (ee != null && ee.getState() == ExecutionState.RUNNING) {
+      triggerIDs[i]=ee.getAttemptId();
+    }
+ else {
+      LOG.info("Checkpoint triggering task {} is not being executed at the moment. Aborting checkpoint.",tasksToTrigger[i].getSimpleName());
+      return new CheckpointTriggerResult(CheckpointDeclineReason.NOT_ALL_REQUIRED_TASKS_RUNNING);
+    }
+  }
+  Map<ExecutionAttemptID,ExecutionVertex> ackTasks=new HashMap<>(tasksToWaitFor.length);
+  for (  ExecutionVertex ev : tasksToWaitFor) {
+    Execution ee=ev.getCurrentExecutionAttempt();
+    if (ee != null) {
+      ackTasks.put(ee.getAttemptId(),ev);
+    }
+ else {
+      LOG.info("Checkpoint acknowledging task {} is not being executed at the moment. Aborting checkpoint.",ev.getSimpleName());
+      return new CheckpointTriggerResult(CheckpointDeclineReason.NOT_ALL_REQUIRED_TASKS_RUNNING);
+    }
+  }
+  lastTriggeredCheckpoint=timestamp;
+  final long checkpointID;
+  try {
+    checkpointID=checkpointIdCounter.getAndIncrement();
+  }
+ catch (  Throwable t) {
+    int numUnsuccessful=++numUnsuccessfulCheckpointsTriggers;
+    LOG.warn("Failed to trigger checkpoint (" + numUnsuccessful + " consecutive failed attempts so far)",t);
+    return new CheckpointTriggerResult(CheckpointDeclineReason.EXCEPTION);
+  }
+  LOG.info("Triggering checkpoint " + checkpointID + " @ "+ timestamp);
+  final PendingCheckpoint checkpoint=props.isSavepoint() ? new PendingSavepoint(job,checkpointID,timestamp,ackTasks,userClassLoader,savepointStore) : new PendingCheckpoint(job,checkpointID,timestamp,ackTasks,userClassLoader);
+  TimerTask canceller=new TimerTask(){
+    @Override public void run(){
+      try {
+synchronized (lock) {
+          if (!checkpoint.isDiscarded()) {
+            LOG.info("Checkpoint " + checkpointID + " expired before completing.");
+            checkpoint.abortExpired();
+            pendingCheckpoints.remove(checkpointID);
+            rememberRecentCheckpointId(checkpointID);
+            triggerQueuedRequests();
+          }
+        }
+      }
+ catch (      Throwable t) {
+        LOG.error("Exception while handling checkpoint timeout",t);
+      }
+    }
+  }
+;
+  try {
+synchronized (lock) {
+      if (shutdown) {
+        return new CheckpointTriggerResult(CheckpointDeclineReason.COORDINATOR_SHUTDOWN);
+      }
+ else       if (!props.isSavepoint()) {
+        if (triggerRequestQueued) {
+          LOG.warn("Trying to trigger another checkpoint while one was queued already");
+          return new CheckpointTriggerResult(CheckpointDeclineReason.ALREADY_QUEUED);
+        }
+ else         if (pendingCheckpoints.size() >= maxConcurrentCheckpointAttempts) {
+          triggerRequestQueued=true;
+          if (currentPeriodicTrigger != null) {
+            currentPeriodicTrigger.cancel();
+            currentPeriodicTrigger=null;
+          }
+          return new CheckpointTriggerResult(CheckpointDeclineReason.TOO_MANY_CONCURRENT_CHECKPOINTS);
+        }
+      }
+      pendingCheckpoints.put(checkpointID,checkpoint);
+      timer.schedule(canceller,checkpointTimeout);
+    }
+    for (int i=0; i < tasksToTrigger.length; i++) {
+      ExecutionAttemptID id=triggerIDs[i];
+      TriggerCheckpoint message=new TriggerCheckpoint(job,id,checkpointID,timestamp);
+      tasksToTrigger[i].sendMessageToCurrentExecution(message,id);
+    }
+    numUnsuccessfulCheckpointsTriggers=0;
+    return new CheckpointTriggerResult(checkpoint);
+  }
+ catch (  Throwable t) {
+synchronized (lock) {
+      pendingCheckpoints.remove(checkpointID);
+    }
+    int numUnsuccessful=++numUnsuccessfulCheckpointsTriggers;
+    LOG.warn("Failed to trigger checkpoint (" + numUnsuccessful + " consecutive failed attempts so far)",t);
+    if (!checkpoint.isDiscarded()) {
+      checkpoint.abortError(new Exception("Failed to trigger checkpoint"));
+    }
+    return new CheckpointTriggerResult(CheckpointDeclineReason.EXCEPTION);
+  }
+}
