@@ -1,14 +1,17 @@
 {
-  String zkQuorum=configuration.getString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,"");
-  if (zkQuorum == null || zkQuorum.equals("")) {
-    throw new RuntimeException("No valid ZooKeeper quorum has been specified. " + "You can specify the quorum via the configuration key '" + ConfigConstants.ZOOKEEPER_QUORUM_KEY + "'.");
+  String zkQuorum=configuration.getString(ConfigConstants.HA_ZOOKEEPER_QUORUM_KEY,"");
+  if (zkQuorum.isEmpty()) {
+    zkQuorum=configuration.getString(ConfigConstants.ZOOKEEPER_QUORUM_KEY,"");
   }
-  int sessionTimeout=configuration.getInteger(ConfigConstants.ZOOKEEPER_SESSION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_SESSION_TIMEOUT);
-  int connectionTimeout=configuration.getInteger(ConfigConstants.ZOOKEEPER_CONNECTION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_CONNECTION_TIMEOUT);
-  int retryWait=configuration.getInteger(ConfigConstants.ZOOKEEPER_RETRY_WAIT,ConfigConstants.DEFAULT_ZOOKEEPER_RETRY_WAIT);
-  int maxRetryAttempts=configuration.getInteger(ConfigConstants.ZOOKEEPER_MAX_RETRY_ATTEMPTS,ConfigConstants.DEFAULT_ZOOKEEPER_MAX_RETRY_ATTEMPTS);
-  String root=configuration.getString(ConfigConstants.ZOOKEEPER_DIR_KEY,ConfigConstants.DEFAULT_ZOOKEEPER_DIR_KEY);
-  String namespace=configuration.getString(ConfigConstants.ZOOKEEPER_NAMESPACE_KEY,ConfigConstants.DEFAULT_ZOOKEEPER_NAMESPACE_KEY);
+  if (zkQuorum == null || zkQuorum.equals("")) {
+    throw new RuntimeException("No valid ZooKeeper quorum has been specified. " + "You can specify the quorum via the configuration key '" + ConfigConstants.HA_ZOOKEEPER_QUORUM_KEY + "'.");
+  }
+  int sessionTimeout=getConfiguredIntValue(configuration,ConfigConstants.HA_ZOOKEEPER_SESSION_TIMEOUT,ConfigConstants.ZOOKEEPER_SESSION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_SESSION_TIMEOUT);
+  int connectionTimeout=getConfiguredIntValue(configuration,ConfigConstants.HA_ZOOKEEPER_CONNECTION_TIMEOUT,ConfigConstants.ZOOKEEPER_CONNECTION_TIMEOUT,ConfigConstants.DEFAULT_ZOOKEEPER_SESSION_TIMEOUT);
+  int retryWait=getConfiguredIntValue(configuration,ConfigConstants.HA_ZOOKEEPER_RETRY_WAIT,ConfigConstants.ZOOKEEPER_RETRY_WAIT,ConfigConstants.DEFAULT_ZOOKEEPER_RETRY_WAIT);
+  int maxRetryAttempts=getConfiguredIntValue(configuration,ConfigConstants.HA_ZOOKEEPER_MAX_RETRY_ATTEMPTS,ConfigConstants.ZOOKEEPER_MAX_RETRY_ATTEMPTS,ConfigConstants.DEFAULT_ZOOKEEPER_MAX_RETRY_ATTEMPTS);
+  String root=getConfiguredStringValue(configuration,ConfigConstants.HA_ZOOKEEPER_DIR_KEY,ConfigConstants.ZOOKEEPER_DIR_KEY,ConfigConstants.DEFAULT_ZOOKEEPER_DIR_KEY);
+  String namespace=getConfiguredStringValue(configuration,ConfigConstants.HA_ZOOKEEPER_NAMESPACE_KEY,ConfigConstants.ZOOKEEPER_NAMESPACE_KEY,ConfigConstants.DEFAULT_ZOOKEEPER_NAMESPACE_KEY);
   String rootWithNamespace=generateZookeeperPath(root,namespace);
   LOG.info("Using '{}' as zookeeper namespace.",rootWithNamespace);
   CuratorFramework cf=CuratorFrameworkFactory.builder().connectString(zkQuorum).sessionTimeoutMs(sessionTimeout).connectionTimeoutMs(connectionTimeout).retryPolicy(new ExponentialBackoffRetry(retryWait,maxRetryAttempts)).namespace(rootWithNamespace.startsWith("/") ? rootWithNamespace.substring(1) : rootWithNamespace).build();
