@@ -6,7 +6,7 @@
   this.config.setCheckpointingEnabled(true);
   this.executionConfig=executionConfig;
   this.checkpointLock=new Object();
-  final Environment env=new MockEnvironment("MockTwoInputTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024,underlyingConfig);
+  final Environment env=new MockEnvironment("MockTwoInputTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024,underlyingConfig,executionConfig,MAX_PARALLELISM,1,0);
   mockTask=mock(StreamTask.class);
   timeServiceProvider=testTimeProvider;
   when(mockTask.getName()).thenReturn("Mock Task");
@@ -16,21 +16,6 @@
   when(mockTask.getEnvironment()).thenReturn(env);
   when(mockTask.getExecutionConfig()).thenReturn(executionConfig);
   when(mockTask.getUserCodeClassLoader()).thenReturn(this.getClass().getClassLoader());
-  try {
-    doAnswer(new Answer<AbstractStateBackend>(){
-      @Override public AbstractStateBackend answer(      InvocationOnMock invocationOnMock) throws Throwable {
-        final String operatorIdentifier=(String)invocationOnMock.getArguments()[0];
-        final TypeSerializer<?> keySerializer=(TypeSerializer<?>)invocationOnMock.getArguments()[1];
-        OneInputStreamOperatorTestHarness.this.stateBackend.disposeAllStateForCurrentJob();
-        OneInputStreamOperatorTestHarness.this.stateBackend.initializeForJob(env,operatorIdentifier,keySerializer);
-        return OneInputStreamOperatorTestHarness.this.stateBackend;
-      }
-    }
-).when(mockTask).createStateBackend(any(String.class),any(TypeSerializer.class));
-  }
- catch (  Exception e) {
-    throw new RuntimeException(e.getMessage(),e);
-  }
   doAnswer(new Answer<Void>(){
     @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
       final long execTime=(Long)invocation.getArguments()[0];
@@ -46,4 +31,16 @@
     }
   }
 ).when(mockTask).getCurrentProcessingTime();
+  try {
+    doAnswer(new Answer<CheckpointStreamFactory>(){
+      @Override public CheckpointStreamFactory answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        final StreamOperator operator=(StreamOperator)invocationOnMock.getArguments()[0];
+        return stateBackend.createStreamFactory(new JobID(),operator.getClass().getSimpleName());
+      }
+    }
+).when(mockTask).createCheckpointStreamFactory(any(StreamOperator.class));
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e.getMessage(),e);
+  }
 }

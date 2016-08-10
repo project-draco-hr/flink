@@ -1,0 +1,35 @@
+{
+  if (isInitialized) {
+    return;
+  }
+  this.operatorIdentifier=operatorIdentifier.replace(" ","");
+  this.jobId=env.getJobID();
+  if (configuredDbBasePaths == null) {
+    initializedDbBasePaths=env.getIOManager().getSpillingDirectories();
+  }
+ else {
+    List<File> dirs=new ArrayList<>(configuredDbBasePaths.length);
+    String errorMessage="";
+    for (    Path path : configuredDbBasePaths) {
+      File f=new File(path.toUri().getPath());
+      File testDir=new File(f,UUID.randomUUID().toString());
+      if (!testDir.mkdirs()) {
+        String msg="Local DB files directory '" + path + "' does not exist and cannot be created. ";
+        LOG.error(msg);
+        errorMessage+=msg;
+      }
+ else {
+        dirs.add(f);
+      }
+      testDir.delete();
+    }
+    if (dirs.isEmpty()) {
+      throw new Exception("No local storage directories available. " + errorMessage);
+    }
+ else {
+      initializedDbBasePaths=dirs.toArray(new File[dirs.size()]);
+    }
+  }
+  nextDirectory=new Random().nextInt(initializedDbBasePaths.length);
+  isInitialized=true;
+}

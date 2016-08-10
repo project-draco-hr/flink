@@ -1,0 +1,27 @@
+{
+  Preconditions.checkState(namespace != null,"No namespace given.");
+  Preconditions.checkState(key != null,"No key given.");
+  Map<N,Map<K,ArrayList<V>>> namespaceMap=stateTable.get(backend.getKeyGroupAssigner().getKeyGroupIndex(key));
+  if (namespaceMap == null) {
+    return null;
+  }
+  Map<K,ArrayList<V>> keyedMap=namespaceMap.get(currentNamespace);
+  if (keyedMap == null) {
+    return null;
+  }
+  ArrayList<V> result=keyedMap.get(key);
+  if (result == null) {
+    return null;
+  }
+  TypeSerializer<V> serializer=stateDesc.getSerializer();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  DataOutputViewStreamWrapper view=new DataOutputViewStreamWrapper(baos);
+  for (int i=0; i < result.size(); i++) {
+    serializer.serialize(result.get(i),view);
+    if (i < result.size() - 1) {
+      view.writeByte(',');
+    }
+  }
+  view.flush();
+  return baos.toByteArray();
+}

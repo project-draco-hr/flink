@@ -1,71 +1,54 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
     final int factor=4;
     final int windowSlide=50;
     final int windowSize=factor * windowSlide;
-    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>(windowSlide);
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    TestTimeServiceProvider timerService=new TestTimeServiceProvider();
     AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
-    OneInputStreamOperatorTestHarness<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    timerService.setCurrentTime(0);
+    OneInputStreamOperatorTestHarness<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
     testHarness.setup();
     testHarness.open();
     final int numElements=1000;
     final int numElementsFirst=700;
     for (int i=0; i < numElementsFirst; i++) {
-synchronized (lock) {
-        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
-        op.setKeyContextElement1(next);
-        op.processElement(next);
-      }
-      Thread.sleep(1);
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
     }
-    StreamStateHandle state;
-    List<Tuple2<Integer,Integer>> resultAtSnapshot;
-synchronized (lock) {
-      int beforeSnapShot=out.getElements().size();
-      state=testHarness.snapshot(1L,System.currentTimeMillis());
-      resultAtSnapshot=new ArrayList<>(out.getElements());
-      int afterSnapShot=out.getElements().size();
-      assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
-    }
+    List<Tuple2<Integer,Integer>> resultAtSnapshot=extractFromStreamRecords(testHarness.getOutput());
+    int beforeSnapShot=resultAtSnapshot.size();
+    StreamStateHandle state=testHarness.snapshot(1L,System.currentTimeMillis());
+    int afterSnapShot=testHarness.getOutput().size();
+    assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
     assertTrue(resultAtSnapshot.size() <= factor * numElementsFirst);
     for (int i=numElementsFirst; i < numElements; i++) {
-synchronized (lock) {
-        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
-        op.setKeyContextElement1(next);
-        op.processElement(next);
-      }
-      Thread.sleep(1);
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
     }
     op.dispose();
-    final CollectingOutput<Tuple2<Integer,Integer>> out2=new CollectingOutput<>(windowSlide);
     op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
-    testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
     testHarness.setup();
     testHarness.restore(state);
     testHarness.open();
     for (int i=numElementsFirst; i < numElements; i++) {
-synchronized (lock) {
-        StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
-        op.setKeyContextElement1(next);
-        op.processElement(next);
-      }
-      Thread.sleep(1);
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
     }
-    long deadline=System.currentTimeMillis() + 120000;
-    do {
-      Thread.sleep(20);
-    }
- while (resultAtSnapshot.size() + out2.getElements().size() < factor * numElements && System.currentTimeMillis() < deadline);
-synchronized (lock) {
-      op.close();
-    }
+    timerService.setCurrentTime(50);
+    timerService.setCurrentTime(100);
+    timerService.setCurrentTime(150);
+    timerService.setCurrentTime(200);
+    timerService.setCurrentTime(250);
+    timerService.setCurrentTime(300);
+    timerService.setCurrentTime(350);
+    timerService.setCurrentTime(400);
+    testHarness.close();
     op.dispose();
     List<Tuple2<Integer,Integer>> finalResult=new ArrayList<>(resultAtSnapshot);
-    finalResult.addAll(out2.getElements());
-    assertEquals(factor * numElements,finalResult.size());
+    List<Tuple2<Integer,Integer>> partialFinalResult=extractFromStreamRecords(testHarness.getOutput());
+    finalResult.addAll(partialFinalResult);
+    assertEquals(numElements * factor,finalResult.size());
     Collections.sort(finalResult,tupleComparator);
     for (int i=0; i < factor * numElements; i++) {
       assertEquals(i / factor,finalResult.get(i).f0.intValue());
@@ -75,8 +58,5 @@ synchronized (lock) {
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    timerService.shutdown();
   }
 }

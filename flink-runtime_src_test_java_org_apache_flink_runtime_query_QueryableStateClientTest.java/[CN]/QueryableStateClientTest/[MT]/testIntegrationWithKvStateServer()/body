@@ -8,16 +8,19 @@
   QueryableStateClient client=null;
   KvStateClient networkClient=null;
   AtomicKvStateRequestStats networkClientStats=new AtomicKvStateRequestStats();
+  MemoryStateBackend backend=new MemoryStateBackend();
+  DummyEnvironment dummyEnv=new DummyEnvironment("test",1,0);
+  KeyedStateBackend<Integer> keyedStateBackend=backend.createKeyedStateBackend(dummyEnv,new JobID(),"test_op",IntSerializer.INSTANCE,new HashKeyGroupAssigner<Integer>(1),new KeyGroupRange(0,0),new KvStateRegistry().createTaskRegistry(new JobID(),new JobVertexID()));
   try {
     KvStateRegistry[] registries=new KvStateRegistry[numServers];
     KvStateID[] kvStateIds=new KvStateID[numServers];
-    List<MemValueState<Integer,VoidNamespace,Integer>> kvStates=new ArrayList<>();
+    List<HeapValueState<Integer,VoidNamespace,Integer>> kvStates=new ArrayList<>();
     for (int i=0; i < numServers; i++) {
       registries[i]=new KvStateRegistry();
       serverStats[i]=new AtomicKvStateRequestStats();
       servers[i]=new KvStateServer(InetAddress.getLocalHost(),0,1,1,registries[i],serverStats[i]);
       servers[i].start();
-      MemValueState<Integer,VoidNamespace,Integer> kvState=new MemValueState<>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null));
+      HeapValueState<Integer,VoidNamespace,Integer> kvState=new HeapValueState<>(keyedStateBackend,new ValueStateDescriptor<>("any",IntSerializer.INSTANCE,null),new StateTable<Integer,VoidNamespace,Integer>(IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE,new KeyGroupRange(0,1)),IntSerializer.INSTANCE,VoidNamespaceSerializer.INSTANCE);
       kvStates.add(kvState);
       kvStateIds[i]=registries[i].registerKvState(jobId,new JobVertexID(),i,"choco",kvState);
     }
@@ -25,8 +28,8 @@
     for (int key=0; key < numKeys; key++) {
       int targetKeyGroupIndex=MathUtils.murmurHash(key) % numServers;
       expectedRequests[targetKeyGroupIndex]++;
-      MemValueState<Integer,VoidNamespace,Integer> kvState=kvStates.get(targetKeyGroupIndex);
-      kvState.setCurrentKey(key);
+      HeapValueState<Integer,VoidNamespace,Integer> kvState=kvStates.get(targetKeyGroupIndex);
+      keyedStateBackend.setCurrentKey(key);
       kvState.setCurrentNamespace(VoidNamespace.INSTANCE);
       kvState.update(1337 + key);
     }

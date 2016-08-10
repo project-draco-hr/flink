@@ -8,23 +8,24 @@ synchronized (lock) {
       for (int i=0; i < allOperators.length; i++) {
         StreamOperator<?> operator=allOperators[i];
         if (operator != null) {
-          AbstractStateBackend.CheckpointStateOutputStream outStream=((AbstractStreamOperator)operator).getStateBackend().createCheckpointStateOutputStream(checkpointId,timestamp);
+          CheckpointStreamFactory streamFactory=stateBackend.createStreamFactory(getEnvironment().getJobID(),createOperatorIdentifier(operator,configuration.getVertexID()));
+          CheckpointStreamFactory.CheckpointStateOutputStream outStream=streamFactory.createCheckpointStateOutputStream(checkpointId,timestamp);
           operator.snapshotState(outStream,checkpointId,timestamp);
           nonPartitionedStates.set(i,outStream.closeAndGetHandle());
         }
       }
-      if (!isRunning) {
-        throw new CancelTaskException();
+      RunnableFuture<KeyGroupsStateHandle> keyGroupsStateHandleFuture=null;
+      if (keyedStateBackend != null) {
+        CheckpointStreamFactory streamFactory=stateBackend.createStreamFactory(getEnvironment().getJobID(),createOperatorIdentifier(headOperator,configuration.getVertexID()));
+        keyGroupsStateHandleFuture=keyedStateBackend.snapshot(checkpointId,timestamp,streamFactory);
       }
-      ChainedStateHandle<StreamStateHandle> states=new ChainedStateHandle<>(nonPartitionedStates);
-      List<KeyGroupsStateHandle> keyedStates=Collections.<KeyGroupsStateHandle>emptyList();
-      if (states.isEmpty() && keyedStates.isEmpty()) {
-        getEnvironment().acknowledgeCheckpoint(checkpointId);
+      ChainedStateHandle<StreamStateHandle> chainedStateHandles=new ChainedStateHandle<>(nonPartitionedStates);
+      LOG.debug("Finished synchronous checkpoints for checkpoint {} on task {}",checkpointId,getName());
+      AsyncCheckpointRunnable asyncCheckpointRunnable=new AsyncCheckpointRunnable("checkpoint-" + checkpointId + "-"+ timestamp,this,cancelables,chainedStateHandles,keyGroupsStateHandleFuture,checkpointId);
+synchronized (cancelables) {
+        cancelables.add(asyncCheckpointRunnable);
       }
- else {
-        this.lastCheckpointSize=states.getStateSize();
-        getEnvironment().acknowledgeCheckpoint(checkpointId,states,keyedStates);
-      }
+      asyncOperationsThreadPool.submit(asyncCheckpointRunnable);
       return true;
     }
  else {

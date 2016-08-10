@@ -1,37 +1,30 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
     final int factor=2;
     final int windowSlide=50;
     final int windowSize=factor * windowSlide;
-    final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>();
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    TestTimeServiceProvider timerService=new TestTimeServiceProvider();
     StatefulFunction.globalCounts.clear();
     AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(new StatefulFunction(),fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
-    op.setup(mockTask,createTaskConfig(fieldOneSelector,IntSerializer.INSTANCE,new HashKeyGroupAssigner<Object>(10)),out);
-    op.open();
+    timerService.setCurrentTime(0);
+    KeyedOneInputStreamOperatorTestHarness<Integer,Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> testHarness=new KeyedOneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService,fieldOneSelector,BasicTypeInfo.INT_TYPE_INFO);
+    testHarness.open();
     final int numElements=100;
     for (int i=0; i < numElements; i++) {
       StreamRecord<Tuple2<Integer,Integer>> next1=new StreamRecord<>(new Tuple2<>(1,i));
       StreamRecord<Tuple2<Integer,Integer>> next2=new StreamRecord<>(new Tuple2<>(2,i));
       StreamRecord<Tuple2<Integer,Integer>> next3=new StreamRecord<>(new Tuple2<>(1,i));
       StreamRecord<Tuple2<Integer,Integer>> next4=new StreamRecord<>(new Tuple2<>(2,i));
-synchronized (lock) {
-        op.setKeyContextElement1(next1);
-        op.processElement(next1);
-        op.setKeyContextElement1(next2);
-        op.processElement(next2);
-        op.setKeyContextElement1(next3);
-        op.processElement(next3);
-        op.setKeyContextElement1(next4);
-        op.processElement(next4);
-      }
-      Thread.sleep(1);
+      testHarness.processElement(next1);
+      testHarness.processElement(next2);
+      testHarness.processElement(next3);
+      testHarness.processElement(next4);
     }
-synchronized (lock) {
-      op.close();
-    }
+    timerService.setCurrentTime(50);
+    timerService.setCurrentTime(100);
+    timerService.setCurrentTime(150);
+    timerService.setCurrentTime(200);
+    testHarness.close();
     int count1=StatefulFunction.globalCounts.get(1);
     int count2=StatefulFunction.globalCounts.get(2);
     assertTrue(count1 >= 2 && count1 <= 2 * numElements);
@@ -41,8 +34,5 @@ synchronized (lock) {
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    timerService.shutdown();
   }
 }

@@ -1,0 +1,30 @@
+{
+  Preconditions.checkState(currentNamespace != null,"No namespace set.");
+  Preconditions.checkState(backend.getCurrentKey() != null,"No key set.");
+  if (value == null) {
+    clear();
+    return;
+  }
+  Map<N,Map<K,ACC>> namespaceMap=stateTable.get(backend.getCurrentKeyGroupIndex());
+  if (namespaceMap == null) {
+    namespaceMap=createNewMap();
+    stateTable.set(backend.getCurrentKeyGroupIndex(),namespaceMap);
+  }
+  Map<K,ACC> keyedMap=namespaceMap.get(currentNamespace);
+  if (keyedMap == null) {
+    keyedMap=createNewMap();
+    namespaceMap.put(currentNamespace,keyedMap);
+  }
+  ACC currentValue=keyedMap.get(backend.<K>getCurrentKey());
+  try {
+    if (currentValue == null) {
+      keyedMap.put(backend.<K>getCurrentKey(),foldFunction.fold(stateDesc.getDefaultValue(),value));
+    }
+ else {
+      keyedMap.put(backend.<K>getCurrentKey(),foldFunction.fold(currentValue,value));
+    }
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Could not add value to folding state.",e);
+  }
+}

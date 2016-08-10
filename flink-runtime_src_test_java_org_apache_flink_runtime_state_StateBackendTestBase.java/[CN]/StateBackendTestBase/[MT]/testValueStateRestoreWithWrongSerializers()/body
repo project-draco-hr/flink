@@ -1,6 +1,7 @@
 {
   try {
-    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
+    CheckpointStreamFactory streamFactory=createStreamFactory();
+    KeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE);
     ValueStateDescriptor<String> kvId=new ValueStateDescriptor<>("id",String.class,null);
     kvId.initializeSerializerUnlessSet(new ExecutionConfig());
     ValueState<String> state=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
@@ -8,18 +9,10 @@
     state.update("1");
     backend.setCurrentKey(2);
     state.update("2");
-    HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot1=backend.snapshotPartitionedState(682375462378L,2);
-    for (    String key : snapshot1.keySet()) {
-      if (snapshot1.get(key) instanceof AsynchronousKvStateSnapshot) {
-        snapshot1.put(key,((AsynchronousKvStateSnapshot<?,?,?,?,?>)snapshot1.get(key)).materialize());
-      }
-    }
-    backend.discardState();
-    backend.initializeForJob(new DummyEnvironment("test",1,0),"test_op",IntSerializer.INSTANCE);
-    backend.injectKeyValueStateSnapshots((HashMap)snapshot1);
-    for (    String key : snapshot1.keySet()) {
-      snapshot1.get(key).discardState();
-    }
+    KeyGroupsStateHandle snapshot1=runSnapshot(backend.snapshot(682375462378L,2,streamFactory));
+    backend.close();
+    backend=restoreKeyedBackend(IntSerializer.INSTANCE,snapshot1);
+    snapshot1.discardState();
     @SuppressWarnings("unchecked") TypeSerializer<String> fakeStringSerializer=(TypeSerializer<String>)(TypeSerializer<?>)FloatSerializer.INSTANCE;
     try {
       kvId=new ValueStateDescriptor<>("id",fakeStringSerializer,null);
@@ -35,6 +28,7 @@
 catch (    Exception e) {
       fail("wrong exception " + e);
     }
+    backend.close();
   }
  catch (  Exception e) {
     e.printStackTrace();

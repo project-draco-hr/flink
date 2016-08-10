@@ -1,2 +1,53 @@
 {
+  try {
+    final int windowSize=200;
+    TestTimeServiceProvider timerService=new TestTimeServiceProvider();
+    AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSize);
+    OneInputStreamOperatorTestHarness<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
+    timerService.setCurrentTime(0);
+    testHarness.setup();
+    testHarness.open();
+    final int numElementsFirst=700;
+    final int numElements=1000;
+    for (int i=0; i < numElementsFirst; i++) {
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
+    }
+    List<Tuple2<Integer,Integer>> resultAtSnapshot=extractFromStreamRecords(testHarness.getOutput());
+    int beforeSnapShot=resultAtSnapshot.size();
+    StreamStateHandle state=testHarness.snapshot(1L,System.currentTimeMillis());
+    int afterSnapShot=testHarness.getOutput().size();
+    assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
+    assertTrue(resultAtSnapshot.size() <= numElementsFirst);
+    for (int i=numElementsFirst; i < numElements; i++) {
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
+    }
+    op.dispose();
+    op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSize);
+    testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
+    testHarness.setup();
+    testHarness.restore(state);
+    testHarness.open();
+    for (int i=numElementsFirst; i < numElements; i++) {
+      StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));
+      testHarness.processElement(next);
+    }
+    timerService.setCurrentTime(200);
+    List<Tuple2<Integer,Integer>> finalResult=new ArrayList<>(resultAtSnapshot);
+    List<Tuple2<Integer,Integer>> partialFinalResult=extractFromStreamRecords(testHarness.getOutput());
+    finalResult.addAll(partialFinalResult);
+    assertEquals(numElements,finalResult.size());
+    testHarness.close();
+    op.dispose();
+    Collections.sort(finalResult,tupleComparator);
+    for (int i=0; i < numElements; i++) {
+      assertEquals(i,finalResult.get(i).f0.intValue());
+      assertEquals(i,finalResult.get(i).f1.intValue());
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
 }

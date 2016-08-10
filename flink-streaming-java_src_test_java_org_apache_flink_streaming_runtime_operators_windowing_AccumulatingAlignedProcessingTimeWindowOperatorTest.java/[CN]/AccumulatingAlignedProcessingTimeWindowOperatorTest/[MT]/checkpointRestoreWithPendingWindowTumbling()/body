@@ -1,2 +1,49 @@
 {
+  try {
+    final int windowSize=200;
+    AccumulatingProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSize);
+    TestTimeServiceProvider timerService=new TestTimeServiceProvider();
+    OneInputStreamOperatorTestHarness<Integer,Integer> testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
+    testHarness.setup();
+    testHarness.open();
+    timerService.setCurrentTime(0);
+    final int numElementsFirst=700;
+    final int numElements=1000;
+    for (int i=0; i < numElementsFirst; i++) {
+      testHarness.processElement(new StreamRecord<>(i));
+    }
+    System.out.println("GOT: " + testHarness.getOutput());
+    int beforeSnapShot=testHarness.getOutput().size();
+    StreamStateHandle state=testHarness.snapshot(1L,System.currentTimeMillis());
+    List<Integer> resultAtSnapshot=extractFromStreamRecords(testHarness.getOutput());
+    int afterSnapShot=testHarness.getOutput().size();
+    assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
+    assertTrue(afterSnapShot <= numElementsFirst);
+    for (int i=0; i < 300; i++) {
+      testHarness.processElement(new StreamRecord<>(i + numElementsFirst));
+    }
+    op.dispose();
+    op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSize);
+    testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
+    testHarness.setup();
+    testHarness.restore(state);
+    testHarness.open();
+    for (int i=numElementsFirst; i < numElements; i++) {
+      testHarness.processElement(new StreamRecord<>(i));
+    }
+    timerService.setCurrentTime(400);
+    List<Integer> finalResult=new ArrayList<>();
+    finalResult.addAll(resultAtSnapshot);
+    List<Integer> finalPartialResult=extractFromStreamRecords(testHarness.getOutput());
+    finalResult.addAll(finalPartialResult);
+    assertEquals(numElements,finalResult.size());
+    Collections.sort(finalResult);
+    for (int i=0; i < numElements; i++) {
+      assertEquals(i,finalResult.get(i).intValue());
+    }
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
 }

@@ -2,8 +2,10 @@
   boolean disposed=false;
   try {
     LOG.debug("Initializing {}",getName());
+    asyncOperationsThreadPool=Executors.newCachedThreadPool();
     userClassLoader=getUserCodeClassLoader();
     configuration=new StreamConfig(getTaskConfiguration());
+    stateBackend=createStateBackend();
     accumulatorMap=getEnvironment().getAccumulatorRegistry().getUserMap();
     if (timerService == null) {
       ScheduledThreadPoolExecutor executor=new ScheduledThreadPoolExecutor(1,new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
@@ -28,7 +30,6 @@
     LOG.debug("Invoking {}",getName());
     restoreState();
     lazyRestoreChainedOperatorState=null;
-    lazyRestoreKeyGroupStates=null;
 synchronized (lock) {
       openAllOperators();
     }
@@ -46,6 +47,7 @@ synchronized (lock) {
     operatorChain.flushOutputs();
     tryDisposeAllOperators();
     disposed=true;
+    checkTimerException();
   }
   finally {
     isRunning=false;
@@ -59,6 +61,7 @@ synchronized (lock) {
     }
     try {
       closeAllClosables();
+      shutdownAsyncThreads();
     }
  catch (    Throwable t) {
       LOG.error("Could not shut down async checkpoint threads",t);

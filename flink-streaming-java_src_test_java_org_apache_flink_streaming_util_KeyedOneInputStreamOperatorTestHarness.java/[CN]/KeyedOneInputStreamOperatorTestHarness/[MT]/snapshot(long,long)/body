@@ -1,0 +1,21 @@
+{
+  MemoryStateBackend backend=new MemoryStateBackend();
+  CheckpointStreamFactory streamFactory=backend.createStreamFactory(new JobID(),"test_op");
+  CheckpointStreamFactory.CheckpointStateOutputStream outStream=streamFactory.createCheckpointStateOutputStream(checkpointId,timestamp);
+  operator.snapshotState(outStream,checkpointId,timestamp);
+  if (keyedStateBackend != null) {
+    RunnableFuture<KeyGroupsStateHandle> keyedSnapshotRunnable=keyedStateBackend.snapshot(checkpointId,timestamp,streamFactory);
+    if (!keyedSnapshotRunnable.isDone()) {
+      Thread runner=new Thread(keyedSnapshotRunnable);
+      runner.start();
+    }
+    outStream.write(1);
+    ObjectOutputStream oos=new ObjectOutputStream(outStream);
+    oos.writeObject(keyedSnapshotRunnable.get());
+    oos.flush();
+  }
+ else {
+    outStream.write(0);
+  }
+  return outStream.closeAndGetHandle();
+}

@@ -5,8 +5,8 @@
   ReducingStateDescriptor<Tuple2<String,Integer>> stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
   WindowOperator<String,Tuple2<String,Integer>,Tuple2<String,Integer>,Tuple2<String,Integer>,GlobalWindow> operator=new WindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,GlobalWindow,Tuple2<String,Integer>>()),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)),0);
   operator.setInputType(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),new ExecutionConfig());
-  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
-  testHarness.configureForKeyedStream(new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  OneInputStreamOperatorTestHarness<Tuple2<String,Integer>,Tuple2<String,Integer>> testHarness=new KeyedOneInputStreamOperatorTestHarness<>(operator,new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  ;
   ConcurrentLinkedQueue<Object> expectedOutput=new ConcurrentLinkedQueue<>();
   testHarness.open();
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),3000));
@@ -18,18 +18,25 @@
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1999));
   StreamStateHandle snapshot=testHarness.snapshot(0L,0L);
   testHarness.close();
+  ConcurrentLinkedQueue<Object> outputBeforeClose=testHarness.getOutput();
+  stateDesc=new ReducingStateDescriptor<>("window-contents",new SumReducer(),inputType.createSerializer(new ExecutionConfig()));
+  operator=new WindowOperator<>(GlobalWindows.create(),new GlobalWindow.Serializer(),new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO.createSerializer(new ExecutionConfig()),stateDesc,new InternalSingleValueWindowFunction<>(new PassThroughWindowFunction<String,GlobalWindow,Tuple2<String,Integer>>()),PurgingTrigger.of(CountTrigger.of(WINDOW_SIZE)),0);
+  testHarness=new KeyedOneInputStreamOperatorTestHarness<>(operator,new TupleKeySelector(),BasicTypeInfo.STRING_TYPE_INFO);
+  operator.setInputType(TypeInfoParser.<Tuple2<String,Integer>>parse("Tuple2<String, Integer>"),new ExecutionConfig());
   testHarness.setup();
   testHarness.restore(snapshot);
   testHarness.open();
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1000));
   expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2",4),Long.MAX_VALUE));
-  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new Tuple2ResultSortComparator());
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,Iterables.concat(outputBeforeClose,testHarness.getOutput()),new Tuple2ResultSortComparator());
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1",1),10999));
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1000));
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1000));
   testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2",1),1000));
   expectedOutput.add(new StreamRecord<>(new Tuple2<>("key1",4),Long.MAX_VALUE));
   expectedOutput.add(new StreamRecord<>(new Tuple2<>("key2",4),Long.MAX_VALUE));
-  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,testHarness.getOutput(),new Tuple2ResultSortComparator());
+  System.out.println("BEFORE GOT: " + outputBeforeClose);
+  System.out.println("GOT: " + testHarness.getOutput());
+  TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.",expectedOutput,Iterables.concat(outputBeforeClose,testHarness.getOutput()),new Tuple2ResultSortComparator());
   testHarness.close();
 }

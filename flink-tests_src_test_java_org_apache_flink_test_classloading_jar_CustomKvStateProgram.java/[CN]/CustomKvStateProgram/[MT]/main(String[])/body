@@ -12,10 +12,16 @@
   env.enableCheckpointing(checkpointingInterval);
   env.setStateBackend(new FsStateBackend(checkpointPath));
   DataStream<Integer> source=env.addSource(new InfiniteIntegerSource());
-  source.keyBy(new KeySelector<Integer,Integer>(){
-    private static final long serialVersionUID=-9044152404048903826L;
-    @Override public Integer getKey(    Integer value) throws Exception {
-      return ThreadLocalRandom.current().nextInt(parallelism);
+  source.map(new MapFunction<Integer,Tuple2<Integer,Integer>>(){
+    private static final long serialVersionUID=1L;
+    @Override public Tuple2<Integer,Integer> map(    Integer value) throws Exception {
+      return new Tuple2<>(ThreadLocalRandom.current().nextInt(parallelism),value);
+    }
+  }
+).keyBy(new KeySelector<Tuple2<Integer,Integer>,Integer>(){
+    private static final long serialVersionUID=1L;
+    @Override public Integer getKey(    Tuple2<Integer,Integer> value) throws Exception {
+      return value.f0;
     }
   }
 ).flatMap(new ReducingStateFlatMap()).writeAsText(outputPath);

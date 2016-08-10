@@ -1,0 +1,31 @@
+{
+  Preconditions.checkState(currentNamespace != null,"No namespace set.");
+  Preconditions.checkState(backend.getCurrentKey() != null,"No key set.");
+  if (value == null) {
+    clear();
+    return;
+  }
+  Map<N,Map<K,V>> namespaceMap=stateTable.get(backend.getCurrentKeyGroupIndex());
+  if (namespaceMap == null) {
+    namespaceMap=createNewMap();
+    stateTable.set(backend.getCurrentKeyGroupIndex(),namespaceMap);
+  }
+  Map<K,V> keyedMap=namespaceMap.get(currentNamespace);
+  if (keyedMap == null) {
+    keyedMap=createNewMap();
+    namespaceMap.put(currentNamespace,keyedMap);
+  }
+  V currentValue=keyedMap.put(backend.<K>getCurrentKey(),value);
+  if (currentValue == null) {
+  }
+ else {
+    V reducedValue=null;
+    try {
+      reducedValue=reduceFunction.reduce(currentValue,value);
+    }
+ catch (    Exception e) {
+      throw new RuntimeException("Could not add value to reducing state.",e);
+    }
+    keyedMap.put(backend.<K>getCurrentKey(),reducedValue);
+  }
+}

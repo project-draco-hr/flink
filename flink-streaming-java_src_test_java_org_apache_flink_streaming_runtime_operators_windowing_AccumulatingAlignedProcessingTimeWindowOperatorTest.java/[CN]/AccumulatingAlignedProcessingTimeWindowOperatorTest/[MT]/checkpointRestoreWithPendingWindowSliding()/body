@@ -1,64 +1,49 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
   try {
     final int factor=4;
     final int windowSlide=50;
     final int windowSize=factor * windowSlide;
-    final CollectingOutput<Integer> out=new CollectingOutput<>(windowSlide);
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    TestTimeServiceProvider timerService=new TestTimeServiceProvider();
     AccumulatingProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSlide);
-    OneInputStreamOperatorTestHarness<Integer,Integer> testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    OneInputStreamOperatorTestHarness<Integer,Integer> testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
+    timerService.setCurrentTime(0);
     testHarness.setup();
     testHarness.open();
     final int numElements=1000;
     final int numElementsFirst=700;
     for (int i=0; i < numElementsFirst; i++) {
-synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
-      }
-      Thread.sleep(1);
+      testHarness.processElement(new StreamRecord<>(i));
     }
-    StreamStateHandle state;
-    List<Integer> resultAtSnapshot;
-synchronized (lock) {
-      int beforeSnapShot=out.getElements().size();
-      state=testHarness.snapshot(1L,System.currentTimeMillis());
-      resultAtSnapshot=new ArrayList<>(out.getElements());
-      int afterSnapShot=out.getElements().size();
-      assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
-    }
+    List<Integer> resultAtSnapshot=extractFromStreamRecords(testHarness.getOutput());
+    int beforeSnapShot=testHarness.getOutput().size();
+    StreamStateHandle state=testHarness.snapshot(1L,System.currentTimeMillis());
+    int afterSnapShot=testHarness.getOutput().size();
+    assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
     assertTrue(resultAtSnapshot.size() <= factor * numElementsFirst);
     for (int i=numElementsFirst; i < numElements; i++) {
-synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
-      }
-      Thread.sleep(1);
+      testHarness.processElement(new StreamRecord<>(i));
     }
     op.dispose();
-    final CollectingOutput<Integer> out2=new CollectingOutput<>(windowSlide);
     op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,windowSize,windowSlide);
-    testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    testHarness=new OneInputStreamOperatorTestHarness<>(op,new ExecutionConfig(),timerService);
     testHarness.setup();
     testHarness.restore(state);
     testHarness.open();
     for (int i=numElementsFirst; i < numElements; i++) {
-synchronized (lock) {
-        op.processElement(new StreamRecord<Integer>(i));
-      }
-      Thread.sleep(1);
+      testHarness.processElement(new StreamRecord<>(i));
     }
-    long deadline=System.currentTimeMillis() + 120000;
-    do {
-      Thread.sleep(20);
-    }
- while (resultAtSnapshot.size() + out2.getElements().size() < factor * numElements && System.currentTimeMillis() < deadline);
-synchronized (lock) {
-      op.close();
-    }
+    timerService.setCurrentTime(50);
+    timerService.setCurrentTime(100);
+    timerService.setCurrentTime(150);
+    timerService.setCurrentTime(200);
+    timerService.setCurrentTime(250);
+    timerService.setCurrentTime(300);
+    timerService.setCurrentTime(350);
+    testHarness.close();
     op.dispose();
     List<Integer> finalResult=new ArrayList<>(resultAtSnapshot);
-    finalResult.addAll(out2.getElements());
+    List<Integer> finalPartialResult=extractFromStreamRecords(testHarness.getOutput());
+    finalResult.addAll(finalPartialResult);
     assertEquals(factor * numElements,finalResult.size());
     Collections.sort(finalResult);
     for (int i=0; i < factor * numElements; i++) {
@@ -68,8 +53,5 @@ synchronized (lock) {
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    timerService.shutdown();
   }
 }

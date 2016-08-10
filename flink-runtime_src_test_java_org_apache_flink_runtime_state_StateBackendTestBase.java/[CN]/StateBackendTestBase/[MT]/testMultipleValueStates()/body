@@ -1,0 +1,29 @@
+{
+  CheckpointStreamFactory streamFactory=createStreamFactory();
+  KeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE,new HashKeyGroupAssigner<Integer>(1),new KeyGroupRange(0,0),new DummyEnvironment("test_op",1,0));
+  ValueStateDescriptor<String> desc1=new ValueStateDescriptor<>("a-string",StringSerializer.INSTANCE,null);
+  ValueStateDescriptor<Integer> desc2=new ValueStateDescriptor<>("an-integer",IntSerializer.INSTANCE,null);
+  desc1.initializeSerializerUnlessSet(new ExecutionConfig());
+  desc2.initializeSerializerUnlessSet(new ExecutionConfig());
+  ValueState<String> state1=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc1);
+  ValueState<Integer> state2=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc2);
+  backend.setCurrentKey(1);
+  assertNull(state1.value());
+  assertNull(state2.value());
+  state1.update("1");
+  assertEquals("1",state1.value());
+  assertNull(state2.value());
+  state2.update(13);
+  assertEquals("1",state1.value());
+  assertEquals(13,(int)state2.value());
+  KeyGroupsStateHandle snapshot1=runSnapshot(backend.snapshot(682375462378L,2,streamFactory));
+  backend.close();
+  backend=restoreKeyedBackend(IntSerializer.INSTANCE,new HashKeyGroupAssigner<Integer>(1),new KeyGroupRange(0,0),Collections.singletonList(snapshot1),new DummyEnvironment("test_op",1,0));
+  snapshot1.discardState();
+  backend.setCurrentKey(1);
+  state1=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc1);
+  state2=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc2);
+  assertEquals("1",state1.value());
+  assertEquals(13,(int)state2.value());
+  backend.close();
+}

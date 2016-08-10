@@ -1,23 +1,21 @@
 {
   DummyEnvironment env=new DummyEnvironment("test",1,0);
   KvStateRegistry registry=env.getKvStateRegistry();
+  CheckpointStreamFactory streamFactory=createStreamFactory();
+  KeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE,env);
   KvStateRegistryListener listener=mock(KvStateRegistryListener.class);
   registry.registerListener(listener);
-  backend.initializeForJob(env,"test_op",IntSerializer.INSTANCE);
   ValueStateDescriptor<Integer> desc=new ValueStateDescriptor<>("test",IntSerializer.INSTANCE,null);
   desc.setQueryable("banana");
   backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
   verify(listener,times(1)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"),any(KvStateID.class));
-  HashMap<String,KvStateSnapshot<?,?,?,?,?>> snapshot=backend.snapshotPartitionedState(682375462379L,4);
-  for (  String key : snapshot.keySet()) {
-    if (snapshot.get(key) instanceof AsynchronousKvStateSnapshot) {
-      snapshot.put(key,((AsynchronousKvStateSnapshot<?,?,?,?,?>)snapshot.get(key)).materialize());
-    }
-  }
-  backend.discardState();
+  KeyGroupsStateHandle snapshot=runSnapshot(backend.snapshot(682375462379L,4,streamFactory));
+  backend.close();
   verify(listener,times(1)).notifyKvStateUnregistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"));
-  backend.initializeForJob(env,"test_op",IntSerializer.INSTANCE);
-  backend.injectKeyValueStateSnapshots((HashMap)snapshot);
+  backend.close();
+  backend=restoreKeyedBackend(IntSerializer.INSTANCE,snapshot,env);
+  snapshot.discardState();
   backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
   verify(listener,times(2)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"),any(KvStateID.class));
+  backend.close();
 }
