@@ -1,0 +1,45 @@
+{
+  try {
+    final JobID jid=new JobID();
+    final ExecutionAttemptID triggerAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID ackAttemptID=new ExecutionAttemptID();
+    final ExecutionAttemptID commitAttemptID=new ExecutionAttemptID();
+    ExecutionVertex triggerVertex=mockExecutionVertex(triggerAttemptID);
+    ExecutionVertex ackVertex=mockExecutionVertex(ackAttemptID);
+    ExecutionVertex commitVertex=mockExecutionVertex(commitAttemptID);
+    final AtomicInteger numCalls=new AtomicInteger();
+    doAnswer(new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        numCalls.incrementAndGet();
+        return null;
+      }
+    }
+).when(triggerVertex).sendMessageToCurrentExecution(any(Serializable.class),any(ExecutionAttemptID.class));
+    CheckpointCoordinator coord=new CheckpointCoordinator(jid,10,200000,0L,maxConcurrentAttempts,42,new ExecutionVertex[]{triggerVertex},new ExecutionVertex[]{ackVertex},new ExecutionVertex[]{commitVertex},cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(2,cl),new HeapSavepointStore(),new DisabledCheckpointStatsTracker());
+    coord.startCheckpointScheduler();
+    long now=System.currentTimeMillis();
+    long timeout=now + 60000;
+    long minDuration=now + 100;
+    do {
+      Thread.sleep(20);
+    }
+ while ((now=System.currentTimeMillis()) < minDuration || (numCalls.get() < maxConcurrentAttempts && now < timeout));
+    assertEquals(maxConcurrentAttempts,numCalls.get());
+    verify(triggerVertex,times(maxConcurrentAttempts)).sendMessageToCurrentExecution(any(TriggerCheckpoint.class),eq(triggerAttemptID));
+    coord.receiveAcknowledgeMessage(new AcknowledgeCheckpoint(jid,ackAttemptID,1L));
+    now=System.currentTimeMillis();
+    timeout=now + 60000;
+    do {
+      Thread.sleep(20);
+    }
+ while (numCalls.get() < maxConcurrentAttempts + 1 && now < timeout);
+    assertEquals(maxConcurrentAttempts + 1,numCalls.get());
+    Thread.sleep(200);
+    assertEquals(maxConcurrentAttempts + 1,numCalls.get());
+    coord.shutdown();
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail(e.getMessage());
+  }
+}

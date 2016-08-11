@@ -1,40 +1,26 @@
 {
 synchronized (lock) {
-    try {
-      if (!shutdown) {
-        shutdown=true;
-        LOG.info("Stopping checkpoint coordinator for job " + job);
-        periodicScheduling=false;
-        triggerRequestQueued=false;
-        timer.cancel();
-        if (jobStatusListener != null) {
-          jobStatusListener.tell(PoisonPill.getInstance());
-          jobStatusListener=null;
-        }
-        for (        PendingCheckpoint pending : pendingCheckpoints.values()) {
-          pending.abortError(new Exception("Checkpoint Coordinator is shutting down"));
-        }
-        pendingCheckpoints.clear();
-        if (shutdownStoreAndCounter) {
-          completedCheckpointStore.shutdown();
-          checkpointIdCounter.shutdown();
-        }
- else {
-          completedCheckpointStore.suspend();
-          checkpointIdCounter.suspend();
-        }
+    if (!shutdown) {
+      shutdown=true;
+      LOG.info("Stopping checkpoint coordinator for job " + job);
+      periodicScheduling=false;
+      triggerRequestQueued=false;
+      timer.cancel();
+      if (jobStatusListener != null) {
+        jobStatusListener.tell(PoisonPill.getInstance());
+        jobStatusListener=null;
       }
-    }
-  finally {
-      if (shutdownHook != null && shutdownHook != Thread.currentThread()) {
-        try {
-          Runtime.getRuntime().removeShutdownHook(shutdownHook);
-        }
- catch (        IllegalStateException ignored) {
-        }
-catch (        Throwable t) {
-          LOG.warn("Error unregistering checkpoint coordinator shutdown hook.",t);
-        }
+      for (      PendingCheckpoint pending : pendingCheckpoints.values()) {
+        pending.abortError(new Exception("Checkpoint Coordinator is shutting down"));
+      }
+      pendingCheckpoints.clear();
+      if (shutdownStoreAndCounter) {
+        completedCheckpointStore.shutdown();
+        checkpointIdCounter.shutdown();
+      }
+ else {
+        completedCheckpointStore.suspend();
+        checkpointIdCounter.suspend();
       }
     }
   }

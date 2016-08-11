@@ -43,12 +43,6 @@
     Future<Object> savepointFuture=jobManager.ask(new RequestSavepoint(savepointPath),deadline.timeLeft());
     SavepointV0 savepoint=(SavepointV0)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
     LOG.info("Retrieved savepoint: " + savepointPath + ".");
-    LOG.info("Cancelling job " + jobId + ".");
-    Future<Object> cancelRespFuture=jobManager.ask(new CancelJob(jobId),deadline.timeLeft());
-    assertTrue(Await.result(cancelRespFuture,deadline.timeLeft()) instanceof CancellationSuccess);
-    LOG.info("Waiting for job " + jobId + " to be removed.");
-    Future<Object> removedRespFuture=jobManager.ask(new NotifyWhenJobRemoved(jobId),deadline.timeLeft());
-    assertTrue((Boolean)Await.result(removedRespFuture,deadline.timeLeft()));
     for (    TaskState stateForTaskGroup : savepoint.getTaskStates()) {
       for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
         StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
@@ -58,12 +52,19 @@
         }
       }
     }
+    LOG.info("Cancelling job " + jobId + ".");
+    Future<Object> cancelRespFuture=jobManager.ask(new CancelJob(jobId),deadline.timeLeft());
+    assertTrue(Await.result(cancelRespFuture,deadline.timeLeft()) instanceof CancellationSuccess);
+    LOG.info("Waiting for job " + jobId + " to be removed.");
+    Future<Object> removedRespFuture=jobManager.ask(new NotifyWhenJobRemoved(jobId),deadline.timeLeft());
+    assertTrue((Boolean)Await.result(removedRespFuture,deadline.timeLeft()));
   }
   finally {
     if (flink != null) {
       flink.shutdown();
     }
-    assertTrue(checkpointFiles.size() > 0);
+    Thread.sleep(1000);
+    assertTrue(checkpointFiles.toString(),checkpointFiles.size() > 0);
     for (    File f : checkpointFiles) {
       String errMsg="Checkpoint file " + f + " not cleaned up properly.";
       assertFalse(errMsg,f.exists());
