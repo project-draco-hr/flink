@@ -1,0 +1,14 @@
+{
+  if (mergingWindowsByKey != null) {
+    TupleSerializer<Tuple2<W,W>> tupleSerializer=new TupleSerializer<>((Class)Tuple2.class,new TypeSerializer[]{windowSerializer,windowSerializer});
+    ListStateDescriptor<Tuple2<W,W>> mergeStateDescriptor=new ListStateDescriptor<>("merging-window-set",tupleSerializer);
+    for (    Map.Entry<K,MergingWindowSet<W>> key : mergingWindowsByKey.entrySet()) {
+      setKeyContext(key.getKey());
+      ListState<Tuple2<W,W>> mergeState=getStateBackend().getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,mergeStateDescriptor);
+      mergeState.clear();
+      key.getValue().persist(mergeState);
+    }
+  }
+  snapshotTimers(new DataOutputViewStreamWrapper(out));
+  super.snapshotState(out,checkpointId,timestamp);
+}

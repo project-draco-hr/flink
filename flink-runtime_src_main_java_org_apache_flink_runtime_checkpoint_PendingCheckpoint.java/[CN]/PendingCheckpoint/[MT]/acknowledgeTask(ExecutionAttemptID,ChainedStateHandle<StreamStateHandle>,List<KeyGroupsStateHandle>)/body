@@ -1,0 +1,34 @@
+{
+synchronized (lock) {
+    if (discarded) {
+      return false;
+    }
+    ExecutionVertex vertex=notYetAcknowledgedTasks.remove(attemptID);
+    if (vertex != null) {
+      if (state != null || keyGroupsState != null) {
+        JobVertexID jobVertexID=vertex.getJobvertexId();
+        TaskState taskState;
+        if (taskStates.containsKey(jobVertexID)) {
+          taskState=taskStates.get(jobVertexID);
+        }
+ else {
+          taskState=new TaskState(jobVertexID,vertex.getTotalNumberOfParallelSubtasks(),vertex.getMaxParallelism());
+          taskStates.put(jobVertexID,taskState);
+        }
+        long duration=System.currentTimeMillis() - checkpointTimestamp;
+        if (state != null) {
+          taskState.putState(vertex.getParallelSubtaskIndex(),new SubtaskState(state,duration));
+        }
+        if (keyGroupsState != null && !keyGroupsState.isEmpty()) {
+          KeyGroupsStateHandle keyGroupsStateHandle=keyGroupsState.get(0);
+          taskState.putKeyedState(vertex.getParallelSubtaskIndex(),keyGroupsStateHandle);
+        }
+      }
+      numAcknowledgedTasks++;
+      return true;
+    }
+ else {
+      return false;
+    }
+  }
+}

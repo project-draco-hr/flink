@@ -1,0 +1,36 @@
+{
+  try {
+    dos.writeLong(savepoint.getCheckpointId());
+    Collection<TaskState> taskStates=savepoint.getTaskStates();
+    dos.writeInt(taskStates.size());
+    for (    TaskState taskState : savepoint.getTaskStates()) {
+      dos.writeLong(taskState.getJobVertexID().getLowerPart());
+      dos.writeLong(taskState.getJobVertexID().getUpperPart());
+      int parallelism=taskState.getParallelism();
+      dos.writeInt(parallelism);
+      dos.writeInt(taskState.getMaxParallelism());
+      Map<Integer,SubtaskState> subtaskStateMap=taskState.getSubtaskStates();
+      dos.writeInt(subtaskStateMap.size());
+      for (      Map.Entry<Integer,SubtaskState> entry : subtaskStateMap.entrySet()) {
+        dos.writeInt(entry.getKey());
+        SubtaskState subtaskState=entry.getValue();
+        ChainedStateHandle<StreamStateHandle> chainedStateHandle=subtaskState.getChainedStateHandle();
+        dos.writeInt(chainedStateHandle.getLength());
+        for (int j=0; j < chainedStateHandle.getLength(); ++j) {
+          StreamStateHandle stateHandle=chainedStateHandle.get(j);
+          serializeStreamStateHandle(stateHandle,dos);
+        }
+        dos.writeLong(subtaskState.getDuration());
+      }
+      Map<Integer,KeyGroupsStateHandle> keyGroupsStateHandles=taskState.getKeyGroupsStateHandles();
+      dos.writeInt(keyGroupsStateHandles.size());
+      for (      Map.Entry<Integer,KeyGroupsStateHandle> entry : keyGroupsStateHandles.entrySet()) {
+        dos.writeInt(entry.getKey());
+        serializeKeyGroupStateHandle(entry.getValue(),dos);
+      }
+    }
+  }
+ catch (  Exception e) {
+    throw new IOException(e);
+  }
+}

@@ -1,31 +1,19 @@
 {
-  MockContext<IN,OUT> mockContext=new MockContext<IN,OUT>(inputs);
-  StreamConfig config=new StreamConfig(new Configuration());
-  if (keySelector != null && keyType != null) {
-    config.setStateKeySerializer(keyType.createSerializer(new ExecutionConfig()));
-    config.setStatePartitioner(0,keySelector);
+  OneInputStreamOperatorTestHarness<IN,OUT> testHarness=new OneInputStreamOperatorTestHarness<>(operator);
+  testHarness.configureForKeyedStream(keySelector,keyType);
+  testHarness.setup();
+  testHarness.open();
+  operator.open();
+  for (  IN in : inputs) {
+    testHarness.processElement(new StreamRecord<>(in));
   }
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
-  final Object lock=new Object();
-  final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
-  operator.setup(mockTask,config,mockContext.output);
-  try {
-    operator.open();
-    StreamRecord<IN> record=new StreamRecord<IN>(null);
-    for (    IN in : inputs) {
-      record=record.replace(in);
-synchronized (lock) {
-        operator.setKeyContextElement1(record);
-        operator.processElement(record);
-      }
+  testHarness.close();
+  ConcurrentLinkedQueue<Object> output=testHarness.getOutput();
+  List<OUT> result=new ArrayList<>();
+  for (  Object o : output) {
+    if (o instanceof StreamRecord) {
+      result.add((OUT)((StreamRecord)o).getValue());
     }
-    operator.close();
   }
- catch (  Exception e) {
-    throw new RuntimeException("Cannot invoke operator.",e);
-  }
- finally {
-    timerService.shutdownNow();
-  }
-  return mockContext.getOutputs();
+  return result;
 }

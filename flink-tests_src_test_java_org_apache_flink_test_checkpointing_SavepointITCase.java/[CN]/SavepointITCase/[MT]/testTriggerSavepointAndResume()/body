@@ -44,7 +44,7 @@
     LOG.info("Retrieved savepoint path: " + savepointPath + ".");
     LOG.info("Requesting the savepoint.");
     Future<Object> savepointFuture=jobManager.ask(new RequestSavepoint(savepointPath),deadline.timeLeft());
-    SavepointV0 savepoint=(SavepointV0)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
+    SavepointV1 savepoint=(SavepointV1)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
     LOG.info("Retrieved savepoint: " + savepointPath + ".");
     LOG.info("Shutting down Flink cluster.");
     flink.shutdown();
@@ -115,23 +115,25 @@
         SubtaskState subtaskState=taskState.getState(tdd.getIndexInSubtaskGroup());
         assertNotNull(subtaskState);
         errMsg="Initial operator state mismatch.";
-        assertEquals(errMsg,subtaskState.getState(),tdd.getOperatorState());
+        assertEquals(errMsg,subtaskState.getChainedStateHandle(),tdd.getOperatorState());
       }
     }
     LOG.info("Cancelling job " + jobId + ".");
     jobManager.tell(new CancelJob(jobId));
     LOG.info("Disposing savepoint " + savepointPath + ".");
-    Future<Object> disposeFuture=jobManager.ask(new DisposeSavepoint(savepointPath,Option.<List<BlobKey>>empty()),deadline.timeLeft());
+    Future<Object> disposeFuture=jobManager.ask(new DisposeSavepoint(savepointPath),deadline.timeLeft());
     errMsg="Failed to dispose savepoint " + savepointPath + ".";
     Object resp=Await.result(disposeFuture,deadline.timeLeft());
     assertTrue(errMsg,resp.getClass() == getDisposeSavepointSuccess().getClass());
     List<File> checkpointFiles=new ArrayList<>();
     for (    TaskState stateForTaskGroup : savepoint.getTaskStates()) {
       for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
-        StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
-        for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
-          AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
-          checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+        ChainedStateHandle<StreamStateHandle> streamTaskState=subtaskState.getChainedStateHandle();
+        for (int i=0; i < streamTaskState.getLength(); i++) {
+          if (streamTaskState.get(i) != null) {
+            FileStateHandle fileStateHandle=(FileStateHandle)streamTaskState.get(i);
+            checkpointFiles.add(new File(fileStateHandle.getFilePath().toUri()));
+          }
         }
       }
     }

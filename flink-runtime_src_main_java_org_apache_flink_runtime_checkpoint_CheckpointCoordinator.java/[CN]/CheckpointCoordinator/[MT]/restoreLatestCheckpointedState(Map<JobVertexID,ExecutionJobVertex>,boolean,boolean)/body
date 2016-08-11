@@ -17,21 +17,34 @@ synchronized (lock) {
       TaskState taskState=taskGroupStateEntry.getValue();
       ExecutionJobVertex executionJobVertex=tasks.get(taskGroupStateEntry.getKey());
       if (executionJobVertex != null) {
-        if (taskState.getParallelism() != executionJobVertex.getParallelism()) {
-          throw new RuntimeException("Cannot restore the latest checkpoint because " + "the parallelism changed. The operator" + executionJobVertex.getJobVertexId() + " has parallelism "+ executionJobVertex.getParallelism()+ " whereas the corresponding"+ "state object has a parallelism of "+ taskState.getParallelism());
+        if (taskState.getMaxParallelism() != executionJobVertex.getMaxParallelism()) {
+          throw new IllegalStateException("The maximum parallelism (" + taskState.getMaxParallelism() + ") with which the latest "+ "checkpoint of the execution job vertex "+ executionJobVertex+ " has been taken and the current maximum parallelism ("+ executionJobVertex.getMaxParallelism()+ ") changed. This "+ "is currently not supported.");
         }
+        boolean hasNonPartitionedState=taskState.hasNonPartitionedState();
+        if (hasNonPartitionedState && taskState.getParallelism() != executionJobVertex.getParallelism()) {
+          throw new IllegalStateException("Cannot restore the latest checkpoint because " + "the operator " + executionJobVertex.getJobVertexId() + " has non-partitioned "+ "state and its parallelism changed. The operator"+ executionJobVertex.getJobVertexId()+ " has parallelism "+ executionJobVertex.getParallelism()+ " whereas the corresponding"+ "state object has a parallelism of "+ taskState.getParallelism());
+        }
+        List<KeyGroupRange> keyGroupPartitions=createKeyGroupPartitions(executionJobVertex.getMaxParallelism(),executionJobVertex.getParallelism());
         int counter=0;
-        List<Set<Integer>> keyGroupPartitions=createKeyGroupPartitions(executionJobVertex.getMaxParallelism(),executionJobVertex.getParallelism());
         for (int i=0; i < executionJobVertex.getParallelism(); i++) {
-          SubtaskState subtaskState=taskState.getState(i);
-          SerializedValue<StateHandle<?>> state=null;
-          if (subtaskState != null) {
-            counter++;
-            state=subtaskState.getState();
+          ChainedStateHandle<StreamStateHandle> state=null;
+          if (hasNonPartitionedState) {
+            SubtaskState subtaskState=taskState.getState(i);
+            if (subtaskState != null) {
+              counter++;
+              state=subtaskState.getChainedStateHandle();
+            }
           }
-          Map<Integer,SerializedValue<StateHandle<?>>> kvStateForTaskMap=taskState.getUnwrappedKvStates(keyGroupPartitions.get(i));
+          KeyGroupRange subtaskKeyGroupIds=keyGroupPartitions.get(i);
+          List<KeyGroupsStateHandle> subtaskKeyGroupStates=new ArrayList<>();
+          for (          KeyGroupsStateHandle storedKeyGroup : taskState.getKeyGroupStates()) {
+            KeyGroupsStateHandle intersection=storedKeyGroup.getKeyGroupIntersection(subtaskKeyGroupIds);
+            if (intersection.getNumberOfKeyGroups() > 0) {
+              subtaskKeyGroupStates.add(intersection);
+            }
+          }
           Execution currentExecutionAttempt=executionJobVertex.getTaskVertices()[i].getCurrentExecutionAttempt();
-          currentExecutionAttempt.setInitialState(state,kvStateForTaskMap);
+          currentExecutionAttempt.setInitialState(state,subtaskKeyGroupStates);
         }
         if (allOrNothingState && counter > 0 && counter < executionJobVertex.getParallelism()) {
           throw new IllegalStateException("The checkpoint contained state only for " + "a subset of tasks for vertex " + executionJobVertex);

@@ -1,0 +1,17 @@
+{
+  HashMap<String,KvStateSnapshot<?,?,?,?,?>> keyedState=stateBackend.snapshotPartitionedState(checkpointId,timestamp);
+  if (keyedState != null) {
+    Set<String> keys=keyedState.keySet();
+    for (    String key : keys) {
+      if (keyedState.get(key) instanceof AsynchronousKvStateSnapshot) {
+        AsynchronousKvStateSnapshot<?,?,?,?,?> asyncHandle=(AsynchronousKvStateSnapshot<?,?,?,?,?>)keyedState.get(key);
+        keyedState.put(key,asyncHandle.materialize());
+      }
+    }
+  }
+  byte[] serializedSnapshot=InstantiationUtil.serializeObject(keyedState);
+  DataOutputStream dos=new DataOutputStream(out);
+  dos.writeInt(serializedSnapshot.length);
+  dos.write(serializedSnapshot);
+  dos.flush();
+}

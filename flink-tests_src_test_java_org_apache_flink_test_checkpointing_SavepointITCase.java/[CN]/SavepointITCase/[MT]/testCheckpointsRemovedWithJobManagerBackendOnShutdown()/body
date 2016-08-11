@@ -41,14 +41,16 @@
     LOG.info("Retrieved savepoint path: " + savepointPath + ".");
     LOG.info("Requesting the savepoint.");
     Future<Object> savepointFuture=jobManager.ask(new RequestSavepoint(savepointPath),deadline.timeLeft());
-    SavepointV0 savepoint=(SavepointV0)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
+    SavepointV1 savepoint=(SavepointV1)((ResponseSavepoint)Await.result(savepointFuture,deadline.timeLeft())).savepoint();
     LOG.info("Retrieved savepoint: " + savepointPath + ".");
     for (    TaskState stateForTaskGroup : savepoint.getTaskStates()) {
       for (      SubtaskState subtaskState : stateForTaskGroup.getStates()) {
-        StreamTaskStateList taskStateList=(StreamTaskStateList)subtaskState.getState().deserializeValue(ClassLoader.getSystemClassLoader());
-        for (        StreamTaskState taskState : taskStateList.getState(ClassLoader.getSystemClassLoader())) {
-          AbstractFileStateHandle fsState=(AbstractFileStateHandle)taskState.getFunctionState();
-          checkpointFiles.add(new File(fsState.getFilePath().toUri()));
+        ChainedStateHandle<StreamStateHandle> streamTaskState=subtaskState.getChainedStateHandle();
+        for (int i=0; i < streamTaskState.getLength(); i++) {
+          if (streamTaskState.get(i) != null) {
+            FileStateHandle fileStateHandle=(FileStateHandle)streamTaskState.get(i);
+            checkpointFiles.add(new File(fileStateHandle.getFilePath().toUri()));
+          }
         }
       }
     }

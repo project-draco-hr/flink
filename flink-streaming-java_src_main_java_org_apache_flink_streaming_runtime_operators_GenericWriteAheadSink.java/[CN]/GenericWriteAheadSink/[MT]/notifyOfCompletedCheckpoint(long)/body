@@ -7,9 +7,9 @@ synchronized (state.pendingHandles) {
       if (pastCheckpointId <= checkpointId) {
         try {
           if (!committer.isCheckpointCommitted(pastCheckpointId)) {
-            Tuple2<Long,StateHandle<DataInputView>> handle=state.pendingHandles.get(pastCheckpointId);
-            DataInputView in=handle.f1.getState(getUserCodeClassloader());
-            boolean success=sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(in,serializer),serializer),handle.f0);
+            Tuple2<Long,StreamStateHandle> handle=state.pendingHandles.get(pastCheckpointId);
+            FSDataInputStream in=handle.f1.openInputStream();
+            boolean success=sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(new DataInputViewStreamWrapper(in),serializer),serializer),handle.f0);
             if (success) {
               committer.commitCheckpoint(pastCheckpointId);
               checkpointsToRemove.add(pastCheckpointId);
@@ -26,7 +26,7 @@ synchronized (state.pendingHandles) {
       }
     }
     for (    Long toRemove : checkpointsToRemove) {
-      Tuple2<Long,StateHandle<DataInputView>> handle=state.pendingHandles.get(toRemove);
+      Tuple2<Long,StreamStateHandle> handle=state.pendingHandles.get(toRemove);
       state.pendingHandles.remove(toRemove);
       handle.f1.discardState();
     }

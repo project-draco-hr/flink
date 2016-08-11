@@ -1,37 +1,27 @@
 {
-  OperatorExposingTask<Tuple1<Integer>> task=createTask();
-  TypeInformation<Tuple1<Integer>> info=createTypeInfo();
-  OneInputStreamTaskTestHarness<Tuple1<Integer>,Tuple1<Integer>> testHarness=new OneInputStreamTaskTestHarness<>(task,1,1,info,info);
-  StreamConfig streamConfig=testHarness.getStreamConfig();
-  streamConfig.setCheckpointingEnabled(true);
-  streamConfig.setStreamOperator(new ListSink2());
+  ListSink2 sink=new ListSink2();
+  OneInputStreamOperatorTestHarness<Tuple1<Integer>,Tuple1<Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(sink);
+  testHarness.open();
   int elementCounter=1;
-  testHarness.invoke();
-  testHarness.waitForTaskRunning();
   for (int x=0; x < 10; x++) {
     testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,0)));
     elementCounter++;
   }
-  testHarness.waitForInputProcessing();
-  task.getOperator().snapshotOperatorState(0,0);
-  task.notifyCheckpointComplete(0);
-  Assert.assertTrue(((ListSink2)task.getOperator()).values.size() == 0);
+  testHarness.snapshot(0,0);
+  testHarness.notifyOfCompletedCheckpoint(0);
+  Assert.assertTrue(sink.values.size() == 0);
   for (int x=0; x < 10; x++) {
     testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,1)));
     elementCounter++;
   }
-  testHarness.waitForInputProcessing();
-  task.getOperator().snapshotOperatorState(1,0);
-  task.notifyCheckpointComplete(1);
-  Assert.assertTrue(((ListSink2)task.getOperator()).values.size() == 10);
+  testHarness.snapshot(1,0);
+  testHarness.notifyOfCompletedCheckpoint(1);
+  Assert.assertTrue(sink.values.size() == 10);
   for (int x=0; x < 10; x++) {
     testHarness.processElement(new StreamRecord<>(generateValue(elementCounter,2)));
     elementCounter++;
   }
-  testHarness.waitForInputProcessing();
-  task.getOperator().snapshotOperatorState(2,0);
-  task.notifyCheckpointComplete(2);
-  Assert.assertTrue(((ListSink2)task.getOperator()).values.size() == 40);
-  testHarness.endInput();
-  testHarness.waitForTaskCompletion();
+  testHarness.snapshot(2,0);
+  testHarness.notifyOfCompletedCheckpoint(2);
+  Assert.assertTrue(sink.values.size() == 40);
 }

@@ -1,14 +1,15 @@
 {
   try {
     long startTime=System.currentTimeMillis();
-    CheckpointStateOutputView outputView=backend.createCheckpointStateOutputView(checkpointId,startTime);
+    CheckpointStateOutputStream outputStream=backend.createCheckpointStateOutputStream(checkpointId,startTime);
+    DataOutputView outputView=new DataOutputViewStreamWrapper(outputStream);
     outputView.writeInt(columnFamilies.size());
     byte count=0;
     Map<String,Byte> columnFamilyMapping=new HashMap<>();
     for (    Map.Entry<String,Tuple2<ColumnFamilyHandle,StateDescriptor>> column : columnFamilies.entrySet()) {
       columnFamilyMapping.put(column.getKey(),count);
       outputView.writeByte(count);
-      ObjectOutputStream ooOut=new ObjectOutputStream(outputView);
+      ObjectOutputStream ooOut=new ObjectOutputStream(outputStream);
       ooOut.writeObject(column.getValue().f1);
       ooOut.flush();
       count++;
@@ -31,7 +32,7 @@ synchronized (dbCleanupLock) {
         }
       }
     }
-    StateHandle<DataInputView> stateHandle=outputView.closeAndGetHandle();
+    StreamStateHandle stateHandle=outputStream.closeAndGetHandle();
     long endTime=System.currentTimeMillis();
     LOG.info("Fully asynchronous RocksDB materialization to " + backupUri + " (asynchronous part) took "+ (endTime - startTime)+ " ms.");
     return new FinalFullyAsyncSnapshot(stateHandle,checkpointId);

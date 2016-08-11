@@ -8,8 +8,9 @@
     final Object lock=new Object();
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
     AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
-    op.setup(mockTask,new StreamConfig(new Configuration()),out);
-    op.open();
+    OneInputStreamOperatorTestHarness<Tuple2<Integer,Integer>,Tuple2<Integer,Integer>> testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    testHarness.setup();
+    testHarness.open();
     final int numElements=1000;
     final int numElementsFirst=700;
     for (int i=0; i < numElementsFirst; i++) {
@@ -20,11 +21,11 @@ synchronized (lock) {
       }
       Thread.sleep(1);
     }
-    StreamTaskState state;
+    StreamStateHandle state;
     List<Tuple2<Integer,Integer>> resultAtSnapshot;
 synchronized (lock) {
       int beforeSnapShot=out.getElements().size();
-      state=op.snapshotOperatorState(1L,System.currentTimeMillis());
+      state=testHarness.snapshot(1L,System.currentTimeMillis());
       resultAtSnapshot=new ArrayList<>(out.getElements());
       int afterSnapShot=out.getElements().size();
       assertEquals("operator performed computation during snapshot",beforeSnapShot,afterSnapShot);
@@ -41,9 +42,10 @@ synchronized (lock) {
     op.dispose();
     final CollectingOutput<Tuple2<Integer,Integer>> out2=new CollectingOutput<>(windowSlide);
     op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,windowSize,windowSlide);
-    op.setup(mockTask,new StreamConfig(new Configuration()),out2);
-    op.restoreState(state);
-    op.open();
+    testHarness=new OneInputStreamOperatorTestHarness<>(op);
+    testHarness.setup();
+    testHarness.restore(state);
+    testHarness.open();
     for (int i=numElementsFirst; i < numElements; i++) {
 synchronized (lock) {
         StreamRecord<Tuple2<Integer,Integer>> next=new StreamRecord<>(new Tuple2<>(i,i));

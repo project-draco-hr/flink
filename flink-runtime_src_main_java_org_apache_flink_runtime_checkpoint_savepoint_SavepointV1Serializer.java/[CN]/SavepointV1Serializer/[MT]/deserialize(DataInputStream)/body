@@ -1,0 +1,35 @@
+{
+  long checkpointId=dis.readLong();
+  int numTaskStates=dis.readInt();
+  List<TaskState> taskStates=new ArrayList<>(numTaskStates);
+  for (int i=0; i < numTaskStates; i++) {
+    JobVertexID jobVertexId=new JobVertexID(dis.readLong(),dis.readLong());
+    int parallelism=dis.readInt();
+    int maxParallelism=dis.readInt();
+    TaskState taskState=new TaskState(jobVertexId,parallelism,maxParallelism);
+    taskStates.add(taskState);
+    int numSubTaskStates=dis.readInt();
+    for (int j=0; j < numSubTaskStates; j++) {
+      int subtaskIndex=dis.readInt();
+      int chainedStateHandleSize=dis.readInt();
+      List<StreamStateHandle> streamStateHandleList=new ArrayList<>(chainedStateHandleSize);
+      for (int k=0; k < chainedStateHandleSize; ++k) {
+        StreamStateHandle streamStateHandle=deserializeStreamStateHandle(dis);
+        streamStateHandleList.add(streamStateHandle);
+      }
+      long duration=dis.readLong();
+      ChainedStateHandle<StreamStateHandle> chainedStateHandle=new ChainedStateHandle<>(streamStateHandleList);
+      SubtaskState subtaskState=new SubtaskState(chainedStateHandle,duration);
+      taskState.putState(subtaskIndex,subtaskState);
+    }
+    int numKeyGroupStates=dis.readInt();
+    for (int j=0; j < numKeyGroupStates; j++) {
+      int keyGroupIndex=dis.readInt();
+      KeyGroupsStateHandle keyGroupsStateHandle=deserializeKeyGroupStateHandle(dis);
+      if (keyGroupsStateHandle != null) {
+        taskState.putKeyedState(keyGroupIndex,keyGroupsStateHandle);
+      }
+    }
+  }
+  return new SavepointV1(checkpointId,taskStates);
+}

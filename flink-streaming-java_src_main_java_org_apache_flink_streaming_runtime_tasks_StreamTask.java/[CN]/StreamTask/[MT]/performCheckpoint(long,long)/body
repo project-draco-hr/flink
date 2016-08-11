@@ -4,46 +4,26 @@ synchronized (lock) {
     if (isRunning) {
       operatorChain.broadcastCheckpointBarrier(checkpointId,timestamp);
       final StreamOperator<?>[] allOperators=operatorChain.getAllOperators();
-      final StreamTaskState[] states=new StreamTaskState[allOperators.length];
-      boolean hasAsyncStates=false;
-      for (int i=0; i < states.length; i++) {
+      final List<StreamStateHandle> nonPartitionedStates=Arrays.asList(new StreamStateHandle[allOperators.length]);
+      for (int i=0; i < allOperators.length; i++) {
         StreamOperator<?> operator=allOperators[i];
         if (operator != null) {
-          StreamTaskState state=operator.snapshotOperatorState(checkpointId,timestamp);
-          if (state.getOperatorState() instanceof AsynchronousStateHandle) {
-            hasAsyncStates=true;
-          }
-          if (state.getFunctionState() instanceof AsynchronousStateHandle) {
-            hasAsyncStates=true;
-          }
-          if (state.getKvStates() != null) {
-            for (            KvStateSnapshot<?,?,?,?,?> kvSnapshot : state.getKvStates().values()) {
-              if (kvSnapshot instanceof AsynchronousKvStateSnapshot) {
-                hasAsyncStates=true;
-              }
-            }
-          }
-          states[i]=state.isEmpty() ? null : state;
+          AbstractStateBackend.CheckpointStateOutputStream outStream=((AbstractStreamOperator)operator).getStateBackend().createCheckpointStateOutputStream(checkpointId,timestamp);
+          operator.snapshotState(outStream,checkpointId,timestamp);
+          nonPartitionedStates.set(i,outStream.closeAndGetHandle());
         }
       }
       if (!isRunning) {
         throw new CancelTaskException();
       }
-      StreamTaskStateList allStates=new StreamTaskStateList(states);
-      if (allStates.isEmpty()) {
+      ChainedStateHandle<StreamStateHandle> states=new ChainedStateHandle<>(nonPartitionedStates);
+      List<KeyGroupsStateHandle> keyedStates=Collections.<KeyGroupsStateHandle>emptyList();
+      if (states.isEmpty() && keyedStates.isEmpty()) {
         getEnvironment().acknowledgeCheckpoint(checkpointId);
       }
- else       if (!hasAsyncStates) {
-        this.lastCheckpointSize=allStates.getStateSize();
-        getEnvironment().acknowledgeCheckpoint(checkpointId,allStates);
-      }
  else {
-        String threadName="Materialize checkpoint state " + checkpointId + " - "+ getName();
-        AsyncCheckpointThread checkpointThread=new AsyncCheckpointThread(threadName,this,cancelables,states,checkpointId);
-synchronized (cancelables) {
-          cancelables.add(checkpointThread);
-        }
-        checkpointThread.start();
+        this.lastCheckpointSize=states.getStateSize();
+        getEnvironment().acknowledgeCheckpoint(checkpointId,states,keyedStates);
       }
       return true;
     }

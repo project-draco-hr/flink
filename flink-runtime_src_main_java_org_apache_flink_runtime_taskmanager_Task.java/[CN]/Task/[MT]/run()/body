@@ -52,24 +52,17 @@
     TaskKvStateRegistry kvStateRegistry=network.createKvStateTaskRegistry(jobId,getJobVertexId());
     Environment env=new RuntimeEnvironment(jobId,vertexId,executionId,executionConfig,taskInfo,jobConfiguration,taskConfiguration,userCodeClassLoader,memoryManager,ioManager,broadcastVariableManager,accumulatorRegistry,kvStateRegistry,splitProvider,distributedCacheEntries,writers,inputGates,jobManager,taskManagerConfig,metrics,this);
     invokable.setEnvironment(env);
-    SerializedValue<StateHandle<?>> operatorState=this.operatorState;
-    if (operatorState != null) {
+    if (chainedOperatorState != null || keyGroupStates != null) {
       if (invokable instanceof StatefulTask) {
-        try {
-          StateHandle<?> state=operatorState.deserializeValue(userCodeClassLoader);
-          StatefulTask<?> op=(StatefulTask<?>)invokable;
-          StateUtils.setOperatorState(op,state);
-        }
- catch (        Exception e) {
-          throw new RuntimeException("Failed to deserialize state handle and setup initial operator state.",e);
-        }
+        StatefulTask op=(StatefulTask)invokable;
+        op.setInitialState(chainedOperatorState,keyGroupStates);
       }
  else {
         throw new IllegalStateException("Found operator state for a non-stateful task invokable");
       }
     }
-    operatorState=null;
-    this.operatorState=null;
+    this.chainedOperatorState=null;
+    this.keyGroupStates=null;
     this.invokable=invokable;
     if (!STATE_UPDATER.compareAndSet(this,ExecutionState.DEPLOYING,ExecutionState.RUNNING)) {
       throw new CancelTaskException();
