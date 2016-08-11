@@ -1,0 +1,19 @@
+{
+  final int WINDOW_SIZE=3000;
+  final int SLIDING=1000;
+  final int OFFSET=10;
+  TypeInformation<Tuple2<String,Integer>> inputType=TypeInfoParser.parse("Tuple2<String, Integer>");
+  SlidingProcessingTimeWindows windowAssigner=SlidingProcessingTimeWindows.of(Time.milliseconds(WINDOW_SIZE),Time.milliseconds(SLIDING),Time.milliseconds(OFFSET));
+  WindowingTestHarness<String,Tuple2<String,Integer>,TimeWindow> testHarness=new WindowingTestHarness<>(new ExecutionConfig(),windowAssigner,BasicTypeInfo.STRING_TYPE_INFO,inputType,new TupleKeySelector(),ProcessingTimeTrigger.create(),0);
+  testHarness.setProcessingTime(3);
+  testHarness.processElement(new Tuple2<>("key2",1),Long.MAX_VALUE);
+  testHarness.setProcessingTime(1111);
+  testHarness.addExpectedElement(new Tuple2<>("key2",1),OFFSET - 1);
+  testHarness.addExpectedElement(new Tuple2<>("key2",1),OFFSET + 999);
+  testHarness.processElement(new Tuple2<>("key2",2),Long.MIN_VALUE);
+  testHarness.setProcessingTime(2222);
+  testHarness.addExpectedElement(new Tuple2<>("key2",1),OFFSET + 1999);
+  testHarness.addExpectedElement(new Tuple2<>("key2",2),OFFSET + 1999);
+  testHarness.compareActualToExpectedOutput("Output was not correct.");
+  testHarness.close();
+}
