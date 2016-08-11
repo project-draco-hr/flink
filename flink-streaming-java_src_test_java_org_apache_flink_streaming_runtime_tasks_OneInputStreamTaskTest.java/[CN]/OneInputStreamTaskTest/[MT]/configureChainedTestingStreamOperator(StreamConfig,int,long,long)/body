@@ -1,0 +1,18 @@
+{
+  Preconditions.checkArgument(numberChainedTasks >= 1,"The operator chain must at least " + "contain one operator.");
+  Random random=new Random(seed);
+  TestingStreamOperator<Integer,Integer> previousOperator=new TestingStreamOperator<>(random.nextLong(),recoveryTimestamp);
+  streamConfig.setStreamOperator(previousOperator);
+  Map<Integer,StreamConfig> chainedTaskConfigs=new HashMap<>(numberChainedTasks - 1);
+  List<StreamEdge> outputEdges=new ArrayList<>(numberChainedTasks - 1);
+  for (int chainedIndex=1; chainedIndex < numberChainedTasks; chainedIndex++) {
+    TestingStreamOperator<Integer,Integer> chainedOperator=new TestingStreamOperator<>(random.nextLong(),recoveryTimestamp);
+    StreamConfig chainedConfig=new StreamConfig(new Configuration());
+    chainedConfig.setStreamOperator(chainedOperator);
+    chainedTaskConfigs.put(chainedIndex,chainedConfig);
+    StreamEdge outputEdge=new StreamEdge(new StreamNode(null,chainedIndex - 1,null,null,null,null,null),new StreamNode(null,chainedIndex,null,null,null,null,null),0,Collections.<String>emptyList(),null);
+    outputEdges.add(outputEdge);
+  }
+  streamConfig.setChainedOutputs(outputEdges);
+  streamConfig.setTransitiveChainedTaskConfigs(chainedTaskConfigs);
+}

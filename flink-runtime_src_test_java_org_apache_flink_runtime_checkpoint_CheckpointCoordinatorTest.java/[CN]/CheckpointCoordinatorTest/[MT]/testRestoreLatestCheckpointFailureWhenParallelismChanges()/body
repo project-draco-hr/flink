@@ -1,0 +1,45 @@
+{
+  final JobID jid=new JobID();
+  final long timestamp=System.currentTimeMillis();
+  final JobVertexID jobVertexID1=new JobVertexID();
+  final JobVertexID jobVertexID2=new JobVertexID();
+  int parallelism1=3;
+  int parallelism2=2;
+  int maxParallelism1=42;
+  int maxParallelism2=13;
+  final ExecutionJobVertex jobVertex1=mockExecutionJobVertex(jobVertexID1,parallelism1,maxParallelism1);
+  final ExecutionJobVertex jobVertex2=mockExecutionJobVertex(jobVertexID2,parallelism2,maxParallelism2);
+  List<ExecutionVertex> allExecutionVertices=new ArrayList<>(parallelism1 + parallelism2);
+  allExecutionVertices.addAll(Arrays.asList(jobVertex1.getTaskVertices()));
+  allExecutionVertices.addAll(Arrays.asList(jobVertex2.getTaskVertices()));
+  ExecutionVertex[] arrayExecutionVertices=allExecutionVertices.toArray(new ExecutionVertex[0]);
+  CheckpointCoordinator coord=new CheckpointCoordinator(jid,600000,600000,0,Integer.MAX_VALUE,arrayExecutionVertices,arrayExecutionVertices,arrayExecutionVertices,cl,new StandaloneCheckpointIDCounter(),new StandaloneCompletedCheckpointStore(1,cl),new HeapSavepointStore(),new DisabledCheckpointStatsTracker());
+  coord.triggerCheckpoint(timestamp);
+  assertTrue(coord.getPendingCheckpoints().keySet().size() == 1);
+  long checkpointId=Iterables.getOnlyElement(coord.getPendingCheckpoints().keySet());
+  List<KeyGroupRange> keyGroupPartitions1=coord.createKeyGroupPartitions(maxParallelism1,parallelism1);
+  List<KeyGroupRange> keyGroupPartitions2=coord.createKeyGroupPartitions(maxParallelism2,parallelism2);
+  for (int index=0; index < jobVertex1.getParallelism(); index++) {
+    ChainedStateHandle<StreamStateHandle> valueSizeTuple=generateStateForVertex(jobVertexID1,index);
+    List<KeyGroupsStateHandle> keyGroupState=generateKeyGroupState(jobVertexID1,keyGroupPartitions1.get(index));
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex1.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,valueSizeTuple,keyGroupState);
+    coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
+  }
+  for (int index=0; index < jobVertex2.getParallelism(); index++) {
+    ChainedStateHandle<StreamStateHandle> state=generateStateForVertex(jobVertexID2,index);
+    List<KeyGroupsStateHandle> keyGroupState=generateKeyGroupState(jobVertexID2,keyGroupPartitions2.get(index));
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex2.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,state,keyGroupState);
+    coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
+  }
+  List<CompletedCheckpoint> completedCheckpoints=coord.getSuccessfulCheckpoints();
+  assertEquals(1,completedCheckpoints.size());
+  Map<JobVertexID,ExecutionJobVertex> tasks=new HashMap<>();
+  int newParallelism1=4;
+  int newParallelism2=3;
+  final ExecutionJobVertex newJobVertex1=mockExecutionJobVertex(jobVertexID1,newParallelism1,maxParallelism1);
+  final ExecutionJobVertex newJobVertex2=mockExecutionJobVertex(jobVertexID2,newParallelism2,maxParallelism2);
+  tasks.put(jobVertexID1,newJobVertex1);
+  tasks.put(jobVertexID2,newJobVertex2);
+  coord.restoreLatestCheckpointedState(tasks,true,true);
+  fail("The restoration should have failed because the parallelism of an vertex with " + "non-partitioned state changed.");
+}

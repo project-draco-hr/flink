@@ -1,0 +1,28 @@
+{
+  Preconditions.checkArgument(keyGroupRange.getNumberOfKeyGroups() == states.size());
+  long[] offsets=new long[keyGroupRange.getNumberOfKeyGroups()];
+  List<byte[]> serializedGroupValues=new ArrayList<>(offsets.length);
+  KeyGroupRangeOffsets keyGroupRangeOffsets=new KeyGroupRangeOffsets(keyGroupRange,offsets);
+  int runningGroupsOffset=0;
+  int idx=0;
+  for (  int keyGroup : keyGroupRange) {
+    keyGroupRangeOffsets.setKeyGroupOffset(keyGroup,runningGroupsOffset);
+    byte[] serializedValue=InstantiationUtil.serializeObject(states.get(idx));
+    runningGroupsOffset+=serializedValue.length;
+    serializedGroupValues.add(serializedValue);
+    ++idx;
+  }
+  byte[] allSerializedValuesConcatenated=new byte[runningGroupsOffset];
+  runningGroupsOffset=0;
+  byte[] old=null;
+  for (  byte[] serializedGroupValue : serializedGroupValues) {
+    System.arraycopy(serializedGroupValue,0,allSerializedValuesConcatenated,runningGroupsOffset,serializedGroupValue.length);
+    runningGroupsOffset+=serializedGroupValue.length;
+    old=serializedGroupValue;
+  }
+  ByteStreamStateHandle allSerializedStatesHandle=new ByteStreamStateHandle(allSerializedValuesConcatenated);
+  KeyGroupsStateHandle keyGroupsStateHandle=new KeyGroupsStateHandle(keyGroupRangeOffsets,allSerializedStatesHandle);
+  List<KeyGroupsStateHandle> keyGroupsStateHandleList=new ArrayList<>();
+  keyGroupsStateHandleList.add(keyGroupsStateHandle);
+  return keyGroupsStateHandleList;
+}

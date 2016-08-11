@@ -1,0 +1,35 @@
+{
+  final Deadline deadline=new FiniteDuration(2,TimeUnit.MINUTES).fromNow();
+  final OneInputStreamTask<String,String> streamTask=new OneInputStreamTask<String,String>();
+  final OneInputStreamTaskTestHarness<String,String> testHarness=new OneInputStreamTaskTestHarness<String,String>(streamTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  IdentityKeySelector<String> keySelector=new IdentityKeySelector<>();
+  testHarness.configureForKeyedStream(keySelector,BasicTypeInfo.STRING_TYPE_INFO);
+  long checkpointId=1L;
+  long checkpointTimestamp=1L;
+  long recoveryTimestamp=3L;
+  long seed=2L;
+  int numberChainedTasks=11;
+  StreamConfig streamConfig=testHarness.getStreamConfig();
+  configureChainedTestingStreamOperator(streamConfig,numberChainedTasks,seed,recoveryTimestamp);
+  AcknowledgeStreamMockEnvironment env=new AcknowledgeStreamMockEnvironment(testHarness.jobConfig,testHarness.taskConfig,testHarness.executionConfig,testHarness.memorySize,new MockInputSplitProvider(),testHarness.bufferSize);
+  TestingStreamOperator.numberRestoreCalls=0;
+  testHarness.invoke(env);
+  testHarness.waitForTaskRunning(deadline.timeLeft().toMillis());
+  streamTask.triggerCheckpoint(checkpointId,checkpointTimestamp);
+  testHarness.endInput();
+  testHarness.waitForTaskCompletion(deadline.timeLeft().toMillis());
+  assertEquals(0,TestingStreamOperator.numberRestoreCalls);
+  assertEquals(checkpointId,env.getCheckpointId());
+  final OneInputStreamTask<String,String> restoredTask=new OneInputStreamTask<String,String>();
+  restoredTask.setInitialState(env.getState(),env.getKeyGroupStates());
+  final OneInputStreamTaskTestHarness<String,String> restoredTaskHarness=new OneInputStreamTaskTestHarness<String,String>(restoredTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
+  restoredTaskHarness.configureForKeyedStream(keySelector,BasicTypeInfo.STRING_TYPE_INFO);
+  StreamConfig restoredTaskStreamConfig=restoredTaskHarness.getStreamConfig();
+  configureChainedTestingStreamOperator(restoredTaskStreamConfig,numberChainedTasks,seed,recoveryTimestamp);
+  TestingStreamOperator.numberRestoreCalls=0;
+  restoredTaskHarness.invoke();
+  restoredTaskHarness.endInput();
+  restoredTaskHarness.waitForTaskCompletion(deadline.timeLeft().toMillis());
+  assertEquals(numberChainedTasks,TestingStreamOperator.numberRestoreCalls);
+  TestingStreamOperator.numberRestoreCalls=0;
+}
