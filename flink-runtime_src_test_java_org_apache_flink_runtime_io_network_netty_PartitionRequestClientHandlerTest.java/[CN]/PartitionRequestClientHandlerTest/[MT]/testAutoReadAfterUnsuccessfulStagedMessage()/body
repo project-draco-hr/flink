@@ -1,0 +1,33 @@
+{
+  PartitionRequestClientHandler handler=new PartitionRequestClientHandler();
+  EmbeddedChannel channel=new EmbeddedChannel(handler);
+  final AtomicReference<EventListener<Buffer>> listener=new AtomicReference<>();
+  BufferProvider bufferProvider=mock(BufferProvider.class);
+  when(bufferProvider.addListener(any(EventListener.class))).thenAnswer(new Answer<Boolean>(){
+    @Override @SuppressWarnings("unchecked") public Boolean answer(    InvocationOnMock invocation) throws Throwable {
+      listener.set((EventListener<Buffer>)invocation.getArguments()[0]);
+      return true;
+    }
+  }
+);
+  when(bufferProvider.requestBuffer()).thenReturn(null);
+  InputChannelID channelId=new InputChannelID(0,0);
+  RemoteInputChannel inputChannel=mock(RemoteInputChannel.class);
+  when(inputChannel.getInputChannelId()).thenReturn(channelId);
+  when(inputChannel.getBufferProvider()).thenReturn(bufferProvider,bufferProvider,null);
+  handler.addInputChannel(inputChannel);
+  BufferResponse msg=createBufferResponse(createBuffer(true),0,channelId);
+  assertTrue(channel.config().isAutoRead());
+  channel.writeInbound(msg);
+  assertFalse(channel.config().isAutoRead());
+  msg=createBufferResponse(createBuffer(true),1,channelId);
+  channel.writeInbound(msg);
+  msg=createBufferResponse(createBuffer(true),2,channelId);
+  channel.writeInbound(msg);
+  Buffer availableBuffer=createBuffer(false);
+  listener.get().onEvent(availableBuffer);
+  when(bufferProvider.addListener(any(EventListener.class))).thenReturn(false);
+  when(bufferProvider.isDestroyed()).thenReturn(true);
+  channel.runPendingTasks();
+  assertTrue(channel.config().isAutoRead());
+}
