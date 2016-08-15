@@ -15,7 +15,10 @@
   TaskManagerJobMetricGroup tmJobMetricGroup=new TaskManagerJobMetricGroup(metricRegistry,tmMetricGroup,new JobID(),jobName);
   TaskMetricGroup taskMetricGroup=new TaskMetricGroup(metricRegistry,tmJobMetricGroup,new AbstractID(),new AbstractID(),taskName,0,0);
   SimpleCounter myCounter=new SimpleCounter();
+  com.codahale.metrics.Meter dropwizardMeter=new com.codahale.metrics.Meter();
+  DropwizardMeterWrapper meterWrapper=new DropwizardMeterWrapper(dropwizardMeter);
   taskMetricGroup.counter(counterName,myCounter);
+  taskMetricGroup.meter("meter",meterWrapper);
   List<MetricReporter> reporters=metricRegistry.getReporters();
   assertTrue(reporters.size() == 1);
   MetricReporter metricReporter=reporters.get(0);
@@ -23,6 +26,8 @@
   TestingScheduledDropwizardReporter reporter=(TestingScheduledDropwizardReporter)metricReporter;
   Map<Counter,String> counters=reporter.getCounters();
   assertTrue(counters.containsKey(myCounter));
+  Map<Meter,String> meters=reporter.getMeters();
+  assertTrue(meters.containsKey(meterWrapper));
   String expectedCounterName=reporter.filterCharacters(hostname) + delimiter + reporter.filterCharacters(taskManagerId)+ delimiter+ reporter.filterCharacters(jobName)+ delimiter+ reporter.filterCharacters(counterName);
   assertEquals(expectedCounterName,counters.get(myCounter));
   metricRegistry.shutdown();
