@@ -1,22 +1,39 @@
 {
+  try {
 switch (type) {
 case YARN_SESSION:
-    yCli=new FlinkYarnSessionCli("","",false);
-  returnValue=yCli.run(args);
-break;
+      yCli=new FlinkYarnSessionCli("","",false);
+    returnValue=yCli.run(args);
+  break;
 case CLI_FRONTEND:
+TestingCLI cli;
 try {
-CliFrontend cli=new CliFrontend();
+cli=new TestingCLI();
 returnValue=cli.parseParameters(args);
 }
  catch (Exception e) {
-throw new RuntimeException(e);
+throw new RuntimeException("Failed to execute the following args with CliFrontend: " + Arrays.toString(args),e);
 }
+final ClusterClient client=cli.getClusterClient();
+try {
+final FiniteDuration finiteDuration=new FiniteDuration(10,TimeUnit.SECONDS);
+ActorGateway jobManagerGateway=client.getJobManagerGateway();
+Await.ready(jobManagerGateway.ask(new Identify(true),finiteDuration),finiteDuration);
+}
+ catch (Exception e) {
+throw new RuntimeException("It seems like the JobManager died although it should still be alive");
+}
+Mockito.verify(cli.getSpiedClusterClient()).shutdown();
+client.shutdown();
 break;
 default :
 throw new RuntimeException("Unknown type " + type);
 }
 if (returnValue != 0) {
 Assert.fail("The YARN session returned with non-null value=" + returnValue);
+}
+}
+ catch (Throwable t) {
+Assert.fail(t.getMessage());
 }
 }
