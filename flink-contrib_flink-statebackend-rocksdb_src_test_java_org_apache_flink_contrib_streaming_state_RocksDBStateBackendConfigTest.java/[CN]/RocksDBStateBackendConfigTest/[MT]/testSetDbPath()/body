@@ -1,0 +1,19 @@
+{
+  String checkpointPath=tempFolder.newFolder().toURI().toString();
+  File testDir1=tempFolder.newFolder();
+  File testDir2=tempFolder.newFolder();
+  RocksDBStateBackend rocksDbBackend=new RocksDBStateBackend(checkpointPath);
+  assertNull(rocksDbBackend.getDbStoragePaths());
+  rocksDbBackend.setDbStoragePath(testDir1.getAbsolutePath());
+  assertArrayEquals(new String[]{testDir1.getAbsolutePath()},rocksDbBackend.getDbStoragePaths());
+  rocksDbBackend.setDbStoragePath(null);
+  assertNull(rocksDbBackend.getDbStoragePaths());
+  rocksDbBackend.setDbStoragePaths(testDir1.getAbsolutePath(),testDir2.getAbsolutePath());
+  assertArrayEquals(new String[]{testDir1.getAbsolutePath(),testDir2.getAbsolutePath()},rocksDbBackend.getDbStoragePaths());
+  Environment env=getMockEnvironment(new File[]{});
+  RocksDBKeyedStateBackend<Integer> keyedBackend=(RocksDBKeyedStateBackend<Integer>)rocksDbBackend.createKeyedStateBackend(env,env.getJobID(),"test_op",IntSerializer.INSTANCE,new HashKeyGroupAssigner<Integer>(1),new KeyGroupRange(0,0),env.getTaskKvStateRegistry());
+  File instanceBasePath=keyedBackend.getInstanceBasePath();
+  assertThat(instanceBasePath.getAbsolutePath(),anyOf(startsWith(testDir1.getAbsolutePath()),startsWith(testDir2.getAbsolutePath())));
+  rocksDbBackend.setDbStoragePaths(null);
+  assertNull(rocksDbBackend.getDbStoragePaths());
+}

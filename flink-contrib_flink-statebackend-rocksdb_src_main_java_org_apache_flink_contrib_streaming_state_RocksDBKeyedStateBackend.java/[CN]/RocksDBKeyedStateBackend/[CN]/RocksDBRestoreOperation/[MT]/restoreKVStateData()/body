@@ -1,0 +1,29 @@
+{
+  for (  Tuple2<Integer,Long> keyGroupOffset : currentKeyGroupsStateHandle.getGroupRangeOffsets()) {
+    long offset=keyGroupOffset.f1;
+    if (0L != offset) {
+      currentStateHandleInStream.seek(offset);
+      boolean keyGroupHasMoreKeys=true;
+      int kvStateId=currentStateHandleInView.readShort();
+      ColumnFamilyHandle handle=currentStateHandleKVStateColumnFamilies.get(kvStateId);
+      while (keyGroupHasMoreKeys) {
+        byte[] key=BytePrimitiveArraySerializer.INSTANCE.deserialize(currentStateHandleInView);
+        byte[] value=BytePrimitiveArraySerializer.INSTANCE.deserialize(currentStateHandleInView);
+        if (RocksDBSnapshotOperation.hasMetaDataFollowsFlag(key)) {
+          RocksDBSnapshotOperation.clearMetaDataFollowsFlag(key);
+          rocksDBKeyedStateBackend.db.put(handle,key,value);
+          kvStateId=RocksDBSnapshotOperation.END_OF_KEY_GROUP_MARK & currentStateHandleInView.readShort();
+          if (RocksDBSnapshotOperation.END_OF_KEY_GROUP_MARK == kvStateId) {
+            keyGroupHasMoreKeys=false;
+          }
+ else {
+            handle=currentStateHandleKVStateColumnFamilies.get(kvStateId);
+          }
+        }
+ else {
+          rocksDBKeyedStateBackend.db.put(handle,key,value);
+        }
+      }
+    }
+  }
+}

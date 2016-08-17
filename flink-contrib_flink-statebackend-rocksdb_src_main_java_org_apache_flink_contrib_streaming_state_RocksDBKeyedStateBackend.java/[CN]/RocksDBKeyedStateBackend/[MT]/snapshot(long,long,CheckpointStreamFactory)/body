@@ -1,3 +1,50 @@
 {
-  throw new RuntimeException("Not implemented.");
+  long startTime=System.currentTimeMillis();
+  if (kvStateInformation.isEmpty()) {
+    LOG.info("Asynchronous RocksDB snapshot performed on empty keyed state at " + timestamp + " . Returning null.");
+    return new DoneFuture<>(null);
+  }
+  final RocksDBSnapshotOperation snapshotOperation=new RocksDBSnapshotOperation(this,streamFactory);
+synchronized (dbDisposeLock) {
+    if (db != null) {
+      snapshotOperation.takeDBSnapShot(checkpointId,timestamp);
+    }
+ else {
+      throw new IOException("RocksDB closed.");
+    }
+  }
+  AbstractAsyncIOCallable<KeyGroupsStateHandle,CheckpointStreamFactory.CheckpointStateOutputStream> ioCallable=new AbstractAsyncIOCallable<KeyGroupsStateHandle,CheckpointStreamFactory.CheckpointStateOutputStream>(){
+    @Override public CheckpointStreamFactory.CheckpointStateOutputStream openIOHandle() throws Exception {
+      snapshotOperation.openCheckpointStream();
+      return snapshotOperation.getOutStream();
+    }
+    @Override public KeyGroupsStateHandle performOperation() throws Exception {
+      long startTime=System.currentTimeMillis();
+      try {
+synchronized (dbDisposeLock) {
+          if (db != null) {
+            snapshotOperation.writeDBSnapshot();
+          }
+ else {
+            throw new IOException("RocksDB closed.");
+          }
+        }
+      }
+  finally {
+        snapshotOperation.closeCheckpointStream();
+      }
+      LOG.info("Asynchronous RocksDB snapshot (" + streamFactory + ", asynchronous part) in thread "+ Thread.currentThread()+ " took "+ (System.currentTimeMillis() - startTime)+ " ms.");
+      return snapshotOperation.getSnapshotResultStateHandle();
+    }
+    @Override public void done(){
+synchronized (dbDisposeLock) {
+        if (db != null) {
+          snapshotOperation.releaseDBSnapshot();
+        }
+      }
+    }
+  }
+;
+  LOG.info("Asynchronous RocksDB snapshot (" + streamFactory + ", synchronous part) in thread "+ Thread.currentThread()+ " took "+ (System.currentTimeMillis() - startTime)+ " ms.");
+  return AsyncStoppableTaskWithCallback.from(ioCallable);
 }

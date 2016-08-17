@@ -1,0 +1,61 @@
+{
+  Random random=new Random(1234);
+  File tmpDir=CommonTestUtils.createTempDirectory();
+  RocksDB rocksDB=RocksDB.open(tmpDir.getAbsolutePath());
+  try {
+    List<Tuple2<RocksIterator,Integer>> rocksIteratorsWithKVStateId=new ArrayList<>();
+    List<Tuple2<ColumnFamilyHandle,Integer>> columnFamilyHandlesWithKeyCount=new ArrayList<>();
+    int totalKeysExpected=0;
+    for (int c=0; c < NUM_KEY_VAL_STATES; ++c) {
+      ColumnFamilyHandle handle=rocksDB.createColumnFamily(new ColumnFamilyDescriptor(("column-" + c).getBytes()));
+      ByteArrayOutputStreamWithPos bos=new ByteArrayOutputStreamWithPos();
+      DataOutputStream dos=new DataOutputStream(bos);
+      int numKeys=random.nextInt(MAX_NUM_KEYS + 1);
+      for (int i=0; i < numKeys; ++i) {
+        if (maxParallelism <= Byte.MAX_VALUE) {
+          dos.writeByte(i);
+        }
+ else {
+          dos.writeShort(i);
+        }
+        dos.writeInt(i);
+        byte[] key=bos.toByteArray();
+        byte[] val=new byte[]{42};
+        rocksDB.put(handle,key,val);
+        bos.reset();
+      }
+      columnFamilyHandlesWithKeyCount.add(new Tuple2<>(handle,numKeys));
+      totalKeysExpected+=numKeys;
+    }
+    int id=0;
+    for (    Tuple2<ColumnFamilyHandle,Integer> columnFamilyHandle : columnFamilyHandlesWithKeyCount) {
+      rocksIteratorsWithKVStateId.add(new Tuple2<>(rocksDB.newIterator(columnFamilyHandle.f0),id));
+      ++id;
+    }
+    RocksDBKeyedStateBackend.RocksDBMergeIterator mergeIterator=new RocksDBKeyedStateBackend.RocksDBMergeIterator(rocksIteratorsWithKVStateId,maxParallelism <= Byte.MAX_VALUE ? 1 : 2);
+    int prevKVState=-1;
+    int prevKey=-1;
+    int prevKeyGroup=-1;
+    int totalKeysActual=0;
+    while (mergeIterator.isValid()) {
+      ByteBuffer bb=ByteBuffer.wrap(mergeIterator.key());
+      int keyGroup=maxParallelism > Byte.MAX_VALUE ? bb.getShort() : bb.get();
+      int key=bb.getInt();
+      Assert.assertTrue(keyGroup >= prevKeyGroup);
+      Assert.assertTrue(key >= prevKey);
+      Assert.assertEquals(prevKeyGroup != keyGroup,mergeIterator.isNewKeyGroup());
+      Assert.assertEquals(prevKVState != mergeIterator.kvStateId(),mergeIterator.isNewKeyValueState());
+      prevKeyGroup=keyGroup;
+      prevKVState=mergeIterator.kvStateId();
+      mergeIterator.next();
+      ++totalKeysActual;
+    }
+    Assert.assertEquals(totalKeysExpected,totalKeysActual);
+    for (    Tuple2<ColumnFamilyHandle,Integer> handleWithCount : columnFamilyHandlesWithKeyCount) {
+      rocksDB.dropColumnFamily(handleWithCount.f0);
+    }
+  }
+  finally {
+    rocksDB.close();
+  }
+}

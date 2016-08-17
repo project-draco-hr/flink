@@ -1,21 +1,20 @@
 {
-  ByteArrayOutputStream baos=new ByteArrayOutputStream();
-  DataOutputViewStreamWrapper out=new DataOutputViewStreamWrapper(baos);
   try {
-    writeKeyAndNamespace(out);
-    byte[] key=baos.toByteArray();
+    writeCurrentKeyWithGroupAndNamespace();
+    byte[] key=keySerializationStream.toByteArray();
     byte[] valueBytes=backend.db.get(columnFamily,key);
+    DataOutputViewStreamWrapper out=new DataOutputViewStreamWrapper(keySerializationStream);
     if (valueBytes == null) {
-      baos.reset();
+      keySerializationStream.reset();
       valueSerializer.serialize(foldFunction.fold(stateDesc.getDefaultValue(),value),out);
-      backend.db.put(columnFamily,writeOptions,key,baos.toByteArray());
+      backend.db.put(columnFamily,writeOptions,key,keySerializationStream.toByteArray());
     }
  else {
       ACC oldValue=valueSerializer.deserialize(new DataInputViewStreamWrapper(new ByteArrayInputStream(valueBytes)));
       ACC newValue=foldFunction.fold(oldValue,value);
-      baos.reset();
+      keySerializationStream.reset();
       valueSerializer.serialize(newValue,out);
-      backend.db.put(columnFamily,writeOptions,key,baos.toByteArray());
+      backend.db.put(columnFamily,writeOptions,key,keySerializationStream.toByteArray());
     }
   }
  catch (  Exception e) {

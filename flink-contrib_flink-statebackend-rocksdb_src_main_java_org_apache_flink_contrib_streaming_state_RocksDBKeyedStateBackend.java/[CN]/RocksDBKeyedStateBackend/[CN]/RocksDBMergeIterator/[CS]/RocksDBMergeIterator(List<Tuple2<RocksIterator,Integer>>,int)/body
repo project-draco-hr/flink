@@ -1,0 +1,29 @@
+{
+  Preconditions.checkNotNull(kvStateIterators);
+  this.keyGroupPrefixByteCount=keyGroupPrefixByteCount;
+  Comparator<MergeIterator> iteratorComparator=new Comparator<MergeIterator>(){
+    @Override public int compare(    MergeIterator o1,    MergeIterator o2){
+      int arrayCmpRes=compareKeyGroupsForByteArrays(o1.currentKey,o2.currentKey,keyGroupPrefixByteCount);
+      return arrayCmpRes == 0 ? o1.getKvStateId() - o2.getKvStateId() : arrayCmpRes;
+    }
+  }
+;
+  if (kvStateIterators.size() > 0) {
+    this.heap=new PriorityQueue<>(kvStateIterators.size(),iteratorComparator);
+    for (    Tuple2<RocksIterator,Integer> rocksIteratorWithKVStateId : kvStateIterators) {
+      RocksIterator rocksIterator=rocksIteratorWithKVStateId.f0;
+      rocksIterator.seekToFirst();
+      if (rocksIterator.isValid()) {
+        heap.offer(new MergeIterator(rocksIterator,rocksIteratorWithKVStateId.f1));
+      }
+    }
+    this.valid=!heap.isEmpty();
+    this.currentSubIterator=heap.poll();
+  }
+ else {
+    this.heap=null;
+    this.valid=false;
+  }
+  this.newKeyGroup=true;
+  this.newKVState=true;
+}

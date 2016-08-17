@@ -1,0 +1,37 @@
+{
+  RocksDBMergeIterator iterator=new RocksDBMergeIterator(kvStateIterators,stateBackend.keyGroupPrefixBytes);
+  byte[] previousKey=null;
+  byte[] previousValue=null;
+  if (iterator.isValid()) {
+    keyGroupRangeOffsets.setKeyGroupOffset(iterator.keyGroup(),outStream.getPos());
+    outputView.writeShort(iterator.kvStateId());
+    previousKey=iterator.key();
+    previousValue=iterator.value();
+    iterator.next();
+  }
+  while (iterator.isValid()) {
+    assert(!hasMetaDataFollowsFlag(previousKey));
+    if (iterator.isNewKeyGroup() || iterator.isNewKeyValueState()) {
+      checkInterrupted();
+      setMetaDataFollowsFlagInKey(previousKey);
+    }
+    writeKeyValuePair(previousKey,previousValue);
+    if (iterator.isNewKeyGroup()) {
+      outputView.writeShort(END_OF_KEY_GROUP_MARK);
+      keyGroupRangeOffsets.setKeyGroupOffset(iterator.keyGroup(),outStream.getPos());
+      outputView.writeShort(iterator.kvStateId());
+    }
+ else     if (iterator.isNewKeyValueState()) {
+      outputView.writeShort(iterator.kvStateId());
+    }
+    previousKey=iterator.key();
+    previousValue=iterator.value();
+    iterator.next();
+  }
+  if (previousKey != null) {
+    assert(!hasMetaDataFollowsFlag(previousKey));
+    setMetaDataFollowsFlagInKey(previousKey);
+    writeKeyValuePair(previousKey,previousValue);
+    outputView.writeShort(END_OF_KEY_GROUP_MARK);
+  }
+}
