@@ -16,15 +16,16 @@ synchronized (lock) {
         }
         return new CheckpointTriggerResult(CheckpointDeclineReason.TOO_MANY_CONCURRENT_CHECKPOINTS);
       }
-    }
-    if (lastTriggeredCheckpoint + minPauseBetweenCheckpoints > timestamp) {
-      if (currentPeriodicTrigger != null) {
-        currentPeriodicTrigger.cancel();
-        currentPeriodicTrigger=null;
+      if (lastTriggeredCheckpoint + minPauseBetweenCheckpoints > timestamp) {
+        if (currentPeriodicTrigger != null) {
+          currentPeriodicTrigger.cancel();
+          currentPeriodicTrigger=null;
+        }
+        ScheduledTrigger trigger=new ScheduledTrigger();
+        currentPeriodicTrigger=trigger;
+        timer.scheduleAtFixedRate(trigger,minPauseBetweenCheckpoints,baseInterval);
+        return new CheckpointTriggerResult(CheckpointDeclineReason.MINIMUM_TIME_BETWEEN_CHECKPOINTS);
       }
-      ScheduledTrigger trigger=new ScheduledTrigger();
-      timer.scheduleAtFixedRate(trigger,minPauseBetweenCheckpoints,baseInterval);
-      return new CheckpointTriggerResult(CheckpointDeclineReason.MINIMUM_TIME_BETWEEN_CHECKPOINTS);
     }
   }
   ExecutionAttemptID[] triggerIDs=new ExecutionAttemptID[tasksToTrigger.length];
