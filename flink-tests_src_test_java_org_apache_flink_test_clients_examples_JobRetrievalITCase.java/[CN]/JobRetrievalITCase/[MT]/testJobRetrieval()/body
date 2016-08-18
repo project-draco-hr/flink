@@ -1,0 +1,30 @@
+{
+  final JobID jobID=new JobID();
+  final JobVertex imalock=new JobVertex("imalock");
+  imalock.setInvokableClass(SemaphoreInvokable.class);
+  final JobGraph jobGraph=new JobGraph(jobID,"testjob",imalock);
+  final ClusterClient client=new StandaloneClusterClient(cluster.configuration());
+  lock.acquire();
+  client.runDetached(jobGraph,JobRetrievalITCase.class.getClassLoader());
+  final Thread resumingThread=new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        assertNotNull(client.retrieveJob(jobID));
+      }
+ catch (      JobExecutionException e) {
+        fail(e.getMessage());
+      }
+    }
+  }
+);
+  final Seq<ActorSystem> actorSystemSeq=cluster.jobManagerActorSystems().get();
+  final ActorSystem actorSystem=actorSystemSeq.last();
+  JavaTestKit testkit=new JavaTestKit(actorSystem);
+  final ActorRef jm=cluster.getJobManagersAsJava().get(0);
+  jm.tell(TestingJobManagerMessages.getNotifyWhenClientConnects(),testkit.getRef());
+  testkit.expectMsgEquals(true);
+  resumingThread.start();
+  testkit.expectMsgEquals(true);
+  lock.release();
+  resumingThread.join();
+}

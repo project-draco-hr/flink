@@ -1,0 +1,45 @@
+{
+  if (message instanceof AttachToJobAndWait) {
+    if (this.client == null) {
+      jobID=((AttachToJobAndWait)message).jobID();
+      if (jobID == null) {
+        LOG.error("Received null JobID");
+        sender().tell(decorateMessage(new Status.Failure(new Exception("JobID is null"))),getSelf());
+      }
+ else {
+        LOG.info("Received JobID {}.",jobID);
+        this.client=getSender();
+        if (jobManager != null) {
+          tryToAttachToJob();
+        }
+      }
+    }
+ else {
+      String msg="Received repeated 'AttachToJobAndWait'";
+      LOG.error(msg);
+      getSender().tell(decorateMessage(new Status.Failure(new Exception(msg))),ActorRef.noSender());
+      terminate();
+    }
+  }
+ else   if (message instanceof JobManagerMessages.RegisterJobClientSuccess) {
+    JobManagerMessages.RegisterJobClientSuccess msg=((JobManagerMessages.RegisterJobClientSuccess)message);
+    logAndPrintMessage("Successfully registered at the JobManager for Job " + msg.jobId());
+    successfullyRegisteredForJob=true;
+  }
+ else   if (message instanceof JobManagerMessages.JobNotFound) {
+    LOG.info("Couldn't register JobClient for JobID {}",((JobManagerMessages.JobNotFound)message).jobID());
+    client.tell(decorateMessage(message),getSelf());
+    terminate();
+  }
+ else   if (JobClientMessages.getRegistrationTimeout().equals(message)) {
+    if (!successfullyRegisteredForJob) {
+      if (isClientConnected()) {
+        client.tell(decorateMessage(new Status.Failure(new JobClientActorRegistrationTimeoutException("Registration for Job at the JobManager " + "timed out. " + "You may increase '" + ConfigConstants.AKKA_CLIENT_TIMEOUT + "' in case the JobManager needs more time to confirm the job client registration."))),getSelf());
+      }
+      terminate();
+    }
+  }
+ else {
+    LOG.error("{} received unknown message: ",getClass());
+  }
+}

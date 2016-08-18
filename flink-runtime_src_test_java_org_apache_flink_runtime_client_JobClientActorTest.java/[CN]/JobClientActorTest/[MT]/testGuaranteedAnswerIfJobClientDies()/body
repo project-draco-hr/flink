@@ -1,0 +1,16 @@
+{
+  FiniteDuration timeout=new FiniteDuration(2,TimeUnit.SECONDS);
+  UUID leaderSessionID=UUID.randomUUID();
+  ActorRef jobManager=system.actorOf(Props.create(JobAcceptingActor.class,leaderSessionID));
+  TestingLeaderRetrievalService testingLeaderRetrievalService=new TestingLeaderRetrievalService(jobManager.path().toString(),leaderSessionID);
+  JobListeningContext jobListeningContext=JobClient.submitJob(system,testingLeaderRetrievalService,testJobGraph,timeout,false,getClass().getClassLoader());
+  Future<Object> waitFuture=Patterns.ask(jobManager,new RegisterTest(),new Timeout(timeout));
+  Await.result(waitFuture,timeout);
+  jobListeningContext.getJobClientActor().tell(PoisonPill.getInstance(),ActorRef.noSender());
+  try {
+    JobClient.awaitJobResult(jobListeningContext);
+    Assert.fail();
+  }
+ catch (  JobExecutionException e) {
+  }
+}

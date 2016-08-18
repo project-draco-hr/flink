@@ -1,0 +1,39 @@
+{
+  final Object jmAnswer;
+  try {
+    jmAnswer=Await.result(jobManager.ask(new JobManagerMessages.RequestClassloadingProps(jobID),AkkaUtils.getDefaultTimeout()),AkkaUtils.getDefaultTimeout());
+  }
+ catch (  Exception e) {
+    throw new JobRetrievalException(jobID,"Couldn't retrieve class loading properties from JobManager.",e);
+  }
+  if (jmAnswer instanceof JobManagerMessages.ClassloadingProps) {
+    JobManagerMessages.ClassloadingProps props=((JobManagerMessages.ClassloadingProps)jmAnswer);
+    Option<String> jmHost=jobManager.actor().path().address().host();
+    String jmHostname=jmHost.isDefined() ? jmHost.get() : "localhost";
+    InetSocketAddress serverAddress=new InetSocketAddress(jmHostname,props.blobManagerPort());
+    final BlobCache blobClient=new BlobCache(serverAddress,config);
+    final List<BlobKey> requiredJarFiles=props.requiredJarFiles();
+    final List<URL> requiredClasspaths=props.requiredClasspaths();
+    final URL[] allURLs=new URL[requiredJarFiles.size() + requiredClasspaths.size()];
+    int pos=0;
+    for (    BlobKey blobKey : props.requiredJarFiles()) {
+      try {
+        allURLs[pos++]=blobClient.getURL(blobKey);
+      }
+ catch (      Exception e) {
+        blobClient.shutdown();
+        throw new JobRetrievalException(jobID,"Failed to download BlobKey " + blobKey);
+      }
+    }
+    for (    URL url : requiredClasspaths) {
+      allURLs[pos++]=url;
+    }
+    return new URLClassLoader(allURLs,JobClient.class.getClassLoader());
+  }
+ else   if (jmAnswer instanceof JobManagerMessages.JobNotFound) {
+    throw new JobRetrievalException(jobID,"Couldn't retrieve class loader. Job " + jobID + " not found");
+  }
+ else {
+    throw new JobRetrievalException(jobID,"Unknown response from JobManager: " + jmAnswer);
+  }
+}

@@ -1,0 +1,20 @@
+{
+  LOG.info("Sending message to JobManager {} to submit job {} ({}) and wait for progress",jobManager.path().toString(),jobGraph.getName(),jobGraph.getJobID());
+  Futures.future(new Callable<Object>(){
+    @Override public Object call() throws Exception {
+      ActorGateway jobManagerGateway=new AkkaActorGateway(jobManager,leaderSessionID);
+      LOG.info("Upload jar files to job manager {}.",jobManager.path());
+      try {
+        jobGraph.uploadUserJars(jobManagerGateway,timeout);
+      }
+ catch (      IOException exception) {
+        getSelf().tell(decorateMessage(new JobManagerMessages.JobResultFailure(new SerializedThrowable(new JobSubmissionException(jobGraph.getJobID(),"Could not upload the jar files to the job manager.",exception)))),ActorRef.noSender());
+      }
+      LOG.info("Submit job to the job manager {}.",jobManager.path());
+      jobManager.tell(decorateMessage(new JobManagerMessages.SubmitJob(jobGraph,ListeningBehaviour.EXECUTION_RESULT_AND_STATE_CHANGES)),getSelf());
+      getContext().system().scheduler().scheduleOnce(timeout,getSelf(),decorateMessage(JobClientMessages.getSubmissionTimeout()),getContext().dispatcher(),ActorRef.noSender());
+      return null;
+    }
+  }
+,getContext().dispatcher());
+}

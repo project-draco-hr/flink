@@ -1,0 +1,39 @@
+{
+  if (message instanceof SubmitJobAndWait) {
+    if (this.client == null) {
+      jobGraph=((SubmitJobAndWait)message).jobGraph();
+      if (jobGraph == null) {
+        LOG.error("Received null JobGraph");
+        sender().tell(decorateMessage(new Status.Failure(new Exception("JobGraph is null"))),getSelf());
+      }
+ else {
+        LOG.info("Received job {} ({}).",jobGraph.getName(),jobGraph.getJobID());
+        this.client=getSender();
+        if (jobManager != null) {
+          tryToSubmitJob();
+        }
+      }
+    }
+ else {
+      String msg="Received repeated 'SubmitJobAndWait'";
+      LOG.error(msg);
+      getSender().tell(decorateMessage(new Status.Failure(new Exception(msg))),ActorRef.noSender());
+      terminate();
+    }
+  }
+ else   if (message instanceof JobManagerMessages.JobSubmitSuccess) {
+    LOG.info("Job {} was successfully submitted to the JobManager {}.",((JobManagerMessages.JobSubmitSuccess)message).jobId(),getSender().path());
+    jobSuccessfullySubmitted=true;
+  }
+ else   if (JobClientMessages.getSubmissionTimeout().equals(message)) {
+    if (!jobSuccessfullySubmitted) {
+      if (isClientConnected()) {
+        client.tell(decorateMessage(new Status.Failure(new JobClientActorSubmissionTimeoutException("Job submission to the JobManager timed out. " + "You may increase '" + ConfigConstants.AKKA_CLIENT_TIMEOUT + "' in case the JobManager "+ "needs more time to configure and confirm the job submission."))),getSelf());
+      }
+      terminate();
+    }
+  }
+ else {
+    LOG.error("{} received unknown message: ",getClass());
+  }
+}
