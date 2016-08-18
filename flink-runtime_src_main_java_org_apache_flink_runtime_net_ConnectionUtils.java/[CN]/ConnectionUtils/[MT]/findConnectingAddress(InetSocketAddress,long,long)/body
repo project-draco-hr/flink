@@ -8,60 +8,43 @@
   final long startTime=System.currentTimeMillis();
   long currentSleepTime=MIN_SLEEP_TIME;
   long elapsedTime=0;
+  final List<AddressDetectionState> strategies=Collections.unmodifiableList(Arrays.asList(AddressDetectionState.LOCAL_HOST,AddressDetectionState.ADDRESS,AddressDetectionState.FAST_CONNECT,AddressDetectionState.SLOW_CONNECT));
   while (elapsedTime < maxWaitMillis) {
-    AddressDetectionState strategy=AddressDetectionState.LOCAL_HOST;
     boolean logging=elapsedTime >= startLoggingAfter;
     if (logging) {
       LOG.info("Trying to connect to " + targetAddress);
     }
-    do {
+    for (    AddressDetectionState strategy : strategies) {
       InetAddress address=findAddressUsingStrategy(strategy,targetAddress,logging);
       if (address != null) {
         return address;
       }
-switch (strategy) {
-case LOCAL_HOST:
-        strategy=AddressDetectionState.ADDRESS;
-      break;
-case ADDRESS:
-    strategy=AddressDetectionState.FAST_CONNECT;
-  break;
-case FAST_CONNECT:
-strategy=AddressDetectionState.SLOW_CONNECT;
-break;
-case SLOW_CONNECT:
-strategy=null;
-break;
-default :
-throw new RuntimeException("Unsupported strategy: " + strategy);
-}
-}
- while (strategy != null);
-elapsedTime=System.currentTimeMillis() - startTime;
-long toWait=Math.min(maxWaitMillis - elapsedTime,currentSleepTime);
-if (toWait > 0) {
-if (logging) {
-LOG.info("Could not connect. Waiting for {} msecs before next attempt",toWait);
-}
+    }
+    elapsedTime=System.currentTimeMillis() - startTime;
+    long toWait=Math.min(maxWaitMillis - elapsedTime,currentSleepTime);
+    if (toWait > 0) {
+      if (logging) {
+        LOG.info("Could not connect. Waiting for {} msecs before next attempt",toWait);
+      }
  else {
-LOG.debug("Could not connect. Waiting for {} msecs before next attempt",toWait);
-}
-try {
-Thread.sleep(toWait);
-}
- catch (InterruptedException e) {
-throw new IOException("Connection attempts have been interrupted.");
-}
-}
-currentSleepTime=Math.min(2 * currentSleepTime,MAX_SLEEP_TIME);
-}
-LOG.warn("Could not connect to {}. Selecting a local address using heuristics.",targetAddress);
-InetAddress heuristic=findAddressUsingStrategy(AddressDetectionState.HEURISTIC,targetAddress,true);
-if (heuristic != null) {
-return heuristic;
-}
+        LOG.debug("Could not connect. Waiting for {} msecs before next attempt",toWait);
+      }
+      try {
+        Thread.sleep(toWait);
+      }
+ catch (      InterruptedException e) {
+        throw new IOException("Connection attempts have been interrupted.");
+      }
+    }
+    currentSleepTime=Math.min(2 * currentSleepTime,MAX_SLEEP_TIME);
+  }
+  LOG.warn("Could not connect to {}. Selecting a local address using heuristics.",targetAddress);
+  InetAddress heuristic=findAddressUsingStrategy(AddressDetectionState.HEURISTIC,targetAddress,true);
+  if (heuristic != null) {
+    return heuristic;
+  }
  else {
-LOG.warn("Could not find any IPv4 address that is not loopback or link-local. Using localhost address.");
-return InetAddress.getLocalHost();
-}
+    LOG.warn("Could not find any IPv4 address that is not loopback or link-local. Using localhost address.");
+    return InetAddress.getLocalHost();
+  }
 }
