@@ -1,10 +1,15 @@
 {
   final ResourceID id=extractResourceID(taskID);
+  boolean existed;
   try {
-    workerStore.removeWorker(taskID);
+    existed=workerStore.removeWorker(taskID);
   }
  catch (  Exception ex) {
     fatalError("unable to remove worker",ex);
+    return;
+  }
+  if (!existed) {
+    LOG.info("Received a termination notice for an unrecognized worker: {}",id);
     return;
   }
   if (workersBeingReturned.remove(id) != null) {
@@ -23,7 +28,7 @@
     String diagMessage=String.format("Diagnostics for task %s in state %s : " + "reason=%s message=%s",id,status.getState(),status.getReason(),status.getMessage());
     sendInfoMessage(diagMessage);
     LOG.info(diagMessage);
-    LOG.info("Total number of failed tasks so far: " + failedTasksSoFar);
+    LOG.info("Total number of failed tasks so far: {}",failedTasksSoFar);
     if (maxFailedTasks >= 0 && failedTasksSoFar > maxFailedTasks) {
       String msg="Stopping Mesos session because the number of failed tasks (" + failedTasksSoFar + ") exceeded the maximum failed tasks ("+ maxFailedTasks+ "). This number is controlled by the '"+ ConfigConstants.MESOS_MAX_FAILED_TASKS+ "' configuration setting. "+ "By default its the number of requested tasks.";
       LOG.error(msg);

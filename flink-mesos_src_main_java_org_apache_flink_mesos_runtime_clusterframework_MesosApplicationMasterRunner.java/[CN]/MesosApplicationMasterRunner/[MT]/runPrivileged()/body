@@ -4,9 +4,9 @@
   MesosArtifactServer artifactServer=null;
   try {
     final String workingDir=ENV.get(MesosConfigKeys.ENV_MESOS_SANDBOX);
-    require(workingDir != null,"Sandbox directory variable (%s) not set",MesosConfigKeys.ENV_MESOS_SANDBOX);
+    checkState(workingDir != null,"Sandbox directory variable (%s) not set",MesosConfigKeys.ENV_MESOS_SANDBOX);
     final String sessionID=ENV.get(MesosConfigKeys.ENV_SESSION_ID);
-    require(sessionID != null,"Session ID (%s) not set",MesosConfigKeys.ENV_SESSION_ID);
+    checkState(sessionID != null,"Session ID (%s) not set",MesosConfigKeys.ENV_SESSION_ID);
     final String appMasterHostname=InetAddress.getLocalHost().getHostName();
     final Configuration dynamicProperties=FlinkMesosSessionCli.decodeDynamicProperties(ENV.get(MesosConfigKeys.ENV_DYNAMIC_PROPERTIES));
     LOG.debug("Mesos dynamic properties: {}",dynamicProperties);
@@ -38,17 +38,18 @@
     LOG.info("TaskManagers will be created with {} task slots",taskManagerParameters.containeredParameters().numSlots());
     LOG.info("TaskManagers will be started with container size {} MB, JVM heap size {} MB, " + "JVM direct memory limit {} MB, {} cpus",taskManagerParameters.containeredParameters().taskManagerTotalMemoryMB(),taskManagerParameters.containeredParameters().taskManagerHeapSizeMB(),taskManagerParameters.containeredParameters().taskManagerDirectMemoryLimitMB(),taskManagerParameters.cpus());
     final int listeningPort=config.getInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY,ConfigConstants.DEFAULT_JOB_MANAGER_IPC_PORT);
-    require(listeningPort >= 0 && listeningPort <= 65536,"Config parameter \"" + ConfigConstants.JOB_MANAGER_IPC_PORT_KEY + "\" is invalid, it must be between 0 and 65536");
+    checkState(listeningPort >= 0 && listeningPort <= 65536,"Config parameter \"" + ConfigConstants.JOB_MANAGER_IPC_PORT_KEY + "\" is invalid, it must be between 0 and 65536");
     actorSystem=BootstrapTools.startActorSystem(config,appMasterHostname,listeningPort,LOG);
-    final String akkaHostname=AkkaUtils.getAddress(actorSystem).host().get();
-    final int akkaPort=(Integer)AkkaUtils.getAddress(actorSystem).port().get();
+    Address address=AkkaUtils.getAddress(actorSystem);
+    final String akkaHostname=address.host().get();
+    final int akkaPort=(Integer)address.port().get();
     LOG.info("Actor system bound to hostname {}.",akkaHostname);
     LOG.debug("Starting Artifact Server");
     final int artifactServerPort=config.getInteger(ConfigConstants.MESOS_ARTIFACT_SERVER_PORT_KEY,ConfigConstants.DEFAULT_MESOS_ARTIFACT_SERVER_PORT);
     artifactServer=new MesosArtifactServer(sessionID,akkaHostname,artifactServerPort);
     final Configuration taskManagerConfig=BootstrapTools.generateTaskManagerConfiguration(config,akkaHostname,akkaPort,slotsPerTaskManager,TASKMANAGER_REGISTRATION_TIMEOUT);
     LOG.debug("TaskManager configuration: {}",taskManagerConfig);
-    final Protos.TaskInfo.Builder taskManagerContext=createTaskManagerContext(config,mesosConfig,ENV,taskManagerParameters,taskManagerConfig,workingDir,getTaskManagerClass(),artifactServer,LOG);
+    final Protos.TaskInfo.Builder taskManagerContext=createTaskManagerContext(config,ENV,taskManagerParameters,taskManagerConfig,workingDir,getTaskManagerClass(),artifactServer,LOG);
     LOG.debug("Starting JobManager actor");
     ActorRef jobManager=JobManager.startJobManagerActors(config,actorSystem,new scala.Some<>(JobManager.JOB_MANAGER_NAME()),scala.Option.<String>empty(),getJobManagerClass(),getArchivistClass())._1();
     LOG.debug("Starting Web Frontend");
@@ -68,14 +69,6 @@
   }
  catch (  Throwable t) {
     LOG.error("Mesos JobManager initialization failed",t);
-    if (actorSystem != null) {
-      try {
-        actorSystem.shutdown();
-      }
- catch (      Throwable tt) {
-        LOG.error("Error shutting down actor system",tt);
-      }
-    }
     if (webMonitor != null) {
       try {
         webMonitor.stop();
@@ -90,6 +83,14 @@
       }
  catch (      Throwable ignored) {
         LOG.error("Failed to stop the artifact server",ignored);
+      }
+    }
+    if (actorSystem != null) {
+      try {
+        actorSystem.shutdown();
+      }
+ catch (      Throwable tt) {
+        LOG.error("Error shutting down actor system",tt);
       }
     }
     return INIT_ERROR_EXIT_CODE;
