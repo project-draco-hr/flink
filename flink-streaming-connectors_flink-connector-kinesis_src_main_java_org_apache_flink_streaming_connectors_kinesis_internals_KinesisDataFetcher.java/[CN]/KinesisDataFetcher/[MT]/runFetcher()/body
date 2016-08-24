@@ -4,7 +4,7 @@
   }
   this.mainThread=Thread.currentThread();
   if (LOG.isDebugEnabled()) {
-    String logFormat=(isRestoredFromFailure) ? "Subtask {} is trying to discover initial shards ..." : "Subtask {} is trying to discover any new shards that were created while the consumer wasn't" + "running due to failure ...";
+    String logFormat=(!isRestoredFromFailure) ? "Subtask {} is trying to discover initial shards ..." : "Subtask {} is trying to discover any new shards that were created while the consumer wasn't " + "running due to failure ...";
     LOG.debug(logFormat,indexOfThisConsumerSubtask);
   }
   List<KinesisStreamShard> newShardsCreatedWhileNotRunning=discoverNewShardsToSubscribe();
@@ -12,7 +12,7 @@
     InitialPosition initialPosition=InitialPosition.valueOf(configProps.getProperty(ConsumerConfigConstants.STREAM_INITIAL_POSITION,ConsumerConfigConstants.DEFAULT_STREAM_INITIAL_POSITION));
     SentinelSequenceNumber startingStateForNewShard=(isRestoredFromFailure) ? SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM : initialPosition.toSentinelSequenceNumber();
     if (LOG.isInfoEnabled()) {
-      String logFormat=(isRestoredFromFailure) ? "Subtask {} will be seeded with initial shard {}, starting state set as sequence number {}" : "Subtask {} will be seeded with new shard {} that was created while the consumer wasn't" + "running due to failure, starting state set as sequence number {}";
+      String logFormat=(!isRestoredFromFailure) ? "Subtask {} will be seeded with initial shard {}, starting state set as sequence number {}" : "Subtask {} will be seeded with new shard {} that was created while the consumer wasn't " + "running due to failure, starting state set as sequence number {}";
       LOG.info(logFormat,indexOfThisConsumerSubtask,shard.toString(),startingStateForNewShard.get());
     }
     registerNewSubscribedShardState(new KinesisStreamShardState(shard,startingStateForNewShard.get()));
@@ -35,17 +35,34 @@
   }
   for (int seededStateIndex=0; seededStateIndex < subscribedShardsState.size(); seededStateIndex++) {
     KinesisStreamShardState seededShardState=subscribedShardsState.get(seededStateIndex);
-    if (LOG.isInfoEnabled()) {
-      LOG.info("Subtask {} will start consuming seeded shard {} from sequence number {} with ShardConsumer {}",indexOfThisConsumerSubtask,seededShardState.getKinesisStreamShard().toString(),seededShardState.getLastProcessedSequenceNum(),seededStateIndex);
+    if (!seededShardState.getLastProcessedSequenceNum().equals(SentinelSequenceNumber.SENTINEL_SHARD_ENDING_SEQUENCE_NUM.get())) {
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Subtask {} will start consuming seeded shard {} from sequence number {} with ShardConsumer {}",indexOfThisConsumerSubtask,seededShardState.getKinesisStreamShard().toString(),seededShardState.getLastProcessedSequenceNum(),seededStateIndex);
+      }
+      shardConsumersExecutor.submit(new ShardConsumer<>(this,seededStateIndex,subscribedShardsState.get(seededStateIndex).getKinesisStreamShard(),subscribedShardsState.get(seededStateIndex).getLastProcessedSequenceNum()));
     }
-    shardConsumersExecutor.submit(new ShardConsumer<>(this,seededStateIndex,subscribedShardsState.get(seededStateIndex).getKinesisStreamShard(),subscribedShardsState.get(seededStateIndex).getLastProcessedSequenceNum()));
   }
   final long discoveryIntervalMillis=Long.valueOf(configProps.getProperty(ConsumerConfigConstants.SHARD_DISCOVERY_INTERVAL_MILLIS,Long.toString(ConsumerConfigConstants.DEFAULT_SHARD_DISCOVERY_INTERVAL_MILLIS)));
+  boolean emittedMaxValueWatermark=false;
+  if (this.numberOfActiveShards.get() == 0) {
+    LOG.info("Subtask {} has no initial shards to read on startup; emitting max value watermark ...",indexOfThisConsumerSubtask);
+    sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
+    emittedMaxValueWatermark=true;
+  }
   while (running) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Subtask {} is trying to discover new shards that were created due to resharding ...",indexOfThisConsumerSubtask);
     }
     List<KinesisStreamShard> newShardsDueToResharding=discoverNewShardsToSubscribe();
+    if (newShardsDueToResharding.size() == 0 && this.numberOfActiveShards.get() == 0 && !emittedMaxValueWatermark) {
+      LOG.info("Subtask {} has completed reading all shards; emitting max value watermark ...",indexOfThisConsumerSubtask);
+      sourceContext.emitWatermark(new Watermark(Long.MAX_VALUE));
+      emittedMaxValueWatermark=true;
+    }
+ else     if (newShardsDueToResharding.size() > 0 && emittedMaxValueWatermark) {
+      LOG.warn("Subtask {} has discovered {} new shards to subscribe, but is failing hard to avoid messing" + " up watermarks; the new shards will be subscribed by this subtask after restore ...",indexOfThisConsumerSubtask,newShardsDueToResharding.size());
+      throw new RuntimeException("Deliberate failure to avoid messing up watermarks");
+    }
     for (    KinesisStreamShard shard : newShardsDueToResharding) {
       KinesisStreamShardState newShardState=new KinesisStreamShardState(shard,SentinelSequenceNumber.SENTINEL_EARLIEST_SEQUENCE_NUM.get());
       int newStateIndex=registerNewSubscribedShardState(newShardState);
