@@ -1,19 +1,13 @@
 {
   final OneShotLatch latch=new OneShotLatch();
   final Object lock=new Object();
-  TimeServiceProvider timeServiceProvider=DefaultTimeServiceProvider.create(new AsyncExceptionHandler(){
-    @Override public void registerAsyncException(    AsynchronousException exception){
-      exception.printStackTrace();
-    }
-  }
-,Executors.newSingleThreadScheduledExecutor(),lock);
+  TimeServiceProvider timeServiceProvider=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   final List<Long> timestamps=new ArrayList<>();
-  long start=System.currentTimeMillis();
   long interval=50L;
   final long noOfTimers=20;
-  final long expectedNoOfTimers=2 * noOfTimers - 1;
+  final long expectedNoOfTimers=2 * noOfTimers;
   for (int i=0; i < noOfTimers; i++) {
-    double nextTimer=start + i * interval;
+    double nextTimer=timeServiceProvider.getCurrentProcessingTime() + 100 + i * interval;
     timeServiceProvider.registerTimer((long)nextTimer,new Triggerable(){
       @Override public void trigger(      long timestamp) throws Exception {
         timestamps.add(timestamp);
@@ -23,17 +17,15 @@
       }
     }
 );
-    if (i > 0) {
-      timeServiceProvider.registerTimer((long)(nextTimer - 10),new Triggerable(){
-        @Override public void trigger(        long timestamp) throws Exception {
-          timestamps.add(timestamp);
-          if (timestamps.size() == expectedNoOfTimers) {
-            latch.trigger();
-          }
+    timeServiceProvider.registerTimer((long)(nextTimer - 10L),new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        timestamps.add(timestamp);
+        if (timestamps.size() == expectedNoOfTimers) {
+          latch.trigger();
         }
       }
-);
     }
+);
   }
   if (!latch.isTriggered()) {
     latch.await();
@@ -43,9 +35,10 @@
   long lastTs=Long.MIN_VALUE;
   for (  long timestamp : timestamps) {
     Assert.assertTrue(timestamp >= lastTs);
+    if (lastTs != Long.MIN_VALUE && counter % 2 == 1) {
+      Assert.assertEquals((timestamp - lastTs),10);
+    }
     lastTs=timestamp;
-    long expectedTs=start + (counter / 2) * interval;
-    Assert.assertEquals(timestamp,(expectedTs + ((counter % 2 == 0) ? 0 : 40)));
     counter++;
   }
 }

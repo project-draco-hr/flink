@@ -14,7 +14,7 @@ synchronized (checkpointLock) {
             checkpointableFormat.reopen(currentSplit,restoredFormatState);
           }
  else {
-            LOG.info("Format " + this.format.getClass().getName() + " used is not checkpointable.");
+            LOG.info("Format " + this.format.getClass().getName() + " does not support checkpointing.");
             format.open(currentSplit);
           }
           this.restoredFormatState=null;
@@ -40,7 +40,7 @@ synchronized (checkpointLock) {
 synchronized (checkpointLock) {
             nextElement=format.nextRecord(nextElement);
             if (nextElement != null) {
-              collector.collect(nextElement);
+              readerContext.collect(nextElement);
             }
  else {
               break;
@@ -59,10 +59,7 @@ synchronized (checkpointLock) {
     }
   }
  catch (  Throwable e) {
-    if (isRunning) {
-      LOG.error("Caught exception processing split: ",currentSplit);
-    }
-    getContainingTask().failExternally(e);
+    getContainingTask().handleAsyncException("Caught exception when processing split: " + currentSplit,e);
   }
  finally {
 synchronized (checkpointLock) {

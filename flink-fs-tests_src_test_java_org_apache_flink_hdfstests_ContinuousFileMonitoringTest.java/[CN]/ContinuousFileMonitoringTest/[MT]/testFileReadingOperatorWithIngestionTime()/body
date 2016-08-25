@@ -1,0 +1,103 @@
+{
+  Set<org.apache.hadoop.fs.Path> filesCreated=new HashSet<>();
+  Map<Integer,String> expectedFileContents=new HashMap<>();
+  for (int i=0; i < NO_OF_FILES; i++) {
+    Tuple2<org.apache.hadoop.fs.Path,String> file=fillWithData(hdfsURI,"file",i,"This is test line.");
+    filesCreated.add(file.f0);
+    expectedFileContents.put(i,file.f1);
+  }
+  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+  TypeInformation<String> typeInfo=TypeExtractor.getInputFormatTypes(format);
+  final long watermarkInterval=10;
+  ExecutionConfig executionConfig=new ExecutionConfig();
+  executionConfig.setAutoWatermarkInterval(watermarkInterval);
+  ContinuousFileReaderOperator<String,?> reader=new ContinuousFileReaderOperator<>(format);
+  reader.setOutputType(typeInfo,executionConfig);
+  final TestTimeServiceProvider timeServiceProvider=new TestTimeServiceProvider();
+  final OneInputStreamOperatorTestHarness<FileInputSplit,String> tester=new OneInputStreamOperatorTestHarness<>(reader,executionConfig,timeServiceProvider);
+  tester.setTimeCharacteristic(TimeCharacteristic.IngestionTime);
+  tester.open();
+  Assert.assertEquals(TimeCharacteristic.IngestionTime,tester.getTimeCharacteristic());
+  timeServiceProvider.setCurrentTime(201);
+  timeServiceProvider.setCurrentTime(301);
+  timeServiceProvider.setCurrentTime(401);
+  timeServiceProvider.setCurrentTime(501);
+  int i=0;
+  for (  Object line : tester.getOutput()) {
+    if (!(line instanceof Watermark)) {
+      Assert.fail("Only watermarks are expected here ");
+    }
+    Watermark w=(Watermark)line;
+    Assert.assertEquals(200 + (i * 100),w.getTimestamp());
+    i++;
+  }
+  tester.getOutput().clear();
+  Assert.assertEquals(0,tester.getOutput().size());
+  FileInputSplit[] splits=format.createInputSplits(reader.getRuntimeContext().getNumberOfParallelSubtasks());
+  Map<Integer,List<String>> actualFileContents=new HashMap<>();
+  long lastSeenWatermark=Long.MIN_VALUE;
+  int lineCounter=0;
+  int watermarkCounter=0;
+  for (  FileInputSplit split : splits) {
+    long nextTimestamp=timeServiceProvider.getCurrentProcessingTime() + watermarkInterval;
+    timeServiceProvider.setCurrentTime(nextTimestamp);
+    tester.processElement(new StreamRecord<>(split));
+synchronized (tester.getCheckpointLock()) {
+      while (tester.getOutput().isEmpty() || tester.getOutput().size() != (LINES_PER_FILE + 1)) {
+        tester.getCheckpointLock().wait(10);
+      }
+    }
+    for (    Object line : tester.getOutput()) {
+      if (line instanceof StreamRecord) {
+        StreamRecord<String> element=(StreamRecord<String>)line;
+        lineCounter++;
+        Assert.assertEquals(nextTimestamp,element.getTimestamp());
+        int fileIdx=Character.getNumericValue(element.getValue().charAt(0));
+        List<String> content=actualFileContents.get(fileIdx);
+        if (content == null) {
+          content=new ArrayList<>();
+          actualFileContents.put(fileIdx,content);
+        }
+        content.add(element.getValue() + "\n");
+      }
+ else       if (line instanceof Watermark) {
+        long watermark=((Watermark)line).getTimestamp();
+        Assert.assertEquals(nextTimestamp - (nextTimestamp % watermarkInterval),watermark);
+        Assert.assertTrue(watermark > lastSeenWatermark);
+        watermarkCounter++;
+        lastSeenWatermark=watermark;
+      }
+ else {
+        Assert.fail("Unknown element in the list.");
+      }
+    }
+    tester.getOutput().clear();
+  }
+  Assert.assertEquals(NO_OF_FILES * LINES_PER_FILE,lineCounter);
+  Assert.assertEquals(NO_OF_FILES,watermarkCounter);
+synchronized (tester.getCheckpointLock()) {
+    tester.close();
+  }
+  for (  org.apache.hadoop.fs.Path file : filesCreated) {
+    hdfs.delete(file,false);
+  }
+  Assert.assertEquals(1,tester.getOutput().size());
+  Assert.assertTrue(tester.getOutput().peek() instanceof Watermark);
+  Assert.assertEquals(Long.MAX_VALUE,((Watermark)tester.getOutput().poll()).getTimestamp());
+  Assert.assertEquals(expectedFileContents.size(),actualFileContents.size());
+  for (  Integer fileIdx : expectedFileContents.keySet()) {
+    Assert.assertTrue("file" + fileIdx + " not found",actualFileContents.keySet().contains(fileIdx));
+    List<String> cntnt=actualFileContents.get(fileIdx);
+    Collections.sort(cntnt,new Comparator<String>(){
+      @Override public int compare(      String o1,      String o2){
+        return getLineNo(o1) - getLineNo(o2);
+      }
+    }
+);
+    StringBuilder cntntStr=new StringBuilder();
+    for (    String line : cntnt) {
+      cntntStr.append(line);
+    }
+    Assert.assertEquals(expectedFileContents.get(fileIdx),cntntStr.toString());
+  }
+}

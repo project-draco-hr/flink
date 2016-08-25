@@ -1,14 +1,14 @@
 {
   super.open();
-  if (this.serializer == null) {
-    throw new IllegalStateException("The serializer has not been set. " + "Probably the setOutputType() was not called and this should not have happened. " + "Please report it.");
-  }
+  checkState(this.reader == null,"The reader is already initialized.");
+  checkState(this.serializer != null,"The serializer has not been set. " + "Probably the setOutputType() was not called. Please report it.");
   this.format.setRuntimeContext(getRuntimeContext());
   this.format.configure(new Configuration());
-  this.collector=new TimestampedCollector<>(output);
   this.checkpointLock=getContainingTask().getCheckpointLock();
-  Preconditions.checkState(reader == null,"The reader is already initialized.");
-  this.reader=new SplitReader<>(format,serializer,collector,checkpointLock,readerState);
+  final TimeCharacteristic timeCharacteristic=getOperatorConfig().getTimeCharacteristic();
+  final long watermarkInterval=getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval();
+  this.readerContext=StreamSourceContexts.getSourceContext(timeCharacteristic,getTimerService(),checkpointLock,output,watermarkInterval);
+  this.reader=new SplitReader<>(format,serializer,readerContext,checkpointLock,readerState);
   this.readerState=null;
   this.reader.start();
 }

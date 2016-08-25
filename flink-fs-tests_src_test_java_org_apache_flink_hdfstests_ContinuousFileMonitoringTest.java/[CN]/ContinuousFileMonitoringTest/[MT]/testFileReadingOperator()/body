@@ -9,8 +9,9 @@
   TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
   TypeInformation<String> typeInfo=TypeExtractor.getInputFormatTypes(format);
   ContinuousFileReaderOperator<String,?> reader=new ContinuousFileReaderOperator<>(format);
-  OneInputStreamOperatorTestHarness<FileInputSplit,String> tester=new OneInputStreamOperatorTestHarness<>(reader);
   reader.setOutputType(typeInfo,new ExecutionConfig());
+  OneInputStreamOperatorTestHarness<FileInputSplit,String> tester=new OneInputStreamOperatorTestHarness<>(reader);
+  tester.setTimeCharacteristic(TimeCharacteristic.EventTime);
   tester.open();
   FileInputSplit[] splits=format.createInputSplits(reader.getRuntimeContext().getNumberOfParallelSubtasks());
   for (  FileInputSplit split : splits) {
@@ -19,24 +20,24 @@
 synchronized (tester.getCheckpointLock()) {
     tester.close();
   }
-  long start=System.currentTimeMillis();
-  Queue<Object> output;
-  do {
-    output=tester.getOutput();
-    Thread.sleep(50);
-  }
- while ((output == null || output.size() != NO_OF_FILES * LINES_PER_FILE) && (System.currentTimeMillis() - start) < 1000);
+  Assert.assertEquals(NO_OF_FILES * LINES_PER_FILE + 1,tester.getOutput().size());
   Map<Integer,List<String>> actualFileContents=new HashMap<>();
+  Object lastElement=null;
   for (  Object line : tester.getOutput()) {
-    StreamRecord<String> element=(StreamRecord<String>)line;
-    int fileIdx=Character.getNumericValue(element.getValue().charAt(0));
-    List<String> content=actualFileContents.get(fileIdx);
-    if (content == null) {
-      content=new ArrayList<>();
-      actualFileContents.put(fileIdx,content);
+    lastElement=line;
+    if (line instanceof StreamRecord) {
+      StreamRecord<String> element=(StreamRecord<String>)line;
+      int fileIdx=Character.getNumericValue(element.getValue().charAt(0));
+      List<String> content=actualFileContents.get(fileIdx);
+      if (content == null) {
+        content=new ArrayList<>();
+        actualFileContents.put(fileIdx,content);
+      }
+      content.add(element.getValue() + "\n");
     }
-    content.add(element.getValue() + "\n");
   }
+  Assert.assertTrue(lastElement instanceof Watermark);
+  Assert.assertEquals(Long.MAX_VALUE,((Watermark)lastElement).getTimestamp());
   Assert.assertEquals(expectedFileContents.size(),actualFileContents.size());
   for (  Integer fileIdx : expectedFileContents.keySet()) {
     Assert.assertTrue("file" + fileIdx + " not found",actualFileContents.keySet().contains(fileIdx));

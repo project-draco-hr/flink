@@ -1,27 +1,14 @@
 {
   final TimeCharacteristic timeCharacteristic=getOperatorConfig().getTimeCharacteristic();
-  final SourceFunction.SourceContext<OUT> ctx;
-switch (timeCharacteristic) {
-case EventTime:
-    ctx=new ManualWatermarkContext<>(this,lockingObject,collector);
-  break;
-case IngestionTime:
-ctx=new AutomaticWatermarkContext<>(this,lockingObject,collector,getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval());
-break;
-case ProcessingTime:
-ctx=new NonTimestampContext<>(this,lockingObject,collector);
-break;
-default :
-throw new Exception(String.valueOf(timeCharacteristic));
-}
-this.ctx=ctx;
-try {
-userFunction.run(ctx);
-if (!isCanceledOrStopped()) {
-ctx.emitWatermark(Watermark.MAX_WATERMARK);
-}
-}
+  final long watermarkInterval=getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval();
+  this.ctx=StreamSourceContexts.getSourceContext(timeCharacteristic,getTimerService(),lockingObject,collector,watermarkInterval);
+  try {
+    userFunction.run(ctx);
+    if (!isCanceledOrStopped()) {
+      ctx.emitWatermark(Watermark.MAX_WATERMARK);
+    }
+  }
   finally {
-ctx.close();
-}
+    ctx.close();
+  }
 }
