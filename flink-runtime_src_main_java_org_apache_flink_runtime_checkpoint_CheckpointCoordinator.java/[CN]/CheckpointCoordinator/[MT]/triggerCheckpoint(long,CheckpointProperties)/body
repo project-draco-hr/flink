@@ -61,7 +61,7 @@ synchronized (triggerLock) {
       checkpointID=checkpointIdCounter.getAndIncrement();
     }
  catch (    Throwable t) {
-      int numUnsuccessful=++numUnsuccessfulCheckpointsTriggers;
+      int numUnsuccessful=numUnsuccessfulCheckpointsTriggers.incrementAndGet();
       LOG.warn("Failed to trigger checkpoint (" + numUnsuccessful + " consecutive failed attempts so far)",t);
       return new CheckpointTriggerResult(CheckpointDeclineReason.EXCEPTION);
     }
@@ -129,14 +129,14 @@ synchronized (lock) {
         TriggerCheckpoint message=new TriggerCheckpoint(job,id,checkpointID,timestamp);
         tasksToTrigger[i].sendMessageToCurrentExecution(message,id);
       }
-      numUnsuccessfulCheckpointsTriggers=0;
+      numUnsuccessfulCheckpointsTriggers.set(0);
       return new CheckpointTriggerResult(checkpoint);
     }
  catch (    Throwable t) {
 synchronized (lock) {
         pendingCheckpoints.remove(checkpointID);
       }
-      int numUnsuccessful=++numUnsuccessfulCheckpointsTriggers;
+      int numUnsuccessful=numUnsuccessfulCheckpointsTriggers.incrementAndGet();
       LOG.warn("Failed to trigger checkpoint (" + numUnsuccessful + " consecutive failed attempts so far)",t);
       if (!checkpoint.isDiscarded()) {
         checkpoint.abortError(new Exception("Failed to trigger checkpoint"));
