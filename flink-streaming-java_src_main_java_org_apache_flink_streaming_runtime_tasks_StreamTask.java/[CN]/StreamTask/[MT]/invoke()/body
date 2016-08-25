@@ -9,7 +9,7 @@
     if (timerService == null) {
       ScheduledThreadPoolExecutor executor=new ScheduledThreadPoolExecutor(1,new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
       executor.setRemoveOnCancelPolicy(true);
-      timerService=DefaultTimeServiceProvider.create(executor);
+      timerService=DefaultTimeServiceProvider.create(this,executor,getCheckpointLock());
     }
     headOperator=configuration.getStreamOperator(getUserCodeClassLoader());
     operatorChain=new OperatorChain<>(this,headOperator,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
@@ -52,7 +52,10 @@ synchronized (lock) {
     isRunning=false;
     if (timerService != null) {
       try {
-        timerService.shutdownService();
+        if (!timerService.isTerminated()) {
+          LOG.info("Timer service is shutting down.");
+          timerService.shutdownService();
+        }
       }
  catch (      Throwable t) {
         LOG.error("Could not shut down timer service",t);

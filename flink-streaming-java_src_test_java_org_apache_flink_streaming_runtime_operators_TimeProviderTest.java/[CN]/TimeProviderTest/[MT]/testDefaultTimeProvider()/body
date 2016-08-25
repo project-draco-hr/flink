@@ -1,0 +1,46 @@
+{
+  final OneShotLatch latch=new OneShotLatch();
+  final Object lock=new Object();
+  TimeServiceProvider timeServiceProvider=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
+  final List<Long> timestamps=new ArrayList<>();
+  long start=System.currentTimeMillis();
+  long interval=50L;
+  final long noOfTimers=20;
+  final long expectedNoOfTimers=2 * noOfTimers - 1;
+  for (int i=0; i < noOfTimers; i++) {
+    double nextTimer=start + i * interval;
+    timeServiceProvider.registerTimer((long)nextTimer,new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        timestamps.add(timestamp);
+        if (timestamps.size() == expectedNoOfTimers) {
+          latch.trigger();
+        }
+      }
+    }
+);
+    if (i > 0) {
+      timeServiceProvider.registerTimer((long)(nextTimer - 10),new Triggerable(){
+        @Override public void trigger(        long timestamp) throws Exception {
+          timestamps.add(timestamp);
+          if (timestamps.size() == expectedNoOfTimers) {
+            latch.trigger();
+          }
+        }
+      }
+);
+    }
+  }
+  if (!latch.isTriggered()) {
+    latch.await();
+  }
+  Assert.assertEquals(timestamps.size(),expectedNoOfTimers);
+  int counter=0;
+  long lastTs=Long.MIN_VALUE;
+  for (  long timestamp : timestamps) {
+    Assert.assertTrue(timestamp >= lastTs);
+    lastTs=timestamp;
+    long expectedTs=start + (counter / 2) * interval;
+    Assert.assertEquals(timestamp,(expectedTs + ((counter % 2 == 0) ? 0 : 40)));
+    counter++;
+  }
+}

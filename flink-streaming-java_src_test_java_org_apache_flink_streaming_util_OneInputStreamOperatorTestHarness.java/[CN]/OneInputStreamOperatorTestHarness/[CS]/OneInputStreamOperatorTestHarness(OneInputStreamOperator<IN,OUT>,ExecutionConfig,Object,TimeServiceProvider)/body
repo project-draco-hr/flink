@@ -1,0 +1,52 @@
+{
+  this.operator=operator;
+  this.outputList=new ConcurrentLinkedQueue<Object>();
+  Configuration underlyingConfig=new Configuration();
+  this.config=new StreamConfig(underlyingConfig);
+  this.config.setCheckpointingEnabled(true);
+  this.executionConfig=executionConfig;
+  this.checkpointLock=checkpointLock;
+  final Environment env=new MockEnvironment("MockTwoInputTask",3 * 1024 * 1024,new MockInputSplitProvider(),1024,underlyingConfig,executionConfig,MAX_PARALLELISM,1,0);
+  mockTask=mock(StreamTask.class);
+  when(mockTask.getName()).thenReturn("Mock Task");
+  when(mockTask.getCheckpointLock()).thenReturn(this.checkpointLock);
+  when(mockTask.getConfiguration()).thenReturn(config);
+  when(mockTask.getTaskConfiguration()).thenReturn(underlyingConfig);
+  when(mockTask.getEnvironment()).thenReturn(env);
+  when(mockTask.getExecutionConfig()).thenReturn(executionConfig);
+  when(mockTask.getUserCodeClassLoader()).thenReturn(this.getClass().getClassLoader());
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      return null;
+    }
+  }
+).when(mockTask).registerAsyncException(any(String.class),any(AsynchronousException.class));
+  try {
+    doAnswer(new Answer<CheckpointStreamFactory>(){
+      @Override public CheckpointStreamFactory answer(      InvocationOnMock invocationOnMock) throws Throwable {
+        final StreamOperator operator=(StreamOperator)invocationOnMock.getArguments()[0];
+        return stateBackend.createStreamFactory(new JobID(),operator.getClass().getSimpleName());
+      }
+    }
+).when(mockTask).createCheckpointStreamFactory(any(StreamOperator.class));
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e.getMessage(),e);
+  }
+  timeServiceProvider=testTimeProvider != null ? testTimeProvider : DefaultTimeServiceProvider.create(mockTask,Executors.newSingleThreadScheduledExecutor(),this.checkpointLock);
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      final long execTime=(Long)invocation.getArguments()[0];
+      final Triggerable target=(Triggerable)invocation.getArguments()[1];
+      timeServiceProvider.registerTimer(execTime,target);
+      return null;
+    }
+  }
+).when(mockTask).registerTimer(anyLong(),any(Triggerable.class));
+  doAnswer(new Answer<Long>(){
+    @Override public Long answer(    InvocationOnMock invocation) throws Throwable {
+      return timeServiceProvider.getCurrentProcessingTime();
+    }
+  }
+).when(mockTask).getCurrentProcessingTime();
+}
