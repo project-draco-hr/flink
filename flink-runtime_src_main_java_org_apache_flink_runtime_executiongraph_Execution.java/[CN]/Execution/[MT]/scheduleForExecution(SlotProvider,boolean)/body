@@ -1,5 +1,5 @@
 {
-  if (scheduler == null) {
+  if (slotProvider == null) {
     throw new IllegalArgumentException("Cannot send null Scheduler when scheduling execution.");
   }
   final SlotSharingGroup sharingGroup=vertex.getJobVertex().getSlotSharingGroup();
@@ -9,8 +9,8 @@
   }
   if (transitionState(CREATED,SCHEDULED)) {
     ScheduledUnit toSchedule=locationConstraint == null ? new ScheduledUnit(this,sharingGroup) : new ScheduledUnit(this,sharingGroup,locationConstraint);
+    final SlotAllocationFuture future=slotProvider.allocateSlot(toSchedule,queued);
     if (queued) {
-      SlotAllocationFuture future=scheduler.scheduleQueued(toSchedule);
       future.setFutureAction(new SlotAllocationFutureAction(){
         @Override public void slotAllocated(        SimpleSlot slot){
           try {
@@ -29,7 +29,7 @@
 );
     }
  else {
-      SimpleSlot slot=scheduler.scheduleImmediately(toSchedule);
+      SimpleSlot slot=future.get();
       try {
         deployToSlot(slot);
       }
