@@ -1,0 +1,38 @@
+{
+  while (this.newlyAvailableInstances.size() > 0) {
+    Instance queuedInstance=this.newlyAvailableInstances.poll();
+    if (queuedInstance != null) {
+      this.instancesWithAvailableResources.put(queuedInstance.getResourceId(),queuedInstance);
+    }
+  }
+  if (this.instancesWithAvailableResources.isEmpty()) {
+    return null;
+  }
+  Iterator<TaskManagerLocation> locations=requestedLocations == null ? null : requestedLocations.iterator();
+  if (locations != null && locations.hasNext()) {
+    while (locations.hasNext()) {
+      TaskManagerLocation location=locations.next();
+      if (location != null) {
+        Instance instance=instancesWithAvailableResources.remove(location.getResourceID());
+        if (instance != null) {
+          return new ImmutablePair<Instance,Locality>(instance,Locality.LOCAL);
+        }
+      }
+    }
+    if (localOnly) {
+      return null;
+    }
+ else {
+      Iterator<Instance> instances=instancesWithAvailableResources.values().iterator();
+      Instance instanceToUse=instances.next();
+      instances.remove();
+      return new ImmutablePair<>(instanceToUse,Locality.NON_LOCAL);
+    }
+  }
+ else {
+    Iterator<Instance> instances=instancesWithAvailableResources.values().iterator();
+    Instance instanceToUse=instances.next();
+    instances.remove();
+    return new ImmutablePair<>(instanceToUse,Locality.UNCONSTRAINED);
+  }
+}

@@ -1,0 +1,49 @@
+{
+synchronized (lock) {
+    if (constraint.isAssignedAndAlive()) {
+      final SharedSlot shared=constraint.getSharedSlot();
+      SimpleSlot subslot=shared.allocateSubSlot(null);
+      subslot.setLocality(Locality.LOCAL);
+      return subslot;
+    }
+ else     if (constraint.isAssigned()) {
+      SharedSlot previous=constraint.getSharedSlot();
+      if (previous == null) {
+        throw new IllegalStateException("Bug: Found assigned co-location constraint without a slot.");
+      }
+      TaskManagerLocation location=previous.getTaskManagerLocation();
+      Tuple2<SharedSlot,Locality> p=getSlotForTaskInternal(constraint.getGroupId(),Collections.singleton(location),true);
+      if (p == null) {
+        return null;
+      }
+ else {
+        SharedSlot newSharedSlot=p.f0;
+        SharedSlot constraintGroupSlot=newSharedSlot.allocateSharedSlot(constraint.getGroupId());
+        if (constraintGroupSlot != null) {
+          constraint.setSharedSlot(constraintGroupSlot);
+          SimpleSlot subSlot=constraintGroupSlot.allocateSubSlot(null);
+          subSlot.setLocality(Locality.LOCAL);
+          return subSlot;
+        }
+ else {
+          return null;
+        }
+      }
+    }
+ else {
+      Tuple2<SharedSlot,Locality> p=getSlotForTaskInternal(constraint.getGroupId(),locationPreferences,false);
+      if (p == null) {
+        return null;
+      }
+ else {
+        final SharedSlot availableShared=p.f0;
+        final Locality l=p.f1;
+        SharedSlot constraintGroupSlot=availableShared.allocateSharedSlot(constraint.getGroupId());
+        constraint.setSharedSlot(constraintGroupSlot);
+        SimpleSlot sub=constraintGroupSlot.allocateSubSlot(null);
+        sub.setLocality(l);
+        return sub;
+      }
+    }
+  }
+}

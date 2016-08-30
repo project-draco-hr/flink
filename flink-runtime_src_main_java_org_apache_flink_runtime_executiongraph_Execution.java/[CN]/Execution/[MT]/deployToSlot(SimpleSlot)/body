@@ -19,25 +19,24 @@
       throw new JobException("Could not assign the ExecutionVertex to the slot " + slot);
     }
     this.assignedResource=slot;
-    this.assignedResourceLocation=slot.getInstance().getInstanceConnectionInfo();
+    this.assignedResourceLocation=slot.getTaskManagerLocation();
     if (this.state != DEPLOYING) {
       slot.releaseSlot();
       return;
     }
     if (LOG.isInfoEnabled()) {
-      LOG.info(String.format("Deploying %s (attempt #%d) to %s",vertex.getSimpleName(),attemptNumber,slot.getInstance().getInstanceConnectionInfo().getHostname()));
+      LOG.info(String.format("Deploying %s (attempt #%d) to %s",vertex.getSimpleName(),attemptNumber,assignedResourceLocation.getHostname()));
     }
     final TaskDeploymentDescriptor deployment=vertex.createDeploymentDescriptor(attemptId,slot,chainedStateHandle,keyGroupsStateHandles,attemptNumber);
     vertex.getExecutionGraph().registerExecution(this);
-    final Instance instance=slot.getInstance();
-    final ActorGateway gateway=instance.getActorGateway();
+    final ActorGateway gateway=slot.getTaskManagerActorGateway();
     final Future<Object> deployAction=gateway.ask(new SubmitTask(deployment),timeout);
     deployAction.onComplete(new OnComplete<Object>(){
       @Override public void onComplete(      Throwable failure,      Object success) throws Throwable {
         if (failure != null) {
           if (failure instanceof TimeoutException) {
             String taskname=deployment.getTaskInfo().getTaskNameWithSubtasks() + " (" + attemptId+ ')';
-            markFailed(new Exception("Cannot deploy task " + taskname + " - TaskManager ("+ instance+ ") not responding after a timeout of "+ timeout,failure));
+            markFailed(new Exception("Cannot deploy task " + taskname + " - TaskManager ("+ assignedResourceLocation+ ") not responding after a timeout of "+ timeout,failure));
           }
  else {
             markFailed(failure);
