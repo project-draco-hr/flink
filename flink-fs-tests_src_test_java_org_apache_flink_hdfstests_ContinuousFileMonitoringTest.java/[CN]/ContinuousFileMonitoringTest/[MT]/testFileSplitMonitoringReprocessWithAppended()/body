@@ -1,17 +1,27 @@
 {
-  Set<String> uniqFilesFound=new HashSet<>();
+  final Set<String> uniqFilesFound=new HashSet<>();
   FileCreator fc=new FileCreator(INTERVAL,NO_OF_FILES);
   fc.start();
-  TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
-  format.setFilesFilter(FilePathFilter.createDefaultFilter());
-  ContinuousFileMonitoringFunction<String> monitoringFunction=new ContinuousFileMonitoringFunction<>(format,hdfsURI,FileProcessingMode.PROCESS_CONTINUOUSLY,1,INTERVAL);
-  monitoringFunction.open(new Configuration());
-  monitoringFunction.run(new TestingSourceContext(monitoringFunction,uniqFilesFound));
-synchronized (uniqFilesFound) {
-    while (uniqFilesFound.size() < NO_OF_FILES) {
-      uniqFilesFound.wait(7 * INTERVAL);
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      TextInputFormat format=new TextInputFormat(new Path(hdfsURI));
+      format.setFilesFilter(FilePathFilter.createDefaultFilter());
+      ContinuousFileMonitoringFunction<String> monitoringFunction=new ContinuousFileMonitoringFunction<>(format,hdfsURI,FileProcessingMode.PROCESS_CONTINUOUSLY,1,INTERVAL);
+      try {
+        monitoringFunction.open(new Configuration());
+        monitoringFunction.run(new TestingSourceContext(monitoringFunction,uniqFilesFound));
+      }
+ catch (      Exception e) {
+      }
     }
   }
+);
+  t.start();
+synchronized (uniqFilesFound) {
+    uniqFilesFound.wait();
+  }
+  t.interrupt();
+  fc.join();
   Assert.assertTrue(fc.getFilesCreated().size() == NO_OF_FILES);
   Assert.assertTrue(uniqFilesFound.size() == NO_OF_FILES);
   Set<org.apache.hadoop.fs.Path> filesCreated=fc.getFilesCreated();
