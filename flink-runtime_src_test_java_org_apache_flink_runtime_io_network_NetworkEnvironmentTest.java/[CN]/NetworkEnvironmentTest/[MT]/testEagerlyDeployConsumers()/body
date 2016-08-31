@@ -1,17 +1,24 @@
 {
-  ActorGateway jobManager=mock(ActorGateway.class);
+  final ActorGateway jobManager=mock(ActorGateway.class);
   when(jobManager.ask(anyObject(),any(FiniteDuration.class))).thenReturn(new Promise.DefaultPromise<>().future());
-  NetworkEnvironmentConfiguration config=new NetworkEnvironmentConfiguration(20,1024,MemoryType.HEAP,IOManager.IOMode.SYNC,0,0,0,Some.<NettyConfig>empty(),new Tuple2<>(0,0));
-  NetworkEnvironment env=new NetworkEnvironment(TestingUtils.defaultExecutionContext(),new FiniteDuration(30,TimeUnit.SECONDS),config,new InstanceConnectionInfo(InetAddress.getLocalHost(),12232));
-  env.associateWithTaskManagerAndJobManager(jobManager,DummyActorGateway.INSTANCE);
+  NetworkEnvironmentConfiguration config=new NetworkEnvironmentConfiguration(20,1024,MemoryType.HEAP,IOManager.IOMode.SYNC,0,0,0,Some.<NettyConfig>empty(),0,0);
+  NetworkEnvironment env=new NetworkEnvironment(new NetworkBufferPool(config.numNetworkBuffers(),config.networkBufferSize(),config.memoryType()),new LocalConnectionManager(),new ResultPartitionManager(),new TaskEventDispatcher(),new KvStateRegistry(),null,config.ioMode(),config.partitionRequestInitialBackoff(),config.partitinRequestMaxBackoff());
+  env.start();
+  JobManagerCommunicationFactory jobManagerCommunicationFactory=mock(JobManagerCommunicationFactory.class);
+  when(jobManagerCommunicationFactory.createResultPartitionConsumableNotifier(any(Task.class))).thenAnswer(new Answer<ResultPartitionConsumableNotifier>(){
+    @Override public ResultPartitionConsumableNotifier answer(    InvocationOnMock invocation) throws Throwable {
+      return new ActorGatewayResultPartitionConsumableNotifier(TestingUtils.defaultExecutionContext(),jobManager,(Task)invocation.getArguments()[0],new FiniteDuration(30,TimeUnit.SECONDS));
+    }
+  }
+);
   JobID jobId=new JobID();
+  Task mockTask=mock(Task.class);
   ResultPartition[] partitions=new ResultPartition[2];
-  partitions[0]=createPartition("p1",jobId,true,env);
-  partitions[1]=createPartition("p2",jobId,false,env);
+  partitions[0]=createPartition(mockTask,"p1",jobId,true,env,jobManagerCommunicationFactory);
+  partitions[1]=createPartition(mockTask,"p2",jobId,false,env,jobManagerCommunicationFactory);
   ResultPartitionWriter[] writers=new ResultPartitionWriter[2];
   writers[0]=new ResultPartitionWriter(partitions[0]);
   writers[1]=new ResultPartitionWriter(partitions[1]);
-  Task mockTask=mock(Task.class);
   when(mockTask.getAllInputGates()).thenReturn(new SingleInputGate[0]);
   when(mockTask.getAllWriters()).thenReturn(writers);
   when(mockTask.getProducedPartitions()).thenReturn(partitions);

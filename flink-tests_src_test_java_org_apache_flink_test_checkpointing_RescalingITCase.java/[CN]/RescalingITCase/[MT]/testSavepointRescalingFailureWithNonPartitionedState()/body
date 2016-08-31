@@ -11,10 +11,14 @@
     JobGraph jobGraph=createNonPartitionedStateJobGraph(parallelism,maxParallelism,500);
     jobID=jobGraph.getJobID();
     cluster.submitJobDetached(jobGraph);
-    Future<Object> allTasksRunning=jobManager.ask(new TestingJobManagerMessages.WaitForAllVerticesToBeRunning(jobID),deadline.timeLeft());
-    Await.ready(allTasksRunning,deadline.timeLeft());
-    Future<Object> savepointPathFuture=jobManager.ask(new JobManagerMessages.TriggerSavepoint(jobID),deadline.timeLeft());
-    Object savepointResponse=Await.result(savepointPathFuture,deadline.timeLeft());
+    Object savepointResponse=null;
+    while (deadline.hasTimeLeft()) {
+      Future<Object> savepointPathFuture=jobManager.ask(new JobManagerMessages.TriggerSavepoint(jobID),deadline.timeLeft());
+      savepointResponse=Await.result(savepointPathFuture,deadline.timeLeft());
+      if (savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess) {
+        break;
+      }
+    }
     assertTrue(savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess);
     final String savepointPath=((JobManagerMessages.TriggerSavepointSuccess)savepointResponse).savepointPath();
     Future<Object> jobRemovedFuture=jobManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobID),deadline.timeLeft());

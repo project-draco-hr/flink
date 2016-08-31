@@ -3,17 +3,36 @@ synchronized (lock) {
     if (isShutdown) {
       return;
     }
+    LOG.info("Shutting down the network environment and its components.");
+    if (kvStateServer != null) {
+      try {
+        kvStateServer.shutDown();
+      }
+ catch (      Throwable t) {
+        LOG.warn("Cannot shut down KvState server.",t);
+      }
+    }
     try {
-      disassociate();
+      LOG.debug("Shutting down network connection manager");
+      connectionManager.shutdown();
     }
  catch (    Throwable t) {
-      LOG.warn("Network services did not shut down properly: " + t.getMessage(),t);
+      LOG.warn("Cannot shut down the network connection manager.",t);
     }
+    try {
+      LOG.debug("Shutting down intermediate result partition manager");
+      resultPartitionManager.shutdown();
+    }
+ catch (    Throwable t) {
+      LOG.warn("Cannot shut down the result partition manager.",t);
+    }
+    taskEventDispatcher.clearAll();
+    networkBufferPool.destroyAllBufferPools();
     try {
       networkBufferPool.destroy();
     }
  catch (    Throwable t) {
-      LOG.warn("Network buffer pool did not shut down properly: " + t.getMessage(),t);
+      LOG.warn("Network buffer pool did not shut down properly.",t);
     }
     isShutdown=true;
   }

@@ -12,11 +12,12 @@
     final ActorRef jobManager=JobManager.startJobManagerActors(config,actorSystem,JobManager.class,MemoryArchivist.class)._1();
     FlinkResourceManager.startResourceManagerActors(config,actorSystem,LeaderRetrievalUtils.createLeaderRetrievalService(config,jobManager),StandaloneResourceManager.class);
     final TaskManagerConfiguration tmConfig=new TaskManagerConfiguration(TMP_DIR,1000000,timeout,Option.<FiniteDuration>empty(),1,config);
-    final NetworkEnvironmentConfiguration netConf=new NetworkEnvironmentConfiguration(32,BUFFER_SIZE,MemoryType.HEAP,IOManager.IOMode.SYNC,0,0,0,Option.<NettyConfig>empty(),new Tuple2<Integer,Integer>(0,0));
+    final NetworkEnvironmentConfiguration netConf=new NetworkEnvironmentConfiguration(32,BUFFER_SIZE,MemoryType.HEAP,IOManager.IOMode.SYNC,0,0,0,Option.<NettyConfig>empty(),0,0);
     final InstanceConnectionInfo connectionInfo=new InstanceConnectionInfo(InetAddress.getLocalHost(),10000);
     final MemoryManager memManager=new MemoryManager(32 * BUFFER_SIZE,1,BUFFER_SIZE,MemoryType.HEAP,false);
     final IOManager ioManager=new IOManagerAsync(TMP_DIR);
-    final NetworkEnvironment network=new NetworkEnvironment(TestingUtils.defaultExecutionContext(),timeout,netConf,connectionInfo);
+    final NetworkEnvironment network=new NetworkEnvironment(new NetworkBufferPool(netConf.numNetworkBuffers(),netConf.networkBufferSize(),netConf.memoryType()),new LocalConnectionManager(),new ResultPartitionManager(),new TaskEventDispatcher(),new KvStateRegistry(),null,netConf.ioMode(),netConf.partitionRequestInitialBackoff(),netConf.partitinRequestMaxBackoff());
+    network.start();
     final int numberOfSlots=1;
     LeaderRetrievalService leaderRetrievalService=new StandaloneLeaderRetrievalService(jobManager.path().toString());
     final Props tmProps=Props.create(TaskManager.class,tmConfig,ResourceID.generate(),connectionInfo,memManager,ioManager,network,numberOfSlots,leaderRetrievalService);
@@ -33,13 +34,11 @@
       }
     }
 ;
-    assertTrue(network.isAssociated());
     taskManager.tell(Kill.getInstance(),ActorRef.noSender());
     jobManager.tell(Kill.getInstance(),ActorRef.noSender());
     actorSystem.shutdown();
     actorSystem.awaitTermination();
     actorSystem=null;
-    assertFalse(network.isAssociated());
     assertTrue(network.isShutdown());
     assertTrue(ioManager.isProperlyShutDown());
     assertTrue(memManager.isShutdown());
