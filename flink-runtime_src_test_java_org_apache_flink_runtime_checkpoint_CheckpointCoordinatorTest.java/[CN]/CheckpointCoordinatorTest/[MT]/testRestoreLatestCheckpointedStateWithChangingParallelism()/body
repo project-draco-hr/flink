@@ -21,13 +21,19 @@
   List<KeyGroupRange> keyGroupPartitions2=CheckpointCoordinator.createKeyGroupPartitions(maxParallelism2,parallelism2);
   for (int index=0; index < jobVertex1.getParallelism(); index++) {
     ChainedStateHandle<StreamStateHandle> valueSizeTuple=generateStateForVertex(jobVertexID1,index);
+    ChainedStateHandle<OperatorStateHandle> partitionableState=generateChainedPartitionableStateHandle(jobVertexID1,index,2,8);
     List<KeyGroupsStateHandle> keyGroupState=generateKeyGroupState(jobVertexID1,keyGroupPartitions1.get(index));
-    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex1.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,valueSizeTuple,keyGroupState);
+    CheckpointStateHandles checkpointStateHandles=new CheckpointStateHandles(valueSizeTuple,partitionableState,keyGroupState);
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex1.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,checkpointStateHandles);
     coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
   }
+  final List<ChainedStateHandle<OperatorStateHandle>> originalPartitionableStates=new ArrayList<>(jobVertex2.getParallelism());
   for (int index=0; index < jobVertex2.getParallelism(); index++) {
     List<KeyGroupsStateHandle> keyGroupState=generateKeyGroupState(jobVertexID2,keyGroupPartitions2.get(index));
-    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex2.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,null,keyGroupState);
+    ChainedStateHandle<OperatorStateHandle> partitionableState=generateChainedPartitionableStateHandle(jobVertexID2,index,2,8);
+    originalPartitionableStates.add(partitionableState);
+    CheckpointStateHandles checkpointStateHandles=new CheckpointStateHandles(null,partitionableState,keyGroupState);
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex2.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,checkpointStateHandles);
     coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
   }
   List<CompletedCheckpoint> completedCheckpoints=coord.getSuccessfulCheckpoints();
@@ -41,11 +47,15 @@
   tasks.put(jobVertexID2,newJobVertex2);
   coord.restoreLatestCheckpointedState(tasks,true,true);
   verifiyStateRestore(jobVertexID1,newJobVertex1,keyGroupPartitions1);
+  List<List<Collection<OperatorStateHandle>>> actualPartitionableStates=new ArrayList<>(newJobVertex2.getParallelism());
   for (int i=0; i < newJobVertex2.getParallelism(); i++) {
     List<KeyGroupsStateHandle> originalKeyGroupState=generateKeyGroupState(jobVertexID2,newKeyGroupPartitions2.get(i));
     ChainedStateHandle<StreamStateHandle> operatorState=newJobVertex2.getTaskVertices()[i].getCurrentExecutionAttempt().getChainedStateHandle();
+    List<Collection<OperatorStateHandle>> partitionableState=newJobVertex2.getTaskVertices()[i].getCurrentExecutionAttempt().getChainedPartitionableStateHandle();
     List<KeyGroupsStateHandle> keyGroupState=newJobVertex2.getTaskVertices()[i].getCurrentExecutionAttempt().getKeyGroupsStateHandles();
+    actualPartitionableStates.add(partitionableState);
     assertNull(operatorState);
-    comparePartitionedState(originalKeyGroupState,keyGroupState);
+    compareKeyPartitionedState(originalKeyGroupState,keyGroupState);
   }
+  comparePartitionableState(originalPartitionableStates,actualPartitionableStates);
 }

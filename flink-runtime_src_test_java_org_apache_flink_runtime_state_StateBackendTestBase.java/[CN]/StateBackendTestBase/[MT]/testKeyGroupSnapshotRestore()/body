@@ -1,7 +1,7 @@
 {
   final int MAX_PARALLELISM=10;
   CheckpointStreamFactory streamFactory=createStreamFactory();
-  KeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(0,MAX_PARALLELISM - 1),new DummyEnvironment("test",1,0));
+  AbstractKeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(0,MAX_PARALLELISM - 1),new DummyEnvironment("test",1,0));
   ValueStateDescriptor<String> kvId=new ValueStateDescriptor<>("id",String.class,null);
   kvId.initializeSerializerUnlessSet(new ExecutionConfig());
   ValueState<String> state=backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
@@ -21,9 +21,9 @@
   KeyGroupsStateHandle snapshot=runSnapshot(backend.snapshot(0,0,streamFactory));
   List<KeyGroupsStateHandle> firstHalfKeyGroupStates=CheckpointCoordinator.getKeyGroupsStateHandles(Collections.singletonList(snapshot),KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM,2,0));
   List<KeyGroupsStateHandle> secondHalfKeyGroupStates=CheckpointCoordinator.getKeyGroupsStateHandles(Collections.singletonList(snapshot),KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM,2,1));
-  backend.close();
-  KeyedStateBackend<Integer> firstHalfBackend=restoreKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(0,4),firstHalfKeyGroupStates,new DummyEnvironment("test",1,0));
-  KeyedStateBackend<Integer> secondHalfBackend=restoreKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(5,9),secondHalfKeyGroupStates,new DummyEnvironment("test",1,0));
+  backend.dispose();
+  AbstractKeyedStateBackend<Integer> firstHalfBackend=restoreKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(0,4),firstHalfKeyGroupStates,new DummyEnvironment("test",1,0));
+  AbstractKeyedStateBackend<Integer> secondHalfBackend=restoreKeyedBackend(IntSerializer.INSTANCE,MAX_PARALLELISM,new KeyGroupRange(5,9),secondHalfKeyGroupStates,new DummyEnvironment("test",1,0));
   ValueState<String> firstHalfState=firstHalfBackend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,kvId);
   firstHalfBackend.setCurrentKey(keyInFirstHalf);
   assertTrue(firstHalfState.value().equals("ShouldBeInFirstHalf"));
@@ -34,6 +34,6 @@
   assertTrue(secondHalfState.value() == null);
   secondHalfBackend.setCurrentKey(keyInSecondHalf);
   assertTrue(secondHalfState.value().equals("ShouldBeInSecondHalf"));
-  firstHalfBackend.close();
-  secondHalfBackend.close();
+  firstHalfBackend.dispose();
+  secondHalfBackend.dispose();
 }

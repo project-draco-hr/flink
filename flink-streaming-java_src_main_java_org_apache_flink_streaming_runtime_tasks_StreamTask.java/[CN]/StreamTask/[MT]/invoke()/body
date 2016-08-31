@@ -11,11 +11,8 @@
       executor.setRemoveOnCancelPolicy(true);
       timerService=DefaultTimeServiceProvider.create(this,executor,getCheckpointLock());
     }
-    headOperator=configuration.getStreamOperator(getUserCodeClassLoader());
-    operatorChain=new OperatorChain<>(this,headOperator,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
-    if (headOperator != null) {
-      headOperator.setup(this,configuration,operatorChain.getChainEntryPoint());
-    }
+    operatorChain=new OperatorChain<>(this,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
+    headOperator=operatorChain.getHeadOperator();
     getEnvironment().getMetricGroup().gauge("lastCheckpointSize",new Gauge<Long>(){
       @Override public Long getValue(){
         return StreamTask.this.lastCheckpointSize;
@@ -62,7 +59,7 @@ synchronized (lock) {
       }
     }
     try {
-      closeAllClosables();
+      cancelables.close();
       shutdownAsyncThreads();
     }
  catch (    Throwable t) {

@@ -1,0 +1,16 @@
+{
+  List<List<? extends Serializable>> namedStateSerializables=new ArrayList<>(states.size());
+  for (  Map.Entry<String,List<? extends Serializable>> entry : states.entrySet()) {
+    namedStateSerializables.add(entry.getValue());
+  }
+  Tuple2<byte[],List<long[]>> serializationWithOffsets=serializeTogetherAndTrackOffsets(namedStateSerializables);
+  Map<String,long[]> offsetsMap=new HashMap<>(states.size());
+  int idx=0;
+  for (  Map.Entry<String,List<? extends Serializable>> entry : states.entrySet()) {
+    offsetsMap.put(entry.getKey(),serializationWithOffsets.f1.get(idx));
+    ++idx;
+  }
+  ByteStreamStateHandle streamStateHandle=new ByteStreamStateHandle(serializationWithOffsets.f0);
+  OperatorStateHandle operatorStateHandle=new OperatorStateHandle(streamStateHandle,offsetsMap);
+  return ChainedStateHandle.wrapSingleHandle(operatorStateHandle);
+}

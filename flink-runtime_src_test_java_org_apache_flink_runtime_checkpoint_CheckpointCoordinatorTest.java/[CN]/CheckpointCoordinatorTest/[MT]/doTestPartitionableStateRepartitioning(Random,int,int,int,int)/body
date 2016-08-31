@@ -1,0 +1,76 @@
+{
+  List<OperatorStateHandle> previousParallelOpInstanceStates=new ArrayList<>(oldParallelism);
+  for (int i=0; i < oldParallelism; ++i) {
+    Path fakePath=new Path("/fake-" + i);
+    Map<String,long[]> namedStatesToOffsets=new HashMap<>();
+    int off=0;
+    for (int s=0; s < numNamedStates; ++s) {
+      long[] offs=new long[1 + r.nextInt(maxPartitionsPerState)];
+      if (offs.length > 0) {
+        for (int o=0; o < offs.length; ++o) {
+          offs[o]=off;
+          ++off;
+        }
+        namedStatesToOffsets.put("State-" + s,offs);
+      }
+    }
+    previousParallelOpInstanceStates.add(new OperatorStateHandle(new FileStateHandle(fakePath,-1),namedStatesToOffsets));
+  }
+  Map<StreamStateHandle,Map<String,List<Long>>> expected=new HashMap<>();
+  int expectedTotalPartitions=0;
+  for (  OperatorStateHandle psh : previousParallelOpInstanceStates) {
+    Map<String,long[]> offsMap=psh.getStateNameToPartitionOffsets();
+    Map<String,List<Long>> offsMapWithList=new HashMap<>(offsMap.size());
+    for (    Map.Entry<String,long[]> e : offsMap.entrySet()) {
+      long[] offs=e.getValue();
+      expectedTotalPartitions+=offs.length;
+      List<Long> offsList=new ArrayList<>(offs.length);
+      for (int i=0; i < offs.length; ++i) {
+        offsList.add(i,offs[i]);
+      }
+      offsMapWithList.put(e.getKey(),offsList);
+    }
+    expected.put(psh.getDelegateStateHandle(),offsMapWithList);
+  }
+  OperatorStateRepartitioner repartitioner=RoundRobinOperatorStateRepartitioner.INSTANCE;
+  List<Collection<OperatorStateHandle>> pshs=repartitioner.repartitionState(previousParallelOpInstanceStates,newParallelism);
+  Map<StreamStateHandle,Map<String,List<Long>>> actual=new HashMap<>();
+  int minCount=Integer.MAX_VALUE;
+  int maxCount=0;
+  int actualTotalPartitions=0;
+  for (int p=0; p < newParallelism; ++p) {
+    int partitionCount=0;
+    Collection<OperatorStateHandle> pshc=pshs.get(p);
+    for (    OperatorStateHandle sh : pshc) {
+      for (      Map.Entry<String,long[]> namedState : sh.getStateNameToPartitionOffsets().entrySet()) {
+        Map<String,List<Long>> x=actual.get(sh.getDelegateStateHandle());
+        if (x == null) {
+          x=new HashMap<>();
+          actual.put(sh.getDelegateStateHandle(),x);
+        }
+        List<Long> actualOffs=x.get(namedState.getKey());
+        if (actualOffs == null) {
+          actualOffs=new ArrayList<>();
+          x.put(namedState.getKey(),actualOffs);
+        }
+        long[] add=namedState.getValue();
+        for (int i=0; i < add.length; ++i) {
+          actualOffs.add(add[i]);
+        }
+        partitionCount+=namedState.getValue().length;
+      }
+    }
+    minCount=Math.min(minCount,partitionCount);
+    maxCount=Math.max(maxCount,partitionCount);
+    actualTotalPartitions+=partitionCount;
+  }
+  for (  Map<String,List<Long>> v : actual.values()) {
+    for (    List<Long> l : v.values()) {
+      Collections.sort(l);
+    }
+  }
+  int maxLoadDiff=maxCount - minCount;
+  Assert.assertTrue("Difference in partition load is > 1 : " + maxLoadDiff,maxLoadDiff <= 1);
+  Assert.assertEquals(expectedTotalPartitions,actualTotalPartitions);
+  Assert.assertEquals(expected,actual);
+}

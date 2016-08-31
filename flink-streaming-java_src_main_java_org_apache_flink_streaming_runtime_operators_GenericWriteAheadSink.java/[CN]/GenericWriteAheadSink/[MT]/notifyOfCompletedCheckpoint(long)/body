@@ -8,13 +8,14 @@ synchronized (state.pendingHandles) {
         try {
           if (!committer.isCheckpointCommitted(pastCheckpointId)) {
             Tuple2<Long,StreamStateHandle> handle=state.pendingHandles.get(pastCheckpointId);
-            FSDataInputStream in=handle.f1.openInputStream();
-            boolean success=sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(new DataInputViewStreamWrapper(in),serializer),serializer),handle.f0);
-            if (success) {
-              committer.commitCheckpoint(pastCheckpointId);
-              checkpointsToRemove.add(pastCheckpointId);
+            try (FSDataInputStream in=handle.f1.openInputStream()){
+              boolean success=sendValues(new ReusingMutableToRegularIteratorWrapper<>(new InputViewIterator<>(new DataInputViewStreamWrapper(in),serializer),serializer),handle.f0);
+              if (success) {
+                committer.commitCheckpoint(pastCheckpointId);
+                checkpointsToRemove.add(pastCheckpointId);
+              }
             }
-          }
+           }
  else {
             checkpointsToRemove.add(pastCheckpointId);
           }

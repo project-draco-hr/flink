@@ -1,28 +1,32 @@
 {
   final StreamOperator<?>[] allOperators=operatorChain.getAllOperators();
-  try {
-    if (lazyRestoreChainedOperatorState != null) {
-synchronized (cancelables) {
-        cancelables.add(lazyRestoreChainedOperatorState);
-      }
-      for (int i=0; i < lazyRestoreChainedOperatorState.getLength(); i++) {
-        StreamStateHandle state=lazyRestoreChainedOperatorState.get(i);
-        if (state == null) {
-          continue;
-        }
-        StreamOperator<?> operator=allOperators[i];
-        if (operator != null) {
-          LOG.debug("Restore state of task {} in chain ({}).",i,getName());
-          try (FSDataInputStream inputStream=state.openInputStream()){
-            operator.restoreState(inputStream);
-          }
-         }
-      }
-    }
+  if (lazyRestoreChainedOperatorState != null) {
+    Preconditions.checkState(lazyRestoreChainedOperatorState.getLength() == allOperators.length,"Invalid Invalid number of operator states. Found :" + lazyRestoreChainedOperatorState.getLength() + ". Expected: "+ allOperators.length);
   }
+  if (lazyRestoreOperatorState != null) {
+    Preconditions.checkArgument(lazyRestoreOperatorState.isEmpty() || lazyRestoreOperatorState.size() == allOperators.length,"Invalid number of operator states. Found :" + lazyRestoreOperatorState.size() + ". Expected: "+ allOperators.length);
+  }
+  for (int i=0; i < allOperators.length; i++) {
+    StreamOperator<?> operator=allOperators[i];
+    if (null != lazyRestoreOperatorState && !lazyRestoreOperatorState.isEmpty()) {
+      operator.restoreState(lazyRestoreOperatorState.get(i));
+    }
+    if (operator instanceof StreamCheckpointedOperator) {
+      if (lazyRestoreChainedOperatorState != null) {
+        StreamStateHandle state=lazyRestoreChainedOperatorState.get(i);
+        if (state != null) {
+          LOG.debug("Restore state of task {} in chain ({}).",i,getName());
+          FSDataInputStream is=state.openInputStream();
+          try {
+            cancelables.registerClosable(is);
+            ((StreamCheckpointedOperator)operator).restoreState(is);
+          }
   finally {
-synchronized (cancelables) {
-      cancelables.remove(lazyRestoreChainedOperatorState);
+            cancelables.unregisterClosable(is);
+            is.close();
+          }
+        }
+      }
     }
   }
 }

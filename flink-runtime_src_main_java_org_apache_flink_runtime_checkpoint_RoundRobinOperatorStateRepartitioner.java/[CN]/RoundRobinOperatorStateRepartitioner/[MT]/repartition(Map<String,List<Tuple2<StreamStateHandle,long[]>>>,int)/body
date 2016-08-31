@@ -1,0 +1,62 @@
+{
+  List<Map<StreamStateHandle,OperatorStateHandle>> mergeMapList=new ArrayList<>(parallelism);
+  for (int i=0; i < parallelism; ++i) {
+    mergeMapList.add(new HashMap<StreamStateHandle,OperatorStateHandle>());
+  }
+  int startParallelOP=0;
+  for (  Map.Entry<String,List<Tuple2<StreamStateHandle,long[]>>> e : nameToState.entrySet()) {
+    List<Tuple2<StreamStateHandle,long[]>> current=e.getValue();
+    int totalPartitions=0;
+    for (    Tuple2<StreamStateHandle,long[]> offsets : current) {
+      totalPartitions+=offsets.f1.length;
+    }
+    int lstIdx=0;
+    int offsetIdx=0;
+    int baseFraction=totalPartitions / parallelism;
+    int remainder=totalPartitions % parallelism;
+    int newStartParallelOp=startParallelOP;
+    for (int i=0; i < parallelism; ++i) {
+      int parallelOpIdx=(i + startParallelOP) % parallelism;
+      int numberOfPartitionsToAssign=baseFraction;
+      if (remainder > 0) {
+        ++numberOfPartitionsToAssign;
+        --remainder;
+      }
+ else       if (remainder == 0) {
+        newStartParallelOp=parallelOpIdx;
+        --remainder;
+      }
+      List<Tuple2<StreamStateHandle,long[]>> parallelOperatorState=new ArrayList<>();
+      while (numberOfPartitionsToAssign > 0) {
+        Tuple2<StreamStateHandle,long[]> handleWithOffsets=current.get(lstIdx);
+        long[] offsets=handleWithOffsets.f1;
+        int remaining=offsets.length - offsetIdx;
+        long[] offs;
+        if (remaining > numberOfPartitionsToAssign) {
+          offs=Arrays.copyOfRange(offsets,offsetIdx,offsetIdx + numberOfPartitionsToAssign);
+          offsetIdx+=numberOfPartitionsToAssign;
+        }
+ else {
+          if (OPTIMIZE_MEMORY_USE) {
+            handleWithOffsets.f1=null;
+          }
+          offs=Arrays.copyOfRange(offsets,offsetIdx,offsets.length);
+          offsetIdx=0;
+          ++lstIdx;
+        }
+        parallelOperatorState.add(new Tuple2<>(handleWithOffsets.f0,offs));
+        numberOfPartitionsToAssign-=remaining;
+        Map<StreamStateHandle,OperatorStateHandle> mergeMap=mergeMapList.get(parallelOpIdx);
+        OperatorStateHandle psh=mergeMap.get(handleWithOffsets.f0);
+        if (psh == null) {
+          psh=new OperatorStateHandle(handleWithOffsets.f0,new HashMap<String,long[]>());
+          mergeMap.put(handleWithOffsets.f0,psh);
+        }
+        psh.getStateNameToPartitionOffsets().put(e.getKey(),offs);
+      }
+    }
+    startParallelOP=newStartParallelOp;
+    e.setValue(null);
+  }
+  return mergeMapList;
+}

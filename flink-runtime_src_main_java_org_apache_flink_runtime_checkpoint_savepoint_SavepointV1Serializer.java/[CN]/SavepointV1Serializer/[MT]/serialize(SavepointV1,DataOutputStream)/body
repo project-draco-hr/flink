@@ -9,6 +9,7 @@
       int parallelism=taskState.getParallelism();
       dos.writeInt(parallelism);
       dos.writeInt(taskState.getMaxParallelism());
+      dos.writeInt(taskState.getChainLength());
       Map<Integer,SubtaskState> subtaskStateMap=taskState.getSubtaskStates();
       dos.writeInt(subtaskStateMap.size());
       for (      Map.Entry<Integer,SubtaskState> entry : subtaskStateMap.entrySet()) {
@@ -21,6 +22,17 @@
           serializeStreamStateHandle(stateHandle,dos);
         }
         dos.writeLong(subtaskState.getDuration());
+      }
+      Map<Integer,ChainedStateHandle<OperatorStateHandle>> partitionableStatesMap=taskState.getPartitionableStates();
+      dos.writeInt(partitionableStatesMap.size());
+      for (      Map.Entry<Integer,ChainedStateHandle<OperatorStateHandle>> entry : partitionableStatesMap.entrySet()) {
+        dos.writeInt(entry.getKey());
+        ChainedStateHandle<OperatorStateHandle> chainedStateHandle=entry.getValue();
+        dos.writeInt(chainedStateHandle.getLength());
+        for (int j=0; j < chainedStateHandle.getLength(); ++j) {
+          OperatorStateHandle stateHandle=chainedStateHandle.get(j);
+          serializePartitionableStateHandle(stateHandle,dos);
+        }
       }
       Map<Integer,KeyGroupsStateHandle> keyGroupsStateHandles=taskState.getKeyGroupsStateHandles();
       dos.writeInt(keyGroupsStateHandles.size());

@@ -19,12 +19,20 @@
     stream.print();
     see.execute("No broker test");
   }
- catch (  RuntimeException re) {
+ catch (  ProgramInvocationException pie) {
     if (kafkaServer.getVersion().equals("0.9")) {
-      Assert.assertTrue("Wrong RuntimeException thrown: " + StringUtils.stringifyException(re),re.getClass().equals(TimeoutException.class) && re.getMessage().contains("Timeout expired while fetching topic metadata"));
+      assertTrue(pie.getCause() instanceof JobExecutionException);
+      JobExecutionException jee=(JobExecutionException)pie.getCause();
+      assertTrue(jee.getCause() instanceof TimeoutException);
+      TimeoutException te=(TimeoutException)jee.getCause();
+      assertEquals("Timeout expired while fetching topic metadata",te.getMessage());
     }
  else {
-      Assert.assertTrue("Wrong RuntimeException thrown: " + StringUtils.stringifyException(re),re.getClass().equals(RuntimeException.class) && re.getMessage().contains("Unable to retrieve any partitions for the requested topics [doesntexist]"));
+      assertTrue(pie.getCause() instanceof JobExecutionException);
+      JobExecutionException jee=(JobExecutionException)pie.getCause();
+      assertTrue(jee.getCause() instanceof RuntimeException);
+      RuntimeException re=(RuntimeException)jee.getCause();
+      assertTrue(re.getMessage().contains("Unable to retrieve any partitions for the requested topics [doesntexist]"));
     }
   }
 }

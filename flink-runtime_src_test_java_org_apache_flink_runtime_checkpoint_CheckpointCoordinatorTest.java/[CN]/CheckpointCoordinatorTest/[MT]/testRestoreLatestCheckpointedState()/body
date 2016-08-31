@@ -21,14 +21,18 @@
   List<KeyGroupRange> keyGroupPartitions2=CheckpointCoordinator.createKeyGroupPartitions(maxParallelism2,parallelism2);
   for (int index=0; index < jobVertex1.getParallelism(); index++) {
     ChainedStateHandle<StreamStateHandle> nonPartitionedState=generateStateForVertex(jobVertexID1,index);
+    ChainedStateHandle<OperatorStateHandle> partitionableState=generateChainedPartitionableStateHandle(jobVertexID1,index,2,8);
     List<KeyGroupsStateHandle> partitionedKeyGroupState=generateKeyGroupState(jobVertexID1,keyGroupPartitions1.get(index));
-    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex1.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,nonPartitionedState,partitionedKeyGroupState);
+    CheckpointStateHandles checkpointStateHandles=new CheckpointStateHandles(nonPartitionedState,partitionableState,partitionedKeyGroupState);
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex1.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,checkpointStateHandles);
     coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
   }
   for (int index=0; index < jobVertex2.getParallelism(); index++) {
     ChainedStateHandle<StreamStateHandle> nonPartitionedState=generateStateForVertex(jobVertexID2,index);
+    ChainedStateHandle<OperatorStateHandle> partitionableState=generateChainedPartitionableStateHandle(jobVertexID2,index,2,8);
     List<KeyGroupsStateHandle> partitionedKeyGroupState=generateKeyGroupState(jobVertexID2,keyGroupPartitions2.get(index));
-    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex2.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,nonPartitionedState,partitionedKeyGroupState);
+    CheckpointStateHandles checkpointStateHandles=new CheckpointStateHandles(nonPartitionedState,partitionableState,partitionedKeyGroupState);
+    AcknowledgeCheckpoint acknowledgeCheckpoint=new AcknowledgeCheckpoint(jid,jobVertex2.getTaskVertices()[index].getCurrentExecutionAttempt().getAttemptId(),checkpointId,checkpointStateHandles);
     coord.receiveAcknowledgeMessage(acknowledgeCheckpoint);
   }
   List<CompletedCheckpoint> completedCheckpoints=coord.getSuccessfulCheckpoints();

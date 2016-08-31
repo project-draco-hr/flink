@@ -13,18 +13,36 @@
   final LinkedMap pendingCheckpoints=new LinkedMap();
   FlinkKafkaConsumerBase<String> consumer=getConsumer(fetcher,pendingCheckpoints,true);
   assertEquals(0,pendingCheckpoints.size());
-  HashMap<KafkaTopicPartition,Long> snapshot1=consumer.snapshotState(138L,19L);
+  OperatorStateStore backend=mock(OperatorStateStore.class);
+  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState1=new TestingListState<>();
+  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState2=new TestingListState<>();
+  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState3=new TestingListState<>();
+  when(backend.getPartitionableState(Matchers.any(ListStateDescriptor.class))).thenReturn(listState1,listState1,listState2,listState2,listState3,listState3);
+  consumer.initializeState(backend);
+  consumer.prepareSnapshot(138L,138L);
+  HashMap<KafkaTopicPartition,Long> snapshot1=new HashMap<>();
+  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState1.get()) {
+    snapshot1.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
+  }
   assertEquals(state1,snapshot1);
   assertEquals(1,pendingCheckpoints.size());
   assertEquals(state1,pendingCheckpoints.get(138L));
-  HashMap<KafkaTopicPartition,Long> snapshot2=consumer.snapshotState(140L,1578L);
+  consumer.prepareSnapshot(140L,140L);
+  HashMap<KafkaTopicPartition,Long> snapshot2=new HashMap<>();
+  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState2.get()) {
+    snapshot2.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
+  }
   assertEquals(state2,snapshot2);
   assertEquals(2,pendingCheckpoints.size());
   assertEquals(state2,pendingCheckpoints.get(140L));
   consumer.notifyCheckpointComplete(138L);
   assertEquals(1,pendingCheckpoints.size());
   assertTrue(pendingCheckpoints.containsKey(140L));
-  HashMap<KafkaTopicPartition,Long> snapshot3=consumer.snapshotState(141L,1578L);
+  consumer.prepareSnapshot(141L,141L);
+  HashMap<KafkaTopicPartition,Long> snapshot3=new HashMap<>();
+  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState1.get()) {
+    snapshot1.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
+  }
   assertEquals(state3,snapshot3);
   assertEquals(2,pendingCheckpoints.size());
   assertEquals(state3,pendingCheckpoints.get(141L));
@@ -32,8 +50,12 @@
   assertEquals(0,pendingCheckpoints.size());
   consumer.notifyCheckpointComplete(666);
   assertEquals(0,pendingCheckpoints.size());
+  OperatorStateStore operatorStateStore=mock(OperatorStateStore.class);
+  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState=new TestingListState<>();
+  when(operatorStateStore.getPartitionableState(Matchers.any(ListStateDescriptor.class))).thenReturn(listState);
   for (int i=100; i < 600; i++) {
-    consumer.snapshotState(i,15 * i);
+    consumer.prepareSnapshot(i,i);
+    listState.clear();
   }
   assertEquals(FlinkKafkaConsumerBase.MAX_NUM_PENDING_CHECKPOINTS,pendingCheckpoints.size());
   consumer.notifyCheckpointComplete(598);

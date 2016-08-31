@@ -1,0 +1,53 @@
+{
+synchronized (lock) {
+    if (discarded) {
+      return false;
+    }
+    ExecutionVertex vertex=notYetAcknowledgedTasks.remove(attemptID);
+    if (vertex != null) {
+      if (checkpointStateHandles != null) {
+        List<KeyGroupsStateHandle> keyGroupsState=checkpointStateHandles.getKeyGroupsStateHandle();
+        ChainedStateHandle<StreamStateHandle> nonPartitionedState=checkpointStateHandles.getNonPartitionedStateHandles();
+        ChainedStateHandle<OperatorStateHandle> partitioneableState=checkpointStateHandles.getPartitioneableStateHandles();
+        if (nonPartitionedState != null || partitioneableState != null || keyGroupsState != null) {
+          JobVertexID jobVertexID=vertex.getJobvertexId();
+          int subtaskIndex=vertex.getParallelSubtaskIndex();
+          TaskState taskState;
+          if (taskStates.containsKey(jobVertexID)) {
+            taskState=taskStates.get(jobVertexID);
+          }
+ else {
+            int chainLength;
+            if (nonPartitionedState != null) {
+              chainLength=nonPartitionedState.getLength();
+            }
+ else             if (partitioneableState != null) {
+              chainLength=partitioneableState.getLength();
+            }
+ else {
+              chainLength=1;
+            }
+            taskState=new TaskState(jobVertexID,vertex.getTotalNumberOfParallelSubtasks(),vertex.getMaxParallelism(),chainLength);
+            taskStates.put(jobVertexID,taskState);
+          }
+          long duration=System.currentTimeMillis() - checkpointTimestamp;
+          if (nonPartitionedState != null) {
+            taskState.putState(subtaskIndex,new SubtaskState(nonPartitionedState,duration));
+          }
+          if (partitioneableState != null && !partitioneableState.isEmpty()) {
+            taskState.putPartitionableState(subtaskIndex,partitioneableState);
+          }
+          if (keyGroupsState != null && !keyGroupsState.isEmpty()) {
+            KeyGroupsStateHandle keyGroupsStateHandle=keyGroupsState.get(0);
+            taskState.putKeyedState(subtaskIndex,keyGroupsStateHandle);
+          }
+        }
+      }
+      ++numAcknowledgedTasks;
+      return true;
+    }
+ else {
+      return false;
+    }
+  }
+}

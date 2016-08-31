@@ -1,4 +1,21 @@
 {
   super.open();
   FunctionUtils.openFunction(userFunction,new Configuration());
+  if (userFunction instanceof CheckpointedFunction) {
+    ((CheckpointedFunction)userFunction).initializeState(getOperatorStateBackend());
+  }
+ else   if (userFunction instanceof ListCheckpointed) {
+    @SuppressWarnings("unchecked") ListCheckpointed<Serializable> listCheckpointedFun=(ListCheckpointed<Serializable>)userFunction;
+    ListState<Serializable> listState=getOperatorStateBackend().getPartitionableState(ListCheckpointed.DEFAULT_LIST_DESCRIPTOR);
+    List<Serializable> list=new ArrayList<>();
+    for (    Serializable serializable : listState.get()) {
+      list.add(serializable);
+    }
+    try {
+      listCheckpointedFun.restoreState(list);
+    }
+ catch (    Exception e) {
+      throw new Exception("Failed to restore state to function: " + e.getMessage(),e);
+    }
+  }
 }

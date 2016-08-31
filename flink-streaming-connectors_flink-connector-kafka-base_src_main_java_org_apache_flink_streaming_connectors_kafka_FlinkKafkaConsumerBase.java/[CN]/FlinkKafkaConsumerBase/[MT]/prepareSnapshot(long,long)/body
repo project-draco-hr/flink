@@ -1,0 +1,36 @@
+{
+  if (!running) {
+    LOG.debug("storeOperatorState() called on closed source");
+  }
+ else {
+    ListState<Serializable> listState=stateStore.getPartitionableState(ListCheckpointed.DEFAULT_LIST_DESCRIPTOR);
+    listState.clear();
+    final AbstractFetcher<?,?> fetcher=this.kafkaFetcher;
+    if (fetcher == null) {
+      if (restoreToOffset != null) {
+        pendingCheckpoints.put(checkpointId,restoreToOffset);
+        while (pendingCheckpoints.size() > MAX_NUM_PENDING_CHECKPOINTS) {
+          pendingCheckpoints.remove(0);
+        }
+        for (        Map.Entry<KafkaTopicPartition,Long> kafkaTopicPartitionLongEntry : restoreToOffset.entrySet()) {
+          listState.add(Tuple2.of(kafkaTopicPartitionLongEntry.getKey(),kafkaTopicPartitionLongEntry.getValue()));
+        }
+      }
+ else       if (subscribedPartitions != null) {
+        for (        KafkaTopicPartition subscribedPartition : subscribedPartitions) {
+          listState.add(Tuple2.of(subscribedPartition,KafkaTopicPartitionState.OFFSET_NOT_SET));
+        }
+      }
+    }
+ else {
+      HashMap<KafkaTopicPartition,Long> currentOffsets=fetcher.snapshotCurrentState();
+      pendingCheckpoints.put(checkpointId,currentOffsets);
+      while (pendingCheckpoints.size() > MAX_NUM_PENDING_CHECKPOINTS) {
+        pendingCheckpoints.remove(0);
+      }
+      for (      Map.Entry<KafkaTopicPartition,Long> kafkaTopicPartitionLongEntry : currentOffsets.entrySet()) {
+        listState.add(Tuple2.of(kafkaTopicPartitionLongEntry.getKey(),kafkaTopicPartitionLongEntry.getValue()));
+      }
+    }
+  }
+}

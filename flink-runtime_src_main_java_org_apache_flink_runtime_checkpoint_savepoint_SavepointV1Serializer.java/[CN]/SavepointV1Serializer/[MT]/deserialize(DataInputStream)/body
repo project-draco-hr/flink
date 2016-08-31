@@ -6,7 +6,8 @@
     JobVertexID jobVertexId=new JobVertexID(dis.readLong(),dis.readLong());
     int parallelism=dis.readInt();
     int maxParallelism=dis.readInt();
-    TaskState taskState=new TaskState(jobVertexId,parallelism,maxParallelism);
+    int chainLength=dis.readInt();
+    TaskState taskState=new TaskState(jobVertexId,parallelism,maxParallelism,chainLength);
     taskStates.add(taskState);
     int numSubTaskStates=dis.readInt();
     for (int j=0; j < numSubTaskStates; j++) {
@@ -21,6 +22,18 @@
       ChainedStateHandle<StreamStateHandle> chainedStateHandle=new ChainedStateHandle<>(streamStateHandleList);
       SubtaskState subtaskState=new SubtaskState(chainedStateHandle,duration);
       taskState.putState(subtaskIndex,subtaskState);
+    }
+    int numPartitionableOpStates=dis.readInt();
+    for (int j=0; j < numPartitionableOpStates; j++) {
+      int subtaskIndex=dis.readInt();
+      int chainedStateHandleSize=dis.readInt();
+      List<OperatorStateHandle> streamStateHandleList=new ArrayList<>(chainedStateHandleSize);
+      for (int k=0; k < chainedStateHandleSize; ++k) {
+        OperatorStateHandle streamStateHandle=deserializePartitionableStateHandle(dis);
+        streamStateHandleList.add(streamStateHandle);
+      }
+      ChainedStateHandle<OperatorStateHandle> chainedStateHandle=new ChainedStateHandle<>(streamStateHandleList);
+      taskState.putPartitionableState(subtaskIndex,chainedStateHandle);
     }
     int numKeyGroupStates=dis.readInt();
     for (int j=0; j < numKeyGroupStates; j++) {

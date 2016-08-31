@@ -15,14 +15,14 @@
   TestingStreamOperator.numberRestoreCalls=0;
   testHarness.invoke(env);
   testHarness.waitForTaskRunning(deadline.timeLeft().toMillis());
-  streamTask.triggerCheckpoint(checkpointId,checkpointTimestamp);
+  while (!streamTask.triggerCheckpoint(checkpointId,checkpointTimestamp))   ;
   assertEquals(0,TestingStreamOperator.numberRestoreCalls);
   env.getCheckpointLatch().await();
   assertEquals(checkpointId,env.getCheckpointId());
   testHarness.endInput();
   testHarness.waitForTaskCompletion(deadline.timeLeft().toMillis());
   final OneInputStreamTask<String,String> restoredTask=new OneInputStreamTask<String,String>();
-  restoredTask.setInitialState(env.getState(),env.getKeyGroupStates());
+  restoredTask.setInitialState(env.getState(),env.getKeyGroupStates(),env.getPartitionableOperatorState());
   final OneInputStreamTaskTestHarness<String,String> restoredTaskHarness=new OneInputStreamTaskTestHarness<String,String>(restoredTask,BasicTypeInfo.STRING_TYPE_INFO,BasicTypeInfo.STRING_TYPE_INFO);
   restoredTaskHarness.configureForKeyedStream(keySelector,BasicTypeInfo.STRING_TYPE_INFO);
   StreamConfig restoredTaskStreamConfig=restoredTaskHarness.getStreamConfig();

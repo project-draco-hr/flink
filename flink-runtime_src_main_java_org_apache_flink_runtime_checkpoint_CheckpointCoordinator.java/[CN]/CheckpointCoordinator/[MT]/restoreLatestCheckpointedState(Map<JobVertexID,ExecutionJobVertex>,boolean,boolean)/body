@@ -21,27 +21,73 @@ synchronized (lock) {
         if (taskState.getMaxParallelism() != executionJobVertex.getMaxParallelism()) {
           throw new IllegalStateException("The maximum parallelism (" + taskState.getMaxParallelism() + ") with which the latest "+ "checkpoint of the execution job vertex "+ executionJobVertex+ " has been taken and the current maximum parallelism ("+ executionJobVertex.getMaxParallelism()+ ") changed. This "+ "is currently not supported.");
         }
+        int oldParallelism=taskState.getParallelism();
+        int newParallelism=executionJobVertex.getParallelism();
+        boolean parallelismChanged=oldParallelism != newParallelism;
         boolean hasNonPartitionedState=taskState.hasNonPartitionedState();
-        if (hasNonPartitionedState && taskState.getParallelism() != executionJobVertex.getParallelism()) {
-          throw new IllegalStateException("Cannot restore the latest checkpoint because " + "the operator " + executionJobVertex.getJobVertexId() + " has non-partitioned "+ "state and its parallelism changed. The operator"+ executionJobVertex.getJobVertexId()+ " has parallelism "+ executionJobVertex.getParallelism()+ " whereas the corresponding"+ "state object has a parallelism of "+ taskState.getParallelism());
+        if (hasNonPartitionedState && parallelismChanged) {
+          throw new IllegalStateException("Cannot restore the latest checkpoint because " + "the operator " + executionJobVertex.getJobVertexId() + " has non-partitioned "+ "state and its parallelism changed. The operator"+ executionJobVertex.getJobVertexId()+ " has parallelism "+ newParallelism+ " whereas the corresponding"+ "state object has a parallelism of "+ oldParallelism);
         }
-        List<KeyGroupRange> keyGroupPartitions=createKeyGroupPartitions(executionJobVertex.getMaxParallelism(),executionJobVertex.getParallelism());
+        List<KeyGroupRange> keyGroupPartitions=createKeyGroupPartitions(executionJobVertex.getMaxParallelism(),newParallelism);
+        @SuppressWarnings("unchecked") List<OperatorStateHandle>[] chainParallelStates=new List[taskState.getChainLength()];
+        for (int i=0; i < oldParallelism; ++i) {
+          ChainedStateHandle<OperatorStateHandle> partitionableState=taskState.getPartitionableState(i);
+          if (partitionableState != null) {
+            for (int j=0; j < partitionableState.getLength(); ++j) {
+              OperatorStateHandle opParalleState=partitionableState.get(j);
+              if (opParalleState != null) {
+                List<OperatorStateHandle> opParallelStates=chainParallelStates[j];
+                if (opParallelStates == null) {
+                  opParallelStates=new ArrayList<>();
+                  chainParallelStates[j]=opParallelStates;
+                }
+                opParallelStates.add(opParalleState);
+              }
+            }
+          }
+        }
+        @SuppressWarnings("unchecked") List<Collection<OperatorStateHandle>>[] redistributedParallelStates=new List[taskState.getChainLength()];
+        OperatorStateRepartitioner repartitioner=RoundRobinOperatorStateRepartitioner.INSTANCE;
+        for (int i=0; i < chainParallelStates.length; ++i) {
+          List<OperatorStateHandle> chainOpParallelStates=chainParallelStates[i];
+          if (chainOpParallelStates != null) {
+            if (parallelismChanged) {
+              redistributedParallelStates[i]=repartitioner.repartitionState(chainOpParallelStates,newParallelism);
+            }
+ else {
+              List<Collection<OperatorStateHandle>> repacking=new ArrayList<>(newParallelism);
+              for (              OperatorStateHandle operatorStateHandle : chainOpParallelStates) {
+                repacking.add(Collections.singletonList(operatorStateHandle));
+              }
+              redistributedParallelStates[i]=repacking;
+            }
+          }
+        }
         int counter=0;
-        for (int i=0; i < executionJobVertex.getParallelism(); i++) {
+        for (int i=0; i < newParallelism; ++i) {
           ChainedStateHandle<StreamStateHandle> state=null;
           if (hasNonPartitionedState) {
             SubtaskState subtaskState=taskState.getState(i);
             if (subtaskState != null) {
-              counter++;
+              ++counter;
               state=subtaskState.getChainedStateHandle();
             }
           }
+          @SuppressWarnings("unchecked") Collection<OperatorStateHandle>[] ia=new Collection[taskState.getChainLength()];
+          List<Collection<OperatorStateHandle>> subTaskPartitionableState=Arrays.asList(ia);
+          for (int j=0; j < redistributedParallelStates.length; ++j) {
+            List<Collection<OperatorStateHandle>> redistributedParallelState=redistributedParallelStates[j];
+            if (redistributedParallelState != null) {
+              subTaskPartitionableState.set(j,redistributedParallelState.get(i));
+            }
+          }
           KeyGroupRange subtaskKeyGroupIds=keyGroupPartitions.get(i);
-          List<KeyGroupsStateHandle> subtaskKeyGroupStates=getKeyGroupsStateHandles(taskState.getKeyGroupStates(),subtaskKeyGroupIds);
+          List<KeyGroupsStateHandle> subtaskKeyGroupStates=parallelismChanged ? getKeyGroupsStateHandles(taskState.getKeyGroupStates(),subtaskKeyGroupIds) : Collections.singletonList(taskState.getKeyGroupState(i));
           Execution currentExecutionAttempt=executionJobVertex.getTaskVertices()[i].getCurrentExecutionAttempt();
-          currentExecutionAttempt.setInitialState(state,subtaskKeyGroupStates);
+          CheckpointStateHandles checkpointStateHandles=new CheckpointStateHandles(state,null,subtaskKeyGroupStates);
+          currentExecutionAttempt.setInitialState(checkpointStateHandles,subTaskPartitionableState);
         }
-        if (allOrNothingState && counter > 0 && counter < executionJobVertex.getParallelism()) {
+        if (allOrNothingState && counter > 0 && counter < newParallelism) {
           throw new IllegalStateException("The checkpoint contained state only for " + "a subset of tasks for vertex " + executionJobVertex);
         }
       }

@@ -1,0 +1,35 @@
+{
+  OperatorStateBackend operatorStateBackend=createNewOperatorStateBackend();
+  ListStateDescriptor<Serializable> stateDescriptor1=new ListStateDescriptor<>("test1",new JavaSerializer<>());
+  ListStateDescriptor<Serializable> stateDescriptor2=new ListStateDescriptor<>("test2",new JavaSerializer<>());
+  ListState<Serializable> listState1=operatorStateBackend.getPartitionableState(stateDescriptor1);
+  ListState<Serializable> listState2=operatorStateBackend.getPartitionableState(stateDescriptor2);
+  listState1.add(42);
+  listState1.add(4711);
+  listState2.add(7);
+  listState2.add(13);
+  listState2.add(23);
+  CheckpointStreamFactory streamFactory=abstractStateBackend.createStreamFactory(new JobID(),"testOperator");
+  OperatorStateHandle stateHandle=operatorStateBackend.snapshot(1,1,streamFactory).get();
+  try {
+    operatorStateBackend.dispose();
+    operatorStateBackend=abstractStateBackend.restoreOperatorStateBackend(null,"testOperator",Collections.singletonList(stateHandle));
+    assertEquals(0,operatorStateBackend.getRegisteredStateNames().size());
+    listState1=operatorStateBackend.getPartitionableState(stateDescriptor1);
+    listState2=operatorStateBackend.getPartitionableState(stateDescriptor2);
+    assertEquals(2,operatorStateBackend.getRegisteredStateNames().size());
+    Iterator<Serializable> it=listState1.get().iterator();
+    assertEquals(42,it.next());
+    assertEquals(4711,it.next());
+    assertTrue(!it.hasNext());
+    it=listState2.get().iterator();
+    assertEquals(7,it.next());
+    assertEquals(13,it.next());
+    assertEquals(23,it.next());
+    assertTrue(!it.hasNext());
+    operatorStateBackend.dispose();
+  }
+  finally {
+    stateHandle.discardState();
+  }
+}

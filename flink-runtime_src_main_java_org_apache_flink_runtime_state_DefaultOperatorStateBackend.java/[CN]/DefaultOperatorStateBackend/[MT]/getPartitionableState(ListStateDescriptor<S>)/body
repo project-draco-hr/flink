@@ -1,0 +1,32 @@
+{
+  Preconditions.checkNotNull(stateDescriptor);
+  String name=Preconditions.checkNotNull(stateDescriptor.getName());
+  TypeSerializer<S> partitionStateSerializer=Preconditions.checkNotNull(stateDescriptor.getSerializer());
+  @SuppressWarnings("unchecked") PartitionableListState<S> partitionableListState=(PartitionableListState<S>)registeredStates.get(name);
+  if (null == partitionableListState) {
+    partitionableListState=new PartitionableListState<>(partitionStateSerializer);
+    registeredStates.put(name,partitionableListState);
+    if (restoreSnapshots != null) {
+      for (      OperatorStateHandle stateHandle : restoreSnapshots) {
+        long[] offsets=stateHandle.getStateNameToPartitionOffsets().get(name);
+        if (offsets != null) {
+          FSDataInputStream in=stateHandle.openInputStream();
+          try {
+            closeStreamOnCancelRegistry.registerClosable(in);
+            DataInputView div=new DataInputViewStreamWrapper(in);
+            for (int i=0; i < offsets.length; ++i) {
+              in.seek(offsets[i]);
+              S partitionState=partitionStateSerializer.deserialize(div);
+              partitionableListState.add(partitionState);
+            }
+          }
+  finally {
+            closeStreamOnCancelRegistry.unregisterClosable(in);
+            in.close();
+          }
+        }
+      }
+    }
+  }
+  return partitionableListState;
+}

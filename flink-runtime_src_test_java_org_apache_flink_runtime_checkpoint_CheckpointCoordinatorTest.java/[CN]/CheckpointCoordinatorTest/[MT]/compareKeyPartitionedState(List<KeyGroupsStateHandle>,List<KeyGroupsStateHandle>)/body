@@ -1,0 +1,26 @@
+{
+  KeyGroupsStateHandle expectedHeadOpKeyGroupStateHandle=expectPartitionedKeyGroupState.get(0);
+  int expectedTotalKeyGroups=expectedHeadOpKeyGroupStateHandle.getNumberOfKeyGroups();
+  int actualTotalKeyGroups=0;
+  for (  KeyGroupsStateHandle keyGroupsStateHandle : actualPartitionedKeyGroupState) {
+    actualTotalKeyGroups+=keyGroupsStateHandle.getNumberOfKeyGroups();
+  }
+  assertEquals(expectedTotalKeyGroups,actualTotalKeyGroups);
+  try (FSDataInputStream inputStream=expectedHeadOpKeyGroupStateHandle.getStateHandle().openInputStream()){
+    for (    int groupId : expectedHeadOpKeyGroupStateHandle.keyGroups()) {
+      long offset=expectedHeadOpKeyGroupStateHandle.getOffsetForKeyGroup(groupId);
+      inputStream.seek(offset);
+      int expectedKeyGroupState=InstantiationUtil.deserializeObject(inputStream);
+      for (      KeyGroupsStateHandle oneActualKeyGroupStateHandle : actualPartitionedKeyGroupState) {
+        if (oneActualKeyGroupStateHandle.containsKeyGroup(groupId)) {
+          long actualOffset=oneActualKeyGroupStateHandle.getOffsetForKeyGroup(groupId);
+          try (FSDataInputStream actualInputStream=oneActualKeyGroupStateHandle.getStateHandle().openInputStream()){
+            actualInputStream.seek(actualOffset);
+            int actualGroupState=InstantiationUtil.deserializeObject(actualInputStream);
+            assertEquals(expectedKeyGroupState,actualGroupState);
+          }
+         }
+      }
+    }
+  }
+ }

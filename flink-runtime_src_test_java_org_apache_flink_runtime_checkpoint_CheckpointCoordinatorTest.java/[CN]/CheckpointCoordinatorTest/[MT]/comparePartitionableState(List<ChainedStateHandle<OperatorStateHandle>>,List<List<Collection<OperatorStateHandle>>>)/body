@@ -1,0 +1,39 @@
+{
+  List<String> expectedResult=new ArrayList<>();
+  for (  ChainedStateHandle<OperatorStateHandle> chainedStateHandle : expected) {
+    for (int i=0; i < chainedStateHandle.getLength(); ++i) {
+      OperatorStateHandle operatorStateHandle=chainedStateHandle.get(i);
+      try (FSDataInputStream in=operatorStateHandle.openInputStream()){
+        for (        Map.Entry<String,long[]> entry : operatorStateHandle.getStateNameToPartitionOffsets().entrySet()) {
+          for (          long offset : entry.getValue()) {
+            in.seek(offset);
+            Integer state=InstantiationUtil.deserializeObject(in);
+            expectedResult.add(i + " : " + entry.getKey()+ " : "+ state);
+          }
+        }
+      }
+     }
+  }
+  Collections.sort(expectedResult);
+  List<String> actualResult=new ArrayList<>();
+  for (  List<Collection<OperatorStateHandle>> collectionList : actual) {
+    if (collectionList != null) {
+      for (int i=0; i < collectionList.size(); ++i) {
+        Collection<OperatorStateHandle> stateHandles=collectionList.get(i);
+        for (        OperatorStateHandle operatorStateHandle : stateHandles) {
+          try (FSDataInputStream in=operatorStateHandle.openInputStream()){
+            for (            Map.Entry<String,long[]> entry : operatorStateHandle.getStateNameToPartitionOffsets().entrySet()) {
+              for (              long offset : entry.getValue()) {
+                in.seek(offset);
+                Integer state=InstantiationUtil.deserializeObject(in);
+                actualResult.add(i + " : " + entry.getKey()+ " : "+ state);
+              }
+            }
+          }
+         }
+      }
+    }
+  }
+  Collections.sort(actualResult);
+  Assert.assertEquals(expectedResult,actualResult);
+}

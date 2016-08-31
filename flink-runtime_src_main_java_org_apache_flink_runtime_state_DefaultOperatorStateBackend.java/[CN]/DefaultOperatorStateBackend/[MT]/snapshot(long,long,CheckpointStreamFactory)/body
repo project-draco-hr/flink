@@ -1,0 +1,22 @@
+{
+  if (registeredStates.isEmpty()) {
+    return new DoneFuture<>(null);
+  }
+  Map<String,long[]> writtenStatesMetaData=new HashMap<>(registeredStates.size());
+  CheckpointStreamFactory.CheckpointStateOutputStream out=streamFactory.createCheckpointStateOutputStream(checkpointId,timestamp);
+  try {
+    closeStreamOnCancelRegistry.registerClosable(out);
+    DataOutputView dov=new DataOutputViewStreamWrapper(out);
+    dov.writeInt(registeredStates.size());
+    for (    Map.Entry<String,PartitionableListState<?>> entry : registeredStates.entrySet()) {
+      long[] partitionOffsets=entry.getValue().write(out);
+      writtenStatesMetaData.put(entry.getKey(),partitionOffsets);
+    }
+    OperatorStateHandle handle=new OperatorStateHandle(out.closeAndGetHandle(),writtenStatesMetaData);
+    return new DoneFuture<>(handle);
+  }
+  finally {
+    closeStreamOnCancelRegistry.unregisterClosable(out);
+    out.close();
+  }
+}
