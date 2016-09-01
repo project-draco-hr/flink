@@ -1,0 +1,24 @@
+{
+  Preconditions.checkNotNull(userCodeClassLoader);
+  try {
+    final Future<Object> response=jobManager.ask(new JobManagerMessages.RequestNextInputSplit(jobID,vertexID,executionID),timeout);
+    final Object result=Await.result(response,timeout);
+    if (result instanceof JobManagerMessages.NextInputSplit) {
+      final JobManagerMessages.NextInputSplit nextInputSplit=(JobManagerMessages.NextInputSplit)result;
+      byte[] serializedData=nextInputSplit.splitData();
+      if (serializedData == null) {
+        return null;
+      }
+ else {
+        Object deserialized=InstantiationUtil.deserializeObject(serializedData,userCodeClassLoader);
+        return (InputSplit)deserialized;
+      }
+    }
+ else {
+      throw new Exception("RequestNextInputSplit requires a response of type " + "NextInputSplit. Instead response is of type " + result.getClass() + '.');
+    }
+  }
+ catch (  Exception e) {
+    throw new RuntimeException("Requesting the next InputSplit failed.",e);
+  }
+}

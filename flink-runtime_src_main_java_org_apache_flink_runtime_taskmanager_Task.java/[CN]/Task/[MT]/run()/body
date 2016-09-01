@@ -48,9 +48,8 @@
     if (isCanceledOrFailed()) {
       throw new CancelTaskException();
     }
-    TaskInputSplitProvider splitProvider=new TaskInputSplitProvider(jobManager,jobId,vertexId,executionId,userCodeClassLoader,actorAskTimeout);
     TaskKvStateRegistry kvStateRegistry=network.createKvStateTaskRegistry(jobId,getJobVertexId());
-    Environment env=new RuntimeEnvironment(jobId,vertexId,executionId,executionConfig,taskInfo,jobConfiguration,taskConfiguration,userCodeClassLoader,memoryManager,ioManager,broadcastVariableManager,accumulatorRegistry,kvStateRegistry,splitProvider,distributedCacheEntries,writers,inputGates,jobManager,taskManagerConfig,metrics,this);
+    Environment env=new RuntimeEnvironment(jobId,vertexId,executionId,executionConfig,taskInfo,jobConfiguration,taskConfiguration,userCodeClassLoader,memoryManager,ioManager,broadcastVariableManager,accumulatorRegistry,kvStateRegistry,inputSplitProvider,distributedCacheEntries,writers,inputGates,checkpointResponder,taskManagerConfig,metrics,this);
     invokable.setEnvironment(env);
     if (chainedOperatorState != null || keyGroupStates != null) {
       if (invokable instanceof StatefulTask) {
@@ -68,7 +67,7 @@
       throw new CancelTaskException();
     }
     notifyObservers(ExecutionState.RUNNING,null);
-    taskManager.tell(new UpdateTaskExecutionState(new TaskExecutionState(jobId,executionId,ExecutionState.RUNNING)));
+    taskManagerConnection.updateTaskExecutionState(new TaskExecutionState(jobId,executionId,ExecutionState.RUNNING));
     executingThread.setContextClassLoader(userCodeClassLoader);
     invokable.invoke();
     if (isCanceledOrFailed()) {

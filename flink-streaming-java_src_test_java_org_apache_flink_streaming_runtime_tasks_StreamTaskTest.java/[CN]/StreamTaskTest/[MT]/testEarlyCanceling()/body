@@ -4,16 +4,16 @@
   cfg.setStreamOperator(new SlowlyDeserializingOperator());
   cfg.setTimeCharacteristic(TimeCharacteristic.ProcessingTime);
   Task task=createTask(SourceStreamTask.class,cfg);
-  ExecutionStateListener executionStateListener=new ExecutionStateListener();
-  task.registerExecutionListener(executionStateListener);
+  TestingExecutionStateListener testingExecutionStateListener=new TestingExecutionStateListener();
+  task.registerExecutionListener(testingExecutionStateListener);
   task.startTaskThread();
-  Future<ExecutionState> running=executionStateListener.notifyWhenExecutionState(ExecutionState.RUNNING);
+  Future<ExecutionState> running=testingExecutionStateListener.notifyWhenExecutionState(ExecutionState.RUNNING);
   ExecutionState executionState=Await.result(running,deadline.timeLeft());
   if (executionState != ExecutionState.RUNNING) {
     fail("Task entered state " + task.getExecutionState() + " with error "+ ExceptionUtils.stringifyException(task.getFailureCause()));
   }
   task.cancelExecution();
-  Future<ExecutionState> canceling=executionStateListener.notifyWhenExecutionState(ExecutionState.CANCELING);
+  Future<ExecutionState> canceling=testingExecutionStateListener.notifyWhenExecutionState(ExecutionState.CANCELING);
   executionState=Await.result(canceling,deadline.timeLeft());
   assertTrue(executionState == ExecutionState.CANCELING || executionState == ExecutionState.CANCELED);
   task.getExecutingThread().join(deadline.timeLeft().toMillis());
