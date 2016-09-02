@@ -2,6 +2,7 @@
   final ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
   env.getConfig().enableObjectReuse();
   ParameterTool parameters=ParameterTool.fromArgs(args);
+  int little_parallelism=parameters.getInt("little_parallelism",PARALLELISM_DEFAULT);
   DataSet ji;
 switch (parameters.get("input","")) {
 case "csv":
@@ -12,12 +13,12 @@ case "csv":
 switch (parameters.get("type","")) {
 case "integer":
 {
-          ji=reader.keyType(LongValue.class).run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>());
+          ji=reader.keyType(LongValue.class).run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>().setLittleParallelism(little_parallelism));
         }
       break;
 case "string":
 {
-      ji=reader.keyType(StringValue.class).run(new org.apache.flink.graph.library.similarity.JaccardIndex<StringValue,NullValue,NullValue>());
+      ji=reader.keyType(StringValue.class).run(new org.apache.flink.graph.library.similarity.JaccardIndex<StringValue,NullValue,NullValue>().setLittleParallelism(little_parallelism));
     }
   break;
 default :
@@ -33,13 +34,13 @@ int edgeFactor=parameters.getInt("edge_factor",DEFAULT_EDGE_FACTOR);
 RandomGenerableFactory<JDKRandomGenerator> rnd=new JDKRandomGeneratorFactory();
 long vertexCount=1L << scale;
 long edgeCount=vertexCount * edgeFactor;
+Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).setParallelism(little_parallelism).generate();
 boolean clipAndFlip=parameters.getBoolean("clip_and_flip",DEFAULT_CLIP_AND_FLIP);
-Graph<LongValue,NullValue,NullValue> graph=new RMatGraph<>(env,rnd,vertexCount,edgeCount).generate();
 if (scale > 32) {
-ji=graph.run(new Simplify<LongValue,NullValue,NullValue>(clipAndFlip)).run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>());
+ji=graph.run(new Simplify<LongValue,NullValue,NullValue>(clipAndFlip).setParallelism(little_parallelism)).run(new org.apache.flink.graph.library.similarity.JaccardIndex<LongValue,NullValue,NullValue>().setLittleParallelism(little_parallelism));
 }
  else {
-ji=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue())).run(new Simplify<IntValue,NullValue,NullValue>(clipAndFlip)).run(new org.apache.flink.graph.library.similarity.JaccardIndex<IntValue,NullValue,NullValue>());
+ji=graph.run(new TranslateGraphIds<LongValue,IntValue,NullValue,NullValue>(new LongValueToIntValue()).setParallelism(little_parallelism)).run(new Simplify<IntValue,NullValue,NullValue>(clipAndFlip).setParallelism(little_parallelism)).run(new org.apache.flink.graph.library.similarity.JaccardIndex<IntValue,NullValue,NullValue>().setLittleParallelism(little_parallelism));
 }
 }
 break;
