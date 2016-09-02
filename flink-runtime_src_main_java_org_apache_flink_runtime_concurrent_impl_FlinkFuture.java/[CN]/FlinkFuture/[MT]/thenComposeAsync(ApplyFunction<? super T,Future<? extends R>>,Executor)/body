@@ -1,0 +1,24 @@
+{
+  Preconditions.checkNotNull(scalaFuture);
+  Preconditions.checkNotNull(applyFunction);
+  Preconditions.checkNotNull(executor);
+  scala.concurrent.Future<R> flatMappedFuture=scalaFuture.flatMap(new Mapper<T,scala.concurrent.Future<R>>(){
+    @Override public scala.concurrent.Future<R> apply(    T value){
+      final Future<? extends R> future=applyFunction.apply(value);
+      if (future instanceof FlinkFuture) {
+        @SuppressWarnings("unchecked") FlinkFuture<R> flinkFuture=(FlinkFuture<R>)future;
+        return flinkFuture.scalaFuture;
+      }
+ else {
+        return Futures.future(new Callable<R>(){
+          @Override public R call() throws Exception {
+            return future.get();
+          }
+        }
+,createExecutionContext(executor));
+      }
+    }
+  }
+,createExecutionContext(executor));
+  return new FlinkFuture<>(flatMappedFuture);
+}

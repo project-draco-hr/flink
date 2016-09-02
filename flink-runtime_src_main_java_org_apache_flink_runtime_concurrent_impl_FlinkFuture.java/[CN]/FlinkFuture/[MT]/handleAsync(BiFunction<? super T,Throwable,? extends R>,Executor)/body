@@ -1,0 +1,28 @@
+{
+  Preconditions.checkNotNull(scalaFuture);
+  Preconditions.checkNotNull(biFunction);
+  Preconditions.checkNotNull(executor);
+  scala.concurrent.Future<R> mappedFuture=scalaFuture.map(new Mapper<T,R>(){
+    @Override public R checkedApply(    T value) throws Exception {
+      try {
+        return biFunction.apply(value,null);
+      }
+ catch (      Throwable t) {
+        throw new FlinkFuture.WrapperException(t);
+      }
+    }
+  }
+,createExecutionContext(executor));
+  scala.concurrent.Future<R> recoveredFuture=mappedFuture.recover(new Recover<R>(){
+    @Override public R recover(    Throwable failure) throws Throwable {
+      if (failure instanceof FlinkFuture.WrapperException) {
+        throw failure.getCause();
+      }
+ else {
+        return biFunction.apply(null,failure);
+      }
+    }
+  }
+,createExecutionContext(executor));
+  return new FlinkFuture<>(recoveredFuture);
+}
