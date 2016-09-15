@@ -1,24 +1,42 @@
 {
 synchronized (createDestroyLock) {
-    if (process != null) {
-      LOG.debug("Destroying " + getName() + " process.");
+    checkState(process != null,"process not started");
+    if (destroyed) {
+      return;
+    }
+    LOG.info("Destroying " + getName() + " process.");
+    try {
+      boolean destroyed=false;
       try {
-        process.destroy();
+        Method m=process.getClass().getMethod("destroyForcibly");
+        m.setAccessible(true);
+        m.invoke(process);
+        destroyed=true;
       }
- catch (      Throwable t) {
-        LOG.error("Error while trying to destroy process.",t);
+ catch (      NoSuchMethodException ignored) {
       }
- finally {
-        process=null;
-        if (shutdownHook != null && shutdownHook != Thread.currentThread()) {
-          try {
-            Runtime.getRuntime().removeShutdownHook(shutdownHook);
-          }
- catch (          IllegalStateException ignored) {
-          }
-catch (          Throwable t) {
-            LOG.warn("Exception while unregistering prcess cleanup shutdown hook.");
-          }
+catch (      Throwable t) {
+        LOG.error("Failed to forcibly destroy process",t);
+      }
+      if (!destroyed) {
+        try {
+          process.destroy();
+        }
+ catch (        Throwable t) {
+          LOG.error("Error while trying to destroy process.",t);
+        }
+      }
+    }
+  finally {
+      destroyed=true;
+      if (shutdownHook != null && shutdownHook != Thread.currentThread()) {
+        try {
+          Runtime.getRuntime().removeShutdownHook(shutdownHook);
+        }
+ catch (        IllegalStateException ignored) {
+        }
+catch (        Throwable t) {
+          LOG.warn("Exception while unregistering process cleanup shutdown hook.");
         }
       }
     }
