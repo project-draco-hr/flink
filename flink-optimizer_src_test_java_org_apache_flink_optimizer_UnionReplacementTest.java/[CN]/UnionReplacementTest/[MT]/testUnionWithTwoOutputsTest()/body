@@ -1,0 +1,31 @@
+{
+  ExecutionEnvironment env=ExecutionEnvironment.getExecutionEnvironment();
+  env.setParallelism(DEFAULT_PARALLELISM);
+  DataSet<Tuple2<Long,Long>> src1=env.fromElements(new Tuple2<>(0L,0L));
+  DataSet<Tuple2<Long,Long>> src2=env.fromElements(new Tuple2<>(0L,0L));
+  DataSet<Tuple2<Long,Long>> src3=env.fromElements(new Tuple2<>(0L,0L));
+  DataSet<Tuple2<Long,Long>> src4=env.fromElements(new Tuple2<>(0L,0L));
+  DataSet<Tuple2<Long,Long>> union23=src2.union(src3);
+  DataSet<Tuple2<Long,Long>> union123=src1.union(union23);
+  DataSet<Tuple2<Long,Long>> union234=src4.union(union23);
+  union123.groupBy(0).sum(1).name("1").output(new DiscardingOutputFormat<Tuple2<Long,Long>>());
+  union234.groupBy(1).sum(0).name("2").output(new DiscardingOutputFormat<Tuple2<Long,Long>>());
+  OptimizedPlan optimizedPlan=compileNoStats(env.createProgramPlan());
+  OptimizerPlanNodeResolver resolver=getOptimizerPlanNodeResolver(optimizedPlan);
+  SingleInputPlanNode groupRed1=resolver.getNode("1");
+  SingleInputPlanNode groupRed2=resolver.getNode("2");
+  Assert.assertTrue("Reduce input should be partitioned on 0.",groupRed1.getInput().getGlobalProperties().getPartitioningFields().isExactMatch(new FieldList(0)));
+  Assert.assertTrue("Reduce input should be partitioned on 1.",groupRed2.getInput().getGlobalProperties().getPartitioningFields().isExactMatch(new FieldList(1)));
+  Assert.assertTrue("Reduce input should be n-ary union with three inputs.",groupRed1.getInput().getSource() instanceof NAryUnionPlanNode && ((NAryUnionPlanNode)groupRed1.getInput().getSource()).getListOfInputs().size() == 3);
+  Assert.assertTrue("Reduce input should be n-ary union with three inputs.",groupRed2.getInput().getSource() instanceof NAryUnionPlanNode && ((NAryUnionPlanNode)groupRed2.getInput().getSource()).getListOfInputs().size() == 3);
+  Assert.assertTrue("Channel between union and group reduce should be forwarding",groupRed1.getInput().getShipStrategy().equals(ShipStrategyType.FORWARD));
+  Assert.assertTrue("Channel between union and group reduce should be forwarding",groupRed2.getInput().getShipStrategy().equals(ShipStrategyType.FORWARD));
+  List<Channel> union123In=((NAryUnionPlanNode)groupRed1.getInput().getSource()).getListOfInputs();
+  for (  Channel i : union123In) {
+    Assert.assertTrue("Union input channel should hash partition on 0",i.getShipStrategy().equals(ShipStrategyType.PARTITION_HASH) && i.getShipStrategyKeys().isExactMatch(new FieldList(0)));
+  }
+  List<Channel> union234In=((NAryUnionPlanNode)groupRed2.getInput().getSource()).getListOfInputs();
+  for (  Channel i : union234In) {
+    Assert.assertTrue("Union input channel should hash partition on 0",i.getShipStrategy().equals(ShipStrategyType.PARTITION_HASH) && i.getShipStrategyKeys().isExactMatch(new FieldList(1)));
+  }
+}
