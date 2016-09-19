@@ -1,7 +1,7 @@
 {
-  int parallelism=numSlots / 2;
-  int parallelism2=numSlots;
-  int maxParallelism=13;
+  final int parallelism=numSlots / 2;
+  final int parallelism2=numSlots;
+  final int maxParallelism=13;
   FiniteDuration timeout=new FiniteDuration(3,TimeUnit.MINUTES);
   Deadline deadline=timeout.fromNow();
   JobID jobID=null;
@@ -12,9 +12,11 @@
     jobID=jobGraph.getJobID();
     cluster.submitJobDetached(jobGraph);
     Object savepointResponse=null;
+    NonPartitionedStateSource.workStartedLatch.await();
     while (deadline.hasTimeLeft()) {
       Future<Object> savepointPathFuture=jobManager.ask(new JobManagerMessages.TriggerSavepoint(jobID),deadline.timeLeft());
-      savepointResponse=Await.result(savepointPathFuture,deadline.timeLeft());
+      FiniteDuration waitingTime=new FiniteDuration(10,TimeUnit.SECONDS);
+      savepointResponse=Await.result(savepointPathFuture,waitingTime);
       if (savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess) {
         break;
       }
