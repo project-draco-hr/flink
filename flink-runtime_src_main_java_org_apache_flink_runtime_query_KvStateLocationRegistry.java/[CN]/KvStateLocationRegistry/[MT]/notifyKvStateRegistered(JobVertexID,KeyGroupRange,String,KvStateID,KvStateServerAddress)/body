@@ -1,0 +1,23 @@
+{
+  KvStateLocation location=lookupTable.get(registrationName);
+  if (location == null) {
+    ExecutionJobVertex vertex=jobVertices.get(jobVertexId);
+    if (vertex != null) {
+      int parallelism=vertex.getMaxParallelism();
+      location=new KvStateLocation(jobId,jobVertexId,parallelism,registrationName);
+      lookupTable.put(registrationName,location);
+    }
+ else {
+      throw new IllegalArgumentException("Unknown JobVertexID " + jobVertexId);
+    }
+  }
+  if (!location.getJobVertexId().equals(jobVertexId)) {
+    IllegalStateException duplicate=new IllegalStateException("Registration name clash. KvState with name '" + registrationName + "' has already been registered by another operator ("+ location.getJobVertexId()+ ").");
+    ExecutionJobVertex vertex=jobVertices.get(jobVertexId);
+    if (vertex != null) {
+      vertex.fail(new SuppressRestartsException(duplicate));
+    }
+    throw duplicate;
+  }
+  location.registerKvState(keyGroupRange,kvStateId,kvStateServerAddress);
+}

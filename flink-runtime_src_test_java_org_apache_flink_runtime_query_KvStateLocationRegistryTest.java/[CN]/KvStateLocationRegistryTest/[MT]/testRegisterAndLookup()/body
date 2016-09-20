@@ -3,8 +3,8 @@
   ExecutionJobVertex[] vertices=new ExecutionJobVertex[]{createJobVertex(32),createJobVertex(13)};
   KvStateID[][] ids=new KvStateID[vertices.length][];
   for (int i=0; i < ids.length; i++) {
-    ids[i]=new KvStateID[vertices[i].getParallelism()];
-    for (int j=0; j < vertices[i].getParallelism(); j++) {
+    ids[i]=new KvStateID[vertices[i].getMaxParallelism()];
+    for (int j=0; j < vertices[i].getMaxParallelism(); j++) {
       ids[i][j]=new KvStateID();
     }
   }
@@ -12,25 +12,25 @@
   Map<JobVertexID,ExecutionJobVertex> vertexMap=createVertexMap(vertices);
   KvStateLocationRegistry registry=new KvStateLocationRegistry(new JobID(),vertexMap);
   for (int i=0; i < vertices.length; i++) {
-    int numKeyGroups=vertices[i].getParallelism();
+    int numKeyGroups=vertices[i].getMaxParallelism();
     for (int keyGroupIndex=0; keyGroupIndex < numKeyGroups; keyGroupIndex++) {
-      registry.notifyKvStateRegistered(vertices[i].getJobVertexId(),keyGroupIndex,registrationNames[i],ids[i][keyGroupIndex],server);
+      registry.notifyKvStateRegistered(vertices[i].getJobVertexId(),new KeyGroupRange(keyGroupIndex,keyGroupIndex),registrationNames[i],ids[i][keyGroupIndex],server);
     }
   }
   for (int i=0; i < vertices.length; i++) {
     KvStateLocation location=registry.getKvStateLocation(registrationNames[i]);
     assertNotNull(location);
-    int parallelism=vertices[i].getParallelism();
-    for (int keyGroupIndex=0; keyGroupIndex < parallelism; keyGroupIndex++) {
+    int maxParallelism=vertices[i].getMaxParallelism();
+    for (int keyGroupIndex=0; keyGroupIndex < maxParallelism; keyGroupIndex++) {
       assertEquals(ids[i][keyGroupIndex],location.getKvStateID(keyGroupIndex));
       assertEquals(server,location.getKvStateServerAddress(keyGroupIndex));
     }
   }
   for (int i=0; i < vertices.length; i++) {
-    int numKeyGroups=vertices[i].getParallelism();
+    int numKeyGroups=vertices[i].getMaxParallelism();
     JobVertexID jobVertexId=vertices[i].getJobVertexId();
     for (int keyGroupIndex=0; keyGroupIndex < numKeyGroups; keyGroupIndex++) {
-      registry.notifyKvStateUnregistered(jobVertexId,keyGroupIndex,registrationNames[i]);
+      registry.notifyKvStateUnregistered(jobVertexId,new KeyGroupRange(keyGroupIndex,keyGroupIndex),registrationNames[i]);
     }
   }
   for (int i=0; i < registrationNames.length; i++) {

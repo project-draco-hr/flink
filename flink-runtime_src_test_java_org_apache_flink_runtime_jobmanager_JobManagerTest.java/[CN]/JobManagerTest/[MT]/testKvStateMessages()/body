@@ -38,7 +38,7 @@
   }
  catch (  UnknownKvStateLocation ignored) {
   }
-  NotifyKvStateRegistered registerNonExistingJob=new NotifyKvStateRegistered(new JobID(),new JobVertexID(),0,"any-name",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1233));
+  NotifyKvStateRegistered registerNonExistingJob=new NotifyKvStateRegistered(new JobID(),new JobVertexID(),new KeyGroupRange(0,0),"any-name",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1233));
   jobManager.tell(registerNonExistingJob);
   LookupKvStateLocation lookupAfterRegistration=new LookupKvStateLocation(registerNonExistingJob.getJobId(),registerNonExistingJob.getRegistrationName());
   lookupFuture=jobManager.ask(lookupAfterRegistration,deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<KvStateLocation>apply(KvStateLocation.class));
@@ -48,7 +48,7 @@
   }
  catch (  IllegalStateException ignored) {
   }
-  NotifyKvStateRegistered registerForExistingJob=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex1.getID(),0,"register-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
+  NotifyKvStateRegistered registerForExistingJob=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex1.getID(),new KeyGroupRange(0,0),"register-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
   jobManager.tell(registerForExistingJob);
   lookupAfterRegistration=new LookupKvStateLocation(registerForExistingJob.getJobId(),registerForExistingJob.getRegistrationName());
   lookupFuture=jobManager.ask(lookupAfterRegistration,deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<KvStateLocation>apply(KvStateLocation.class));
@@ -56,12 +56,13 @@
   assertNotNull(location);
   assertEquals(jobGraph.getJobID(),location.getJobId());
   assertEquals(jobVertex1.getID(),location.getJobVertexId());
-  assertEquals(jobVertex1.getParallelism(),location.getNumKeyGroups());
+  assertEquals(jobVertex1.getMaxParallelism(),location.getNumKeyGroups());
   assertEquals(1,location.getNumRegisteredKeyGroups());
-  int keyGroupIndex=registerForExistingJob.getKeyGroupIndex();
-  assertEquals(registerForExistingJob.getKvStateId(),location.getKvStateID(keyGroupIndex));
-  assertEquals(registerForExistingJob.getKvStateServerAddress(),location.getKvStateServerAddress(keyGroupIndex));
-  NotifyKvStateUnregistered unregister=new NotifyKvStateUnregistered(registerForExistingJob.getJobId(),registerForExistingJob.getJobVertexId(),registerForExistingJob.getKeyGroupIndex(),registerForExistingJob.getRegistrationName());
+  KeyGroupRange keyGroupRange=registerForExistingJob.getKeyGroupRange();
+  assertEquals(1,keyGroupRange.getNumberOfKeyGroups());
+  assertEquals(registerForExistingJob.getKvStateId(),location.getKvStateID(keyGroupRange.getStartKeyGroup()));
+  assertEquals(registerForExistingJob.getKvStateServerAddress(),location.getKvStateServerAddress(keyGroupRange.getStartKeyGroup()));
+  NotifyKvStateUnregistered unregister=new NotifyKvStateUnregistered(registerForExistingJob.getJobId(),registerForExistingJob.getJobVertexId(),registerForExistingJob.getKeyGroupRange(),registerForExistingJob.getRegistrationName());
   jobManager.tell(unregister);
   lookupFuture=jobManager.ask(lookupAfterRegistration,deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<KvStateLocation>apply(KvStateLocation.class));
   try {
@@ -70,8 +71,8 @@
   }
  catch (  UnknownKvStateLocation ignored) {
   }
-  NotifyKvStateRegistered register=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex1.getID(),0,"duplicate-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
-  NotifyKvStateRegistered duplicate=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex2.getID(),0,"duplicate-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
+  NotifyKvStateRegistered register=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex1.getID(),new KeyGroupRange(0,0),"duplicate-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
+  NotifyKvStateRegistered duplicate=new NotifyKvStateRegistered(jobGraph.getJobID(),jobVertex2.getID(),new KeyGroupRange(0,0),"duplicate-me",new KvStateID(),new KvStateServerAddress(InetAddress.getLocalHost(),1293));
   Future<TestingJobManagerMessages.JobStatusIs> failedFuture=jobManager.ask(new NotifyWhenJobStatus(jobGraph.getJobID(),JobStatus.FAILED),deadline.timeLeft()).mapTo(ClassTag$.MODULE$.<JobStatusIs>apply(JobStatusIs.class));
   jobManager.tell(register);
   jobManager.tell(duplicate);

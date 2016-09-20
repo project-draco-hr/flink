@@ -3,19 +3,20 @@
   KvStateRegistry registry=env.getKvStateRegistry();
   CheckpointStreamFactory streamFactory=createStreamFactory();
   KeyedStateBackend<Integer> backend=createKeyedBackend(IntSerializer.INSTANCE,env);
+  KeyGroupRange expectedKeyGroupRange=backend.getKeyGroupRange();
   KvStateRegistryListener listener=mock(KvStateRegistryListener.class);
   registry.registerListener(listener);
   ValueStateDescriptor<Integer> desc=new ValueStateDescriptor<>("test",IntSerializer.INSTANCE,null);
   desc.setQueryable("banana");
   backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
-  verify(listener,times(1)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"),any(KvStateID.class));
+  verify(listener,times(1)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(expectedKeyGroupRange),eq("banana"),any(KvStateID.class));
   KeyGroupsStateHandle snapshot=runSnapshot(backend.snapshot(682375462379L,4,streamFactory));
   backend.close();
-  verify(listener,times(1)).notifyKvStateUnregistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"));
+  verify(listener,times(1)).notifyKvStateUnregistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(expectedKeyGroupRange),eq("banana"));
   backend.close();
   backend=restoreKeyedBackend(IntSerializer.INSTANCE,snapshot,env);
   snapshot.discardState();
   backend.getPartitionedState(VoidNamespace.INSTANCE,VoidNamespaceSerializer.INSTANCE,desc);
-  verify(listener,times(2)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(0),eq("banana"),any(KvStateID.class));
+  verify(listener,times(2)).notifyKvStateRegistered(eq(env.getJobID()),eq(env.getJobVertexId()),eq(expectedKeyGroupRange),eq("banana"),any(KvStateID.class));
   backend.close();
 }
