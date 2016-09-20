@@ -1,7 +1,9 @@
 {
+  final Object lock=new Object();
+  final TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   try {
     @SuppressWarnings("unchecked") final Output<StreamRecord<String>> mockOut=mock(Output.class);
-    final StreamTask<?,?> mockTask=createMockTask();
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService);
     AccumulatingProcessingTimeWindowOperator<String,String,String> op;
     op=new AccumulatingProcessingTimeWindowOperator<>(mockFunction,mockKeySelector,StringSerializer.INSTANCE,StringSerializer.INSTANCE,5000,1000);
     op.setup(mockTask,new StreamConfig(new Configuration()),mockOut);
@@ -31,5 +33,8 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
+  }
+ finally {
+    timerService.shutdownService();
   }
 }

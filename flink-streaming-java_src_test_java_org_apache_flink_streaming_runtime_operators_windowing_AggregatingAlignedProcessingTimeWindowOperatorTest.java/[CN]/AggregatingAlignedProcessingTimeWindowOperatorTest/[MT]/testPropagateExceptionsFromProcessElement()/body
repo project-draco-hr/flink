@@ -1,9 +1,9 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  final Object lock=new Object();
+  final TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   try {
     final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>();
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService);
     ReduceFunction<Tuple2<Integer,Integer>> failingFunction=new FailingFunction(100);
     final long hundredYears=100L * 365 * 24* 60* 60* 1000;
     AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(failingFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,hundredYears,hundredYears);
@@ -32,6 +32,6 @@ synchronized (lock) {
     fail(e.getMessage());
   }
  finally {
-    timerService.shutdown();
+    timerService.shutdownService();
   }
 }

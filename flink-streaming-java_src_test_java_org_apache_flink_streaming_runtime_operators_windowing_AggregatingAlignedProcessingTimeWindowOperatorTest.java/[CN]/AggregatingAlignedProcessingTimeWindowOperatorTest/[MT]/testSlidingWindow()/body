@@ -1,9 +1,9 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  final Object lock=new Object();
+  final TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   try {
     final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>(50);
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService);
     AggregatingProcessingTimeWindowOperator<Integer,Tuple2<Integer,Integer>> op=new AggregatingProcessingTimeWindowOperator<>(sumFunction,fieldOneSelector,IntSerializer.INSTANCE,tupleSerializer,150,50);
     op.setup(mockTask,createTaskConfig(fieldOneSelector,IntSerializer.INSTANCE,10),out);
     op.open();
@@ -45,6 +45,6 @@ synchronized (lock) {
     fail(e.getMessage());
   }
  finally {
-    timerService.shutdownNow();
+    timerService.shutdownService();
   }
 }

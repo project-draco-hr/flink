@@ -1,9 +1,9 @@
 {
-  final ScheduledExecutorService timerService=Executors.newSingleThreadScheduledExecutor();
+  final Object lock=new Object();
+  final TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   try {
     final CollectingOutput<Integer> out=new CollectingOutput<>(50);
-    final Object lock=new Object();
-    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService);
     AccumulatingProcessingTimeWindowOperator<Integer,Integer,Integer> op=new AccumulatingProcessingTimeWindowOperator<>(validatingIdentityFunction,identitySelector,IntSerializer.INSTANCE,IntSerializer.INSTANCE,50,50);
     op.setup(mockTask,new StreamConfig(new Configuration()),out);
     op.open();
@@ -36,6 +36,6 @@ synchronized (lock) {
     fail(e.getMessage());
   }
  finally {
-    timerService.shutdown();
+    timerService.shutdownService();
   }
 }
