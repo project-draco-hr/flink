@@ -1,7 +1,10 @@
 {
+  TypeInformation<K> keyType=((TupleTypeInfo<?>)input.getVertices().getType()).getTypeAt(0);
+  TypeInformation<VV> valueType=((TupleTypeInfo<?>)input.getVertices().getType()).getTypeAt(1);
+  @SuppressWarnings("unchecked") TupleTypeInfo<Vertex<K,VertexValue<VV>>> vertexType=(TupleTypeInfo<Vertex<K,VertexValue<VV>>>)new TupleTypeInfo(Vertex.class,keyType,new TupleTypeInfo(VertexValue.class,valueType,BasicTypeInfo.LONG_TYPE_INFO));
   UnsortedGrouping<Vertex<K,VV>> vertexUnsortedGrouping=input.getVertices().groupBy(1);
   GroupReduceOperator<Vertex<K,VV>,VertexGroupItem<K,VV>> vertexGroupItems=vertexUnsortedGrouping.reduceGroup(new VertexGroupReducer<K,VV>());
-  DataSet<Vertex<K,VertexValue<VV>>> summarizedVertices=vertexGroupItems.filter(new VertexGroupItemToSummarizedVertexFilter<K,VV>()).map(new VertexGroupItemToSummarizedVertexMapper<K,VV>());
+  DataSet<Vertex<K,VertexValue<VV>>> summarizedVertices=vertexGroupItems.filter(new VertexGroupItemToSummarizedVertexFilter<K,VV>()).map(new VertexGroupItemToSummarizedVertexMapper<K,VV>()).returns(vertexType);
   DataSet<VertexWithRepresentative<K>> vertexToRepresentativeMap=vertexGroupItems.filter(new VertexGroupItemToRepresentativeFilter<K,VV>()).map(new VertexGroupItemToVertexWithRepresentativeMapper<K,VV>());
   DataSet<Edge<K,EV>> edgesForGrouping=input.getEdges().join(vertexToRepresentativeMap).where(0).equalTo(0).with(new SourceVertexJoinFunction<K,EV>()).join(vertexToRepresentativeMap).where(1).equalTo(0).with(new TargetVertexJoinFunction<K,EV>());
   DataSet<Edge<K,EdgeValue<EV>>> summarizedEdges=edgesForGrouping.groupBy(0,1,2).reduceGroup(new EdgeGroupReducer<K,EV>());
