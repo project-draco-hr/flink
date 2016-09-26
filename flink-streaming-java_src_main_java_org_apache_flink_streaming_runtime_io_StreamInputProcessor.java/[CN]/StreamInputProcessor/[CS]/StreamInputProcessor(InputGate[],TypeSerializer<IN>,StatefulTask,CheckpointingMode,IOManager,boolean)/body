@@ -1,0 +1,32 @@
+{
+  InputGate inputGate=InputGateUtil.createInputGate(inputGates);
+  if (checkpointMode == CheckpointingMode.EXACTLY_ONCE) {
+    this.barrierHandler=new BarrierBuffer(inputGate,ioManager);
+  }
+ else   if (checkpointMode == CheckpointingMode.AT_LEAST_ONCE) {
+    this.barrierHandler=new BarrierTracker(inputGate);
+  }
+ else {
+    throw new IllegalArgumentException("Unrecognized Checkpointing Mode: " + checkpointMode);
+  }
+  if (checkpointedTask != null) {
+    this.barrierHandler.registerCheckpointEventHandler(checkpointedTask);
+  }
+  if (enableWatermarkMultiplexing) {
+    MultiplexingStreamRecordSerializer<IN> ser=new MultiplexingStreamRecordSerializer<IN>(inputSerializer);
+    this.deserializationDelegate=new NonReusingDeserializationDelegate<StreamElement>(ser);
+  }
+ else {
+    StreamRecordSerializer<IN> ser=new StreamRecordSerializer<IN>(inputSerializer);
+    this.deserializationDelegate=(NonReusingDeserializationDelegate<StreamElement>)(NonReusingDeserializationDelegate<?>)new NonReusingDeserializationDelegate<StreamRecord<IN>>(ser);
+  }
+  this.recordDeserializers=new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
+  for (int i=0; i < recordDeserializers.length; i++) {
+    recordDeserializers[i]=new SpillingAdaptiveSpanningRecordDeserializer<>(ioManager.getSpillingDirectoriesPaths());
+  }
+  watermarks=new long[inputGate.getNumberOfInputChannels()];
+  for (int i=0; i < inputGate.getNumberOfInputChannels(); i++) {
+    watermarks[i]=Long.MIN_VALUE;
+  }
+  lastEmittedWatermark=Long.MIN_VALUE;
+}

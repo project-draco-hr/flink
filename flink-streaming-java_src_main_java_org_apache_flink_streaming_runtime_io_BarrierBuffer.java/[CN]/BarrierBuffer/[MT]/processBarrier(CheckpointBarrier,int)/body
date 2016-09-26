@@ -9,6 +9,10 @@
       releaseBlocks();
       currentCheckpointId=barrierId;
       onBarrier(channelIndex);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Starting stream alignment for checkpoint {}",barrierId);
+      }
+      startOfAlignmentTimestamp=System.nanoTime();
     }
  else {
       return;
@@ -17,6 +21,10 @@
  else   if (barrierId > currentCheckpointId) {
     currentCheckpointId=barrierId;
     onBarrier(channelIndex);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Starting stream alignment for checkpoint {}",barrierId);
+    }
+    startOfAlignmentTimestamp=System.nanoTime();
   }
  else {
     return;
@@ -25,9 +33,9 @@
     if (LOG.isDebugEnabled()) {
       LOG.debug("Received all barrier, triggering checkpoint {} at {}",receivedBarrier.getId(),receivedBarrier.getTimestamp());
     }
-    if (checkpointHandler != null) {
-      checkpointHandler.onEvent(receivedBarrier);
-    }
     releaseBlocks();
+    if (toNotifyOnCheckpoint != null) {
+      toNotifyOnCheckpoint.triggerCheckpointOnBarrier(receivedBarrier.getId(),receivedBarrier.getTimestamp(),bufferSpiller.getBytesWritten(),latestAlignmentDurationNanos);
+    }
   }
 }
