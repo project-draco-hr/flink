@@ -1,0 +1,32 @@
+{
+  ScopeFormats scopeFormats;
+  try {
+    scopeFormats=createScopeConfig(configuration);
+  }
+ catch (  Exception e) {
+    LOG.warn("Failed to parse scope format, using default scope formats",e);
+    scopeFormats=new ScopeFormats();
+  }
+  char delim;
+  try {
+    delim=configuration.getString(ConfigConstants.METRICS_SCOPE_DELIMITER,".").charAt(0);
+  }
+ catch (  Exception e) {
+    LOG.warn("Failed to parse delimiter, using default delimiter.",e);
+    delim='.';
+  }
+  final String definedReporters=configuration.getString(ConfigConstants.METRICS_REPORTERS_LIST,null);
+  List<Tuple2<String,Configuration>> reporterConfigurations;
+  if (definedReporters == null) {
+    reporterConfigurations=Collections.emptyList();
+  }
+ else {
+    String[] namedReporters=splitPattern.split(definedReporters);
+    reporterConfigurations=new ArrayList<>(namedReporters.length);
+    for (    String namedReporter : namedReporters) {
+      DelegatingConfiguration delegatingConfiguration=new DelegatingConfiguration(configuration,ConfigConstants.METRICS_REPORTER_PREFIX + namedReporter + '.');
+      reporterConfigurations.add(Tuple2.of(namedReporter,(Configuration)delegatingConfiguration));
+    }
+  }
+  return new MetricRegistryConfiguration(scopeFormats,delim,reporterConfigurations);
+}
