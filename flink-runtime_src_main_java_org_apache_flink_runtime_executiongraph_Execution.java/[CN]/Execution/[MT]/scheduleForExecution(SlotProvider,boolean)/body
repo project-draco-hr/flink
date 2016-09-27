@@ -9,33 +9,42 @@
   }
   if (transitionState(CREATED,SCHEDULED)) {
     ScheduledUnit toSchedule=locationConstraint == null ? new ScheduledUnit(this,sharingGroup) : new ScheduledUnit(this,sharingGroup,locationConstraint);
-    final SlotAllocationFuture future=slotProvider.allocateSlot(toSchedule,queued);
+    final Future<SimpleSlot> future=slotProvider.allocateSlot(toSchedule,queued);
     if (queued) {
-      future.setFutureAction(new SlotAllocationFutureAction(){
-        @Override public void slotAllocated(        SimpleSlot slot){
-          try {
-            deployToSlot(slot);
-          }
- catch (          Throwable t) {
+      future.handleAsync(new BiFunction<SimpleSlot,Throwable,Void>(){
+        @Override public Void apply(        SimpleSlot simpleSlot,        Throwable throwable){
+          if (simpleSlot != null) {
             try {
-              slot.releaseSlot();
+              deployToSlot(simpleSlot);
             }
+ catch (            Throwable t) {
+              try {
+                simpleSlot.releaseSlot();
+              }
   finally {
-              markFailed(t);
+                markFailed(t);
+              }
             }
           }
+ else {
+            markFailed(throwable);
+          }
+          return null;
         }
       }
-);
+,ExecutionContext$.MODULE$.global());
     }
  else {
-      SimpleSlot slot=future.get();
+      SimpleSlot slot=null;
       try {
+        slot=checkNotNull(future.getNow(null));
         deployToSlot(slot);
       }
  catch (      Throwable t) {
         try {
-          slot.releaseSlot();
+          if (slot != null) {
+            slot.releaseSlot();
+          }
         }
   finally {
           markFailed(t);
