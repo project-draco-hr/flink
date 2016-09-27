@@ -9,46 +9,32 @@
   }
   if (transitionState(CREATED,SCHEDULED)) {
     ScheduledUnit toSchedule=locationConstraint == null ? new ScheduledUnit(this,sharingGroup) : new ScheduledUnit(this,sharingGroup,locationConstraint);
-    final Future<SimpleSlot> future=slotProvider.allocateSlot(toSchedule,queued);
-    if (queued) {
-      future.handleAsync(new BiFunction<SimpleSlot,Throwable,Void>(){
-        @Override public Void apply(        SimpleSlot simpleSlot,        Throwable throwable){
-          if (simpleSlot != null) {
+    final Future<SimpleSlot> slotAllocationFuture=slotProvider.allocateSlot(toSchedule,queued);
+    final Future<Void> deploymentFuture=slotAllocationFuture.handleAsync(new BiFunction<SimpleSlot,Throwable,Void>(){
+      @Override public Void apply(      SimpleSlot simpleSlot,      Throwable throwable){
+        if (simpleSlot != null) {
+          try {
+            deployToSlot(simpleSlot);
+          }
+ catch (          Throwable t) {
             try {
-              deployToSlot(simpleSlot);
+              simpleSlot.releaseSlot();
             }
- catch (            Throwable t) {
-              try {
-                simpleSlot.releaseSlot();
-              }
   finally {
-                markFailed(t);
-              }
+              markFailed(t);
             }
           }
- else {
-            markFailed(throwable);
-          }
-          return null;
         }
+ else {
+          markFailed(throwable);
+        }
+        return null;
       }
-,ExecutionContext$.MODULE$.global());
     }
- else {
-      SimpleSlot slot=null;
-      try {
-        slot=checkNotNull(future.getNow(null));
-        deployToSlot(slot);
-      }
- catch (      Throwable t) {
-        try {
-          if (slot != null) {
-            slot.releaseSlot();
-          }
-        }
-  finally {
-          markFailed(t);
-        }
+,Executors.directExecutor());
+    if (!queued) {
+      if (!deploymentFuture.isDone()) {
+        markFailed(new IllegalArgumentException("The slot allocation future has not been completed yet."));
       }
     }
     return true;
