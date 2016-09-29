@@ -1,0 +1,23 @@
+{
+  org.apache.flink.runtime.concurrent.Future<PartitionState> futurePartitionState=partitionStateChecker.requestPartitionState(jobId,executionId,resultId,partitionId);
+  futurePartitionState.handleAsync(new BiFunction<PartitionState,Throwable,Void>(){
+    @Override public Void apply(    PartitionState partitionState,    Throwable throwable){
+      try {
+        if (partitionState != null) {
+          onPartitionStateUpdate(partitionState.getIntermediateDataSetID(),partitionState.getIntermediateResultPartitionID(),partitionState.getExecutionState());
+        }
+ else         if (throwable instanceof TimeoutException) {
+          onPartitionStateUpdate(resultId,partitionId.getPartitionId(),ExecutionState.RUNNING);
+        }
+ else {
+          failExternally(throwable);
+        }
+      }
+ catch (      IOException|InterruptedException e) {
+        failExternally(e);
+      }
+      return null;
+    }
+  }
+,executor);
+}
