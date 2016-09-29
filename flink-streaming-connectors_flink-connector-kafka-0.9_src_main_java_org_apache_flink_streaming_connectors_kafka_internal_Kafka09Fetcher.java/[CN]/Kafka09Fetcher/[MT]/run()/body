@@ -30,19 +30,17 @@
     }
     this.consumer=consumer;
     while (running) {
+      final Map<TopicPartition,OffsetAndMetadata> toCommit=nextOffsetsToCommit.getAndSet(null);
+      if (toCommit != null && !commitInProgress) {
+        commitInProgress=true;
+        consumer.commitAsync(toCommit,offsetCommitCallback);
+      }
       final ConsumerRecords<byte[],byte[]> records;
-synchronized (consumerLock) {
-        try {
-          records=consumer.poll(pollTimeout);
-        }
- catch (        WakeupException we) {
-          if (running) {
-            throw we;
-          }
- else {
-            continue;
-          }
-        }
+      try {
+        records=consumer.poll(pollTimeout);
+      }
+ catch (      WakeupException we) {
+        continue;
       }
       for (      KafkaTopicPartitionState<TopicPartition> partition : subscribedPartitions()) {
         List<ConsumerRecord<byte[],byte[]>> partitionRecords=records.records(partition.getKafkaPartitionHandle());
@@ -68,9 +66,7 @@ synchronized (consumerLock) {
   }
  finally {
     try {
-synchronized (consumerLock) {
-        consumer.close();
-      }
+      consumer.close();
     }
  catch (    Throwable t) {
       LOG.warn("Error while closing Kafka 0.9 consumer",t);

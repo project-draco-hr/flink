@@ -8,9 +8,10 @@
       partition.setCommittedOffset(offset);
     }
   }
-  if (this.consumer != null) {
-synchronized (consumerLock) {
-      this.consumer.commitSync(offsetsToCommit);
-    }
+  if (nextOffsetsToCommit.getAndSet(offsetsToCommit) != null) {
+    LOG.warn("Committing offsets to Kafka takes longer than the checkpoint interval. " + "Skipping commit of previous offsets because newer complete checkpoint offsets are available. " + "This does not compromise Flink's checkpoint integrity.");
+  }
+  if (consumer != null) {
+    consumer.wakeup();
   }
 }
