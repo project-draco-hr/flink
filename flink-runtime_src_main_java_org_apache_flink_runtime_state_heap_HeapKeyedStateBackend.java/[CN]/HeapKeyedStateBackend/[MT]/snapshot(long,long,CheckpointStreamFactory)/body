@@ -9,8 +9,8 @@
     Map<String,Integer> kVStateToId=new HashMap<>(stateTables.size());
     for (    Map.Entry<String,StateTable<K,?,?>> kvState : stateTables.entrySet()) {
       outView.writeUTF(kvState.getKey());
-      TypeSerializer namespaceSerializer=kvState.getValue().getNamespaceSerializer();
-      TypeSerializer stateSerializer=kvState.getValue().getStateSerializer();
+      TypeSerializer<?> namespaceSerializer=kvState.getValue().getNamespaceSerializer();
+      TypeSerializer<?> stateSerializer=kvState.getValue().getStateSerializer();
       InstantiationUtil.serializeObject(stream,namespaceSerializer);
       InstantiationUtil.serializeObject(stream,stateSerializer);
       kVStateToId.put(kvState.getKey(),kVStateToId.size());
@@ -22,26 +22,8 @@
       outView.writeInt(keyGroupIndex);
       for (      Map.Entry<String,StateTable<K,?,?>> kvState : stateTables.entrySet()) {
         outView.writeShort(kVStateToId.get(kvState.getKey()));
-        TypeSerializer namespaceSerializer=kvState.getValue().getNamespaceSerializer();
-        TypeSerializer stateSerializer=kvState.getValue().getStateSerializer();
-        Map<?,? extends Map<K,?>> namespaceMap=kvState.getValue().get(keyGroupIndex);
-        if (namespaceMap == null) {
-          outView.writeByte(0);
-          continue;
-        }
-        outView.writeByte(1);
-        outView.writeInt(namespaceMap.size());
-        for (        Map.Entry<?,? extends Map<K,?>> namespace : namespaceMap.entrySet()) {
-          namespaceSerializer.serialize(namespace.getKey(),outView);
-          Map<K,?> entryMap=namespace.getValue();
-          outView.writeInt(entryMap.size());
-          for (          Map.Entry<K,?> entry : entryMap.entrySet()) {
-            keySerializer.serialize(entry.getKey(),outView);
-            stateSerializer.serialize(entry.getValue(),outView);
-          }
-        }
+        writeStateTableForKeyGroup(outView,kvState.getValue(),keyGroupIndex);
       }
-      outView.flush();
     }
     StreamStateHandle streamStateHandle=stream.closeAndGetHandle();
     KeyGroupRangeOffsets offsets=new KeyGroupRangeOffsets(keyGroupRange,keyGroupRangeOffsets);

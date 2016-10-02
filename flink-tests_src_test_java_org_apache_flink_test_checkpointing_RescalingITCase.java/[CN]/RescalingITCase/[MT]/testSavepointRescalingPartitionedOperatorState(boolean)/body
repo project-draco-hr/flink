@@ -1,0 +1,61 @@
+{
+  final int parallelism=scaleOut ? numSlots : numSlots / 2;
+  final int parallelism2=scaleOut ? numSlots / 2 : numSlots;
+  final int maxParallelism=13;
+  FiniteDuration timeout=new FiniteDuration(3,TimeUnit.MINUTES);
+  Deadline deadline=timeout.fromNow();
+  JobID jobID=null;
+  ActorGateway jobManager=null;
+  int counterSize=Math.max(parallelism,parallelism2);
+  PartitionedStateSource.CHECK_CORRECT_SNAPSHOT=new int[counterSize];
+  PartitionedStateSource.CHECK_CORRECT_RESTORE=new int[counterSize];
+  try {
+    jobManager=cluster.getLeaderGateway(deadline.timeLeft());
+    JobGraph jobGraph=createJobGraphWithOperatorState(parallelism,maxParallelism,true);
+    jobID=jobGraph.getJobID();
+    cluster.submitJobDetached(jobGraph);
+    Object savepointResponse=null;
+    StateSourceBase.workStartedLatch.await();
+    while (deadline.hasTimeLeft()) {
+      Future<Object> savepointPathFuture=jobManager.ask(new JobManagerMessages.TriggerSavepoint(jobID),deadline.timeLeft());
+      FiniteDuration waitingTime=new FiniteDuration(10,TimeUnit.SECONDS);
+      savepointResponse=Await.result(savepointPathFuture,waitingTime);
+      if (savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess) {
+        break;
+      }
+    }
+    assertTrue(savepointResponse instanceof JobManagerMessages.TriggerSavepointSuccess);
+    final String savepointPath=((JobManagerMessages.TriggerSavepointSuccess)savepointResponse).savepointPath();
+    Future<Object> jobRemovedFuture=jobManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobID),deadline.timeLeft());
+    Future<Object> cancellationResponseFuture=jobManager.ask(new JobManagerMessages.CancelJob(jobID),deadline.timeLeft());
+    Object cancellationResponse=Await.result(cancellationResponseFuture,deadline.timeLeft());
+    assertTrue(cancellationResponse instanceof JobManagerMessages.CancellationSuccess);
+    Await.ready(jobRemovedFuture,deadline.timeLeft());
+    jobID=null;
+    JobGraph scaledJobGraph=createJobGraphWithOperatorState(parallelism2,maxParallelism,true);
+    scaledJobGraph.setSavepointPath(savepointPath);
+    jobID=scaledJobGraph.getJobID();
+    cluster.submitJobAndWait(scaledJobGraph,false);
+    int sumExp=0;
+    int sumAct=0;
+    for (    int c : PartitionedStateSource.CHECK_CORRECT_SNAPSHOT) {
+      sumExp+=c;
+    }
+    for (    int c : PartitionedStateSource.CHECK_CORRECT_RESTORE) {
+      sumAct+=c;
+    }
+    assertEquals(sumExp,sumAct);
+    jobID=null;
+  }
+  finally {
+    if (jobID != null && jobManager != null) {
+      Future<Object> jobRemovedFuture=jobManager.ask(new TestingJobManagerMessages.NotifyWhenJobRemoved(jobID),timeout);
+      try {
+        Await.ready(jobRemovedFuture,timeout);
+      }
+ catch (      TimeoutException|InterruptedException ie) {
+        fail("Failed while cleaning up the cluster.");
+      }
+    }
+  }
+}
