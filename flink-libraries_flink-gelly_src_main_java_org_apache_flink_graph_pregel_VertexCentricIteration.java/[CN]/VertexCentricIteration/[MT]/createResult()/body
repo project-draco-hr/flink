@@ -3,22 +3,22 @@
     throw new IllegalStateException("The input data set has not been set.");
   }
   TypeInformation<K> keyType=((TupleTypeInfo<?>)initialVertices.getType()).getTypeAt(0);
-  TypeInformation<Tuple2<K,Message>> messageTypeInfo=new TupleTypeInfo<Tuple2<K,Message>>(keyType,messageType);
+  TypeInformation<Tuple2<K,Message>> messageTypeInfo=new TupleTypeInfo<>(keyType,messageType);
   TypeInformation<Vertex<K,VV>> vertexType=initialVertices.getType();
-  TypeInformation<Either<Vertex<K,VV>,Tuple2<K,Message>>> intermediateTypeInfo=new EitherTypeInfo<Vertex<K,VV>,Tuple2<K,Message>>(vertexType,messageTypeInfo);
-  TypeInformation<Either<NullValue,Message>> nullableMsgTypeInfo=new EitherTypeInfo<NullValue,Message>(TypeExtractor.getForClass(NullValue.class),messageType);
-  TypeInformation<Tuple2<K,Either<NullValue,Message>>> workSetTypeInfo=new TupleTypeInfo<Tuple2<K,Either<NullValue,Message>>>(keyType,nullableMsgTypeInfo);
+  TypeInformation<Either<Vertex<K,VV>,Tuple2<K,Message>>> intermediateTypeInfo=new EitherTypeInfo<>(vertexType,messageTypeInfo);
+  TypeInformation<Either<NullValue,Message>> nullableMsgTypeInfo=new EitherTypeInfo<>(TypeExtractor.getForClass(NullValue.class),messageType);
+  TypeInformation<Tuple2<K,Either<NullValue,Message>>> workSetTypeInfo=new TupleTypeInfo<>(keyType,nullableMsgTypeInfo);
   DataSet<Tuple2<K,Either<NullValue,Message>>> initialWorkSet=initialVertices.map(new InitializeWorkSet<K,VV,Message>()).returns(workSetTypeInfo);
   final DeltaIteration<Vertex<K,VV>,Tuple2<K,Either<NullValue,Message>>> iteration=initialVertices.iterateDelta(initialWorkSet,this.maximumNumberOfIterations,0);
   setUpIteration(iteration);
   DataSet<Tuple2<Vertex<K,VV>,Either<NullValue,Message>>> verticesWithMsgs=iteration.getSolutionSet().join(iteration.getWorkset()).where(0).equalTo(0).with(new AppendVertexState<K,VV,Message>()).returns(new TupleTypeInfo<Tuple2<Vertex<K,VV>,Either<NullValue,Message>>>(vertexType,nullableMsgTypeInfo));
-  VertexComputeUdf<K,VV,EV,Message> vertexUdf=new VertexComputeUdf<K,VV,EV,Message>(computeFunction,intermediateTypeInfo);
+  VertexComputeUdf<K,VV,EV,Message> vertexUdf=new VertexComputeUdf<>(computeFunction,intermediateTypeInfo);
   CoGroupOperator<?,?,Either<Vertex<K,VV>,Tuple2<K,Message>>> superstepComputation=verticesWithMsgs.coGroup(edgesWithValue).where("f0.f0").equalTo(0).with(vertexUdf);
   DataSet<Vertex<K,VV>> solutionSetDelta=superstepComputation.flatMap(new ProjectNewVertexValue<K,VV,Message>()).returns(vertexType);
   DataSet<Tuple2<K,Either<NullValue,Message>>> allMessages=superstepComputation.flatMap(new ProjectMessages<K,VV,Message>()).returns(workSetTypeInfo);
   DataSet<Tuple2<K,Either<NullValue,Message>>> newWorkSet=allMessages;
   if (combineFunction != null) {
-    MessageCombinerUdf<K,Message> combinerUdf=new MessageCombinerUdf<K,Message>(combineFunction,workSetTypeInfo);
+    MessageCombinerUdf<K,Message> combinerUdf=new MessageCombinerUdf<>(combineFunction,workSetTypeInfo);
     DataSet<Tuple2<K,Either<NullValue,Message>>> combinedMessages=allMessages.groupBy(0).reduceGroup(combinerUdf).setCombinable(true);
     newWorkSet=combinedMessages;
   }
