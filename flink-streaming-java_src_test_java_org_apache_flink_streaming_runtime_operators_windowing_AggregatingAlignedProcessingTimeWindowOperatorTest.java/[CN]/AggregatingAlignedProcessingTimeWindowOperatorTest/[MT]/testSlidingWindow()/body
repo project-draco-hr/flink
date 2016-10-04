@@ -1,6 +1,7 @@
 {
   final Object lock=new Object();
-  final TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
+  final AtomicReference<Throwable> error=new AtomicReference<>();
+  final TimeServiceProvider timerService=new DefaultTimeServiceProvider(new ReferenceSettingExceptionHandler(error),lock);
   try {
     final CollectingOutput<Tuple2<Integer,Integer>> out=new CollectingOutput<>(50);
     final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
@@ -19,6 +20,7 @@ synchronized (lock) {
 synchronized (lock) {
       op.close();
     }
+    shutdownTimerServiceAndWait(timerService);
     op.dispose();
     List<Tuple2<Integer,Integer>> result=out.getElements();
     if (result.size() < numElements || result.size() > 3 * numElements) {
@@ -38,6 +40,9 @@ synchronized (lock) {
         lastNum=val.f0;
         lastCount=1;
       }
+    }
+    if (error.get() != null) {
+      throw new Exception(error.get());
     }
   }
  catch (  Exception e) {

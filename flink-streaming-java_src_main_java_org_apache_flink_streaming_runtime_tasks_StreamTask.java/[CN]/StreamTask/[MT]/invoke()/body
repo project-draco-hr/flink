@@ -7,9 +7,8 @@
     stateBackend=createStateBackend();
     accumulatorMap=getEnvironment().getAccumulatorRegistry().getUserMap();
     if (timerService == null) {
-      ScheduledThreadPoolExecutor executor=new ScheduledThreadPoolExecutor(1,new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName()));
-      executor.setRemoveOnCancelPolicy(true);
-      timerService=DefaultTimeServiceProvider.create(this,executor,getCheckpointLock());
+      ThreadFactory timerThreadFactory=new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,"Time Trigger for " + getName());
+      timerService=new DefaultTimeServiceProvider(this,getCheckpointLock(),timerThreadFactory);
     }
     operatorChain=new OperatorChain<>(this,getEnvironment().getAccumulatorRegistry().getReadWriteReporter());
     headOperator=operatorChain.getHeadOperator();
@@ -48,10 +47,7 @@ synchronized (lock) {
     isRunning=false;
     if (timerService != null) {
       try {
-        if (!timerService.isTerminated()) {
-          LOG.info("Timer service is shutting down.");
-          timerService.shutdownService();
-        }
+        timerService.shutdownService();
       }
  catch (      Throwable t) {
         LOG.error("Could not shut down timer service",t);

@@ -1,9 +1,8 @@
 {
-  final Object lock=new Object();
-  TimeServiceProvider timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
   try {
     @SuppressWarnings("unchecked") final Output<StreamRecord<String>> mockOut=mock(Output.class);
-    StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,lock);
+    final TimeServiceProvider timerService=new NoOpTimerService();
+    final StreamTask<?,?> mockTask=createMockTaskWithTimer(timerService,new Object());
     AggregatingProcessingTimeWindowOperator<String,String> op;
     op=new AggregatingProcessingTimeWindowOperator<>(mockFunction,mockKeySelector,StringSerializer.INSTANCE,StringSerializer.INSTANCE,5000,1000);
     op.setup(mockTask,createTaskConfig(mockKeySelector,StringSerializer.INSTANCE,10),mockOut);
@@ -11,27 +10,18 @@
     assertTrue(op.getNextSlideTime() % 1000 == 0);
     assertTrue(op.getNextEvaluationTime() % 1000 == 0);
     op.dispose();
-    timerService.shutdownService();
-    timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
-    mockTask=createMockTaskWithTimer(timerService,lock);
     op=new AggregatingProcessingTimeWindowOperator<>(mockFunction,mockKeySelector,StringSerializer.INSTANCE,StringSerializer.INSTANCE,1000,1000);
     op.setup(mockTask,new StreamConfig(new Configuration()),mockOut);
     op.open();
     assertTrue(op.getNextSlideTime() % 1000 == 0);
     assertTrue(op.getNextEvaluationTime() % 1000 == 0);
     op.dispose();
-    timerService.shutdownService();
-    timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
-    mockTask=createMockTaskWithTimer(timerService,lock);
     op=new AggregatingProcessingTimeWindowOperator<>(mockFunction,mockKeySelector,StringSerializer.INSTANCE,StringSerializer.INSTANCE,1500,1000);
     op.setup(mockTask,new StreamConfig(new Configuration()),mockOut);
     op.open();
     assertTrue(op.getNextSlideTime() % 500 == 0);
     assertTrue(op.getNextEvaluationTime() % 1000 == 0);
     op.dispose();
-    timerService.shutdownService();
-    timerService=DefaultTimeServiceProvider.createForTesting(Executors.newSingleThreadScheduledExecutor(),lock);
-    mockTask=createMockTaskWithTimer(timerService,lock);
     op=new AggregatingProcessingTimeWindowOperator<>(mockFunction,mockKeySelector,StringSerializer.INSTANCE,StringSerializer.INSTANCE,1200,1100);
     op.setup(mockTask,new StreamConfig(new Configuration()),mockOut);
     op.open();
@@ -42,8 +32,5 @@
  catch (  Exception e) {
     e.printStackTrace();
     fail(e.getMessage());
-  }
- finally {
-    timerService.shutdownService();
   }
 }
