@@ -1,10 +1,14 @@
 {
   Timer<K,W> timer=new Timer<>(time,key,window);
   if (processingTimeTimers.add(timer)) {
+    Timer<K,W> oldHead=processingTimeTimersQueue.peek();
+    long nextTriggerTime=oldHead != null ? oldHead.timestamp : Long.MAX_VALUE;
     processingTimeTimersQueue.add(timer);
-    if (processingTimeTimerTimestamps.add(time,1) == 0) {
-      ScheduledFuture<?> scheduledFuture=WindowOperator.this.getTimerService().registerTimer(time,WindowOperator.this);
-      processingTimeTimerFutures.put(time,scheduledFuture);
+    if (time < nextTriggerTime) {
+      if (nextTimer != null) {
+        nextTimer.cancel(false);
+      }
+      nextTimer=getTimerService().registerTimer(time,WindowOperator.this);
     }
   }
 }

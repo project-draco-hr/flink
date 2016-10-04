@@ -1,44 +1,37 @@
 {
-  boolean fire;
-  processingTimeTimerFutures.remove(time);
-  processingTimeTimerTimestamps.remove(time,processingTimeTimerTimestamps.count(time));
-  do {
-    Timer<K,W> timer=processingTimeTimersQueue.peek();
-    if (timer != null && timer.timestamp <= time) {
-      fire=true;
-      processingTimeTimers.remove(timer);
-      processingTimeTimersQueue.remove();
-      context.key=timer.key;
-      context.window=timer.window;
-      setKeyContext(timer.key);
-      AppendingState<IN,ACC> windowState;
-      MergingWindowSet<W> mergingWindows=null;
-      if (windowAssigner instanceof MergingWindowAssigner) {
-        mergingWindows=getMergingWindowSet();
-        W stateWindow=mergingWindows.getStateWindow(context.window);
-        if (stateWindow == null) {
-          continue;
-        }
-        windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
-      }
- else {
-        windowState=getPartitionedState(context.window,windowSerializer,windowStateDescriptor);
-      }
-      ACC contents=windowState.get();
-      if (contents == null) {
+  Timer<K,W> timer;
+  while ((timer=processingTimeTimersQueue.peek()) != null && timer.timestamp <= time) {
+    processingTimeTimers.remove(timer);
+    processingTimeTimersQueue.remove();
+    context.key=timer.key;
+    context.window=timer.window;
+    setKeyContext(timer.key);
+    AppendingState<IN,ACC> windowState;
+    MergingWindowSet<W> mergingWindows=null;
+    if (windowAssigner instanceof MergingWindowAssigner) {
+      mergingWindows=getMergingWindowSet();
+      W stateWindow=mergingWindows.getStateWindow(context.window);
+      if (stateWindow == null) {
         continue;
       }
-      TriggerResult triggerResult=context.onProcessingTime(timer.timestamp);
-      if (triggerResult.isFire()) {
-        fire(context.window,contents);
-      }
-      if (triggerResult.isPurge() || (!windowAssigner.isEventTime() && isCleanupTime(context.window,timer.timestamp))) {
-        cleanup(context.window,windowState,mergingWindows);
-      }
+      windowState=getPartitionedState(stateWindow,windowSerializer,windowStateDescriptor);
     }
  else {
-      fire=false;
+      windowState=getPartitionedState(context.window,windowSerializer,windowStateDescriptor);
+    }
+    ACC contents=windowState.get();
+    if (contents == null) {
+      continue;
+    }
+    TriggerResult triggerResult=context.onProcessingTime(timer.timestamp);
+    if (triggerResult.isFire()) {
+      fire(context.window,contents);
+    }
+    if (triggerResult.isPurge() || (!windowAssigner.isEventTime() && isCleanupTime(context.window,timer.timestamp))) {
+      cleanup(context.window,windowState,mergingWindows);
     }
   }
- while (fire);
+  if (timer != null) {
+    nextTimer=getTimerService().registerTimer(timer.timestamp,this);
+  }
 }
