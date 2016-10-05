@@ -1,4 +1,18 @@
 {
   long delay=Math.max(timestamp - getCurrentProcessingTime(),0);
-  return timerService.schedule(new TriggerTask(task,checkpointLock,target,timestamp),delay,TimeUnit.MILLISECONDS);
+  try {
+    return timerService.schedule(new TriggerTask(task,checkpointLock,target,timestamp),delay,TimeUnit.MILLISECONDS);
+  }
+ catch (  RejectedExecutionException e) {
+    final int status=this.status.get();
+    if (status == STATUS_QUIESCED) {
+      return new NeverCompleteFuture(delay);
+    }
+ else     if (status == STATUS_SHUTDOWN) {
+      throw new IllegalStateException("Timer service is shut down");
+    }
+ else {
+      throw e;
+    }
+  }
 }

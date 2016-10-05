@@ -1,0 +1,37 @@
+{
+  final Object lock=new Object();
+  final AtomicReference<Throwable> errorRef=new AtomicReference<>();
+  final DefaultTimeServiceProvider timer=new DefaultTimeServiceProvider(new ReferenceSettingExceptionHandler(errorRef),lock);
+  try {
+    assertFalse(timer.isTerminated());
+    final OneShotLatch latch=new OneShotLatch();
+    timer.registerTimer(System.currentTimeMillis(),new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        latch.trigger();
+        Thread.sleep(100000000);
+      }
+    }
+);
+    latch.await();
+    timer.shutdownService();
+synchronized (lock) {
+      assertTrue(timer.isTerminated());
+    }
+    try {
+      timer.registerTimer(System.currentTimeMillis() + 1000,new Triggerable(){
+        @Override public void trigger(        long timestamp){
+        }
+      }
+);
+      fail("should result in an exception");
+    }
+ catch (    IllegalStateException e) {
+    }
+    assertNotNull(errorRef.get());
+    assertTrue(errorRef.get().getCause() instanceof InterruptedException);
+    assertEquals(0,timer.getNumTasksScheduled());
+  }
+  finally {
+    timer.shutdownService();
+  }
+}

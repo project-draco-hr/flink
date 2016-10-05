@@ -1,0 +1,39 @@
+{
+  final Object lock=new Object();
+  final AtomicReference<Throwable> errorRef=new AtomicReference<>();
+  final DefaultTimeServiceProvider timer=new DefaultTimeServiceProvider(new ReferenceSettingExceptionHandler(errorRef),lock);
+  try {
+    final OneShotLatch latch=new OneShotLatch();
+    final ReentrantLock scopeLock=new ReentrantLock();
+    timer.registerTimer(System.currentTimeMillis() + 20,new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        scopeLock.lock();
+        try {
+          latch.trigger();
+          Thread.sleep(5);
+        }
+  finally {
+          scopeLock.unlock();
+        }
+      }
+    }
+);
+    latch.await();
+    timer.quiesceAndAwaitPending();
+    assertTrue(scopeLock.tryLock());
+    ScheduledFuture<?> future=timer.registerTimer(System.currentTimeMillis() - 5,new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        throw new Exception("test");
+      }
+    }
+);
+    assertNotNull(future);
+    assertEquals(0,timer.getNumTasksScheduled());
+    if (errorRef.get() != null) {
+      throw new Exception(errorRef.get());
+    }
+  }
+  finally {
+    timer.shutdownService();
+  }
+}
