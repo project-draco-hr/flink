@@ -1,21 +1,21 @@
 {
   OperatorStateStore operatorStateStore=mock(OperatorStateStore.class);
-  TestingListState<Tuple2<KafkaTopicPartition,Long>> expectedState=new TestingListState<>();
+  TestingListState<Serializable> expectedState=new TestingListState<>();
   expectedState.add(Tuple2.of(new KafkaTopicPartition("abc",13),16768L));
   expectedState.add(Tuple2.of(new KafkaTopicPartition("def",7),987654321L));
-  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState=new TestingListState<>();
+  TestingListState<Serializable> listState=new TestingListState<>();
   FlinkKafkaConsumerBase<String> consumer=getConsumer(null,new LinkedMap(),true);
-  when(operatorStateStore.getPartitionableState(Matchers.any(ListStateDescriptor.class))).thenReturn(expectedState);
+  when(operatorStateStore.getDefaultPartitionableState(Matchers.any(String.class))).thenReturn(expectedState);
   consumer.initializeState(operatorStateStore);
-  when(operatorStateStore.getPartitionableState(Matchers.any(ListStateDescriptor.class))).thenReturn(listState);
+  when(operatorStateStore.getDefaultPartitionableState(Matchers.any(String.class))).thenReturn(listState);
   consumer.prepareSnapshot(17L,17L);
-  Set<Tuple2<KafkaTopicPartition,Long>> expected=new HashSet<Tuple2<KafkaTopicPartition,Long>>();
-  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : expectedState.get()) {
-    expected.add(kafkaTopicPartitionLongTuple2);
+  Set<Serializable> expected=new HashSet<>();
+  for (  Serializable serializable : expectedState.get()) {
+    expected.add(serializable);
   }
   int counter=0;
-  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState.get()) {
-    assertTrue(expected.contains(kafkaTopicPartitionLongTuple2));
+  for (  Serializable serializable : listState.get()) {
+    assertTrue(expected.contains(serializable));
     counter++;
   }
   assertEquals(expected.size(),counter);

@@ -14,14 +14,15 @@
   FlinkKafkaConsumerBase<String> consumer=getConsumer(fetcher,pendingCheckpoints,true);
   assertEquals(0,pendingCheckpoints.size());
   OperatorStateStore backend=mock(OperatorStateStore.class);
-  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState1=new TestingListState<>();
-  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState2=new TestingListState<>();
-  TestingListState<Tuple2<KafkaTopicPartition,Long>> listState3=new TestingListState<>();
-  when(backend.getPartitionableState(Matchers.any(ListStateDescriptor.class))).thenReturn(listState1,listState1,listState2,listState2,listState3,listState3);
+  TestingListState<Serializable> listState1=new TestingListState<>();
+  TestingListState<Serializable> listState2=new TestingListState<>();
+  TestingListState<Serializable> listState3=new TestingListState<>();
+  when(backend.getDefaultPartitionableState(Matchers.any(String.class))).thenReturn(listState1,listState1,listState2,listState3);
   consumer.initializeState(backend);
   consumer.prepareSnapshot(138L,138L);
   HashMap<KafkaTopicPartition,Long> snapshot1=new HashMap<>();
-  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState1.get()) {
+  for (  Serializable serializable : listState1.get()) {
+    Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2=(Tuple2<KafkaTopicPartition,Long>)serializable;
     snapshot1.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
   }
   assertEquals(state1,snapshot1);
@@ -29,7 +30,8 @@
   assertEquals(state1,pendingCheckpoints.get(138L));
   consumer.prepareSnapshot(140L,140L);
   HashMap<KafkaTopicPartition,Long> snapshot2=new HashMap<>();
-  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState2.get()) {
+  for (  Serializable serializable : listState2.get()) {
+    Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2=(Tuple2<KafkaTopicPartition,Long>)serializable;
     snapshot2.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
   }
   assertEquals(state2,snapshot2);
@@ -40,8 +42,9 @@
   assertTrue(pendingCheckpoints.containsKey(140L));
   consumer.prepareSnapshot(141L,141L);
   HashMap<KafkaTopicPartition,Long> snapshot3=new HashMap<>();
-  for (  Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2 : listState1.get()) {
-    snapshot1.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
+  for (  Serializable serializable : listState3.get()) {
+    Tuple2<KafkaTopicPartition,Long> kafkaTopicPartitionLongTuple2=(Tuple2<KafkaTopicPartition,Long>)serializable;
+    snapshot3.put(kafkaTopicPartitionLongTuple2.f0,kafkaTopicPartitionLongTuple2.f1);
   }
   assertEquals(state3,snapshot3);
   assertEquals(2,pendingCheckpoints.size());
