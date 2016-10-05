@@ -1,0 +1,21 @@
+{
+  CompletableFuture<Integer> leftFuture=new FlinkCompletableFuture<>();
+  CompletableFuture<String> rightFuture=new FlinkCompletableFuture<>();
+  final String expectedRightValue="foobar";
+  final TestException testException=new TestException("barfoo");
+  Future<String> resultFuture=leftFuture.thenCombineAsync(rightFuture,new BiFunction<Integer,String,String>(){
+    @Override public String apply(    Integer integer,    String s){
+      return s + integer;
+    }
+  }
+,executor);
+  leftFuture.completeExceptionally(testException);
+  rightFuture.complete(expectedRightValue);
+  try {
+    resultFuture.get();
+    fail("We should have caught an ExecutionException.");
+  }
+ catch (  ExecutionException e) {
+    assertEquals(testException,e.getCause());
+  }
+}

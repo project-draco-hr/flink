@@ -2,6 +2,7 @@
   Preconditions.checkNotNull(scalaFuture);
   Preconditions.checkNotNull(applyFunction);
   Preconditions.checkNotNull(executor);
+  final ExecutionContext executionContext=createExecutionContext(executor);
   scala.concurrent.Future<R> flatMappedFuture=scalaFuture.flatMap(new Mapper<T,scala.concurrent.Future<R>>(){
     @Override public scala.concurrent.Future<R> apply(    T value){
       final Future<? extends R> future=applyFunction.apply(value);
@@ -12,13 +13,23 @@
  else {
         return Futures.future(new Callable<R>(){
           @Override public R call() throws Exception {
-            return future.get();
+            try {
+              return future.get();
+            }
+ catch (            ExecutionException e) {
+              if (e.getCause() instanceof Exception) {
+                throw (Exception)e.getCause();
+              }
+ else {
+                throw new FlinkFuture.ThrowableWrapperException(e.getCause());
+              }
+            }
           }
         }
-,createExecutionContext(executor));
+,executionContext);
       }
     }
   }
-,createExecutionContext(executor));
+,executionContext);
   return new FlinkFuture<>(flatMappedFuture);
 }
