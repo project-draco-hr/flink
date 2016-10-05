@@ -1,0 +1,46 @@
+{
+  final Object lock=new Object();
+  final AtomicReference<Throwable> errorRef=new AtomicReference<>();
+  final DefaultTimeServiceProvider timer=new DefaultTimeServiceProvider(new ReferenceSettingExceptionHandler(errorRef),lock);
+  try {
+    final OneShotLatch sync=new OneShotLatch();
+    timer.registerTimer(System.currentTimeMillis(),new Triggerable(){
+      @Override public void trigger(      long timestamp) throws Exception {
+        sync.await();
+      }
+    }
+);
+    final long now=System.currentTimeMillis();
+    final long time1=now + 6;
+    final long time2=now + 5;
+    final long time3=now + 8;
+    final long time4=now - 2;
+    final ArrayBlockingQueue<Long> timestamps=new ArrayBlockingQueue<>(4);
+    Triggerable trigger=new Triggerable(){
+      @Override public void trigger(      long timestamp){
+        timestamps.add(timestamp);
+      }
+    }
+;
+    ScheduledFuture<?> future1=timer.registerTimer(time1,trigger);
+    ScheduledFuture<?> future2=timer.registerTimer(time2,trigger);
+    ScheduledFuture<?> future3=timer.registerTimer(time3,trigger);
+    ScheduledFuture<?> future4=timer.registerTimer(time4,trigger);
+    sync.trigger();
+    future1.get();
+    future2.get();
+    future3.get();
+    future4.get();
+    assertEquals(4,timestamps.size());
+    assertEquals(time4,timestamps.take().longValue());
+    assertEquals(time2,timestamps.take().longValue());
+    assertEquals(time1,timestamps.take().longValue());
+    assertEquals(time3,timestamps.take().longValue());
+    if (errorRef.get() != null) {
+      throw new Exception(errorRef.get());
+    }
+  }
+  finally {
+    timer.shutdownService();
+  }
+}

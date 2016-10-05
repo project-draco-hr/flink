@@ -1,23 +1,20 @@
 {
-  final OneShotLatch latch=new OneShotLatch();
   final AtomicBoolean exceptionWasThrown=new AtomicBoolean(false);
+  final OneShotLatch latch=new OneShotLatch();
   final Object lock=new Object();
   TimeServiceProvider timeServiceProvider=new DefaultTimeServiceProvider(new AsyncExceptionHandler(){
     @Override public void handleAsyncException(    String message,    Throwable exception){
-      exceptionWasThrown.compareAndSet(false,true);
+      exceptionWasThrown.set(true);
       latch.trigger();
     }
   }
 ,lock);
-  long now=System.currentTimeMillis();
-  timeServiceProvider.registerTimer(now,new Triggerable(){
+  timeServiceProvider.registerTimer(System.currentTimeMillis(),new Triggerable(){
     @Override public void trigger(    long timestamp) throws Exception {
       throw new Exception("Exception in Timer");
     }
   }
 );
-  if (!latch.isTriggered()) {
-    latch.await();
-  }
-  Assert.assertTrue(exceptionWasThrown.get());
+  latch.await();
+  assertTrue(exceptionWasThrown.get());
 }
